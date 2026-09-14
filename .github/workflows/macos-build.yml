@@ -38,8 +38,6 @@ jobs:
           test -f "$GITHUB_WORKSPACE/Build/version.env"
           test -d "$GITHUB_WORKSPACE/Sources/Blackstock"
 
-          # CI-Hotfixes liegen bewusst außerhalb des ZIP-Payloads, damit echte
-          # macOS-Compilerfunde direkt korrigiert werden können.
           if [[ -f "$GITHUB_WORKSPACE/Patches/WachstumView.swift" ]]; then
             cp "$GITHUB_WORKSPACE/Patches/WachstumView.swift" \
               "$GITHUB_WORKSPACE/Sources/Blackstock/Views/WachstumView.swift"
@@ -51,21 +49,24 @@ jobs:
           sed -i '' 's|lipo -verify_arch arm64 x86_64 "$APP/Contents/MacOS/Blackstock"|lipo "$APP/Contents/MacOS/Blackstock" -verify_arch arm64 x86_64|' \
             "$GITHUB_WORKSPACE/Build/create-dmg.zsh" "$GITHUB_WORKSPACE/Build/verify-release.zsh"
 
-          # Die letzte grüne Produktbasis wird zuerst reproduziert.
+          # Letzte grüne Produktbasis reproduzieren.
           test -f "$GITHUB_WORKSPACE/Patches/apply-v12.py"
           python3 "$GITHUB_WORKSPACE/Patches/apply-v12.py"
-
-          # Die bestehende YouTubeService-API nennt den Live-Scope liveManagement.
           sed -i '' 's|featureAutorisiert(.live, verbindungID:|featureAutorisiert(.liveManagement, verbindungID:|g' \
             "$GITHUB_WORKSPACE/Sources/Blackstock/AppStore+V12.swift"
-
-          # Blackstock 13: geführter Workflow, klare nächste Aktion und neutrales Produktbranding.
           test -f "$GITHUB_WORKSPACE/Patches/apply-v13.py"
           python3 "$GITHUB_WORKSPACE/Patches/apply-v13.py"
 
+          # Blackstock 14: video-zentrierte Trends, Thema/Format-Filter,
+          # reduzierte Übersicht sowie English + Captions als Produktionsstandard.
+          test -f "$GITHUB_WORKSPACE/Patches/blackstock14.patch.gz.b64"
+          base64 --decode "$GITHUB_WORKSPACE/Patches/blackstock14.patch.gz.b64" > "$RUNNER_TEMP/blackstock14.patch.gz"
+          gunzip -c "$RUNNER_TEMP/blackstock14.patch.gz" > "$RUNNER_TEMP/blackstock14.patch"
+          patch -p2 < "$RUNNER_TEMP/blackstock14.patch"
+
           chmod +x "$GITHUB_WORKSPACE"/Build/*.sh "$GITHUB_WORKSPACE"/Build/*.zsh
-          grep -q '^APP_VERSION=13.0.0$' "$GITHUB_WORKSPACE/Build/version.env"
-          grep -q '^BUILD_NUMBER=1300$' "$GITHUB_WORKSPACE/Build/version.env"
+          grep -q '^APP_VERSION=14.0.0$' "$GITHUB_WORKSPACE/Build/version.env"
+          grep -q '^BUILD_NUMBER=1400$' "$GITHUB_WORKSPACE/Build/version.env"
 
       - name: Release-Metadaten laden
         shell: bash
