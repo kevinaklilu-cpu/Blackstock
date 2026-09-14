@@ -6,6 +6,7 @@ on:
     branches: [ main ]
     paths:
       - 'blackstock-build-payload.zip'
+      - 'Patches/**'
       - '.github/workflows/macos-build.yml'
 
 permissions:
@@ -32,6 +33,14 @@ jobs:
           chmod +x "$GITHUB_WORKSPACE"/Build/*.sh "$GITHUB_WORKSPACE"/Build/*.zsh
           test -f "$GITHUB_WORKSPACE/Build/version.env"
           test -d "$GITHUB_WORKSPACE/Sources/Blackstock"
+
+          # CI-Hotfixes liegen bewusst außerhalb des ZIP-Payloads, damit echte
+          # macOS-Compilerfunde direkt korrigiert werden können, ohne dass der
+          # Endnutzer erneut Binärdateien hochladen muss.
+          if [[ -f "$GITHUB_WORKSPACE/Patches/WachstumView.swift" ]]; then
+            cp "$GITHUB_WORKSPACE/Patches/WachstumView.swift" \
+              "$GITHUB_WORKSPACE/Sources/Blackstock/Views/WachstumView.swift"
+          fi
 
       - name: Release-Metadaten laden
         shell: bash
