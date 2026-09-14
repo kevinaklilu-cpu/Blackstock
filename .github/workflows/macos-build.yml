@@ -60,7 +60,13 @@ jobs:
           # Blackstock 14: video-zentrierte Trends, Thema/Format-Filter,
           # reduzierte Übersicht sowie English + Captions als Produktionsstandard.
           test -f "$GITHUB_WORKSPACE/Patches/blackstock14.patch.gz.b64"
-          /usr/bin/base64 -D -i "$GITHUB_WORKSPACE/Patches/blackstock14.patch.gz.b64" -o "$RUNNER_TEMP/blackstock14.patch.gz"
+          python3 - "$GITHUB_WORKSPACE/Patches/blackstock14.patch.gz.b64" "$RUNNER_TEMP/blackstock14.patch.gz" <<'PY'
+          import base64, pathlib, sys
+          source = pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')
+          clean = ''.join(source.split())
+          clean += '=' * ((4 - len(clean) % 4) % 4)
+          pathlib.Path(sys.argv[2]).write_bytes(base64.b64decode(clean, validate=False))
+          PY
           gunzip -c "$RUNNER_TEMP/blackstock14.patch.gz" > "$RUNNER_TEMP/blackstock14.patch"
           patch -p2 < "$RUNNER_TEMP/blackstock14.patch"
 
