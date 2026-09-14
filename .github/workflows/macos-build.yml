@@ -65,6 +65,7 @@ jobs:
           base64 -d < "$RUNNER_TEMP/blackstock25.patch.gz.b64" > "$RUNNER_TEMP/blackstock25.patch.gz"
           gunzip -c "$RUNNER_TEMP/blackstock25.patch.gz" > "$RUNNER_TEMP/blackstock25.patch"
           patch --batch -p1 < "$RUNNER_TEMP/blackstock25.patch"
+          find "$GITHUB_WORKSPACE" \( -name '*.orig' -o -name '*.rej' \) -delete
 
           # Finale Release-Metadaten nach den iterativen Zwischenständen härten.
           cat > "$GITHUB_WORKSPACE/RELEASE_MANIFEST.txt" <<'EOF'
