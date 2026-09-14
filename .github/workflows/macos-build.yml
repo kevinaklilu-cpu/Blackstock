@@ -1,0 +1,135 @@
+name: Blackstock macOS App / DMG
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'Blackstock-build-payload.zip'
+      - '.github/workflows/macos-build.yml'
+
+permissions:
+  contents: read
+
+env:
+  APP_NAME: Blackstock
+
+jobs:
+  build-release:
+    runs-on: macos-26
+    timeout-minutes: 45
+
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: Build-Payload entpacken
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "$GITHUB_WORKSPACE/Blackstock-build-payload.zip"
+          /usr/bin/ditto -x -k "$GITHUB_WORKSPACE/Blackstock-build-payload.zip" "$GITHUB_WORKSPACE"
+          chmod +x "$GITHUB_WORKSPACE"/Build/*.sh "$GITHUB_WORKSPACE"/Build/*.zsh
+          test -f "$GITHUB_WORKSPACE/Build/version.env"
+          test -d "$GITHUB_WORKSPACE/Sources/Blackstock"
+
+      - name: Release-Metadaten laden
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "$GITHUB_WORKSPACE/Build/version.env"
+          set +a
+          echo "APP_VERSION=$APP_VERSION" >> "$GITHUB_ENV"
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
+          echo "MIN_MACOS=$MIN_MACOS" >> "$GITHUB_ENV"
+          echo "BUNDLE_ID=$BUNDLE_ID" >> "$GITHUB_ENV"
+          xcodebuild -version
+          xcrun swiftc --version
+          sw_vers
+
+      - name: Portable Regression Suite
+        shell: bash
+        run: "$GITHUB_WORKSPACE/Build/Core-Tests.sh"
+
+      - name: Vollständiger Release-Audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          SWIFTC="$(xcrun --sdk macosx --find swiftc)" \
+          SDKROOT="$(xcrun --sdk macosx --show-sdk-path)" \
+          SWIFT_TARGET="arm64-apple-macosx${MIN_MACOS}" \
+          "$GITHUB_WORKSPACE/Build/Release-Audit.sh"
+
+      - name: Universal Blackstock.app bauen
+        shell: zsh {0}
+        env:
+          BLACKSTOCK_APP_OUTPUT: ${{ github.workspace }}/dist/Blackstock.app
+          BLACKSTOCK_BUILD_DIR: ${{ runner.temp }}/blackstock-native-build
+          BLACKSTOCK_BUILD_LOG: ${{ runner.temp }}/Blackstock-Buildprotokoll.txt
+          BLACKSTOCK_SIGN_IDENTITY: '-'
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          "$GITHUB_WORKSPACE/Build/build-app.zsh"
+
+      - name: App-Bundle verifizieren
+        shell: zsh {0}
+        run: |
+          set -euo pipefail
+          APP="$GITHUB_WORKSPACE/dist/Blackstock.app"
+          plutil -lint "$APP/Contents/Info.plist"
+          lipo -verify_arch arm64 x86_64 "$APP/Contents/MacOS/Blackstock"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")" = "$APP_VERSION"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Contents/Info.plist")" = "$BUILD_NUMBER"
+
+      - name: Start-Smoke-Test
+        shell: zsh {0}
+        run: |
+          set -euo pipefail
+          APP="$GITHUB_WORKSPACE/dist/Blackstock.app"
+          "$APP/Contents/MacOS/Blackstock" >"$RUNNER_TEMP/blackstock-smoke.log" 2>&1 &
+          PID=$!
+          sleep 6
+          if ! kill -0 "$PID" 2>/dev/null; then
+            cat "$RUNNER_TEMP/blackstock-smoke.log"
+            echo "Blackstock wurde beim Smoke-Test unerwartet beendet."
+            exit 1
+          fi
+          kill "$PID" || true
+          wait "$PID" 2>/dev/null || true
+
+      - name: Drag-and-Drop-DMG erzeugen
+        shell: zsh {0}
+        run: |
+          set -euo pipefail
+          STAGE="$(mktemp -d)"
+          trap 'rm -rf "$STAGE"' EXIT
+          /usr/bin/ditto "$GITHUB_WORKSPACE/dist/Blackstock.app" "$STAGE/Blackstock.app"
+          ln -s /Applications "$STAGE/Programme"
+          cp "$GITHUB_WORKSPACE/Distribution/INSTALLIEREN.txt" "$STAGE/INSTALLIEREN.txt"
+          DMG="$GITHUB_WORKSPACE/dist/Blackstock-${APP_VERSION}-universal.dmg"
+          hdiutil create -volname "Blackstock ${APP_VERSION}" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
+          hdiutil verify "$DMG" >/dev/null
+          shasum -a 256 "$DMG" > "$DMG.sha256"
+
+      - name: App-ZIP erzeugen
+        shell: zsh {0}
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/dist"
+          /usr/bin/ditto -c -k --keepParent Blackstock.app "Blackstock-${APP_VERSION}-universal.zip"
+          shasum -a 256 "Blackstock-${APP_VERSION}-universal.zip" > "Blackstock-${APP_VERSION}-universal.zip.sha256"
+
+      - name: Fertige Mac-App hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: Blackstock-${{ env.APP_VERSION }}-macOS
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            dist/Blackstock-${{ env.APP_VERSION }}-universal.dmg
+            dist/Blackstock-${{ env.APP_VERSION }}-universal.dmg.sha256
+            dist/Blackstock-${{ env.APP_VERSION }}-universal.zip
+            dist/Blackstock-${{ env.APP_VERSION }}-universal.zip.sha256
