@@ -15,6 +15,10 @@ permissions:
 env:
   APP_NAME: Blackstock
 
+concurrency:
+  group: blackstock-macos-release
+  cancel-in-progress: true
+
 jobs:
   build-release:
     runs-on: macos-26
