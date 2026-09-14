@@ -24,7 +24,7 @@ jobs:
       - name: Repository auschecken
         uses: actions/checkout@v4
 
-      - name: Build-Payload entpacken
+      - name: Build-Payload entpacken und V12 anwenden
         shell: bash
         run: |
           set -euo pipefail
@@ -46,6 +46,15 @@ jobs:
             "$GITHUB_WORKSPACE/Build/build-app.zsh"
           sed -i '' 's|lipo -verify_arch arm64 x86_64 "$APP/Contents/MacOS/Blackstock"|lipo "$APP/Contents/MacOS/Blackstock" -verify_arch arm64 x86_64|' \
             "$GITHUB_WORKSPACE/Build/create-dmg.zsh" "$GITHUB_WORKSPACE/Build/verify-release.zsh"
+
+          # Blackstock 12 wird als reviewbarer Text-Layer auf die letzte grüne
+          # native Basis angewendet. Dadurch können Compilerfunde ohne neuen
+          # Binär-Upload korrigiert werden.
+          test -f "$GITHUB_WORKSPACE/Patches/apply-v12.py"
+          python3 "$GITHUB_WORKSPACE/Patches/apply-v12.py"
+          chmod +x "$GITHUB_WORKSPACE"/Build/*.sh "$GITHUB_WORKSPACE"/Build/*.zsh
+          grep -q '^APP_VERSION=12.0.0$' "$GITHUB_WORKSPACE/Build/version.env"
+          grep -q '^BUILD_NUMBER=1200$' "$GITHUB_WORKSPACE/Build/version.env"
 
       - name: Release-Metadaten laden
         shell: bash
