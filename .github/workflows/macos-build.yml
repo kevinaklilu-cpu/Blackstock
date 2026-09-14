@@ -49,7 +49,7 @@ jobs:
           sed -i '' 's|lipo -verify_arch arm64 x86_64 "$APP/Contents/MacOS/Blackstock"|lipo "$APP/Contents/MacOS/Blackstock" -verify_arch arm64 x86_64|' \
             "$GITHUB_WORKSPACE/Build/create-dmg.zsh" "$GITHUB_WORKSPACE/Build/verify-release.zsh"
 
-          # Letzte grüne Produktbasis reproduzieren.
+          # Letzte grüne native Produktbasis reproduzieren.
           test -f "$GITHUB_WORKSPACE/Patches/apply-v12.py"
           python3 "$GITHUB_WORKSPACE/Patches/apply-v12.py"
           sed -i '' 's|featureAutorisiert(.live, verbindungID:|featureAutorisiert(.liveManagement, verbindungID:|g' \
@@ -57,16 +57,29 @@ jobs:
           test -f "$GITHUB_WORKSPACE/Patches/apply-v13.py"
           python3 "$GITHUB_WORKSPACE/Patches/apply-v13.py"
 
-          # Blackstock 14: video-zentrierte Trends, Thema/Format-Filter,
-          # reduzierte Übersicht sowie English + Captions als Produktionsstandard.
-          test -f "$GITHUB_WORKSPACE/Patches/blackstock14.patch.gz.b64"
-          base64 --decode "$GITHUB_WORKSPACE/Patches/blackstock14.patch.gz.b64" > "$RUNNER_TEMP/blackstock14.patch.gz"
-          gunzip -c "$RUNNER_TEMP/blackstock14.patch.gz" > "$RUNNER_TEMP/blackstock14.patch"
-          patch -p2 < "$RUNNER_TEMP/blackstock14.patch"
+          # Blackstock 25: finaler, lokal getesteter Delta-Patch aus den 11
+          # Verbesserungszyklen 15–25 (inklusive Version 14 als Ausgangsumbau).
+          test -d "$GITHUB_WORKSPACE/Patches/V25"
+          test "$(find "$GITHUB_WORKSPACE/Patches/V25" -name 'final.part*' | wc -l | tr -d ' ')" = "8"
+          cat "$GITHUB_WORKSPACE"/Patches/V25/final.part* > "$RUNNER_TEMP/blackstock25.patch.gz.b64"
+          base64 --decode "$RUNNER_TEMP/blackstock25.patch.gz.b64" > "$RUNNER_TEMP/blackstock25.patch.gz"
+          gunzip -c "$RUNNER_TEMP/blackstock25.patch.gz" > "$RUNNER_TEMP/blackstock25.patch"
+          patch --batch -p1 < "$RUNNER_TEMP/blackstock25.patch"
+
+          # Finale Release-Metadaten nach den iterativen Zwischenständen härten.
+          cat > "$GITHUB_WORKSPACE/RELEASE_MANIFEST.txt" <<'EOF'
+          Blackstock 25.0.0 (Build 2500)
+          Bundle ID: de.blackstock.native
+          Minimum macOS: 13.0
+          Creator flow: Channel -> Topic -> YouTube Trends -> Preview -> Clip/Remix -> Quality -> Render -> Upload -> Learning
+          EOF
+          sed -i '' 's/RELEASE_NOTES_v14\.md/RELEASE_NOTES_v25.md/g' "$GITHUB_WORKSPACE/Build/Release-Audit.sh"
 
           chmod +x "$GITHUB_WORKSPACE"/Build/*.sh "$GITHUB_WORKSPACE"/Build/*.zsh
-          grep -q '^APP_VERSION=14.0.0$' "$GITHUB_WORKSPACE/Build/version.env"
-          grep -q '^BUILD_NUMBER=1400$' "$GITHUB_WORKSPACE/Build/version.env"
+          grep -q '^APP_VERSION=25.0.0$' "$GITHUB_WORKSPACE/Build/version.env"
+          grep -q '^BUILD_NUMBER=2500$' "$GITHUB_WORKSPACE/Build/version.env"
+          grep -q 'Blackstock 25.0.0 (Build 2500)' "$GITHUB_WORKSPACE/RELEASE_MANIFEST.txt"
+          grep -q 'RELEASE_NOTES_v25.md' "$GITHUB_WORKSPACE/Build/Release-Audit.sh"
 
       - name: Release-Metadaten laden
         shell: bash
