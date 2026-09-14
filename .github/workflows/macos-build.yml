@@ -35,12 +35,17 @@ jobs:
           test -d "$GITHUB_WORKSPACE/Sources/Blackstock"
 
           # CI-Hotfixes liegen bewusst außerhalb des ZIP-Payloads, damit echte
-          # macOS-Compilerfunde direkt korrigiert werden können, ohne dass der
-          # Endnutzer erneut Binärdateien hochladen muss.
+          # macOS-Compilerfunde direkt korrigiert werden können.
           if [[ -f "$GITHUB_WORKSPACE/Patches/WachstumView.swift" ]]; then
             cp "$GITHUB_WORKSPACE/Patches/WachstumView.swift" \
               "$GITHUB_WORKSPACE/Sources/Blackstock/Views/WachstumView.swift"
           fi
+
+          # Xcode 26 lipo erwartet die Eingabedatei vor -verify_arch.
+          sed -i '' 's|lipo -verify_arch arm64 x86_64 "$MACOS/Blackstock"|lipo "$MACOS/Blackstock" -verify_arch arm64 x86_64|' \
+            "$GITHUB_WORKSPACE/Build/build-app.zsh"
+          sed -i '' 's|lipo -verify_arch arm64 x86_64 "$APP/Contents/MacOS/Blackstock"|lipo "$APP/Contents/MacOS/Blackstock" -verify_arch arm64 x86_64|' \
+            "$GITHUB_WORKSPACE/Build/create-dmg.zsh" "$GITHUB_WORKSPACE/Build/verify-release.zsh"
 
       - name: Release-Metadaten laden
         shell: bash
@@ -88,7 +93,7 @@ jobs:
           set -euo pipefail
           APP="$GITHUB_WORKSPACE/dist/Blackstock.app"
           plutil -lint "$APP/Contents/Info.plist"
-          lipo -verify_arch arm64 x86_64 "$APP/Contents/MacOS/Blackstock"
+          lipo "$APP/Contents/MacOS/Blackstock" -verify_arch arm64 x86_64
           codesign --verify --deep --strict --verbose=2 "$APP"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")" = "$APP_VERSION"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Contents/Info.plist")" = "$BUILD_NUMBER"
