@@ -5,7 +5,7 @@ on:
   push:
     branches: [ main ]
     paths:
-      - 'Blackstock-build-payload.zip'
+      - 'blackstock-build-payload.zip'
       - '.github/workflows/macos-build.yml'
 
 permissions:
@@ -27,8 +27,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -f "$GITHUB_WORKSPACE/Blackstock-build-payload.zip"
-          /usr/bin/ditto -x -k "$GITHUB_WORKSPACE/Blackstock-build-payload.zip" "$GITHUB_WORKSPACE"
+          test -f "$GITHUB_WORKSPACE/blackstock-build-payload.zip"
+          /usr/bin/ditto -x -k "$GITHUB_WORKSPACE/blackstock-build-payload.zip" "$GITHUB_WORKSPACE"
           chmod +x "$GITHUB_WORKSPACE"/Build/*.sh "$GITHUB_WORKSPACE"/Build/*.zsh
           test -f "$GITHUB_WORKSPACE/Build/version.env"
           test -d "$GITHUB_WORKSPACE/Sources/Blackstock"
