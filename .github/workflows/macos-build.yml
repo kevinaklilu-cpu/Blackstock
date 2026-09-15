@@ -1,13 +1,7 @@
-name: Blackstock macOS App / DMG
+name: Blackstock 100 Legacy macOS App / DMG
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ main ]
-    paths:
-      - 'blackstock-build-payload.zip'
-      - 'Patches/**'
-      - '.github/workflows/macos-build.yml'
 
 permissions:
   contents: read
@@ -16,7 +10,7 @@ env:
   APP_NAME: Blackstock
 
 concurrency:
-  group: blackstock-macos-release
+  group: blackstock-100-legacy-release
   cancel-in-progress: true
 
 jobs:
@@ -43,7 +37,6 @@ jobs:
               "$GITHUB_WORKSPACE/Sources/Blackstock/Views/WachstumView.swift"
           fi
 
-          # Xcode 26 lipo erwartet die Eingabedatei vor -verify_arch.
           sed -i '' 's|lipo -verify_arch arm64 x86_64 "$MACOS/Blackstock"|lipo "$MACOS/Blackstock" -verify_arch arm64 x86_64|' \
             "$GITHUB_WORKSPACE/Build/build-app.zsh"
           sed -i '' 's|lipo -verify_arch arm64 x86_64 "$APP/Contents/MacOS/Blackstock"|lipo "$APP/Contents/MacOS/Blackstock" -verify_arch arm64 x86_64|' \
@@ -87,7 +80,6 @@ jobs:
           grep -q 'RELEASE_NOTES_v50.md' "$GITHUB_WORKSPACE/Build/Release-Audit.sh"
           grep -q 'run_test release-core' "$GITHUB_WORKSPACE/Build/Core-Tests.sh"
 
-          # Blackstock 100: authoritative Delta-Patch 50 -> 100 aus der echten CI-50-Basis.
           test -d "$GITHUB_WORKSPACE/Patches/Release100"
           test "$(find "$GITHUB_WORKSPACE/Patches/Release100" -name 'auth.part*' | wc -l | tr -d ' ')" = "4"
           cat "$GITHUB_WORKSPACE"/Patches/Release100/auth.part* > "$RUNNER_TEMP/blackstock100.patch.gz.b64"
@@ -100,11 +92,8 @@ jobs:
           test ! -e "$GITHUB_WORKSPACE/Tests/V11CoreTests.swift.rej"
           find "$GITHUB_WORKSPACE" \( -name '*.orig' -o -name '*.rej' \) -delete
 
-          # Blackstock 100 Audio-Hardening: ein gemeinsames Audio-Profil für Original, Voiceover und Musik.
           test -f "$GITHUB_WORKSPACE/Patches/Release100/apply-audio-hotfix.py"
           python3 "$GITHUB_WORKSPACE/Patches/Release100/apply-audio-hotfix.py"
-
-          # Blackstock 100 Product-Hardening: echte Suche, priorisierte Discovery und Watched erst bei Playback.
           test -f "$GITHUB_WORKSPACE/Patches/Release100/apply-product-hotfix.py"
           python3 "$GITHUB_WORKSPACE/Patches/Release100/apply-product-hotfix.py"
 
