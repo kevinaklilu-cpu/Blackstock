@@ -53,6 +53,7 @@ find "$ROOT" \( -name '*.orig' -o -name '*.rej' \) -delete
 python3 "$ROOT/Patches/Release1000/apply-flow-hotfix.py"
 python3 "$ROOT/Patches/Release1000/apply-ui-language-hotfix.py"
 python3 "$ROOT/Patches/Release1000/apply-native-remix-hotfix.py"
+python3 "$ROOT/Patches/Release1000/apply-clean-workflow-hotfix.py"
 
 chmod +x "$ROOT"/Build/*.sh "$ROOT"/Build/*.zsh
 grep -q '^APP_VERSION=1000.0.0$' "$ROOT/Build/version.env"
@@ -66,9 +67,12 @@ grep -q 'Clip aus Datei' "$ROOT/Sources/Blackstock/Views/CreatorOS1000View.swift
 grep -q 'AbschnittTitel(titel: "Videoideen"' "$ROOT/Sources/Blackstock/Views/CreatorOS1000View.swift"
 grep -q 'Auf YouTube remixen' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
 grep -q 'Originalton · Originalsprache · keine KI-Stimme' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
+grep -q 'Label("Filter", systemImage: "line.3.horizontal.decrease")' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
+grep -q 'DisclosureGroup("Schnittdetails & Quellen")' "$ROOT/Sources/Blackstock/Views/ProduktionsDetailView.swift"
 grep -q 'voiceover: nil' "$ROOT/Sources/Blackstock/AppStore+V11.swift"
 grep -q 'musik: nil' "$ROOT/Sources/Blackstock/AppStore+V11.swift"
 ! grep -q 'BLACKSTOCK 1000' "$ROOT/Sources/Blackstock/Views/SidebarView.swift"
 ! grep -q '"Creator OS"' "$ROOT/Sources/Blackstock/Views/CreatorOS1000View.swift"
+! grep -q 'Top 3 automatisch erstellen' "$ROOT/Sources/Blackstock/Views/CreatorOS1000View.swift"
 grep -q 'BLACKSTOCK_1000_CORE_TESTS_OK' "$ROOT/Tests/Release1000CoreTests.swift"
 echo BLACKSTOCK_1000_FLOW_RECONSTRUCT_OK
