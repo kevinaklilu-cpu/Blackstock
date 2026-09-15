@@ -164,11 +164,11 @@ jobs:
           /usr/bin/ditto "$APP" "$STAGE/Blackstock.app"
           ln -s /Applications "$STAGE/Programme"
           cp "$GITHUB_WORKSPACE/Distribution/INSTALLIEREN.txt" "$STAGE/INSTALLIEREN.txt"
-          DMG="$GITHUB_WORKSPACE/dist/Blackstock-${APP_VERSION}-universal.dmg"
+          cd "$GITHUB_WORKSPACE/dist"
+          DMG="Blackstock-${APP_VERSION}-universal.dmg"
           hdiutil create -volname "Blackstock ${APP_VERSION}" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
           hdiutil verify "$DMG" >/dev/null
           shasum -a 256 "$DMG" > "$DMG.sha256"
-          cd "$GITHUB_WORKSPACE/dist"
           /usr/bin/ditto -c -k --keepParent Blackstock.app "Blackstock-${APP_VERSION}-universal.zip"
           shasum -a 256 "Blackstock-${APP_VERSION}-universal.zip" > "Blackstock-${APP_VERSION}-universal.zip.sha256"
 
