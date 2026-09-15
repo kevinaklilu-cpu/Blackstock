@@ -53,6 +53,7 @@ find "$ROOT" \( -name '*.orig' -o -name '*.rej' \) -delete
 python3 "$ROOT/Patches/Release1000/apply-flow-hotfix.py"
 python3 "$ROOT/Patches/Release1000/apply-ui-language-hotfix.py"
 python3 "$ROOT/Patches/Release1000/apply-native-remix-hotfix.py"
+python3 "$ROOT/Patches/Release1000/apply-player-time-compile-fix.py"
 python3 "$ROOT/Patches/Release1000/apply-clean-workflow-hotfix.py"
 
 chmod +x "$ROOT"/Build/*.sh "$ROOT"/Build/*.zsh
@@ -68,6 +69,7 @@ grep -q 'AbschnittTitel(titel: "Videoideen"' "$ROOT/Sources/Blackstock/Views/Cre
 grep -q 'Auf YouTube remixen' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
 grep -q 'Originalton · Originalsprache · keine KI-Stimme' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
 grep -q 'Label("Filter", systemImage: "line.3.horizontal.decrease")' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
+grep -q 'case time(Double)' "$ROOT/Sources/Blackstock/Views/YouTubePlayerView.swift"
 grep -q 'DisclosureGroup("Schnittdetails & Quellen")' "$ROOT/Sources/Blackstock/Views/ProduktionsDetailView.swift"
 grep -q 'voiceover: nil' "$ROOT/Sources/Blackstock/AppStore+V11.swift"
 grep -q 'musik: nil' "$ROOT/Sources/Blackstock/AppStore+V11.swift"
