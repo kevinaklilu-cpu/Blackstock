@@ -1,0 +1,43 @@
+name: Blackstock Next
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ blackstock-next ]
+    paths:
+      - 'Next/**'
+      - '.github/workflows/blackstock-next.yml'
+  pull_request:
+    paths:
+      - 'Next/**'
+      - '.github/workflows/blackstock-next.yml'
+
+concurrency:
+  group: blackstock-next-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-build:
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+      - name: Tests
+        working-directory: Next
+        run: swift test -c debug
+      - name: Release build
+        working-directory: Next
+        run: swift build -c release
+      - name: Guardrails
+        run: |
+          set -euo pipefail
+          grep -R -q 'youtubeNativeRemix' Next/Sources/BlackstockNext
+          grep -R -q 'localExportAllowed' Next/Sources/BlackstockNext
+          grep -R -q 'Auto-Fix vor Stop' Next/Sources/BlackstockNext
+          grep -R -q 'uploadType.*resumable' Next/Sources/BlackstockNext
+          ! grep -R -E -q 'youtube-dl|yt-dlp|pytube' Next/Sources/BlackstockNext
+          ! grep -R -q 'KI-Stimme' Next/Sources/BlackstockNext
