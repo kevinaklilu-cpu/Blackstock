@@ -49,7 +49,6 @@ jobs:
           sed -i '' 's|lipo -verify_arch arm64 x86_64 "$APP/Contents/MacOS/Blackstock"|lipo "$APP/Contents/MacOS/Blackstock" -verify_arch arm64 x86_64|' \
             "$GITHUB_WORKSPACE/Build/create-dmg.zsh" "$GITHUB_WORKSPACE/Build/verify-release.zsh"
 
-          # Letzte grüne native Produktbasis reproduzieren.
           test -f "$GITHUB_WORKSPACE/Patches/apply-v12.py"
           python3 "$GITHUB_WORKSPACE/Patches/apply-v12.py"
           sed -i '' 's|featureAutorisiert(.live, verbindungID:|featureAutorisiert(.liveManagement, verbindungID:|g' \
@@ -57,7 +56,6 @@ jobs:
           test -f "$GITHUB_WORKSPACE/Patches/apply-v13.py"
           python3 "$GITHUB_WORKSPACE/Patches/apply-v13.py"
 
-          # Blackstock 25 reproduzieren.
           test -d "$GITHUB_WORKSPACE/Patches/V25"
           test "$(find "$GITHUB_WORKSPACE/Patches/V25" -name 'final.part*' | wc -l | tr -d ' ')" = "8"
           cat "$GITHUB_WORKSPACE"/Patches/V25/final.part* > "$RUNNER_TEMP/blackstock25.patch.gz.b64"
@@ -66,7 +64,6 @@ jobs:
           patch --batch -p1 < "$RUNNER_TEMP/blackstock25.patch"
           find "$GITHUB_WORKSPACE" \( -name '*.orig' -o -name '*.rej' \) -delete
 
-          # V25-Metadaten wie im letzten grünen Release härten.
           cat > "$GITHUB_WORKSPACE/RELEASE_MANIFEST.txt" <<'EOF25'
           Blackstock 25.0.0 (Build 2500)
           Bundle ID: de.blackstock.native
@@ -75,7 +72,6 @@ jobs:
           EOF25
           sed -i '' 's/RELEASE_NOTES_v14\.md/RELEASE_NOTES_v25.md/g' "$GITHUB_WORKSPACE/Build/Release-Audit.sh"
 
-          # Blackstock 50.0.0: geprüfter Delta-Patch 25 -> 50.
           test -d "$GITHUB_WORKSPACE/Patches/Release50"
           test "$(find "$GITHUB_WORKSPACE/Patches/Release50" -name 'final.part*' | wc -l | tr -d ' ')" = "13"
           cat "$GITHUB_WORKSPACE"/Patches/Release50/final.part* > "$RUNNER_TEMP/blackstock-release50.patch.gz.b64"
