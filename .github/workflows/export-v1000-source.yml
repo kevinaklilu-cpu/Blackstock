@@ -5,11 +5,22 @@ on:
   push:
     branches: [ main ]
     paths:
+      - 'blackstock-build-payload.zip'
+      - 'Patches/WachstumView.swift'
+      - 'Patches/apply-v12.py'
+      - 'Patches/apply-v13.py'
+      - 'Patches/V25/**'
+      - 'Patches/Release50/**'
+      - 'Patches/Release100/**'
       - 'Patches/Release1000/**'
       - '.github/workflows/export-v1000-source.yml'
 
 permissions:
   contents: read
+
+concurrency:
+  group: blackstock-1000-canonical-source
+  cancel-in-progress: true
 
 jobs:
   export-source-1000:
@@ -25,6 +36,8 @@ jobs:
           set -euo pipefail
           chmod +x "$GITHUB_WORKSPACE/Patches/Release1000/reconstruct-flow.sh"
           "$GITHUB_WORKSPACE/Patches/Release1000/reconstruct-flow.sh"
+          grep -q '^APP_VERSION=1000.0.0$' "$GITHUB_WORKSPACE/Build/version.env"
+          grep -q '^BUILD_NUMBER=100000$' "$GITHUB_WORKSPACE/Build/version.env"
 
       - name: Source-Paket erzeugen
         shell: bash
