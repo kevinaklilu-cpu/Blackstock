@@ -36,3 +36,14 @@ text = text.replace(old_music, '        p.setVolume(audioProfile.musicVolume, at
 
 path.write_text(text)
 print('BLACKSTOCK_100_AUDIO_HOTFIX_APPLIED')
+
+player_path = Path('Sources/Blackstock/Views/YouTubePlayerView.swift')
+player = player_path.read_text()
+old_status = '          status = .failed(message)\n'
+old_pattern = '      if case .failed(let message) = status {\n'
+if old_status not in player or old_pattern not in player:
+    raise SystemExit('Blackstock 100 player failure-state anchors not found')
+player = player.replace(old_status, '          status = .failed(message, code)\n', 1)
+player = player.replace(old_pattern, '      if case .failed(let message, _) = status {\n', 1)
+player_path.write_text(player)
+print('BLACKSTOCK_100_PLAYER_HOTFIX_APPLIED')
