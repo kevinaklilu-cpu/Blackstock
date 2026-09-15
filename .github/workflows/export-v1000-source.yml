@@ -1,0 +1,88 @@
+name: Export Blackstock 1000 Source
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/export-v1000-source.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  export-source-1000:
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: Blackstock 1000 rekonstruieren
+        shell: bash
+        run: |
+          set -euo pipefail
+          /usr/bin/ditto -x -k "$GITHUB_WORKSPACE/blackstock-build-payload.zip" "$GITHUB_WORKSPACE"
+          chmod +x "$GITHUB_WORKSPACE"/Build/*.sh "$GITHUB_WORKSPACE"/Build/*.zsh
+          if [[ -f "$GITHUB_WORKSPACE/Patches/WachstumView.swift" ]]; then
+            cp "$GITHUB_WORKSPACE/Patches/WachstumView.swift" "$GITHUB_WORKSPACE/Sources/Blackstock/Views/WachstumView.swift"
+          fi
+          sed -i '' 's|lipo -verify_arch arm64 x86_64 "$MACOS/Blackstock"|lipo "$MACOS/Blackstock" -verify_arch arm64 x86_64|' "$GITHUB_WORKSPACE/Build/build-app.zsh"
+          sed -i '' 's|lipo -verify_arch arm64 x86_64 "$APP/Contents/MacOS/Blackstock"|lipo "$APP/Contents/MacOS/Blackstock" -verify_arch arm64 x86_64|' "$GITHUB_WORKSPACE/Build/create-dmg.zsh" "$GITHUB_WORKSPACE/Build/verify-release.zsh"
+          python3 "$GITHUB_WORKSPACE/Patches/apply-v12.py"
+          sed -i '' 's|featureAutorisiert(.live, verbindungID:|featureAutorisiert(.liveManagement, verbindungID:|g' "$GITHUB_WORKSPACE/Sources/Blackstock/AppStore+V12.swift"
+          python3 "$GITHUB_WORKSPACE/Patches/apply-v13.py"
+
+          cat "$GITHUB_WORKSPACE"/Patches/V25/final.part* > "$RUNNER_TEMP/v25.b64"
+          base64 -d < "$RUNNER_TEMP/v25.b64" > "$RUNNER_TEMP/v25.gz"
+          gunzip -c "$RUNNER_TEMP/v25.gz" > "$RUNNER_TEMP/v25.patch"
+          patch --batch -p1 < "$RUNNER_TEMP/v25.patch"
+          find "$GITHUB_WORKSPACE" \( -name '*.orig' -o -name '*.rej' \) -delete
+          cat > "$GITHUB_WORKSPACE/RELEASE_MANIFEST.txt" <<'EOF25'
+          Blackstock 25.0.0 (Build 2500)
+          Bundle ID: de.blackstock.native
+          Minimum macOS: 13.0
+          Creator flow: Channel -> Topic -> YouTube Trends -> Preview -> Clip/Remix -> Quality -> Render -> Upload -> Learning
+          EOF25
+          sed -i '' 's/RELEASE_NOTES_v14\.md/RELEASE_NOTES_v25.md/g' "$GITHUB_WORKSPACE/Build/Release-Audit.sh"
+
+          cat "$GITHUB_WORKSPACE"/Patches/Release50/final.part* > "$RUNNER_TEMP/v50.b64"
+          base64 -d < "$RUNNER_TEMP/v50.b64" > "$RUNNER_TEMP/v50.gz"
+          gunzip -c "$RUNNER_TEMP/v50.gz" > "$RUNNER_TEMP/v50.patch"
+          patch --batch -p1 < "$RUNNER_TEMP/v50.patch"
+          find "$GITHUB_WORKSPACE" \( -name '*.orig' -o -name '*.rej' \) -delete
+
+          cat "$GITHUB_WORKSPACE"/Patches/Release100/auth.part* > "$RUNNER_TEMP/v100.b64"
+          base64 -d < "$RUNNER_TEMP/v100.b64" > "$RUNNER_TEMP/v100.gz"
+          gunzip -c "$RUNNER_TEMP/v100.gz" > "$RUNNER_TEMP/v100.patch"
+          patch --batch -p1 < "$RUNNER_TEMP/v100.patch"
+          python3 "$GITHUB_WORKSPACE/Patches/Release100/apply-audio-hotfix.py"
+          python3 "$GITHUB_WORKSPACE/Patches/Release100/apply-product-hotfix.py"
+
+          base64 -d < "$GITHUB_WORKSPACE/Patches/Release1000/final.patch.gz.b64" > "$RUNNER_TEMP/v1000.gz"
+          gunzip -c "$RUNNER_TEMP/v1000.gz" > "$RUNNER_TEMP/v1000.patch"
+          patch --batch -p1 < "$RUNNER_TEMP/v1000.patch"
+          find "$GITHUB_WORKSPACE" \( -name '*.orig' -o -name '*.rej' \) -delete
+          grep -q '^APP_VERSION=1000.0.0$' "$GITHUB_WORKSPACE/Build/version.env"
+          grep -q 'CreatorOS1000View' "$GITHUB_WORKSPACE/Sources/Blackstock/Views/RootView.swift"
+
+      - name: Source-Paket erzeugen
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/export"
+          /usr/bin/ditto -c -k --keepParent "$GITHUB_WORKSPACE/Sources" "$RUNNER_TEMP/export/Sources.zip"
+          cp -R "$GITHUB_WORKSPACE/Build" "$RUNNER_TEMP/export/Build"
+          cp -R "$GITHUB_WORKSPACE/Tests" "$RUNNER_TEMP/export/Tests"
+          cp "$GITHUB_WORKSPACE/RELEASE_MANIFEST.txt" "$RUNNER_TEMP/export/"
+          cp "$GITHUB_WORKSPACE"/RELEASE_NOTES_v*.md "$RUNNER_TEMP/export/" 2>/dev/null || true
+          cd "$RUNNER_TEMP/export"
+          /usr/bin/ditto -c -k --keepParent . "$RUNNER_TEMP/Blackstock-1000.0.0-authoritative-source.zip"
+
+      - name: Autoritativen Source hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: Blackstock-1000.0.0-authoritative-source
+          if-no-files-found: error
+          retention-days: 7
+          path: ${{ runner.temp }}/Blackstock-1000.0.0-authoritative-source.zip
