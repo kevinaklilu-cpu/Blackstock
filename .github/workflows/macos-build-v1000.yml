@@ -31,54 +31,11 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Blackstock 1000 kanonisch rekonstruieren
-        id: reconstruct
-        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
           chmod +x "$GITHUB_WORKSPACE/Patches/Release1000/reconstruct-flow.sh"
           "$GITHUB_WORKSPACE/Patches/Release1000/reconstruct-flow.sh"
-
-      - name: Diagnose Kanalthema
-        if: steps.reconstruct.outcome == 'failure'
-        shell: bash
-        run: |
-          grep -q 'Kanalthema' "$GITHUB_WORKSPACE/Sources/Blackstock/Views/ChancenView.swift"
-          ! grep -q 'Picker("Thema", selection: \$store.v10Thema)' "$GITHUB_WORKSPACE/Sources/Blackstock/Views/ChancenView.swift"
-
-      - name: Diagnose Rechte und Local-only
-        if: steps.reconstruct.outcome == 'failure'
-        shell: bash
-        run: |
-          grep -q 'Nutzungsrechte bestätigen' "$GITHUB_WORKSPACE/Sources/Blackstock/Views/ChancenView.swift"
-          grep -q 'Die Datei bleibt lokal auf diesem Mac' "$GITHUB_WORKSPACE/Sources/Blackstock/Views/ChancenView.swift"
-
-      - name: Diagnose Source-first Dashboard
-        if: steps.reconstruct.outcome == 'failure'
-        shell: bash
-        run: grep -q 'Blackstock erzeugt hier kein künstliches Ersatzvideo' "$GITHUB_WORKSPACE/Sources/Blackstock/Views/CreatorOS1000View.swift"
-
-      - name: Diagnose Source-first Audio
-        if: steps.reconstruct.outcome == 'failure'
-        shell: bash
-        run: |
-          grep -q 'voiceover: nil' "$GITHUB_WORKSPACE/Sources/Blackstock/AppStore+V11.swift"
-          grep -q 'musik: nil' "$GITHUB_WORKSPACE/Sources/Blackstock/AppStore+V11.swift"
-
-      - name: Diagnose Source-first Branding
-        if: steps.reconstruct.outcome == 'failure'
-        shell: bash
-        run: grep -q 'watermarkAktiv = false' "$GITHUB_WORKSPACE/Sources/Blackstock/AppStore+V1000.swift"
-
-      - name: Diagnose High-quality Renderer
-        if: steps.reconstruct.outcome == 'failure'
-        shell: bash
-        run: grep -q 'BLACKSTOCK_SOURCE_FIRST_HIGH_QUALITY' "$GITHUB_WORKSPACE/Sources/Blackstock/Services/TimelineRendererService.swift"
-
-      - name: Rekonstruktion muss erfolgreich sein
-        if: steps.reconstruct.outcome == 'failure'
-        shell: bash
-        run: exit 1
 
       - name: Release-Metadaten laden
         shell: bash
