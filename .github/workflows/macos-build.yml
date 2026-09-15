@@ -104,6 +104,10 @@ jobs:
           test -f "$GITHUB_WORKSPACE/Patches/Release100/apply-audio-hotfix.py"
           python3 "$GITHUB_WORKSPACE/Patches/Release100/apply-audio-hotfix.py"
 
+          # Blackstock 100 Product-Hardening: echte Suche, priorisierte Discovery und Watched erst bei Playback.
+          test -f "$GITHUB_WORKSPACE/Patches/Release100/apply-product-hotfix.py"
+          python3 "$GITHUB_WORKSPACE/Patches/Release100/apply-product-hotfix.py"
+
           chmod +x "$GITHUB_WORKSPACE"/Build/*.sh "$GITHUB_WORKSPACE"/Build/*.zsh
           grep -q '^APP_VERSION=100.0.0$' "$GITHUB_WORKSPACE/Build/version.env"
           grep -q '^BUILD_NUMBER=10000$' "$GITHUB_WORKSPACE/Build/version.env"
@@ -112,6 +116,9 @@ jobs:
           grep -q 'release-core' "$GITHUB_WORKSPACE/Build/Core-Tests.sh"
           grep -q 'audioProfile.voiceVolume' "$GITHUB_WORKSPACE/Sources/Blackstock/Services/MasterVideoService.swift"
           grep -q 'audioProfile.musicVolume' "$GITHUB_WORKSPACE/Sources/Blackstock/Services/MasterVideoService.swift"
+          grep -q 'onPlaybackStarted: { markWatched() }' "$GITHUB_WORKSPACE/Sources/Blackstock/Views/ChancenView.swift"
+          grep -q 'let explicitTerms = zusaetzlicheMarktThemen' "$GITHUB_WORKSPACE/Sources/Blackstock/AppStore.swift"
+          grep -q 'zusaetzlicheThemen + kanaele.map' "$GITHUB_WORKSPACE/Sources/Blackstock/Services/YouTubeService.swift"
 
       - name: Release-Metadaten laden
         shell: bash
