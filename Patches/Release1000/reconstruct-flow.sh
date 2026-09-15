@@ -55,6 +55,7 @@ python3 "$ROOT/Patches/Release1000/apply-ui-language-hotfix.py"
 python3 "$ROOT/Patches/Release1000/apply-native-remix-hotfix.py"
 python3 "$ROOT/Patches/Release1000/apply-player-time-compile-fix.py"
 python3 "$ROOT/Patches/Release1000/apply-clean-workflow-hotfix.py"
+python3 "$ROOT/Patches/Release1000/apply-release-audit-hotfix.py"
 
 chmod +x "$ROOT"/Build/*.sh "$ROOT"/Build/*.zsh
 grep -q '^APP_VERSION=1000.0.0$' "$ROOT/Build/version.env"
