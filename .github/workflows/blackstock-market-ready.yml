@@ -1,0 +1,113 @@
+name: Blackstock Market Ready macOS
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ blackstock-market-ready ]
+    paths:
+      - 'BlackstockNext/**'
+      - 'TestsNext/**'
+      - 'BuildNext/**'
+      - '.github/workflows/blackstock-market-ready.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blackstock-market-ready
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 35
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: Toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          xcrun swiftc --version
+          sw_vers
+
+      - name: Core Regression Suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x BuildNext/*.sh BuildNext/*.zsh
+          BuildNext/core-tests.sh
+
+      - name: Markt-Reife Audit und Swift Typecheck
+        shell: bash
+        run: BuildNext/release-audit.sh
+
+      - name: Universal Blackstock 2 bauen
+        shell: zsh {0}
+        env:
+          BLACKSTOCK_NEXT_OUTPUT: ${{ github.workspace }}/dist-next/Blackstock.app
+          BLACKSTOCK_NEXT_BUILD_DIR: ${{ runner.temp }}/blackstock-market-ready-build
+        run: BuildNext/build-app.zsh
+
+      - name: App Bundle verifizieren
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$GITHUB_WORKSPACE/dist-next/Blackstock.app"
+          plutil -lint "$APP/Contents/Info.plist"
+          lipo "$APP/Contents/MacOS/Blackstock" -verify_arch arm64 x86_64
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")" = "2.0.0"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Contents/Info.plist")" = "200000"
+
+      - name: Start Smoke Test
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$GITHUB_WORKSPACE/dist-next/Blackstock.app"
+          "$APP/Contents/MacOS/Blackstock" >"$RUNNER_TEMP/blackstock-market-ready-smoke.log" 2>&1 &
+          PID=$!
+          sleep 6
+          if ! kill -0 "$PID" 2>/dev/null; then
+            cat "$RUNNER_TEMP/blackstock-market-ready-smoke.log"
+            exit 1
+          fi
+          kill "$PID" || true
+          wait "$PID" 2>/dev/null || true
+
+      - name: DMG und ZIP erzeugen
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$GITHUB_WORKSPACE/dist-next/Blackstock.app"
+          STAGE="$(mktemp -d)"
+          trap 'rm -rf "$STAGE"' EXIT
+          ditto "$APP" "$STAGE/Blackstock.app"
+          ln -s /Applications "$STAGE/Programme"
+          cat > "$STAGE/README.txt" <<'TXT'
+          BLACKSTOCK 2.0.0
+          Source-first macOS release.
+          YouTube-only content stays on YouTube. Local export requires an allowed local source file.
+          No automatic upload is performed by this version.
+          TXT
+          mkdir -p "$GITHUB_WORKSPACE/dist-next"
+          cd "$GITHUB_WORKSPACE/dist-next"
+          hdiutil create -volname "Blackstock 2.0.0" -srcfolder "$STAGE" -ov -format UDZO "Blackstock-2.0.0-universal.dmg" >/dev/null
+          hdiutil verify "Blackstock-2.0.0-universal.dmg" >/dev/null
+          shasum -a 256 "Blackstock-2.0.0-universal.dmg" > "Blackstock-2.0.0-universal.dmg.sha256"
+          ditto -c -k --keepParent Blackstock.app "Blackstock-2.0.0-universal.zip"
+          shasum -a 256 "Blackstock-2.0.0-universal.zip" > "Blackstock-2.0.0-universal.zip.sha256"
+
+      - name: Release Artefakt hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: Blackstock-2.0.0-market-ready-macOS
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            dist-next/Blackstock-2.0.0-universal.dmg
+            dist-next/Blackstock-2.0.0-universal.dmg.sha256
+            dist-next/Blackstock-2.0.0-universal.zip
+            dist-next/Blackstock-2.0.0-universal.zip.sha256
