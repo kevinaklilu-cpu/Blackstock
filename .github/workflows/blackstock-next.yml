@@ -1,4 +1,4 @@
-name: Blackstock Next
+name: Blackstock Next macOS Release
 
 on:
   workflow_dispatch:
@@ -17,21 +17,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test-and-build:
+  test-build-package:
     runs-on: macos-26
-    timeout-minutes: 30
+    timeout-minutes: 45
+    env:
+      APP_VERSION: '1.0.0'
+      BUILD_NUMBER: '100'
+      BLACKSTOCK_GOOGLE_CLIENT_ID: ${{ secrets.BLACKSTOCK_GOOGLE_CLIENT_ID }}
+      BLACKSTOCK_GOOGLE_CLIENT_SECRET: ${{ secrets.BLACKSTOCK_GOOGLE_CLIENT_SECRET }}
     steps:
       - uses: actions/checkout@v4
+
       - name: Toolchain
         run: |
           xcodebuild -version
           swift --version
-      - name: Tests
+
+      - name: Unit tests
         working-directory: Next
         run: swift test -c debug
-      - name: Release build
-        working-directory: Next
-        run: swift build -c release
+
       - name: Guardrails
         run: |
           set -euo pipefail
@@ -39,5 +44,111 @@ jobs:
           grep -R -q 'localExportAllowed' Next/Sources/BlackstockNext
           grep -R -q 'Auto-Fix vor Stop' Next/Sources/BlackstockNext
           grep -R -q 'uploadType.*resumable' Next/Sources/BlackstockNext
+          grep -R -q 'PublishingCoordinator' Next/Sources/BlackstockNext/App.swift
+          grep -R -q 'HighQualityRenderService' Next/Sources/BlackstockNext/App.swift
+          grep -R -q 'YouTubeEmbedView' Next/Sources/BlackstockNext/App.swift
+          grep -R -q 'KeychainStore' Next/Sources/BlackstockNext
           ! grep -R -E -q 'youtube-dl|yt-dlp|pytube' Next/Sources/BlackstockNext
           ! grep -R -q 'KI-Stimme' Next/Sources/BlackstockNext
+
+      - name: Universal release build
+        working-directory: Next
+        run: |
+          set -euo pipefail
+          rm -rf .build-arm64 .build-x86_64
+          swift build -c release --arch arm64 --build-path .build-arm64
+          swift build -c release --arch x86_64 --build-path .build-x86_64
+          ARM_BIN=$(find .build-arm64 -type f -path '*/release/BlackstockNext' -perm -111 | head -1)
+          X86_BIN=$(find .build-x86_64 -type f -path '*/release/BlackstockNext' -perm -111 | head -1)
+          test -n "$ARM_BIN" && test -n "$X86_BIN"
+          mkdir -p dist/Blackstock.app/Contents/MacOS dist/Blackstock.app/Contents/Resources
+          lipo -create "$ARM_BIN" "$X86_BIN" -output dist/Blackstock.app/Contents/MacOS/Blackstock
+          chmod +x dist/Blackstock.app/Contents/MacOS/Blackstock
+          file dist/Blackstock.app/Contents/MacOS/Blackstock
+          lipo -archs dist/Blackstock.app/Contents/MacOS/Blackstock | grep -q arm64
+          lipo -archs dist/Blackstock.app/Contents/MacOS/Blackstock | grep -q x86_64
+
+      - name: App metadata
+        working-directory: Next
+        run: |
+          set -euo pipefail
+          APP='dist/Blackstock.app'
+          cat > "$APP/Contents/Info.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>CFBundleDevelopmentRegion</key><string>de</string>
+            <key>CFBundleDisplayName</key><string>Blackstock</string>
+            <key>CFBundleExecutable</key><string>Blackstock</string>
+            <key>CFBundleIdentifier</key><string>de.blackstock.native.next</string>
+            <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+            <key>CFBundleName</key><string>Blackstock</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleShortVersionString</key><string>${APP_VERSION}</string>
+            <key>CFBundleVersion</key><string>${BUILD_NUMBER}</string>
+            <key>LSMinimumSystemVersion</key><string>13.0</string>
+            <key>NSHighResolutionCapable</key><true/>
+            <key>NSSpeechRecognitionUsageDescription</key><string>Blackstock transkribiert lokal ausgewählte Videodateien, um Schnittpunkte und Untertitel vorzuschlagen.</string>
+            <key>NSHumanReadableCopyright</key><string>Blackstock</string>
+          </dict></plist>
+          PLIST
+          if [ -n "${BLACKSTOCK_GOOGLE_CLIENT_ID:-}" ]; then
+            /usr/libexec/PlistBuddy -c "Add :BlackstockGoogleClientID string ${BLACKSTOCK_GOOGLE_CLIENT_ID}" "$APP/Contents/Info.plist"
+          fi
+          if [ -n "${BLACKSTOCK_GOOGLE_CLIENT_SECRET:-}" ]; then
+            /usr/libexec/PlistBuddy -c "Add :BlackstockGoogleClientSecret string ${BLACKSTOCK_GOOGLE_CLIENT_SECRET}" "$APP/Contents/Info.plist"
+          fi
+          plutil -lint "$APP/Contents/Info.plist"
+
+      - name: Code sign and verify
+        working-directory: Next
+        run: |
+          set -euo pipefail
+          APP='dist/Blackstock.app'
+          codesign --force --deep --sign - --timestamp=none "$APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          codesign -dv --verbose=2 "$APP" 2>&1 | tee dist/codesign.txt
+
+      - name: App smoke test
+        working-directory: Next
+        run: |
+          set -euo pipefail
+          APP='dist/Blackstock.app'
+          "$APP/Contents/MacOS/Blackstock" >dist/smoke.log 2>&1 &
+          PID=$!
+          sleep 4
+          if ! kill -0 "$PID" 2>/dev/null; then
+            cat dist/smoke.log
+            exit 1
+          fi
+          kill "$PID" || true
+          wait "$PID" || true
+
+      - name: Create DMG and ZIP
+        working-directory: Next
+        run: |
+          set -euo pipefail
+          mkdir -p dist/dmg-root
+          cp -R dist/Blackstock.app dist/dmg-root/Blackstock.app
+          ln -s /Applications dist/dmg-root/Applications
+          hdiutil create -volname 'Blackstock' -srcfolder dist/dmg-root -ov -format UDZO "dist/Blackstock-${APP_VERSION}-universal.dmg"
+          ditto -c -k --sequesterRsrc --keepParent dist/Blackstock.app "dist/Blackstock-${APP_VERSION}-universal.zip"
+          shasum -a 256 "dist/Blackstock-${APP_VERSION}-universal.dmg" > "dist/Blackstock-${APP_VERSION}-universal.dmg.sha256"
+          shasum -a 256 "dist/Blackstock-${APP_VERSION}-universal.zip" > "dist/Blackstock-${APP_VERSION}-universal.zip.sha256"
+          hdiutil verify "dist/Blackstock-${APP_VERSION}-universal.dmg"
+          ls -lh dist/Blackstock-${APP_VERSION}-universal.*
+
+      - name: Upload release artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Blackstock-${{ env.APP_VERSION }}-macOS
+          path: |
+            Next/dist/Blackstock-${{ env.APP_VERSION }}-universal.dmg
+            Next/dist/Blackstock-${{ env.APP_VERSION }}-universal.dmg.sha256
+            Next/dist/Blackstock-${{ env.APP_VERSION }}-universal.zip
+            Next/dist/Blackstock-${{ env.APP_VERSION }}-universal.zip.sha256
+            Next/dist/codesign.txt
+            Next/dist/smoke.log
+          if-no-files-found: error
+          compression-level: 0
