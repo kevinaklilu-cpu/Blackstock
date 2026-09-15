@@ -1,0 +1,185 @@
+name: Blackstock 1000 macOS App / DMG
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'Patches/Release1000/**'
+      - '.github/workflows/macos-build-v1000.yml'
+
+permissions:
+  contents: read
+
+env:
+  APP_NAME: Blackstock
+
+concurrency:
+  group: blackstock-1000-macos-release
+  cancel-in-progress: true
+
+jobs:
+  build-release-1000:
+    runs-on: macos-26
+    timeout-minutes: 50
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: Blackstock 1000 exakt rekonstruieren
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "$GITHUB_WORKSPACE/blackstock-build-payload.zip"
+          /usr/bin/ditto -x -k "$GITHUB_WORKSPACE/blackstock-build-payload.zip" "$GITHUB_WORKSPACE"
+          chmod +x "$GITHUB_WORKSPACE"/Build/*.sh "$GITHUB_WORKSPACE"/Build/*.zsh
+
+          if [[ -f "$GITHUB_WORKSPACE/Patches/WachstumView.swift" ]]; then
+            cp "$GITHUB_WORKSPACE/Patches/WachstumView.swift" "$GITHUB_WORKSPACE/Sources/Blackstock/Views/WachstumView.swift"
+          fi
+          sed -i '' 's|lipo -verify_arch arm64 x86_64 "$MACOS/Blackstock"|lipo "$MACOS/Blackstock" -verify_arch arm64 x86_64|' "$GITHUB_WORKSPACE/Build/build-app.zsh"
+          sed -i '' 's|lipo -verify_arch arm64 x86_64 "$APP/Contents/MacOS/Blackstock"|lipo "$APP/Contents/MacOS/Blackstock" -verify_arch arm64 x86_64|' "$GITHUB_WORKSPACE/Build/create-dmg.zsh" "$GITHUB_WORKSPACE/Build/verify-release.zsh"
+
+          python3 "$GITHUB_WORKSPACE/Patches/apply-v12.py"
+          sed -i '' 's|featureAutorisiert(.live, verbindungID:|featureAutorisiert(.liveManagement, verbindungID:|g' "$GITHUB_WORKSPACE/Sources/Blackstock/AppStore+V12.swift"
+          python3 "$GITHUB_WORKSPACE/Patches/apply-v13.py"
+
+          cat "$GITHUB_WORKSPACE"/Patches/V25/final.part* > "$RUNNER_TEMP/blackstock25.patch.gz.b64"
+          base64 -d < "$RUNNER_TEMP/blackstock25.patch.gz.b64" > "$RUNNER_TEMP/blackstock25.patch.gz"
+          gunzip -c "$RUNNER_TEMP/blackstock25.patch.gz" > "$RUNNER_TEMP/blackstock25.patch"
+          patch --batch -p1 < "$RUNNER_TEMP/blackstock25.patch"
+          find "$GITHUB_WORKSPACE" \( -name '*.orig' -o -name '*.rej' \) -delete
+          cat > "$GITHUB_WORKSPACE/RELEASE_MANIFEST.txt" <<'EOF25'
+          Blackstock 25.0.0 (Build 2500)
+          Bundle ID: de.blackstock.native
+          Minimum macOS: 13.0
+          Creator flow: Channel -> Topic -> YouTube Trends -> Preview -> Clip/Remix -> Quality -> Render -> Upload -> Learning
+          EOF25
+          sed -i '' 's/RELEASE_NOTES_v14\.md/RELEASE_NOTES_v25.md/g' "$GITHUB_WORKSPACE/Build/Release-Audit.sh"
+
+          cat "$GITHUB_WORKSPACE"/Patches/Release50/final.part* > "$RUNNER_TEMP/blackstock50.patch.gz.b64"
+          base64 -d < "$RUNNER_TEMP/blackstock50.patch.gz.b64" > "$RUNNER_TEMP/blackstock50.patch.gz"
+          gunzip -c "$RUNNER_TEMP/blackstock50.patch.gz" > "$RUNNER_TEMP/blackstock50.patch"
+          patch --batch -p1 < "$RUNNER_TEMP/blackstock50.patch"
+          find "$GITHUB_WORKSPACE" \( -name '*.orig' -o -name '*.rej' \) -delete
+          grep -q '^APP_VERSION=50.0.0$' "$GITHUB_WORKSPACE/Build/version.env"
+
+          cat "$GITHUB_WORKSPACE"/Patches/Release100/auth.part* > "$RUNNER_TEMP/blackstock100.patch.gz.b64"
+          base64 -d < "$RUNNER_TEMP/blackstock100.patch.gz.b64" > "$RUNNER_TEMP/blackstock100.patch.gz"
+          gunzip -c "$RUNNER_TEMP/blackstock100.patch.gz" > "$RUNNER_TEMP/blackstock100.patch"
+          test "$(shasum -a 256 "$RUNNER_TEMP/blackstock100.patch" | awk '{print $1}')" = "757850e2a4c1ab8d945eba0fad06e33c5a82291dc4bac70a29173a110a2f481c"
+          patch --batch -p1 < "$RUNNER_TEMP/blackstock100.patch"
+          python3 "$GITHUB_WORKSPACE/Patches/Release100/apply-audio-hotfix.py"
+          python3 "$GITHUB_WORKSPACE/Patches/Release100/apply-product-hotfix.py"
+          grep -q '^APP_VERSION=100.0.0$' "$GITHUB_WORKSPACE/Build/version.env"
+
+          base64 -d < "$GITHUB_WORKSPACE/Patches/Release1000/final.patch.gz.b64" > "$RUNNER_TEMP/blackstock1000.patch.gz"
+          gunzip -c "$RUNNER_TEMP/blackstock1000.patch.gz" > "$RUNNER_TEMP/blackstock1000.patch"
+          patch --batch -p1 < "$RUNNER_TEMP/blackstock1000.patch"
+          test ! -e "$GITHUB_WORKSPACE/Build/Core-Tests.sh.rej"
+          test ! -e "$GITHUB_WORKSPACE/Build/Release-Audit.sh.rej"
+          find "$GITHUB_WORKSPACE" \( -name '*.orig' -o -name '*.rej' \) -delete
+
+          chmod +x "$GITHUB_WORKSPACE"/Build/*.sh "$GITHUB_WORKSPACE"/Build/*.zsh
+          grep -q '^APP_VERSION=1000.0.0$' "$GITHUB_WORKSPACE/Build/version.env"
+          grep -q '^BUILD_NUMBER=100000$' "$GITHUB_WORKSPACE/Build/version.env"
+          grep -q 'Blackstock 1000.0.0 (Build 100000)' "$GITHUB_WORKSPACE/RELEASE_MANIFEST.txt"
+          grep -q 'CreatorOS1000View' "$GITHUB_WORKSPACE/Sources/Blackstock/Views/RootView.swift"
+          grep -q 'v1000AutopilotRun' "$GITHUB_WORKSPACE/Sources/Blackstock/AppStore+V1000.swift"
+          grep -q 'BLACKSTOCK_1000_CORE_TESTS_OK' "$GITHUB_WORKSPACE/Tests/Release1000CoreTests.swift"
+
+      - name: Release-Metadaten laden
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "$GITHUB_WORKSPACE/Build/version.env"
+          set +a
+          echo "APP_VERSION=$APP_VERSION" >> "$GITHUB_ENV"
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
+          echo "MIN_MACOS=$MIN_MACOS" >> "$GITHUB_ENV"
+          echo "BUNDLE_ID=$BUNDLE_ID" >> "$GITHUB_ENV"
+          xcodebuild -version
+          xcrun swiftc --version
+          sw_vers
+
+      - name: Portable Regression Suite
+        shell: bash
+        run: "$GITHUB_WORKSPACE/Build/Core-Tests.sh"
+
+      - name: Vollständiger Release-Audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          SWIFTC="$(xcrun --sdk macosx --find swiftc)" \
+          SDKROOT="$(xcrun --sdk macosx --show-sdk-path)" \
+          SWIFT_TARGET="arm64-apple-macosx${MIN_MACOS}" \
+          "$GITHUB_WORKSPACE/Build/Release-Audit.sh"
+
+      - name: Universal Blackstock.app bauen
+        shell: zsh {0}
+        env:
+          BLACKSTOCK_APP_OUTPUT: ${{ github.workspace }}/dist/Blackstock.app
+          BLACKSTOCK_BUILD_DIR: ${{ runner.temp }}/blackstock-1000-native-build
+          BLACKSTOCK_BUILD_LOG: ${{ runner.temp }}/Blackstock-1000-Buildprotokoll.txt
+          BLACKSTOCK_SIGN_IDENTITY: '-'
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          "$GITHUB_WORKSPACE/Build/build-app.zsh"
+
+      - name: App-Bundle verifizieren
+        shell: zsh {0}
+        run: |
+          set -euo pipefail
+          APP="$GITHUB_WORKSPACE/dist/Blackstock.app"
+          plutil -lint "$APP/Contents/Info.plist"
+          lipo "$APP/Contents/MacOS/Blackstock" -verify_arch arm64 x86_64
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")" = "$APP_VERSION"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Contents/Info.plist")" = "$BUILD_NUMBER"
+
+      - name: Start-Smoke-Test
+        shell: zsh {0}
+        run: |
+          set -euo pipefail
+          APP="$GITHUB_WORKSPACE/dist/Blackstock.app"
+          "$APP/Contents/MacOS/Blackstock" >"$RUNNER_TEMP/blackstock-1000-smoke.log" 2>&1 &
+          PID=$!
+          sleep 6
+          if ! kill -0 "$PID" 2>/dev/null; then
+            cat "$RUNNER_TEMP/blackstock-1000-smoke.log"
+            exit 1
+          fi
+          kill "$PID" || true
+          wait "$PID" 2>/dev/null || true
+
+      - name: DMG und ZIP erzeugen
+        shell: zsh {0}
+        run: |
+          set -euo pipefail
+          APP="$GITHUB_WORKSPACE/dist/Blackstock.app"
+          STAGE="$(mktemp -d)"
+          trap 'rm -rf "$STAGE"' EXIT
+          /usr/bin/ditto "$APP" "$STAGE/Blackstock.app"
+          ln -s /Applications "$STAGE/Programme"
+          cp "$GITHUB_WORKSPACE/Distribution/INSTALLIEREN.txt" "$STAGE/INSTALLIEREN.txt"
+          DMG="$GITHUB_WORKSPACE/dist/Blackstock-${APP_VERSION}-universal.dmg"
+          hdiutil create -volname "Blackstock ${APP_VERSION}" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
+          hdiutil verify "$DMG" >/dev/null
+          shasum -a 256 "$DMG" > "$DMG.sha256"
+          cd "$GITHUB_WORKSPACE/dist"
+          /usr/bin/ditto -c -k --keepParent Blackstock.app "Blackstock-${APP_VERSION}-universal.zip"
+          shasum -a 256 "Blackstock-${APP_VERSION}-universal.zip" > "Blackstock-${APP_VERSION}-universal.zip.sha256"
+
+      - name: Blackstock 1000 hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: Blackstock-${{ env.APP_VERSION }}-macOS
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            dist/Blackstock-${{ env.APP_VERSION }}-universal.dmg
+            dist/Blackstock-${{ env.APP_VERSION }}-universal.dmg.sha256
+            dist/Blackstock-${{ env.APP_VERSION }}-universal.zip
+            dist/Blackstock-${{ env.APP_VERSION }}-universal.zip.sha256
