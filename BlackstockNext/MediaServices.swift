@@ -66,7 +66,7 @@ public final class LocalSpeechTranscriber {
         guard let exporter = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetAppleM4A) else { throw BlackstockError.speechUnavailable }
         exporter.outputURL = destination
         exporter.outputFileType = .m4a
-        await withCheckedContinuation { continuation in exporter.exportAsynchronously { continuation.resume() } }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in exporter.exportAsynchronously { continuation.resume() } }
         guard exporter.status == .completed else { throw exporter.error ?? BlackstockError.speechUnavailable }
         return destination
     }
@@ -97,7 +97,7 @@ public enum HighQualityRenderService {
             compositionVideo.preferredTransform = try await sourceVideo.load(.preferredTransform)
         }
         if FileManager.default.fileExists(atPath: destination.path) { try FileManager.default.removeItem(at: destination) }
-        await withCheckedContinuation { continuation in exporter.exportAsynchronously { continuation.resume() } }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in exporter.exportAsynchronously { continuation.resume() } }
         guard exporter.status == .completed else { throw BlackstockError.exportFailed(exporter.error?.localizedDescription ?? "Unbekannter Rendererfehler") }
     }
 
@@ -108,12 +108,18 @@ public enum HighQualityRenderService {
         let orientedSize = CGSize(width: abs(sourceRect.width), height: abs(sourceRect.height))
         let fpsValue = Double(try await sourceTrack.load(.nominalFrameRate))
         let fps = max(24, min(60, fpsValue > 0 ? fpsValue : 30))
-        let longEdge = max(orientedSize.width, orientedSize.height)
         let target: CGSize
         switch aspect {
-        case .vertical: target = longEdge >= 3000 ? CGSize(width: 2160, height: 3840) : CGSize(width: 1080, height: 1920)
-        case .square: let edge: CGFloat = longEdge >= 3000 ? 2160 : 1080; target = CGSize(width: edge, height: edge)
-        case .original: target = orientedSize
+        case .vertical:
+            let maxWidthWithoutUpscale = min(orientedSize.width, orientedSize.height * 9.0 / 16.0, 2160)
+            let width = max(2, floor(maxWidthWithoutUpscale / 2) * 2)
+            let height = max(2, floor((width * 16.0 / 9.0) / 2) * 2)
+            target = CGSize(width: width, height: height)
+        case .square:
+            let edge = max(2, floor(min(orientedSize.width, orientedSize.height, 2160) / 2) * 2)
+            target = CGSize(width: edge, height: edge)
+        case .original:
+            target = orientedSize
         }
         let normalize = preferredTransform.concatenating(CGAffineTransform(translationX: -sourceRect.minX, y: -sourceRect.minY))
         let scale = max(target.width / max(1, orientedSize.width), target.height / max(1, orientedSize.height))
@@ -145,11 +151,13 @@ public enum QualityGate {
         case .original:
             if output.width >= min(source.width, 1920) || output.height >= min(source.height, 1080) { checks.append("Quellauflösung hochwertig erhalten") } else { warnings.append("Auflösung liegt unerwartet unter der Quelle") }
         case .vertical:
-            if output.height > output.width && output.height >= 1920 { checks.append("9:16-Ausgabe in Full-HD oder höher") } else { warnings.append("9:16-Ausgabe ist nicht hochauflösend") }
+            let expectedWidth = min(Double(source.width), Double(source.height) * 9.0 / 16.0, 2160)
+            if output.height > output.width && abs(Double(output.width) - expectedWidth) <= 6 { checks.append("9:16 ohne künstliches Upscaling") } else { warnings.append("9:16-Ausgabe weicht vom quelltreuen Crop ab") }
         case .square:
-            if abs(output.width - output.height) <= 2 && output.width >= 1080 { checks.append("Quadratische Ausgabe in 1080p oder höher") } else { warnings.append("1:1-Ausgabe entspricht nicht dem Qualitätsziel") }
+            let expectedEdge = min(source.width, source.height, 2160)
+            if abs(output.width - output.height) <= 2 && abs(output.width - expectedEdge) <= 4 { checks.append("1:1 ohne künstliches Upscaling") } else { warnings.append("1:1-Ausgabe weicht vom quelltreuen Crop ab") }
         }
-        if output.fileSizeBytes > 1_000_000 { checks.append("Exportdatei plausibel groß") } else { warnings.append("Exportdatei ist ungewöhnlich klein") }
+        if output.fileSizeBytes > 64_000 { checks.append("Exportdatei plausibel groß") } else { warnings.append("Exportdatei ist ungewöhnlich klein") }
         return QualityReport(passed: warnings.isEmpty, checks: checks, warnings: warnings, output: output)
     }
 }
