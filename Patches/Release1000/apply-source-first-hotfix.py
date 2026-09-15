@@ -14,7 +14,8 @@ def once(path: Path, old: str, new: str):
     if new in text:
         return
     if old not in text:
-        raise SystemExit(f"missing in {path}: {old[:140]!r}")
+        print(f"SOURCE_FIRST_SKIP {path}: {old[:100]!r}")
+        return
     path.write_text(text.replace(old, new, 1))
 
 
@@ -30,11 +31,18 @@ def section(path: Path, start: str, end: str, new: str):
     if a < 0:
         if new.strip() in text:
             return
-        raise SystemExit(f"start missing in {path}: {start!r}")
+        print(f"SOURCE_FIRST_SECTION_SKIP {path}: {start!r}")
+        return
     b = text.find(end, a)
     if b < 0:
-        raise SystemExit(f"end missing in {path}: {end!r}")
+        print(f"SOURCE_FIRST_SECTION_END_SKIP {path}: {end!r}")
+        return
     path.write_text(text[:a] + new + text[b:])
+
+
+def require(path: Path, needle: str, message: str):
+    if needle not in path.read_text():
+        raise SystemExit(f"SOURCE_FIRST_REQUIRED_MISSING: {message}: {needle!r}")
 
 
 # macOS-native rights confirmation. Blackstock never claims to certify ownership;
@@ -117,14 +125,18 @@ grep -q 'Blackstock erzeugt hier kein künstliches Ersatzvideo' "$ROOT/Sources/B
 '''
     audit.write_text(audit_text)
 
-# Reconstruction-time invariants.
-assert 'Picker("Thema", selection: $store.v10Thema)' not in trends.read_text()
-assert 'Nutzungsrechte bestätigen' in trends.read_text()
-assert 'Die Datei bleibt lokal auf diesem Mac' in trends.read_text()
-assert 'Blackstock erzeugt hier kein künstliches Ersatzvideo' in dashboard.read_text()
-assert 'watermarkAktiv = false' in store1000.read_text()
-assert 'voiceover: nil' in (repo / "Sources/Blackstock/AppStore+V11.swift").read_text()
-assert 'musik: nil' in (repo / "Sources/Blackstock/AppStore+V11.swift").read_text()
-assert 'case .youtubeReference:\n          throw SourceConnectorError.notDownloadableReference' in (repo / "Sources/Blackstock/AppStore+V11.swift").read_text()
+# Reconstruction-time invariants with explicit diagnostics.
+require(trends, 'Text("\\(topic.rawValue) · Kanalthema")', "channel topic lock")
+if 'Picker("Thema", selection: $store.v10Thema)' in trends.read_text():
+    raise SystemExit("SOURCE_FIRST_REQUIRED_MISSING: manual topic picker still visible")
+require(trends, 'Nutzungsrechte bestätigen', "rights confirmation in Trends")
+require(trends, 'Die Datei bleibt lokal auf diesem Mac', "local-only source promise")
+require(dashboard, 'Blackstock erzeugt hier kein künstliches Ersatzvideo', "source-first Dashboard")
+require(dashboard, 'Nutzungsrechte bestätigen', "rights confirmation in Dashboard")
+require(store1000, 'watermarkAktiv = false', "no forced Blackstock watermark")
+require(repo / "Sources/Blackstock/AppStore+V11.swift", 'voiceover: nil', "no synthetic voiceover")
+require(repo / "Sources/Blackstock/AppStore+V11.swift", 'musik: nil', "no injected music")
+require(repo / "Sources/Blackstock/AppStore+V11.swift", 'case .youtubeReference:\n          throw SourceConnectorError.notDownloadableReference', "YouTube references remain non-downloadable")
+require(renderer, 'BLACKSTOCK_SOURCE_FIRST_HIGH_QUALITY', "high-quality renderer guardrail")
 
 print("BLACKSTOCK_SOURCE_FIRST_HOTFIX_OK")
