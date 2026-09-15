@@ -100,12 +100,18 @@ jobs:
           test ! -e "$GITHUB_WORKSPACE/Tests/V11CoreTests.swift.rej"
           find "$GITHUB_WORKSPACE" \( -name '*.orig' -o -name '*.rej' \) -delete
 
+          # Blackstock 100 Audio-Hardening: ein gemeinsames Audio-Profil für Original, Voiceover und Musik.
+          test -f "$GITHUB_WORKSPACE/Patches/Release100/apply-audio-hotfix.py"
+          python3 "$GITHUB_WORKSPACE/Patches/Release100/apply-audio-hotfix.py"
+
           chmod +x "$GITHUB_WORKSPACE"/Build/*.sh "$GITHUB_WORKSPACE"/Build/*.zsh
           grep -q '^APP_VERSION=100.0.0$' "$GITHUB_WORKSPACE/Build/version.env"
           grep -q '^BUILD_NUMBER=10000$' "$GITHUB_WORKSPACE/Build/version.env"
           grep -q 'Blackstock 100.0.0 (Build 10000)' "$GITHUB_WORKSPACE/RELEASE_MANIFEST.txt"
           grep -q 'RELEASE_NOTES_v100.md' "$GITHUB_WORKSPACE/Build/Release-Audit.sh"
           grep -q 'release-core' "$GITHUB_WORKSPACE/Build/Core-Tests.sh"
+          grep -q 'audioProfile.voiceVolume' "$GITHUB_WORKSPACE/Sources/Blackstock/Services/MasterVideoService.swift"
+          grep -q 'audioProfile.musicVolume' "$GITHUB_WORKSPACE/Sources/Blackstock/Services/MasterVideoService.swift"
 
       - name: Release-Metadaten laden
         shell: bash
