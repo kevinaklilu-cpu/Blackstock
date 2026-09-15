@@ -1,0 +1,72 @@
+name: Export Blackstock 25 Source
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/export-v25-source.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export-source:
+    runs-on: macos-26
+    timeout-minutes: 15
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: Blackstock 25 exakt rekonstruieren
+        shell: bash
+        run: |
+          set -euo pipefail
+          /usr/bin/ditto -x -k "$GITHUB_WORKSPACE/blackstock-build-payload.zip" "$GITHUB_WORKSPACE"
+          chmod +x "$GITHUB_WORKSPACE"/Build/*.sh "$GITHUB_WORKSPACE"/Build/*.zsh
+          if [[ -f "$GITHUB_WORKSPACE/Patches/WachstumView.swift" ]]; then
+            cp "$GITHUB_WORKSPACE/Patches/WachstumView.swift" "$GITHUB_WORKSPACE/Sources/Blackstock/Views/WachstumView.swift"
+          fi
+          sed -i '' 's|lipo -verify_arch arm64 x86_64 "$MACOS/Blackstock"|lipo "$MACOS/Blackstock" -verify_arch arm64 x86_64|' "$GITHUB_WORKSPACE/Build/build-app.zsh"
+          sed -i '' 's|lipo -verify_arch arm64 x86_64 "$APP/Contents/MacOS/Blackstock"|lipo "$APP/Contents/MacOS/Blackstock" -verify_arch arm64 x86_64|' "$GITHUB_WORKSPACE/Build/create-dmg.zsh" "$GITHUB_WORKSPACE/Build/verify-release.zsh"
+          python3 "$GITHUB_WORKSPACE/Patches/apply-v12.py"
+          sed -i '' 's|featureAutorisiert(.live, verbindungID:|featureAutorisiert(.liveManagement, verbindungID:|g' "$GITHUB_WORKSPACE/Sources/Blackstock/AppStore+V12.swift"
+          python3 "$GITHUB_WORKSPACE/Patches/apply-v13.py"
+          cat "$GITHUB_WORKSPACE"/Patches/V25/final.part* > "$RUNNER_TEMP/blackstock25.patch.gz.b64"
+          base64 -d < "$RUNNER_TEMP/blackstock25.patch.gz.b64" > "$RUNNER_TEMP/blackstock25.patch.gz"
+          gunzip -c "$RUNNER_TEMP/blackstock25.patch.gz" > "$RUNNER_TEMP/blackstock25.patch"
+          patch --batch -p1 < "$RUNNER_TEMP/blackstock25.patch"
+          find "$GITHUB_WORKSPACE" \( -name '*.orig' -o -name '*.rej' \) -delete
+          cat > "$GITHUB_WORKSPACE/RELEASE_MANIFEST.txt" <<'EOF'
+          Blackstock 25.0.0 (Build 2500)
+          Bundle ID: de.blackstock.native
+          Minimum macOS: 13.0
+          Creator flow: Channel -> Topic -> YouTube Trends -> Preview -> Clip/Remix -> Quality -> Render -> Upload -> Learning
+          EOF
+          sed -i '' 's/RELEASE_NOTES_v14\.md/RELEASE_NOTES_v25.md/g' "$GITHUB_WORKSPACE/Build/Release-Audit.sh"
+          grep -q '^APP_VERSION=25.0.0$' "$GITHUB_WORKSPACE/Build/version.env"
+          grep -q '^BUILD_NUMBER=2500$' "$GITHUB_WORKSPACE/Build/version.env"
+
+      - name: Source-Paket erzeugen
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/export"
+          /usr/bin/ditto -c -k \
+            --keepParent \
+            "$GITHUB_WORKSPACE/Sources" \
+            "$RUNNER_TEMP/export/Sources.zip"
+          cp -R "$GITHUB_WORKSPACE/Build" "$RUNNER_TEMP/export/Build"
+          cp -R "$GITHUB_WORKSPACE/Tests" "$RUNNER_TEMP/export/Tests"
+          cp "$GITHUB_WORKSPACE/RELEASE_MANIFEST.txt" "$RUNNER_TEMP/export/"
+          cp "$GITHUB_WORKSPACE"/RELEASE_NOTES_v*.md "$RUNNER_TEMP/export/" 2>/dev/null || true
+          cd "$RUNNER_TEMP/export"
+          /usr/bin/ditto -c -k --keepParent . "$RUNNER_TEMP/Blackstock-25.0.0-reconstructed-source.zip"
+
+      - name: Rekonstruierten Source-Stand hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: Blackstock-25.0.0-reconstructed-source
+          if-no-files-found: error
+          retention-days: 2
+          path: ${{ runner.temp }}/Blackstock-25.0.0-reconstructed-source.zip
