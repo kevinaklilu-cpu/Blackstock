@@ -33,7 +33,18 @@ struct UploadRecoveryState: Codable, Hashable {
 }
 
 struct PublicationSettings: Codable, Hashable {
-    enum Privacy: String, Codable, CaseIterable { case `private`, unlisted, `public` }
+    enum Privacy: String, Codable, CaseIterable, Identifiable {
+        case `private`, unlisted, `public`
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .private: return "Privat"
+            case .unlisted: return "Nicht gelistet"
+            case .public: return "Öffentlich"
+            }
+        }
+    }
+
     var title: String
     var description: String
     var tags: [String]
@@ -52,10 +63,15 @@ struct BlackstockProject: Identifiable, Codable, Hashable {
     var updatedAt: Date
     var channelID: String?
     var sourcePath: String
+    var sourceBookmark: Data?
     var rightsConfirmed: Bool
+    var transcriptWords: [TranscriptWord]?
+    var transcriptText: String?
+    var clipCandidates: [ClipCandidate]?
     var selectedClip: ClipCandidate?
     var captionStyle: CaptionStyle
     var captions: [CaptionCue]
+    var outputPortrait: Bool?
     var renderedPath: String?
     var stage: ProjectStage
     var publication: PublicationSettings
@@ -69,10 +85,15 @@ struct BlackstockProject: Identifiable, Codable, Hashable {
         updatedAt = Date()
         self.channelID = channelID
         sourcePath = sourceURL.path
+        sourceBookmark = try? sourceURL.bookmarkData(options: [.withSecurityScope], includingResourceValuesForKeys: nil, relativeTo: nil)
         rightsConfirmed = false
+        transcriptWords = nil
+        transcriptText = nil
+        clipCandidates = nil
         selectedClip = nil
         captionStyle = .clean
         captions = []
+        outputPortrait = nil
         renderedPath = nil
         stage = .source
         publication = .init(
@@ -90,6 +111,14 @@ struct BlackstockProject: Identifiable, Codable, Hashable {
         uploadRecovery = nil
         youtubeVideoID = nil
         lastError = nil
+    }
+
+    func resolvedSourceURL() -> URL {
+        if let sourceBookmark,
+           let resolved = try? URL(resolvingBookmarkData: sourceBookmark, options: [.withSecurityScope], relativeTo: nil, bookmarkDataIsStale: nil) {
+            return resolved
+        }
+        return URL(fileURLWithPath: sourcePath)
     }
 }
 
@@ -116,12 +145,16 @@ final class ProjectStore: ObservableObject {
 
     @discardableResult
     func create(sourceURL: URL, channelID: String?) -> UUID {
-        var project = BlackstockProject(sourceURL: sourceURL, channelID: channelID)
-        if let channelID { project.channelID = channelID }
+        let project = BlackstockProject(sourceURL: sourceURL, channelID: channelID)
         projects.insert(project, at: 0)
         selectedProjectID = project.id
         persist()
         return project.id
+    }
+
+    func select(_ id: UUID) {
+        guard projects.contains(where: { $0.id == id }) else { return }
+        selectedProjectID = id
     }
 
     func update(_ project: BlackstockProject) {
@@ -132,6 +165,7 @@ final class ProjectStore: ObservableObject {
         } else {
             projects.insert(copy, at: 0)
         }
+        projects.sort { $0.updatedAt > $1.updatedAt }
         selectedProjectID = copy.id
         persist()
     }
