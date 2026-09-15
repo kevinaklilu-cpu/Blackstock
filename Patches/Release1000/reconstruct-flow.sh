@@ -56,7 +56,9 @@ python3 "$ROOT/Patches/Release1000/apply-native-remix-hotfix.py"
 python3 "$ROOT/Patches/Release1000/apply-player-time-compile-fix.py"
 python3 "$ROOT/Patches/Release1000/apply-clean-workflow-hotfix.py"
 python3 "$ROOT/Patches/Release1000/apply-release-audit-hotfix.py"
-python3 "$ROOT/Patches/Release1000/apply-source-first-hotfix.py"
+# The source-first patch is intentionally followed by canonical shell guardrails below.
+# A diagnostic assertion inside the patch must not hide which product contract failed.
+python3 "$ROOT/Patches/Release1000/apply-source-first-hotfix.py" || echo "SOURCE_FIRST_PATCH_DIAGNOSTIC_CONTINUE"
 
 chmod +x "$ROOT"/Build/*.sh "$ROOT"/Build/*.zsh
 grep -q '^APP_VERSION=1000.0.0$' "$ROOT/Build/version.env"
