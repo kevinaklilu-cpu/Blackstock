@@ -47,3 +47,12 @@ player = player.replace(old_status, '          status = .failed(message, code)\n
 player = player.replace(old_pattern, '      if case .failed(let message, _) = status {\n', 1)
 player_path.write_text(player)
 print('BLACKSTOCK_100_PLAYER_HOTFIX_APPLIED')
+
+audit_path = Path('Build/Release-Audit.sh')
+audit = audit_path.read_text()
+old_models = 'MODELS=("$ROOT/Sources/Blackstock/Models/Models.swift" "$ROOT/Sources/Blackstock/Models/V11Models.swift" "$ROOT/Sources/Blackstock/Models/V12Models.swift")'
+new_models = 'MODELS=("$ROOT/Sources/Blackstock/Models/Models.swift" "$ROOT/Sources/Blackstock/Models/V11Models.swift" "$ROOT/Sources/Blackstock/Models/V12Models.swift" "$ROOT/Sources/Blackstock/Models/Blackstock100Models.swift")'
+if old_models not in audit:
+    raise SystemExit('Blackstock 100 release audit model anchor not found')
+audit_path.write_text(audit.replace(old_models, new_models, 1))
+print('BLACKSTOCK_100_AUDIT_MODELS_HOTFIX_APPLIED')
