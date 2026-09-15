@@ -5,6 +5,7 @@ public enum BlackstockRoute: String, CaseIterable, Identifiable, Codable {
     case opportunities = "Chancen"
     case cut = "Schnitt"
     case quality = "Prüfungen"
+    case publish = "Veröffentlichen"
     case settings = "Einstellungen"
     public var id: String { rawValue }
 }
@@ -21,6 +22,32 @@ public enum AspectMode: String, Codable, CaseIterable, Identifiable {
     case vertical = "9:16"
     case square = "1:1"
     public var id: String { rawValue }
+}
+
+public enum CaptionStyle: String, Codable, CaseIterable, Identifiable {
+    case off = "Aus"
+    case minimal = "Minimal"
+    case clean = "Clean"
+    case creator = "Creator"
+    public var id: String { rawValue }
+}
+
+public enum YouTubePrivacy: String, Codable, CaseIterable, Identifiable {
+    case privateVideo = "private"
+    case unlisted = "unlisted"
+    case publicVideo = "public"
+    public var id: String { rawValue }
+    public var label: String {
+        switch self {
+        case .privateVideo: return "Privat"
+        case .unlisted: return "Nicht gelistet"
+        case .publicVideo: return "Öffentlich"
+        }
+    }
+}
+
+public enum UploadPhase: String, Codable {
+    case idle, preparing, uploading, processing, captions, completed, failed
 }
 
 public struct ChannelDNA: Codable, Equatable {
@@ -50,8 +77,9 @@ public struct ConnectedChannel: Codable, Identifiable, Equatable {
     public var subscriberCount: Int
     public var videoCount: Int
     public var dna: ChannelDNA
+    public var oauthConnected: Bool
 
-    public init(id: UUID = UUID(), youtubeChannelID: String, handle: String? = nil, name: String, thumbnailURL: URL? = nil, subscriberCount: Int = 0, videoCount: Int = 0, dna: ChannelDNA = ChannelDNA()) {
+    public init(id: UUID = UUID(), youtubeChannelID: String, handle: String? = nil, name: String, thumbnailURL: URL? = nil, subscriberCount: Int = 0, videoCount: Int = 0, dna: ChannelDNA = ChannelDNA(), oauthConnected: Bool = false) {
         self.id = id
         self.youtubeChannelID = youtubeChannelID
         self.handle = handle
@@ -60,6 +88,7 @@ public struct ConnectedChannel: Codable, Identifiable, Equatable {
         self.subscriberCount = subscriberCount
         self.videoCount = videoCount
         self.dna = dna
+        self.oauthConnected = oauthConnected
     }
 }
 
@@ -131,6 +160,22 @@ public struct TranscriptSegment: Codable, Identifiable, Equatable {
     }
 }
 
+public struct CaptionCue: Codable, Identifiable, Equatable {
+    public var id: UUID
+    public var start: Double
+    public var end: Double
+    public var text: String
+    public var confidence: Double
+
+    public init(id: UUID = UUID(), start: Double, end: Double, text: String, confidence: Double) {
+        self.id = id
+        self.start = start
+        self.end = end
+        self.text = text
+        self.confidence = confidence
+    }
+}
+
 public struct ClipMoment: Codable, Identifiable, Equatable {
     public var id: UUID
     public var start: Double
@@ -176,16 +221,57 @@ public struct MediaInfo: Codable, Equatable {
 }
 
 public struct QualityReport: Codable, Equatable {
-    public var passed: Bool
+    public var blockers: [String]
     public var checks: [String]
     public var warnings: [String]
+    public var autoFixes: [String]
     public var output: MediaInfo?
 
-    public init(passed: Bool, checks: [String], warnings: [String], output: MediaInfo? = nil) {
-        self.passed = passed
+    public init(blockers: [String] = [], checks: [String] = [], warnings: [String] = [], autoFixes: [String] = [], output: MediaInfo? = nil) {
+        self.blockers = blockers
         self.checks = checks
         self.warnings = warnings
+        self.autoFixes = autoFixes
         self.output = output
+    }
+
+    public var passed: Bool { blockers.isEmpty }
+    public var publishable: Bool { blockers.isEmpty }
+}
+
+public struct PublishMetadata: Codable, Equatable {
+    public var title: String
+    public var description: String
+    public var tags: [String]
+    public var categoryID: String
+    public var privacy: YouTubePrivacy
+    public var madeForKids: Bool
+    public var language: String
+
+    public init(title: String = "", description: String = "", tags: [String] = [], categoryID: String = "22", privacy: YouTubePrivacy = .privateVideo, madeForKids: Bool = false, language: String = "de") {
+        self.title = title
+        self.description = description
+        self.tags = tags
+        self.categoryID = categoryID
+        self.privacy = privacy
+        self.madeForKids = madeForKids
+        self.language = language
+    }
+}
+
+public struct UploadState: Codable, Equatable {
+    public var phase: UploadPhase
+    public var progress: Double
+    public var videoID: String?
+    public var message: String
+    public var captionUploaded: Bool
+
+    public init(phase: UploadPhase = .idle, progress: Double = 0, videoID: String? = nil, message: String = "", captionUploaded: Bool = false) {
+        self.phase = phase
+        self.progress = progress
+        self.videoID = videoID
+        self.message = message
+        self.captionUploaded = captionUploaded
     }
 }
 
@@ -199,13 +285,19 @@ public struct CutProject: Codable, Identifiable, Equatable {
     public var sourceRightsConfirmed: Bool
     public var mediaInfo: MediaInfo?
     public var transcript: [TranscriptSegment]
+    public var captions: [CaptionCue]
+    public var captionStyle: CaptionStyle
+    public var burnInCaptions: Bool
+    public var uploadCaptionTrack: Bool
     public var moments: [ClipMoment]
     public var selectedMomentID: UUID?
     public var aspect: AspectMode
     public var exportedURL: URL?
     public var qualityReport: QualityReport?
+    public var publishMetadata: PublishMetadata
+    public var uploadState: UploadState
 
-    public init(id: UUID = UUID(), createdAt: Date = .now, channelID: UUID? = nil, youtubeVideoID: String? = nil, sourceURL: URL? = nil, sourceAccess: SourceAccess = .analysisOnly, sourceRightsConfirmed: Bool = false, mediaInfo: MediaInfo? = nil, transcript: [TranscriptSegment] = [], moments: [ClipMoment] = [], selectedMomentID: UUID? = nil, aspect: AspectMode = .original, exportedURL: URL? = nil, qualityReport: QualityReport? = nil) {
+    public init(id: UUID = UUID(), createdAt: Date = .now, channelID: UUID? = nil, youtubeVideoID: String? = nil, sourceURL: URL? = nil, sourceAccess: SourceAccess = .analysisOnly, sourceRightsConfirmed: Bool = false, mediaInfo: MediaInfo? = nil, transcript: [TranscriptSegment] = [], captions: [CaptionCue] = [], captionStyle: CaptionStyle = .clean, burnInCaptions: Bool = true, uploadCaptionTrack: Bool = true, moments: [ClipMoment] = [], selectedMomentID: UUID? = nil, aspect: AspectMode = .original, exportedURL: URL? = nil, qualityReport: QualityReport? = nil, publishMetadata: PublishMetadata = PublishMetadata(), uploadState: UploadState = UploadState()) {
         self.id = id
         self.createdAt = createdAt
         self.channelID = channelID
@@ -215,11 +307,17 @@ public struct CutProject: Codable, Identifiable, Equatable {
         self.sourceRightsConfirmed = sourceRightsConfirmed
         self.mediaInfo = mediaInfo
         self.transcript = transcript
+        self.captions = captions
+        self.captionStyle = captionStyle
+        self.burnInCaptions = burnInCaptions
+        self.uploadCaptionTrack = uploadCaptionTrack
         self.moments = moments
         self.selectedMomentID = selectedMomentID
         self.aspect = aspect
         self.exportedURL = exportedURL
         self.qualityReport = qualityReport
+        self.publishMetadata = publishMetadata
+        self.uploadState = uploadState
     }
 
     public var selectedMoment: ClipMoment? {
@@ -230,24 +328,30 @@ public struct CutProject: Codable, Identifiable, Equatable {
 
 public enum BlackstockError: LocalizedError {
     case missingAPIKey
+    case missingOAuthClientID
+    case notAuthenticated
     case invalidChannel
     case invalidResponse
     case noVideoTrack
     case noMoments
     case rightsNotConfirmed
     case exportFailed(String)
+    case uploadFailed(String)
     case speechUnavailable
     case speechPermissionDenied
 
     public var errorDescription: String? {
         switch self {
-        case .missingAPIKey: return "Für öffentliche YouTube-Daten fehlt der API-Schlüssel."
+        case .missingAPIKey: return "Für öffentliche YouTube-Daten fehlt die Blackstock-API-Konfiguration."
+        case .missingOAuthClientID: return "Die YouTube-Anmeldung ist in diesem Build noch nicht konfiguriert."
+        case .notAuthenticated: return "Verbinde zuerst deinen YouTube-Kanal."
         case .invalidChannel: return "Der YouTube-Kanal konnte nicht aufgelöst werden."
         case .invalidResponse: return "YouTube hat eine unerwartete Antwort geliefert."
         case .noVideoTrack: return "Die ausgewählte Datei enthält keine nutzbare Videospur."
         case .noMoments: return "Es wurden noch keine belastbaren Schnittmomente gefunden."
         case .rightsNotConfirmed: return "Lokaler Export ist erst nach Bestätigung der Nutzungsrechte möglich."
         case .exportFailed(let message): return "Export fehlgeschlagen: \(message)"
+        case .uploadFailed(let message): return "YouTube-Upload fehlgeschlagen: \(message)"
         case .speechUnavailable: return "Spracherkennung ist für diese Quelle derzeit nicht verfügbar."
         case .speechPermissionDenied: return "Spracherkennung wurde nicht erlaubt."
         }
