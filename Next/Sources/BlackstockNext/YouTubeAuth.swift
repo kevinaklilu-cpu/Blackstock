@@ -32,23 +32,25 @@ private final class OAuthLoopbackReceiver {
     private var listener: NWListener?
     private var continuation: CheckedContinuation<String, Error>?
     private var expectedState = ""
+    private var startResolved = false
     private let queue = DispatchQueue(label: "de.blackstock.oauth.loopback")
 
     func start(state: String) async throws -> URL {
         expectedState = state
+        startResolved = false
         let listener = try NWListener(using: .tcp, on: .any)
         self.listener = listener
         return try await withCheckedThrowingContinuation { continuation in
-            var resumed = false
-            listener.stateUpdateHandler = { status in
+            listener.stateUpdateHandler = { [weak self] status in
+                guard let self else { return }
                 switch status {
                 case .ready:
-                    guard !resumed, let port = listener.port else { return }
-                    resumed = true
+                    guard !self.startResolved, let port = listener.port else { return }
+                    self.startResolved = true
                     continuation.resume(returning: URL(string: "http://127.0.0.1:\(port.rawValue)/oauth2callback")!)
                 case .failed(let error):
-                    guard !resumed else { return }
-                    resumed = true
+                    guard !self.startResolved else { return }
+                    self.startResolved = true
                     continuation.resume(throwing: error)
                 default: break
                 }
@@ -186,7 +188,7 @@ final class GoogleOAuthService: ObservableObject {
         return try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
     }
 
-    static func requireSuccess(_ response: URLResponse, data: Data) throws {
+    nonisolated static func requireSuccess(_ response: URLResponse, data: Data) throws {
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
             let message = (root?["error"] as? [String: Any])?["message"] as? String ?? root?["error_description"] as? String ?? "Google/YouTube-Anfrage fehlgeschlagen."
