@@ -51,6 +51,7 @@ patch --batch -p1 < "$TMP/v1000.patch"
 find "$ROOT" \( -name '*.orig' -o -name '*.rej' \) -delete
 
 python3 "$ROOT/Patches/Release1000/apply-flow-hotfix.py"
+python3 "$ROOT/Patches/Release1000/apply-ui-language-hotfix.py"
 
 chmod +x "$ROOT"/Build/*.sh "$ROOT"/Build/*.zsh
 grep -q '^APP_VERSION=1000.0.0$' "$ROOT/Build/version.env"
@@ -58,6 +59,11 @@ grep -q '^BUILD_NUMBER=100000$' "$ROOT/Build/version.env"
 grep -q 'Blackstock 1000.0.0 (Build 100000)' "$ROOT/RELEASE_MANIFEST.txt"
 grep -q 'CreatorOS1000View' "$ROOT/Sources/Blackstock/Views/RootView.swift"
 grep -q 'v1000ProduktionMitQuelleStarten' "$ROOT/Sources/Blackstock/AppStore+V1000.swift"
-grep -q 'Clip mit Datei' "$ROOT/Sources/Blackstock/Views/CreatorOS1000View.swift"
+grep -q 'case .command: "Dashboard"' "$ROOT/Sources/Blackstock/Models/Models.swift"
+grep -q 'Text("BLACKSTOCK")' "$ROOT/Sources/Blackstock/Views/SidebarView.swift"
+grep -q 'Clip aus Datei' "$ROOT/Sources/Blackstock/Views/CreatorOS1000View.swift"
+grep -q 'AbschnittTitel(titel: "Videoideen"' "$ROOT/Sources/Blackstock/Views/CreatorOS1000View.swift"
+! grep -q 'BLACKSTOCK 1000' "$ROOT/Sources/Blackstock/Views/SidebarView.swift"
+! grep -q '"Creator OS"' "$ROOT/Sources/Blackstock/Views/CreatorOS1000View.swift"
 grep -q 'BLACKSTOCK_1000_CORE_TESTS_OK' "$ROOT/Tests/Release1000CoreTests.swift"
 echo BLACKSTOCK_1000_FLOW_RECONSTRUCT_OK
