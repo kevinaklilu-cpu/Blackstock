@@ -56,9 +56,11 @@ python3 "$ROOT/Patches/Release1000/apply-native-remix-hotfix.py"
 python3 "$ROOT/Patches/Release1000/apply-player-time-compile-fix.py"
 python3 "$ROOT/Patches/Release1000/apply-clean-workflow-hotfix.py"
 python3 "$ROOT/Patches/Release1000/apply-release-audit-hotfix.py"
-# The source-first patch is intentionally followed by canonical shell guardrails below.
-# A diagnostic assertion inside the patch must not hide which product contract failed.
-python3 "$ROOT/Patches/Release1000/apply-source-first-hotfix.py" || echo "SOURCE_FIRST_PATCH_DIAGNOSTIC_CONTINUE"
+
+# Final product architecture: existing-video intelligence only. No synthetic fallback.
+base64 -d < "$ROOT/Patches/Release1000/source-only-studio-hotfix.py.gz.b64" > "$TMP/source-only-studio.py.gz"
+gunzip -c "$TMP/source-only-studio.py.gz" > "$TMP/source-only-studio.py"
+BLACKSTOCK_ROOT="$ROOT" python3 "$TMP/source-only-studio.py"
 
 chmod +x "$ROOT"/Build/*.sh "$ROOT"/Build/*.zsh
 grep -q '^APP_VERSION=1000.0.0$' "$ROOT/Build/version.env"
@@ -68,24 +70,35 @@ grep -q 'CreatorOS1000View' "$ROOT/Sources/Blackstock/Views/RootView.swift"
 grep -q 'v1000ProduktionMitQuelleStarten' "$ROOT/Sources/Blackstock/AppStore+V1000.swift"
 grep -q 'case .command: "Dashboard"' "$ROOT/Sources/Blackstock/Models/Models.swift"
 grep -q 'Text("BLACKSTOCK")' "$ROOT/Sources/Blackstock/Views/SidebarView.swift"
-grep -q 'Clip aus Datei' "$ROOT/Sources/Blackstock/Views/CreatorOS1000View.swift"
-grep -q 'AbschnittTitel(titel: "Videoideen"' "$ROOT/Sources/Blackstock/Views/CreatorOS1000View.swift"
-grep -q 'Auf YouTube remixen' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
-grep -q 'Originalton · Originalsprache · keine KI-Stimme' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
-grep -q 'Label("Filter", systemImage: "line.3.horizontal.decrease")' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
-grep -q 'Nutzungsrechte bestätigen' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
-grep -q 'Die Datei bleibt lokal auf diesem Mac' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
-grep -q 'Kanalthema' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
+
+# Source-only / channel-bound product contract.
+grep -q 'case youtubeNativeRemix' "$ROOT/Sources/Blackstock/Models/Blackstock1000Models.swift"
+! grep -q 'case originalBuild' "$ROOT/Sources/Blackstock/Models/Blackstock1000Models.swift"
+grep -q 'blackstockSyncChannelIdentity' "$ROOT/Sources/Blackstock/AppStore+Guidance.swift"
+grep -q 'Kanalthema automatisch gebunden' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
 ! grep -q 'Picker("Thema", selection: \$store.v10Thema)' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
-grep -q 'Blackstock erzeugt hier kein künstliches Ersatzvideo' "$ROOT/Sources/Blackstock/Views/CreatorOS1000View.swift"
-grep -q 'case time(Double)' "$ROOT/Sources/Blackstock/Views/YouTubePlayerView.swift"
-grep -q 'DisclosureGroup("Schnittdetails & Quellen")' "$ROOT/Sources/Blackstock/Views/ProduktionsDetailView.swift"
+grep -q 'Auf YouTube remixen' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
+grep -q 'Welche Rechte hast du an der Quelldatei?' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
+grep -q 'Clip aus eigener/lizenzierter Datei' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
+grep -q 'Originalton · Originalsprache · keine KI-Stimme · lokaler Qualitätsrender' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
+grep -q 'nicht als MP4 kopiert' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
+grep -q 'Es wurde kein Video generiert oder hochgeladen' "$ROOT/Sources/Blackstock/AppStore+V1000.swift"
 grep -q 'watermarkAktiv = false' "$ROOT/Sources/Blackstock/AppStore+V1000.swift"
+grep -q 'publikationsmodus = .review' "$ROOT/Sources/Blackstock/AppStore+V1000.swift"
 grep -q 'voiceover: nil' "$ROOT/Sources/Blackstock/AppStore+V11.swift"
 grep -q 'musik: nil' "$ROOT/Sources/Blackstock/AppStore+V11.swift"
-grep -q 'BLACKSTOCK_SOURCE_FIRST_HIGH_QUALITY' "$ROOT/Sources/Blackstock/Services/TimelineRendererService.swift"
+grep -q 'notDownloadableReference' "$ROOT/Sources/Blackstock/AppStore+V11.swift"
+
+# Source-aware high-quality render contract.
+grep -q 'Source-aware 4K' "$ROOT/Sources/Blackstock/Services/RenderQualityProfileService.swift"
+grep -q 'sourceTrack: segments.first?.source' "$ROOT/Sources/Blackstock/Services/MasterVideoService.swift"
+grep -q 'sourceTrack: visualSegments.first?.source' "$ROOT/Sources/Blackstock/Services/MasterVideoService.swift"
+grep -q 'AVAssetExportPresetHighestQuality' "$ROOT/Sources/Blackstock/Services/MasterVideoService.swift"
+
+grep -q 'case time(Double)' "$ROOT/Sources/Blackstock/Views/YouTubePlayerView.swift"
+grep -q 'DisclosureGroup("Schnittdetails & Quellen")' "$ROOT/Sources/Blackstock/Views/ProduktionsDetailView.swift"
 ! grep -q 'BLACKSTOCK 1000' "$ROOT/Sources/Blackstock/Views/SidebarView.swift"
 ! grep -q '"Creator OS"' "$ROOT/Sources/Blackstock/Views/CreatorOS1000View.swift"
 ! grep -q 'Top 3 automatisch erstellen' "$ROOT/Sources/Blackstock/Views/CreatorOS1000View.swift"
 grep -q 'BLACKSTOCK_1000_CORE_TESTS_OK' "$ROOT/Tests/Release1000CoreTests.swift"
-echo BLACKSTOCK_1000_SOURCE_FIRST_FLOW_RECONSTRUCT_OK
+echo BLACKSTOCK_1000_SOURCE_ONLY_STUDIO_RECONSTRUCT_OK
