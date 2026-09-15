@@ -1,0 +1,126 @@
+name: Blackstock 1000 Flow macOS App / DMG
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'Patches/Release1000/**'
+      - '.github/workflows/macos-build-v1000-flow.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blackstock-1000-flow-release
+  cancel-in-progress: true
+
+jobs:
+  build-release-1000-flow:
+    runs-on: macos-26
+    timeout-minutes: 50
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: Blackstock 1000 Flow rekonstruieren
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x "$GITHUB_WORKSPACE/Patches/Release1000/reconstruct-flow.sh"
+          "$GITHUB_WORKSPACE/Patches/Release1000/reconstruct-flow.sh"
+
+      - name: Release-Metadaten laden
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "$GITHUB_WORKSPACE/Build/version.env"
+          set +a
+          echo "APP_VERSION=$APP_VERSION" >> "$GITHUB_ENV"
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
+          echo "MIN_MACOS=$MIN_MACOS" >> "$GITHUB_ENV"
+          echo "BUNDLE_ID=$BUNDLE_ID" >> "$GITHUB_ENV"
+          xcodebuild -version
+          xcrun swiftc --version
+
+      - name: Portable Regression Suite
+        shell: bash
+        run: "$GITHUB_WORKSPACE/Build/Core-Tests.sh"
+
+      - name: Vollständiger Release-Audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          SWIFTC="$(xcrun --sdk macosx --find swiftc)" \
+          SDKROOT="$(xcrun --sdk macosx --show-sdk-path)" \
+          SWIFT_TARGET="arm64-apple-macosx${MIN_MACOS}" \
+          "$GITHUB_WORKSPACE/Build/Release-Audit.sh"
+
+      - name: Universal Blackstock.app bauen
+        shell: zsh {0}
+        env:
+          BLACKSTOCK_APP_OUTPUT: ${{ github.workspace }}/dist/Blackstock.app
+          BLACKSTOCK_BUILD_DIR: ${{ runner.temp }}/blackstock-1000-flow-native-build
+          BLACKSTOCK_BUILD_LOG: ${{ runner.temp }}/Blackstock-1000-Flow-Buildprotokoll.txt
+          BLACKSTOCK_SIGN_IDENTITY: '-'
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          "$GITHUB_WORKSPACE/Build/build-app.zsh"
+
+      - name: App-Bundle verifizieren
+        shell: zsh {0}
+        run: |
+          set -euo pipefail
+          APP="$GITHUB_WORKSPACE/dist/Blackstock.app"
+          plutil -lint "$APP/Contents/Info.plist"
+          lipo "$APP/Contents/MacOS/Blackstock" -verify_arch arm64 x86_64
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")" = "$APP_VERSION"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Contents/Info.plist")" = "$BUILD_NUMBER"
+
+      - name: Start-Smoke-Test
+        shell: zsh {0}
+        run: |
+          set -euo pipefail
+          APP="$GITHUB_WORKSPACE/dist/Blackstock.app"
+          "$APP/Contents/MacOS/Blackstock" >"$RUNNER_TEMP/blackstock-1000-flow-smoke.log" 2>&1 &
+          PID=$!
+          sleep 6
+          if ! kill -0 "$PID" 2>/dev/null; then
+            cat "$RUNNER_TEMP/blackstock-1000-flow-smoke.log"
+            exit 1
+          fi
+          kill "$PID" || true
+          wait "$PID" 2>/dev/null || true
+
+      - name: DMG und ZIP erzeugen
+        shell: zsh {0}
+        run: |
+          set -euo pipefail
+          APP="$GITHUB_WORKSPACE/dist/Blackstock.app"
+          STAGE="$(mktemp -d)"
+          trap 'rm -rf "$STAGE"' EXIT
+          /usr/bin/ditto "$APP" "$STAGE/Blackstock.app"
+          ln -s /Applications "$STAGE/Programme"
+          cp "$GITHUB_WORKSPACE/Distribution/INSTALLIEREN.txt" "$STAGE/INSTALLIEREN.txt"
+          cd "$GITHUB_WORKSPACE/dist"
+          DMG="Blackstock-${APP_VERSION}-universal.dmg"
+          hdiutil create -volname "Blackstock ${APP_VERSION}" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
+          hdiutil verify "$DMG" >/dev/null
+          shasum -a 256 "$DMG" > "$DMG.sha256"
+          /usr/bin/ditto -c -k --keepParent Blackstock.app "Blackstock-${APP_VERSION}-universal.zip"
+          shasum -a 256 "Blackstock-${APP_VERSION}-universal.zip" > "Blackstock-${APP_VERSION}-universal.zip.sha256"
+
+      - name: Blackstock 1000 Flow hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: Blackstock-${{ env.APP_VERSION }}-flow-macOS
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            dist/Blackstock-${{ env.APP_VERSION }}-universal.dmg
+            dist/Blackstock-${{ env.APP_VERSION }}-universal.dmg.sha256
+            dist/Blackstock-${{ env.APP_VERSION }}-universal.zip
+            dist/Blackstock-${{ env.APP_VERSION }}-universal.zip.sha256
