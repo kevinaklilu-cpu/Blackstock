@@ -56,6 +56,7 @@ python3 "$ROOT/Patches/Release1000/apply-native-remix-hotfix.py"
 python3 "$ROOT/Patches/Release1000/apply-player-time-compile-fix.py"
 python3 "$ROOT/Patches/Release1000/apply-clean-workflow-hotfix.py"
 python3 "$ROOT/Patches/Release1000/apply-release-audit-hotfix.py"
+python3 "$ROOT/Patches/Release1000/apply-source-first-hotfix.py"
 
 chmod +x "$ROOT"/Build/*.sh "$ROOT"/Build/*.zsh
 grep -q '^APP_VERSION=1000.0.0$' "$ROOT/Build/version.env"
@@ -70,12 +71,19 @@ grep -q 'AbschnittTitel(titel: "Videoideen"' "$ROOT/Sources/Blackstock/Views/Cre
 grep -q 'Auf YouTube remixen' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
 grep -q 'Originalton · Originalsprache · keine KI-Stimme' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
 grep -q 'Label("Filter", systemImage: "line.3.horizontal.decrease")' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
+grep -q 'Nutzungsrechte bestätigen' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
+grep -q 'Die Datei bleibt lokal auf diesem Mac' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
+grep -q 'Kanalthema' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
+! grep -q 'Picker("Thema", selection: \$store.v10Thema)' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
+grep -q 'Blackstock erzeugt hier kein künstliches Ersatzvideo' "$ROOT/Sources/Blackstock/Views/CreatorOS1000View.swift"
 grep -q 'case time(Double)' "$ROOT/Sources/Blackstock/Views/YouTubePlayerView.swift"
 grep -q 'DisclosureGroup("Schnittdetails & Quellen")' "$ROOT/Sources/Blackstock/Views/ProduktionsDetailView.swift"
+grep -q 'watermarkAktiv = false' "$ROOT/Sources/Blackstock/AppStore+V1000.swift"
 grep -q 'voiceover: nil' "$ROOT/Sources/Blackstock/AppStore+V11.swift"
 grep -q 'musik: nil' "$ROOT/Sources/Blackstock/AppStore+V11.swift"
+grep -q 'BLACKSTOCK_SOURCE_FIRST_HIGH_QUALITY' "$ROOT/Sources/Blackstock/Services/TimelineRendererService.swift"
 ! grep -q 'BLACKSTOCK 1000' "$ROOT/Sources/Blackstock/Views/SidebarView.swift"
 ! grep -q '"Creator OS"' "$ROOT/Sources/Blackstock/Views/CreatorOS1000View.swift"
 ! grep -q 'Top 3 automatisch erstellen' "$ROOT/Sources/Blackstock/Views/CreatorOS1000View.swift"
 grep -q 'BLACKSTOCK_1000_CORE_TESTS_OK' "$ROOT/Tests/Release1000CoreTests.swift"
-echo BLACKSTOCK_1000_FLOW_RECONSTRUCT_OK
+echo BLACKSTOCK_1000_SOURCE_FIRST_FLOW_RECONSTRUCT_OK
