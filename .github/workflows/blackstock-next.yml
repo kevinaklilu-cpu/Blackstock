@@ -42,7 +42,8 @@ jobs:
           set -euo pipefail
           grep -R -q 'youtubeNativeRemix' Next/Sources/BlackstockNext
           grep -R -q 'localExportAllowed' Next/Sources/BlackstockNext
-          grep -R -q 'Auto-Fix vor Stop' Next/Sources/BlackstockNext
+          grep -R -q 'case .autoFix' Next/Sources/BlackstockNext/App.swift
+          grep -R -q 'MassMarketQualityPolicy' Next/Sources/BlackstockNext
           grep -R -q 'uploadType.*resumable' Next/Sources/BlackstockNext
           grep -R -q 'PublishingCoordinator' Next/Sources/BlackstockNext/App.swift
           grep -R -q 'HighQualityRenderService' Next/Sources/BlackstockNext/App.swift
