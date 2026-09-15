@@ -44,6 +44,10 @@ jobs:
         shell: bash
         run: BuildNext/release-audit.sh
 
+      - name: Reale Medien Render-Tests
+        shell: bash
+        run: BuildNext/media-tests.sh
+
       - name: Universal Blackstock 2 bauen
         shell: zsh {0}
         env:
