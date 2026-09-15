@@ -36,7 +36,59 @@ replace_once(
     '''  private func run(_ mission: CreatorMission1000) {\n    guard let channelID = selectedChannelID,\n          let chance = store.chancen.first(where: { $0.id == mission.chanceID }) else { return }\n    runningMissionID = mission.id\n    Task {\n      _ = await store.v1000ProduktionStarten(chance: chance, channelID: channelID)\n      runningMissionID = nil\n    }\n  }\n\n  private func sourceActionLabel(for mission: CreatorMission1000) -> String {\n    guard let channelID = selectedChannelID,\n          let chance = store.chancen.first(where: { $0.id == mission.chanceID }) else { return "Eigene Quelle" }\n    let recommendation = store.v26Recommendation(for: chance, channelID: channelID)\n    return recommendation.mode == .singleSource ? "Clip mit Datei" : "Remix mit Datei"\n  }\n\n  private func chooseLicensedSource(for mission: CreatorMission1000) {\n    sourceMission = mission\n    localSourceImporter = true\n  }\n\n  private func importLicensedSource(_ result: Result<[URL], Error>) {\n    switch result {\n    case .success(let urls):\n      guard let sourceURL = urls.first,\n            let mission = sourceMission,\n            let channelID = selectedChannelID,\n            let chance = store.chancen.first(where: { $0.id == mission.chanceID })\n      else {\n        sourceMission = nil\n        return\n      }\n      importingLocalSource = true\n      runningMissionID = mission.id\n      Task {\n        _ = await store.v1000ProduktionMitQuelleStarten(\n          chance: chance, channelID: channelID, sourceURL: sourceURL)\n        importingLocalSource = false\n        runningMissionID = nil\n        sourceMission = nil\n      }\n    case .failure(let error):\n      sourceMission = nil\n      store.meldung = error.localizedDescription\n    }\n  }\n}\n''')
 
 insert_before = '''  func v1000AutopilotRun(channelID: UUID, maximum: Int = 3) async {\n'''
-new_func = '''  @discardableResult\n  func v1000ProduktionMitQuelleStarten(\n    chance: Chance,\n    channelID: UUID,\n    sourceURL: URL\n  ) async -> UUID? {\n    if let existing = produktionen.first(where: { $0.chanceID == chance.id && $0.kanalID == channelID }) {\n      ausgewaehlteProduktionID = existing.id\n      ausgewaehltesZiel = .produktionen\n      meldung = "Diese Chance existiert bereits als Produktion. Blackstock öffnet das vorhandene Projekt."\n      return existing.id\n    }\n\n    let recommendation = v26Recommendation(for: chance, channelID: channelID)\n    let mission = CreatorOS1000Service.shared.mission(\n      chance: chance,\n      decision: recommendation.decision,\n      hasUsableSource: true,\n      preferredEditMode: recommendation.mode)\n\n    guard let id = await v26ProduktionStarten(\n      chance: chance,\n      channelID: channelID,\n      forcedMode: recommendation.mode,\n      forcedFormat: mission.format)\n    else { return nil }\n\n    do {\n      _ = try await v26LokaleSchnittquelleHinzufuegen(zu: id, datei: sourceURL)\n    } catch {\n      meldung = error.localizedDescription\n      ausgewaehlteProduktionID = id\n      ausgewaehltesZiel = .produktionen\n      return id\n    }\n\n    if let index = produktionen.firstIndex(where: { $0.id == id }) {\n      produktionen[index].zielDauerSekunden = mission.targetDurationSeconds\n      produktionen[index].hook = mission.hookAngle\n      produktionen[index].captionsAktiv = true\n      produktionen[index].watermarkAktiv = true\n      produktionen[index].naechsterSchritt = "\(mission.executionPath.rawValue) · Quelle analysieren und Master bauen"\n      produktionen[index].aktualisiertAm = Date()\n    }\n    speichern()\n\n    await v48ProduktionFortsetzen(id)\n    ausgewaehlteProduktionID = id\n    ausgewaehltesZiel = .produktionen\n    return id\n  }\n\n'''
+new_func = r'''  @discardableResult
+  func v1000ProduktionMitQuelleStarten(
+    chance: Chance,
+    channelID: UUID,
+    sourceURL: URL
+  ) async -> UUID? {
+    if let existing = produktionen.first(where: { $0.chanceID == chance.id && $0.kanalID == channelID }) {
+      ausgewaehlteProduktionID = existing.id
+      ausgewaehltesZiel = .produktionen
+      meldung = "Diese Chance existiert bereits als Produktion. Blackstock öffnet das vorhandene Projekt."
+      return existing.id
+    }
+
+    let recommendation = v26Recommendation(for: chance, channelID: channelID)
+    let mission = CreatorOS1000Service.shared.mission(
+      chance: chance,
+      decision: recommendation.decision,
+      hasUsableSource: true,
+      preferredEditMode: recommendation.mode)
+
+    guard let id = await v26ProduktionStarten(
+      chance: chance,
+      channelID: channelID,
+      forcedMode: recommendation.mode,
+      forcedFormat: mission.format)
+    else { return nil }
+
+    do {
+      _ = try await v26LokaleSchnittquelleHinzufuegen(zu: id, datei: sourceURL)
+    } catch {
+      meldung = error.localizedDescription
+      ausgewaehlteProduktionID = id
+      ausgewaehltesZiel = .produktionen
+      return id
+    }
+
+    if let index = produktionen.firstIndex(where: { $0.id == id }) {
+      produktionen[index].zielDauerSekunden = mission.targetDurationSeconds
+      produktionen[index].hook = mission.hookAngle
+      produktionen[index].captionsAktiv = true
+      produktionen[index].watermarkAktiv = true
+      produktionen[index].naechsterSchritt = "\(mission.executionPath.rawValue) · Quelle analysieren und Master bauen"
+      produktionen[index].aktualisiertAm = Date()
+    }
+    speichern()
+
+    await v48ProduktionFortsetzen(id)
+    ausgewaehlteProduktionID = id
+    ausgewaehltesZiel = .produktionen
+    return id
+  }
+
+'''
 text = store.read_text()
 if 'func v1000ProduktionMitQuelleStarten(' not in text:
     if insert_before not in text:
