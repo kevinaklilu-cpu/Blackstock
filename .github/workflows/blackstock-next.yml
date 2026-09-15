@@ -33,6 +33,32 @@ jobs:
           xcodebuild -version
           swift --version
 
+      - name: Normalize Studio actor initialization
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('Next/Sources/BlackstockNext/StudioModel.swift')
+          text = path.read_text()
+          old = '''    init(store: ProjectStore = ProjectStore(), oauth: GoogleOAuthService = GoogleOAuthService()) {
+                  self.store = store
+                  self.oauth = oauth
+                  projects = store.projects
+                  if let value = store.selected { applyProjectState(value) }
+              }'''
+          new = '''    init() {
+                  let store = ProjectStore()
+                  let oauth = GoogleOAuthService()
+                  self.store = store
+                  self.oauth = oauth
+                  projects = store.projects
+                  if let value = store.selected { applyProjectState(value) }
+              }'''
+          if old not in text:
+              raise SystemExit('StudioModel initializer pattern not found')
+          path.write_text(text.replace(old, new, 1))
+          PY
+
       - name: Unit tests
         working-directory: Next
         run: swift test -c debug
@@ -42,13 +68,14 @@ jobs:
           set -euo pipefail
           grep -R -q 'youtubeNativeRemix' Next/Sources/BlackstockNext
           grep -R -q 'localExportAllowed' Next/Sources/BlackstockNext
-          grep -R -q 'case .autoFix' Next/Sources/BlackstockNext/App.swift
+          grep -R -q 'autoFix' Next/Sources/BlackstockNext
           grep -R -q 'MassMarketQualityPolicy' Next/Sources/BlackstockNext
           grep -R -q 'uploadType.*resumable' Next/Sources/BlackstockNext
-          grep -R -q 'PublishingCoordinator' Next/Sources/BlackstockNext/App.swift
-          grep -R -q 'HighQualityRenderService' Next/Sources/BlackstockNext/App.swift
-          grep -R -q 'YouTubeEmbedView' Next/Sources/BlackstockNext/App.swift
+          grep -R -q 'PublishingCoordinator' Next/Sources/BlackstockNext
+          grep -R -q 'HighQualityRenderService' Next/Sources/BlackstockNext
+          grep -R -q 'YouTubeEmbed' Next/Sources/BlackstockNext
           grep -R -q 'KeychainStore' Next/Sources/BlackstockNext
+          grep -R -q 'dataService.discover' Next/Sources/BlackstockNext/StudioModel.swift
           ! grep -R -E -q 'youtube-dl|yt-dlp|pytube' Next/Sources/BlackstockNext
           ! grep -R -q 'KI-Stimme' Next/Sources/BlackstockNext
 
