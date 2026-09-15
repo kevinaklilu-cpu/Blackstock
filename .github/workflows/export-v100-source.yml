@@ -59,11 +59,15 @@ jobs:
           patch --batch -p1 < "$RUNNER_TEMP/blackstock100.patch"
           find "$GITHUB_WORKSPACE" \( -name '*.orig' -o -name '*.rej' \) -delete
           python3 "$GITHUB_WORKSPACE/Patches/Release100/apply-audio-hotfix.py"
+          python3 "$GITHUB_WORKSPACE/Patches/Release100/apply-product-hotfix.py"
 
           grep -q '^APP_VERSION=100.0.0$' "$GITHUB_WORKSPACE/Build/version.env"
           grep -q '^BUILD_NUMBER=10000$' "$GITHUB_WORKSPACE/Build/version.env"
           grep -q 'Blackstock 100.0.0 (Build 10000)' "$GITHUB_WORKSPACE/RELEASE_MANIFEST.txt"
           grep -q 'RELEASE_NOTES_v100.md' "$GITHUB_WORKSPACE/Build/Release-Audit.sh"
+          grep -q 'onPlaybackStarted: { markWatched() }' "$GITHUB_WORKSPACE/Sources/Blackstock/Views/ChancenView.swift"
+          grep -q 'let explicitTerms = zusaetzlicheMarktThemen' "$GITHUB_WORKSPACE/Sources/Blackstock/AppStore.swift"
+          grep -q 'zusaetzlicheThemen + kanaele.map' "$GITHUB_WORKSPACE/Sources/Blackstock/Services/YouTubeService.swift"
 
       - name: Source-Paket erzeugen
         shell: bash
