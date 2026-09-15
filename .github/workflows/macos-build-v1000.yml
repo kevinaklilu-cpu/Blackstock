@@ -5,6 +5,13 @@ on:
   push:
     branches: [ main ]
     paths:
+      - 'blackstock-build-payload.zip'
+      - 'Patches/WachstumView.swift'
+      - 'Patches/apply-v12.py'
+      - 'Patches/apply-v13.py'
+      - 'Patches/V25/**'
+      - 'Patches/Release50/**'
+      - 'Patches/Release100/**'
       - 'Patches/Release1000/**'
       - '.github/workflows/macos-build-v1000.yml'
 
@@ -12,7 +19,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: blackstock-1000-macos-release
+  group: blackstock-1000-canonical-release
   cancel-in-progress: true
 
 jobs:
@@ -37,6 +44,8 @@ jobs:
           set -a
           source "$GITHUB_WORKSPACE/Build/version.env"
           set +a
+          test "$APP_VERSION" = "1000.0.0"
+          test "$BUILD_NUMBER" = "100000"
           echo "APP_VERSION=$APP_VERSION" >> "$GITHUB_ENV"
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
           echo "MIN_MACOS=$MIN_MACOS" >> "$GITHUB_ENV"
