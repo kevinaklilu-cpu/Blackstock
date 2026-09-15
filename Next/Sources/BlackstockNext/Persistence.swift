@@ -114,9 +114,11 @@ struct BlackstockProject: Identifiable, Codable, Hashable {
     }
 
     func resolvedSourceURL() -> URL {
-        if let sourceBookmark,
-           let resolved = try? URL(resolvingBookmarkData: sourceBookmark, options: [.withSecurityScope], relativeTo: nil, bookmarkDataIsStale: nil) {
-            return resolved
+        if let sourceBookmark {
+            var stale = false
+            if let resolved = try? URL(resolvingBookmarkData: sourceBookmark, options: [.withSecurityScope], relativeTo: nil, bookmarkDataIsStale: &stale) {
+                return resolved
+            }
         }
         return URL(fileURLWithPath: sourcePath)
     }
