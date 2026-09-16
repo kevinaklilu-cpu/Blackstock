@@ -28,17 +28,29 @@ jobs:
           test -d Sources/BlackstockCore
           test -d Sources/BlackstockApp
           test -f Build/package-installer.sh
+          test -f Sources/BlackstockApp/GoogleYouTubeAuth.swift
+          test -f Sources/BlackstockApp/CreatorShellView.swift
+          test -f Sources/BlackstockApp/OnboardingView.swift
+          test -f Sources/BlackstockApp/YouTubePublishingService.swift
           if grep -R -n -E 'Creator Business OS|Creator Studio|Blackstock 1\.0|fatalError\(|TODO:' Sources Tests; then
             echo 'Shipping audit found blocked product-name or unfinished markers.' >&2
             exit 1
           fi
           grep -q 'research = "Recherche"' Sources/BlackstockApp/AppState.swift
           grep -q 'func render(project:' Sources/BlackstockApp/NativeMediaService.swift
+          grep -q 'BlackstockBrandMark' Sources/BlackstockApp/Components.swift
+          grep -q 'AccountConnectionSheet' Sources/BlackstockApp/CreatorShellView.swift
+          grep -q 'Mit YouTube verbinden' Sources/BlackstockApp/OnboardingView.swift
+          grep -q 'youtube.upload' Sources/BlackstockApp/GoogleYouTubeAuth.swift
+          grep -q 'uploadType=resumable' Sources/BlackstockApp/YouTubePublishingService.swift
+          grep -q 'Zu \\(targetChannelTitle) hochladen' Sources/BlackstockApp/PublishView.swift
           grep -q 'Release-Paket exportieren' Sources/BlackstockApp/PublishView.swift
           grep -q 'RenderCanvas' Sources/BlackstockCore/Models.swift
           grep -q 'ReleasePackageBuilder' Sources/BlackstockCore/ReleasePackage.swift
           grep -q 'Nischen-Radar' Sources/BlackstockApp/ResearchView.swift
           grep -q 'Blackstock-Installer.pkg' Build/package-installer.sh
+          grep -q 'Blackstock.icns' Build/package-installer.sh
+          grep -q 'BlackstockGoogleOAuthClientID' Build/package-installer.sh
           grep -q '/Applications' Build/package-installer.sh
       - name: Swift tests
         run: swift test
@@ -53,6 +65,8 @@ jobs:
         run: swift build -c release
       - name: Create native installer, app bundle and smoke test
         shell: bash
+        env:
+          BLACKSTOCK_GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.BLACKSTOCK_GOOGLE_OAUTH_CLIENT_ID }}
         run: |
           set -euo pipefail
           chmod +x Build/package-installer.sh
