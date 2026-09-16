@@ -62,6 +62,9 @@ base64 -d < "$ROOT/Patches/Release1000/source-only-studio-hotfix.py.gz.b64" > "$
 gunzip -c "$TMP/source-only-studio.py.gz" > "$TMP/source-only-studio.py"
 BLACKSTOCK_ROOT="$ROOT" python3 "$TMP/source-only-studio.py"
 
+# Keep the final generated source compatible with the current Swift toolchain.
+python3 "$ROOT/Patches/Release1000/apply-swift63-compile-hotfix.py"
+
 chmod +x "$ROOT"/Build/*.sh "$ROOT"/Build/*.zsh
 grep -q '^APP_VERSION=1000.0.0$' "$ROOT/Build/version.env"
 grep -q '^BUILD_NUMBER=100000$' "$ROOT/Build/version.env"
