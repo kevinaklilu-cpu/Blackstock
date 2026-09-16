@@ -37,6 +37,29 @@ jobs:
           chmod +x "$GITHUB_WORKSPACE/Patches/Release1000/reconstruct-flow.sh"
           bash -x "$GITHUB_WORKSPACE/Patches/Release1000/reconstruct-flow.sh"
 
+      - name: Reconstructed source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: Blackstock-1.0-source-snapshot
+          if-no-files-found: error
+          retention-days: 1
+          path: |
+            Sources/Blackstock/Views/CreatorOS1000View.swift
+            Sources/Blackstock/Views/ChancenView.swift
+            Sources/Blackstock/Views/ProduktionsDetailView.swift
+            Sources/Blackstock/Views/YouTubePlayerView.swift
+            Sources/Blackstock/Views/RootView.swift
+            Sources/Blackstock/Views/SidebarView.swift
+            Sources/Blackstock/AppStore+V11.swift
+            Sources/Blackstock/AppStore+V26.swift
+            Sources/Blackstock/AppStore+V1000.swift
+            Sources/Blackstock/Models/Blackstock1000Models.swift
+            Sources/Blackstock/Services/CreatorOS1000Service.swift
+            Sources/Blackstock/Services/TrendFeedScoreService.swift
+            Sources/Blackstock/Services/YouTubeService.swift
+            Sources/Blackstock/Services/NextBestActionService.swift
+            Build/Release-Audit.sh
+
       - name: Release-Metadaten laden
         shell: bash
         run: |
