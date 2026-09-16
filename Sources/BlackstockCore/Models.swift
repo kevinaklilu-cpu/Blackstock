@@ -12,6 +12,26 @@ public enum VideoDurationFilter: String, CaseIterable, Identifiable, Codable, Se
     public func contains(seconds: Int) -> Bool { switch self { case .all: return true; case .upToOne: return seconds < 60; case .oneToFour: return seconds >= 60 && seconds < 240; case .fourToTen: return seconds >= 240 && seconds < 600; case .tenToTwenty: return seconds >= 600 && seconds < 1200; case .twentyToSixty: return seconds >= 1200 && seconds < 3600; case .overSixty: return seconds >= 3600 } }
 }
 
+public enum RenderCanvas: String, CaseIterable, Codable, Sendable, Identifiable {
+    case source, landscape16x9, vertical9x16, square1x1, portrait4x5
+    public var id: String { rawValue }
+    public var label: String {
+        switch self {
+        case .source: return "Quelle"
+        case .landscape16x9: return "16:9"
+        case .vertical9x16: return "9:16"
+        case .square1x1: return "1:1"
+        case .portrait4x5: return "4:5"
+        }
+    }
+    public var pixelWidth: Int? {
+        switch self { case .source: return nil; case .landscape16x9: return 1920; case .vertical9x16, .square1x1, .portrait4x5: return 1080 }
+    }
+    public var pixelHeight: Int? {
+        switch self { case .source: return nil; case .landscape16x9: return 1080; case .vertical9x16: return 1920; case .square1x1: return 1080; case .portrait4x5: return 1350 }
+    }
+}
+
 public struct VideoMetric: Codable, Identifiable, Sendable, Equatable {
     public let id: String; public var title: String; public var channelID: String; public var channelTitle: String; public var publishedAt: Date; public var durationSeconds: Int; public var viewCount: Int; public var likeCount: Int?; public var commentCount: Int?; public var thumbnailURL: URL?; public var tags: [String]
     public init(id: String, title: String, channelID: String, channelTitle: String, publishedAt: Date, durationSeconds: Int, viewCount: Int, likeCount: Int? = nil, commentCount: Int? = nil, thumbnailURL: URL? = nil, tags: [String] = []) { self.id = id; self.title = title; self.channelID = channelID; self.channelTitle = channelTitle; self.publishedAt = publishedAt; self.durationSeconds = durationSeconds; self.viewCount = viewCount; self.likeCount = likeCount; self.commentCount = commentCount; self.thumbnailURL = thumbnailURL; self.tags = tags }
@@ -51,6 +71,10 @@ public struct Project: Codable, Identifiable, Sendable, Equatable {
     public var publishTitle: String?
     public var publishDescription: String?
     public var publishTags: [String]?
+    public var renderCanvas: RenderCanvas?
+    public var cropAnchorX: Double?
+    public var cropAnchorY: Double?
+    public var lastExportPackageURL: URL?
     public var createdAt: Date
     public var updatedAt: Date
 
@@ -72,6 +96,10 @@ public struct Project: Codable, Identifiable, Sendable, Equatable {
         publishTitle: String? = nil,
         publishDescription: String? = nil,
         publishTags: [String]? = nil,
+        renderCanvas: RenderCanvas? = nil,
+        cropAnchorX: Double? = nil,
+        cropAnchorY: Double? = nil,
+        lastExportPackageURL: URL? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -92,9 +120,17 @@ public struct Project: Codable, Identifiable, Sendable, Equatable {
         self.publishTitle = publishTitle
         self.publishDescription = publishDescription
         self.publishTags = publishTags
+        self.renderCanvas = renderCanvas
+        self.cropAnchorX = cropAnchorX
+        self.cropAnchorY = cropAnchorY
+        self.lastExportPackageURL = lastExportPackageURL
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
+
+    public var effectiveRenderCanvas: RenderCanvas { renderCanvas ?? .source }
+    public var effectiveCropAnchorX: Double { min(max(cropAnchorX ?? 0.5, 0), 1) }
+    public var effectiveCropAnchorY: Double { min(max(cropAnchorY ?? 0.5, 0), 1) }
 }
 
 public struct AnalyticsRow: Codable, Identifiable, Sendable, Equatable {
