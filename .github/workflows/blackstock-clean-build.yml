@@ -43,7 +43,7 @@ jobs:
           grep -q 'Mit YouTube verbinden' Sources/BlackstockApp/OnboardingView.swift
           grep -q 'youtube.upload' Sources/BlackstockApp/GoogleYouTubeAuth.swift
           grep -q 'uploadType=resumable' Sources/BlackstockApp/YouTubePublishingService.swift
-          grep -q 'Zu \\(targetChannelTitle) hochladen' Sources/BlackstockApp/PublishView.swift
+          grep -q 'Direkt zu YouTube' Sources/BlackstockApp/PublishView.swift
           grep -q 'Release-Paket exportieren' Sources/BlackstockApp/PublishView.swift
           grep -q 'RenderCanvas' Sources/BlackstockCore/Models.swift
           grep -q 'ReleasePackageBuilder' Sources/BlackstockCore/ReleasePackage.swift
