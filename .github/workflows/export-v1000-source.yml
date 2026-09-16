@@ -1,4 +1,4 @@
-name: Export Blackstock 1000 Source
+name: Blackstock Source Export
 
 on:
   workflow_dispatch:
@@ -19,25 +19,27 @@ permissions:
   contents: read
 
 concurrency:
-  group: blackstock-1000-canonical-source
+  group: blackstock-canonical-source
   cancel-in-progress: true
 
 jobs:
-  export-source-1000:
+  export-source:
     runs-on: macos-26
     timeout-minutes: 20
     steps:
       - name: Repository auschecken
         uses: actions/checkout@v4
 
-      - name: Blackstock 1000 kanonisch rekonstruieren
+      - name: Blackstock kanonisch rekonstruieren
         shell: bash
         run: |
           set -euo pipefail
           chmod +x "$GITHUB_WORKSPACE/Patches/Release1000/reconstruct-flow.sh"
           "$GITHUB_WORKSPACE/Patches/Release1000/reconstruct-flow.sh"
-          grep -q '^APP_VERSION=1000.0.0$' "$GITHUB_WORKSPACE/Build/version.env"
-          grep -q '^BUILD_NUMBER=100000$' "$GITHUB_WORKSPACE/Build/version.env"
+          grep -q '^APP_VERSION=1.0.0$' "$GITHUB_WORKSPACE/Build/version.env"
+          grep -q '^BUILD_NUMBER=100$' "$GITHUB_WORKSPACE/Build/version.env"
+          grep -q '^Product: Blackstock$' "$GITHUB_WORKSPACE/RELEASE_MANIFEST.txt"
+          "$GITHUB_WORKSPACE/Build/Market-Readiness-Audit.sh"
 
       - name: Source-Paket erzeugen
         shell: bash
@@ -50,12 +52,12 @@ jobs:
           cp "$GITHUB_WORKSPACE/RELEASE_MANIFEST.txt" "$RUNNER_TEMP/export/"
           cp "$GITHUB_WORKSPACE"/RELEASE_NOTES_v*.md "$RUNNER_TEMP/export/" 2>/dev/null || true
           cd "$RUNNER_TEMP/export"
-          /usr/bin/ditto -c -k --keepParent . "$RUNNER_TEMP/Blackstock-1000.0.0-authoritative-source.zip"
+          /usr/bin/ditto -c -k --keepParent . "$RUNNER_TEMP/Blackstock-authoritative-source.zip"
 
-      - name: Autoritativen Source hochladen
+      - name: Blackstock Source hochladen
         uses: actions/upload-artifact@v4
         with:
-          name: Blackstock-1000.0.0-authoritative-source
+          name: Blackstock-authoritative-source
           if-no-files-found: error
           retention-days: 7
-          path: ${{ runner.temp }}/Blackstock-1000.0.0-authoritative-source.zip
+          path: ${{ runner.temp }}/Blackstock-authoritative-source.zip
