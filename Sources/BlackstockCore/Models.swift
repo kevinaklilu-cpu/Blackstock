@@ -34,8 +34,67 @@ public struct ContentIdea: Codable, Identifiable, Sendable, Equatable {
 }
 
 public struct Project: Codable, Identifiable, Sendable, Equatable {
-    public let id: UUID; public var title: String; public var sourceVideoID: String?; public var sourceEvidenceIDs: [String]; public var localMediaURL: URL?; public var targetFormat: VideoFormat; public var transcript: String; public var notes: String; public var workingHook: String; public var titleVariants: [String]; public var createdAt: Date; public var updatedAt: Date
-    public init(id: UUID = UUID(), title: String, sourceVideoID: String? = nil, sourceEvidenceIDs: [String] = [], localMediaURL: URL? = nil, targetFormat: VideoFormat = .short, transcript: String = "", notes: String = "", workingHook: String = "", titleVariants: [String] = [], createdAt: Date = Date(), updatedAt: Date = Date()) { self.id = id; self.title = title; self.sourceVideoID = sourceVideoID; self.sourceEvidenceIDs = sourceEvidenceIDs; self.localMediaURL = localMediaURL; self.targetFormat = targetFormat; self.transcript = transcript; self.notes = notes; self.workingHook = workingHook; self.titleVariants = titleVariants; self.createdAt = createdAt; self.updatedAt = updatedAt }
+    public let id: UUID
+    public var title: String
+    public var sourceVideoID: String?
+    public var sourceEvidenceIDs: [String]
+    public var localMediaURL: URL?
+    public var targetFormat: VideoFormat
+    public var transcript: String
+    public var notes: String
+    public var workingHook: String
+    public var titleVariants: [String]
+    public var editInSeconds: Double?
+    public var editOutSeconds: Double?
+    public var renderedOutputURL: URL?
+    public var thumbnailURL: URL?
+    public var publishTitle: String?
+    public var publishDescription: String?
+    public var publishTags: [String]?
+    public var createdAt: Date
+    public var updatedAt: Date
+
+    public init(
+        id: UUID = UUID(),
+        title: String,
+        sourceVideoID: String? = nil,
+        sourceEvidenceIDs: [String] = [],
+        localMediaURL: URL? = nil,
+        targetFormat: VideoFormat = .short,
+        transcript: String = "",
+        notes: String = "",
+        workingHook: String = "",
+        titleVariants: [String] = [],
+        editInSeconds: Double? = nil,
+        editOutSeconds: Double? = nil,
+        renderedOutputURL: URL? = nil,
+        thumbnailURL: URL? = nil,
+        publishTitle: String? = nil,
+        publishDescription: String? = nil,
+        publishTags: [String]? = nil,
+        createdAt: Date = Date(),
+        updatedAt: Date = Date()
+    ) {
+        self.id = id
+        self.title = title
+        self.sourceVideoID = sourceVideoID
+        self.sourceEvidenceIDs = sourceEvidenceIDs
+        self.localMediaURL = localMediaURL
+        self.targetFormat = targetFormat
+        self.transcript = transcript
+        self.notes = notes
+        self.workingHook = workingHook
+        self.titleVariants = titleVariants
+        self.editInSeconds = editInSeconds
+        self.editOutSeconds = editOutSeconds
+        self.renderedOutputURL = renderedOutputURL
+        self.thumbnailURL = thumbnailURL
+        self.publishTitle = publishTitle
+        self.publishDescription = publishDescription
+        self.publishTags = publishTags
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
 }
 
 public struct AnalyticsRow: Codable, Identifiable, Sendable, Equatable {

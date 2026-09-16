@@ -4,27 +4,47 @@ import BlackstockCore
 
 struct ProjectsView: View {
     @EnvironmentObject private var app: AppState
+
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 10) {
                 ForEach(app.projects) { project in
+                    let stage = ProjectWorkflowEngine().stage(for: project)
                     BlackstockCard {
                         HStack(spacing: 14) {
                             Image(systemName: project.targetFormat == .short ? "rectangle.portrait" : "rectangle").font(.title2).frame(width: 34)
                             VStack(alignment: .leading, spacing: 5) {
-                                Text(project.title).font(.headline)
+                                HStack {
+                                    Text(project.title).font(.headline)
+                                    Text(stageLabel(stage)).font(.caption.weight(.semibold)).padding(.horizontal, 8).padding(.vertical, 3).background(.quaternary, in: Capsule())
+                                }
                                 Text(project.targetFormat == .short ? "Short" : "Longform").font(.caption).foregroundStyle(.secondary)
                                 if !project.workingHook.isEmpty { Text(project.workingHook).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
                             }
                             Spacer()
                             Text(project.updatedAt, style: .relative).font(.caption).foregroundStyle(.secondary)
-                            Button("Öffnen") { app.openProject(project) }.buttonStyle(.borderedProminent)
+                            Button(stage == .ready || stage == .packaging || stage == .rendered ? "Packaging" : "Öffnen") {
+                                app.activeProject = project
+                                app.selection = (stage == .ready || stage == .packaging || stage == .rendered) ? .publish : .studio
+                            }.buttonStyle(.borderedProminent)
                             Menu { Button("Löschen", role: .destructive) { app.deleteProject(project) } } label: { Image(systemName: "ellipsis") }
                         }
                     }
                 }
             }.padding(20)
-        }.navigationTitle("Projekte").overlay { if app.projects.isEmpty { EmptyState(title: "Noch keine Projekte", systemImage: "square.stack.3d.up", message: "Starte ein Projekt aus Trends oder Ideen.") } }
+        }
+        .navigationTitle("Projekte")
+        .overlay { if app.projects.isEmpty { EmptyState(title: "Noch keine Projekte", systemImage: "square.stack.3d.up", message: "Starte ein Projekt aus Trends oder Ideen.") } }
+    }
+
+    private func stageLabel(_ stage: ProjectStage) -> String {
+        switch stage {
+        case .idea: return "Idee"
+        case .editing: return "Studio"
+        case .rendered: return "Gerendert"
+        case .packaging: return "Packaging"
+        case .ready: return "Bereit"
+        }
     }
 }
 #endif
