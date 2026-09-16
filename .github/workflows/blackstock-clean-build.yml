@@ -10,6 +10,10 @@ on:
       - '.github/workflows/blackstock-clean-build.yml'
   workflow_dispatch:
 
+concurrency:
+  group: blackstock-clean-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   core-tests:
     runs-on: macos-latest
