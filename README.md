@@ -1,81 +1,38 @@
-# Blackstock Native Mac 11.1.0
+# Blackstock 1.0
 
-## Installation für Endnutzer
+Blackstock ist eine native macOS Creator-Intelligence- und Produktions-App für YouTube. Die öffentliche Produktversion ist **Blackstock 1.0**.
 
-Blackstock wird als **fertige macOS-App** verteilt. Auf dem Mac des Nutzers wird nichts kompiliert.
+## Installation
 
-**Blackstock DMG öffnen → Blackstock.app nach Programme ziehen → starten.**
+**Blackstock-1.0.dmg öffnen → Blackstock.app nach Programme ziehen → starten.**
 
-Es gibt keine Endnutzer-`.command`-Installation mehr. Details: `INSTALLATION_EINFACH.md`.
-
-## Release-Build
-
-Der reproduzierbare macOS-26-Build liegt in `.github/workflows/macos-build.yml`. Er erzeugt `Blackstock.app`, eine Universal-App-ZIP und `Blackstock-11.1.0-universal.dmg`. Developer-ID-Signierung/Notarisierung sind über Repository-Secrets optional aktivierbar und für einen reibungslosen öffentlichen Gatekeeper-Release vorgesehen.
-
----
-
-# Blackstock Native Mac v11.1.0
-
-Blackstock ist ein natives macOS **YouTube Creator & Media Operations Center**. Version 11 verschiebt den Kern von einer AI-first-Generator-UX zu **Existing Media First**: kanalrelevante Trends erkennen, rechtlich nutzbare Remote-Quellen auflösen, daraus eine nachvollziehbare Remix-Timeline bauen, nativ rendern, Metadaten aus dem tatsächlich geschnittenen Inhalt erzeugen und anschließend review-basiert oder automatisiert auf den richtigen YouTube-Kanal veröffentlichen.
+Für Endnutzer ist kein lokaler Build und kein Terminal-Schritt erforderlich.
 
 ## Kernworkflow
 
-`Kanal → Trends → Source Discovery → Rights Check → Clip Analysis → Remix Timeline → Render → Metadata → Bereit-Check → Review/Upload → Analytics`
+`Kanal → Trends → Preview → Rechte/Quelle → Clip oder Remix → Creator Studio → Render → Packaging → Upload → Analytics → Learning`
 
-YouTube-Trendvideos sind ausschließlich `TrendReference`. Sie werden nicht gerippt oder als Schnittquelle behandelt. Für einen Render benötigt Blackstock ein `SourceAsset` mit maschinenlesbarem Rechtezustand.
+Blackstock verbindet kanalbezogene Trend-Erkennung, eingebettete Video-Preview, Source-/Rights-Prüfung, Clip- und Remix-Planung, Captions, optionale Voice-/Musik-/Branding-Layer, Thumbnail-/Packaging-Arbeit, hochwertige lokale Renderings, YouTube-Publishing und Analytics in einem durchgängigen Workflow.
 
-## Hauptbereiche
+## Produktprinzipien
 
-- **Übersicht** – echte Tages-KPIs und ein zentraler Apple-Charts-Zeitverlauf.
-- **Trends** – kanalbezogene Chancen mit stabiler Topic-Taxonomie; Sport bleibt immer verfügbar.
-- **Produktionen** – eine operative State Machine für Source Discovery, Analyse, Planung, Cache, Render, Review und Upload.
-- **Inhalte** – veröffentlichte/geplante Inhalte mit realen Performance-Kennzahlen.
-- **Analytics** – Overview, Content und Revenue ohne erfundene Nullwerte.
-- **Kanäle** – Google Accounts, mehrere YouTube-Kanäle, Content DNA und Berechtigungsstatus.
-- **Einstellungen** – Produktion, Veröffentlichung, Quellen/Cache und optionale AI-Fallbacks.
+- **Ein Produkt statt Tool-Hopping:** Discovery, Produktion, Packaging, Publishing und Analytics arbeiten auf demselben Projektzustand.
+- **Channel-bound Intelligence:** Chancen und Empfehlungen orientieren sich am verbundenen Kanal und dessen Content-DNA.
+- **Rights-aware by default:** Referenzvideos und tatsächlich nutzbare Source Assets werden getrennt behandelt; unsichere Rechte blockieren automatisches Publishing.
+- **Quality first:** Source-aware Rendering, Originalton als Standard, editierbare Captions und optionale kreative Layer.
+- **Massentauglicher Release-Pfad:** Regressionstests, vollständiger Swift-Typecheck, Smoke-Test, Universal-Binary-Prüfung, Developer-ID-Signierung, Apple-Notarisierung und Gatekeeper-Validierung.
+- **Sichere Credentials:** OAuth-Konfiguration wird im Release-Prozess aus geschützten Repository-Secrets eingebunden; Tokens gehören in den macOS-Keychain.
 
-## Architekturprinzipien
+## macOS
 
-Blackstock v11 trennt `GoogleAccount` von `YouTubeChannelConnection`, `TrendReference` von `SourceAsset` und periodische Analytics von Lifetime-Werten. OAuth-Tokens und Stream-Keys liegen im Keychain. Remote-Medien werden nur in Blackstocks verwaltetem Working Directory gecacht; große Dateien werden nicht vollständig in den RAM geladen.
+- Minimum: macOS 13
+- Architekturen: Apple Silicon (`arm64`) und Intel (`x86_64`)
+- Bundle ID: `de.blackstock.native`
+- Öffentliche Version: `1.0.0`
+- Build: `100`
 
-Automatisches Publishing wird blockiert, wenn Nutzungsrechte unbekannt/eingeschränkt/abgelaufen sind, erforderliche Attribution fehlt oder eine lizenzierte Quelle keine ausdrücklich erlaubte Bearbeitung, Veröffentlichung und kommerzielle Nutzung ausweist.
+## Release-Artefakte
 
-## Build
+Der kanonische CI-Build erzeugt `Blackstock-1.0.dmg` und `Blackstock-1.0.zip` samt SHA-256-Prüfsummen. Der öffentliche Distributions-Workflow gibt dieselben Namen erst frei, nachdem Produktions-OAuth, Developer-ID-Signatur, Apple-Notarisierung und Gatekeeper erfolgreich geprüft wurden.
 
-Voraussetzungen für einen vollständigen nativen Release-Build:
-
-- macOS 13 oder neuer
-- Xcode Command Line Tools / aktuelles Swift Toolchain
-- Developer ID Application Zertifikat für signierte Distribution
-- optional Apple-Notarisierungsprofil für DMG
-- FFmpeg **nur**, wenn echtes RTMP-Live-Playout verwendet werden soll; FFmpeg wird nicht gebündelt
-
-Prüfung:
-
-```bash
-./Build/verify-release.zsh
-```
-
-App-Bundle:
-
-```bash
-./Build/build-app.zsh
-```
-
-Signiertes/notarisiertes DMG siehe `INSTALLATION_EINFACH.md`.
-
-## Tests
-
-`Build/Core-Tests.sh` ist die gemeinsame portable Regressionstest-Matrix für lokale Prüfung und CI. Sie umfasst Altregressionen plus v11-Tests für Migration, Multi-Channel, Analytics, Rights, Remix, Publishing-Idempotenz und Recovery. `Build/Release-Audit.sh` prüft Versionskonsistenz, Ressourcen, gefährliche Swift-Konstrukte und Syntax.
-
-## Migration
-
-Beim ersten Laden eines älteren Zustands normalisiert Blackstock v10-Daten in den v11-State. Vor der Migration wird ein Pre-v11-Snapshot angelegt. Neue Felder verwenden stabile Defaults; alte Channel-/Production-IDs bleiben soweit möglich erhalten.
-
-## Release
-
-**Version:** 11.1.0  
-**Build:** 1110  
-**Bundle ID:** `de.blackstock.native`
-
-Siehe `RELEASE_NOTES_v11.md`, `ARCHITEKTUR.md` und `PRODUCTION_CHECKLIST.md`.
+Interne historische Datei- oder Symbolnamen wie `Release1000`, `V1000` oder `CreatorOS1000View` sind ausschließlich Migrations-/Build-Interna und keine Produktversionen.
