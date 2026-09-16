@@ -82,8 +82,11 @@ python3 "$ROOT/Patches/Release1000/apply-market-audit-normalization.py"
 
 # Final Creator Business OS architecture: professional workspace navigation, niche/long-tail
 # discovery, research and ideas workspaces, secure runtime OAuth import, and modern audits.
-base64 -d < "$ROOT/Patches/Release1000/creator-business-os.py.gz.b64" > "$TMP/creator-business-os.py.gz"
+cat "$ROOT"/Patches/Release1000/creator-business-os.part*.b64 > "$TMP/creator-business-os.b64"
+test "$(shasum -a 256 "$TMP/creator-business-os.b64" | awk '{print $1}')" = "56e64a8073d08f9d216ec4af0163bead9d084e1545ecf0dc4617f12bc2475fb3"
+base64 -d < "$TMP/creator-business-os.b64" > "$TMP/creator-business-os.py.gz"
 gunzip -c "$TMP/creator-business-os.py.gz" > "$TMP/creator-business-os.py"
+test "$(shasum -a 256 "$TMP/creator-business-os.py" | awk '{print $1}')" = "cb95ea2d98de7ef526a9f9dd09aa7187486e2461edcc7b0cd7be953008867704"
 BLACKSTOCK_ROOT="$ROOT" python3 "$TMP/creator-business-os.py"
 
 chmod +x "$ROOT"/Build/*.sh "$ROOT"/Build/*.zsh
