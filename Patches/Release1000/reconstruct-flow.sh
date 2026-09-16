@@ -72,11 +72,13 @@ python3 "$ROOT/Patches/Release1000/apply-dashboard-simplification.py"
 python3 "$ROOT/Patches/Release1000/apply-market-product-redesign.py"
 python3 "$ROOT/Patches/Release1000/apply-market-audit-normalization.py"
 
-# Creator Business OS: one canonical architecture for discovery, research, ideas, studio,
-# publishing, analytics and channel management. The patch contains no credentials.
-# Verify the decoded executable payload rather than textual base64 whitespace.
-base64 -d < "$ROOT/Patches/Release1000/apply-creator-business-os.py.gz.b64" > "$TMP/creator-business-os.py.gz"
-gunzip -c "$TMP/creator-business-os.py.gz" > "$TMP/creator-business-os.py"
+# Creator Business OS: transparent source assembly, hash-verified before execution.
+cat "$ROOT/Patches/Release1000/creator-business-os.src00" \
+    "$ROOT/Patches/Release1000/creator-business-os.src01" \
+    "$ROOT/Patches/Release1000/creator-business-os.src02" \
+    "$ROOT/Patches/Release1000/creator-business-os.src03" \
+    "$ROOT/Patches/Release1000/creator-business-os.src04" \
+    "$ROOT/Patches/Release1000/creator-business-os.src05" > "$TMP/creator-business-os.py"
 test "$(shasum -a 256 "$TMP/creator-business-os.py" | awk '{print $1}')" = "e1a6c0f70471795944c1f13c824775c8b3c651e916b61b21a099c8cbb7c05d12"
 BLACKSTOCK_ROOT="$ROOT" python3 "$TMP/creator-business-os.py"
 
