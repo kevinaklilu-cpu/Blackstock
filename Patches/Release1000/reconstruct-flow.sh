@@ -57,7 +57,7 @@ python3 "$ROOT/Patches/Release1000/apply-player-time-compile-fix.py"
 python3 "$ROOT/Patches/Release1000/apply-clean-workflow-hotfix.py"
 python3 "$ROOT/Patches/Release1000/apply-release-audit-hotfix.py"
 
-# Final product architecture: existing-video intelligence only. No synthetic fallback.
+# Rights-aware source architecture remains the safety baseline.
 base64 -d < "$ROOT/Patches/Release1000/source-only-studio-hotfix.py.gz.b64" > "$TMP/source-only-studio.py.gz"
 gunzip -c "$TMP/source-only-studio.py.gz" > "$TMP/source-only-studio.py"
 BLACKSTOCK_ROOT="$ROOT" python3 "$TMP/source-only-studio.py"
@@ -65,16 +65,20 @@ BLACKSTOCK_ROOT="$ROOT" python3 "$TMP/source-only-studio.py"
 # Keep the final generated source compatible with the current Swift toolchain.
 python3 "$ROOT/Patches/Release1000/apply-swift63-compile-hotfix.py"
 
+# Blackstock Next integrates optional creator layers into the same rights-aware timeline.
+python3 "$ROOT/Patches/Release1000/apply-next-generation.py"
+
 chmod +x "$ROOT"/Build/*.sh "$ROOT"/Build/*.zsh
 grep -q '^APP_VERSION=1000.0.0$' "$ROOT/Build/version.env"
 grep -q '^BUILD_NUMBER=100000$' "$ROOT/Build/version.env"
 grep -q 'Blackstock 1000.0.0 (Build 100000)' "$ROOT/RELEASE_MANIFEST.txt"
+grep -q 'Product generation: Blackstock Next' "$ROOT/RELEASE_MANIFEST.txt"
 grep -q 'CreatorOS1000View' "$ROOT/Sources/Blackstock/Views/RootView.swift"
 grep -q 'v1000ProduktionMitQuelleStarten' "$ROOT/Sources/Blackstock/AppStore+V1000.swift"
 grep -q 'case .command: "Dashboard"' "$ROOT/Sources/Blackstock/Models/Models.swift"
 grep -q 'Text("BLACKSTOCK")' "$ROOT/Sources/Blackstock/Views/SidebarView.swift"
 
-# Source-only / channel-bound product contract.
+# Channel-bound, rights-aware product contract.
 grep -q 'case youtubeNativeRemix' "$ROOT/Sources/Blackstock/Models/Blackstock1000Models.swift"
 ! grep -q 'case originalBuild' "$ROOT/Sources/Blackstock/Models/Blackstock1000Models.swift"
 grep -q 'blackstockSyncChannelIdentity' "$ROOT/Sources/Blackstock/AppStore+Guidance.swift"
@@ -83,12 +87,14 @@ grep -q 'Kanalthema automatisch gebunden' "$ROOT/Sources/Blackstock/Views/Chance
 grep -q 'Auf YouTube remixen' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
 grep -q 'Welche Rechte hast du an der Quelldatei?' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
 grep -q 'Clip aus eigener/lizenzierter Datei' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
-grep -q 'Originalton · Originalsprache · keine KI-Stimme · lokaler Qualitätsrender' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
+grep -q 'Originalton als Standard' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
 grep -q 'Es wurde kein Video generiert oder hochgeladen' "$ROOT/Sources/Blackstock/AppStore+V1000.swift"
 grep -q 'watermarkAktiv = false' "$ROOT/Sources/Blackstock/AppStore+V1000.swift"
 grep -q 'publikationsmodus = .review' "$ROOT/Sources/Blackstock/AppStore+V1000.swift"
-grep -q 'voiceover: nil' "$ROOT/Sources/Blackstock/AppStore+V11.swift"
-grep -q 'musik: nil' "$ROOT/Sources/Blackstock/AppStore+V11.swift"
+grep -q 'voiceover: voiceoverURL' "$ROOT/Sources/Blackstock/AppStore+V11.swift"
+grep -q 'musik: musicURL' "$ROOT/Sources/Blackstock/AppStore+V11.swift"
+grep -q 'Creator Studio' "$ROOT/Sources/Blackstock/Views/ProduktionsDetailView.swift"
+grep -q 'vNextMasterNeuRendern' "$ROOT/Sources/Blackstock/AppStore+V11.swift"
 grep -q 'notDownloadableReference' "$ROOT/Sources/Blackstock/AppStore+V11.swift"
 
 # Source-aware high-quality render contract.
@@ -103,4 +109,4 @@ grep -q 'DisclosureGroup("Schnittdetails & Quellen")' "$ROOT/Sources/Blackstock/
 ! grep -q '"Creator OS"' "$ROOT/Sources/Blackstock/Views/CreatorOS1000View.swift"
 ! grep -q 'Top 3 automatisch erstellen' "$ROOT/Sources/Blackstock/Views/CreatorOS1000View.swift"
 grep -q 'BLACKSTOCK_1000_CORE_TESTS_OK' "$ROOT/Tests/Release1000CoreTests.swift"
-echo BLACKSTOCK_1000_SOURCE_ONLY_STUDIO_RECONSTRUCT_OK
+echo BLACKSTOCK_NEXT_CANONICAL_RECONSTRUCT_OK
