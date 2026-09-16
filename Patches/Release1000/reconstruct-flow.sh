@@ -74,7 +74,7 @@ python3 "$ROOT/Patches/Release1000/apply-market-audit-normalization.py"
 
 # Creator Business OS: one canonical architecture for discovery, research, ideas, studio,
 # publishing, analytics and channel management. The patch contains no credentials.
-test "$(shasum -a 256 "$ROOT/Patches/Release1000/apply-creator-business-os.py.gz.b64" | awk '{print $1}')" = "0d469f252b8a4c43cd9e89572f0556f5a16e9efd8f92c41968c2468777423c6d"
+# Verify the decoded executable payload rather than textual base64 whitespace.
 base64 -d < "$ROOT/Patches/Release1000/apply-creator-business-os.py.gz.b64" > "$TMP/creator-business-os.py.gz"
 gunzip -c "$TMP/creator-business-os.py.gz" > "$TMP/creator-business-os.py"
 test "$(shasum -a 256 "$TMP/creator-business-os.py" | awk '{print $1}')" = "e1a6c0f70471795944c1f13c824775c8b3c651e916b61b21a099c8cbb7c05d12"
