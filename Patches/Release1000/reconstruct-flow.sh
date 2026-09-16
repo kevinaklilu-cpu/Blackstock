@@ -76,10 +76,15 @@ python3 "$ROOT/Patches/Release1000/apply-blackstock-1.py"
 python3 "$ROOT/Patches/Release1000/apply-market-ready-v1.py"
 python3 "$ROOT/Patches/Release1000/apply-dashboard-simplification.py"
 
-# Final Blackstock 1.0 market product: action-first dashboard, cached trend intelligence,
-# Shorts as trend signals, qualitative explanations and YouTube-first remix flow.
+# Market product baseline.
 python3 "$ROOT/Patches/Release1000/apply-market-product-redesign.py"
 python3 "$ROOT/Patches/Release1000/apply-market-audit-normalization.py"
+
+# Final Creator Business OS architecture: professional workspace navigation, niche/long-tail
+# discovery, research and ideas workspaces, secure runtime OAuth import, and modern audits.
+base64 -d < "$ROOT/Patches/Release1000/creator-business-os.py.gz.b64" > "$TMP/creator-business-os.py.gz"
+gunzip -c "$TMP/creator-business-os.py.gz" > "$TMP/creator-business-os.py"
+BLACKSTOCK_ROOT="$ROOT" python3 "$TMP/creator-business-os.py"
 
 chmod +x "$ROOT"/Build/*.sh "$ROOT"/Build/*.zsh
 grep -q '^APP_VERSION=1.0.0$' "$ROOT/Build/version.env"
@@ -88,8 +93,15 @@ grep -q 'Blackstock 1.0.0 (Build 100)' "$ROOT/RELEASE_MANIFEST.txt"
 grep -q 'Product: Blackstock 1.0' "$ROOT/RELEASE_MANIFEST.txt"
 grep -q 'CreatorOS1000View' "$ROOT/Sources/Blackstock/Views/RootView.swift"
 grep -q 'v1000ProduktionMitQuelleStarten' "$ROOT/Sources/Blackstock/AppStore+V1000.swift"
-grep -q 'case .command: "Dashboard"' "$ROOT/Sources/Blackstock/Models/Models.swift"
+grep -q 'case .command: "Start"' "$ROOT/Sources/Blackstock/Models/Models.swift"
+grep -q 'case .factory: "Recherche"' "$ROOT/Sources/Blackstock/Models/Models.swift"
+grep -q 'case .bibliothek: "Ideen"' "$ROOT/Sources/Blackstock/Models/Models.swift"
 grep -q 'Text("BLACKSTOCK")' "$ROOT/Sources/Blackstock/Views/SidebarView.swift"
+grep -q 'ResearchView()' "$ROOT/Sources/Blackstock/Views/RootView.swift"
+grep -q 'IdeasView()' "$ROOT/Sources/Blackstock/Views/RootView.swift"
+grep -q 'Nischen-Radar' "$ROOT/Sources/Blackstock/Views/ResearchView.swift"
+grep -q 'Weitere Ergebnisse' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
+grep -q 'OAuth-JSON importieren' "$ROOT/Sources/Blackstock/Views/EinstellungenView.swift"
 
 # Channel-bound creator contract.
 grep -q 'case youtubeNativeRemix' "$ROOT/Sources/Blackstock/Models/Blackstock1000Models.swift"
