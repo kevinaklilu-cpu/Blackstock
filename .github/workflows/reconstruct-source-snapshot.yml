@@ -1,0 +1,52 @@
+name: Blackstock 1.0 Source Snapshot
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'Patches/Release1000/**'
+      - '.github/workflows/reconstruct-source-snapshot.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blackstock-1-source-snapshot
+  cancel-in-progress: true
+
+jobs:
+  snapshot:
+    runs-on: macos-26
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct final Blackstock 1.0 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x "$GITHUB_WORKSPACE/Patches/Release1000/reconstruct-flow.sh"
+          "$GITHUB_WORKSPACE/Patches/Release1000/reconstruct-flow.sh"
+      - name: Upload final source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: Blackstock-1.0-final-source
+          retention-days: 1
+          if-no-files-found: error
+          path: |
+            Sources/Blackstock/Views/CreatorOS1000View.swift
+            Sources/Blackstock/Views/ChancenView.swift
+            Sources/Blackstock/Views/ProduktionsDetailView.swift
+            Sources/Blackstock/Views/YouTubePlayerView.swift
+            Sources/Blackstock/Views/RootView.swift
+            Sources/Blackstock/Views/SidebarView.swift
+            Sources/Blackstock/AppStore+V11.swift
+            Sources/Blackstock/AppStore+V26.swift
+            Sources/Blackstock/AppStore+V1000.swift
+            Sources/Blackstock/Models/Blackstock1000Models.swift
+            Sources/Blackstock/Services/CreatorOS1000Service.swift
+            Sources/Blackstock/Services/TrendFeedScoreService.swift
+            Sources/Blackstock/Services/TrendDiscoveryPlannerService.swift
+            Sources/Blackstock/Services/YouTubeService.swift
+            Sources/Blackstock/Services/NextBestActionService.swift
+            Build/Release-Audit.sh
