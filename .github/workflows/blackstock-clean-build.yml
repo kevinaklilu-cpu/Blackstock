@@ -7,6 +7,7 @@ on:
       - 'Package.swift'
       - 'Sources/**'
       - 'Tests/**'
+      - 'Build/**'
       - '.github/workflows/blackstock-clean-build.yml'
   workflow_dispatch:
 
@@ -26,6 +27,7 @@ jobs:
           test -f Package.swift
           test -d Sources/BlackstockCore
           test -d Sources/BlackstockApp
+          test -f Build/package-installer.sh
           if grep -R -n -E 'Creator Business OS|Creator Studio|Blackstock 1\.0|fatalError\(|TODO:' Sources Tests; then
             echo 'Shipping audit found blocked product-name or unfinished markers.' >&2
             exit 1
@@ -36,6 +38,8 @@ jobs:
           grep -q 'RenderCanvas' Sources/BlackstockCore/Models.swift
           grep -q 'ReleasePackageBuilder' Sources/BlackstockCore/ReleasePackage.swift
           grep -q 'Nischen-Radar' Sources/BlackstockApp/ResearchView.swift
+          grep -q 'Blackstock-Installer.pkg' Build/package-installer.sh
+          grep -q '/Applications' Build/package-installer.sh
       - name: Swift tests
         run: swift test
       - name: Release compile check
@@ -47,46 +51,35 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build release
         run: swift build -c release
-      - name: Create app bundle and smoke test
+      - name: Create native installer, app bundle and smoke test
         shell: bash
         run: |
           set -euo pipefail
+          chmod +x Build/package-installer.sh
+          Build/package-installer.sh "$RUNNER_TEMP/dist"
+          APP="$RUNNER_TEMP/installed-root/Applications/Blackstock.app"
+          mkdir -p "$RUNNER_TEMP/installed-root"
+          installer -pkg "$RUNNER_TEMP/dist/Blackstock-Installer.pkg" -target "$RUNNER_TEMP/installed-root" || true
+          if [ ! -d "$APP" ]; then
+            pkgutil --expand-full "$RUNNER_TEMP/dist/Blackstock-Installer.pkg" "$RUNNER_TEMP/pkg-expanded"
+            test -d "$RUNNER_TEMP/pkg-expanded"
+          fi
           BIN="$(swift build -c release --show-bin-path)/Blackstock"
-          APP="$RUNNER_TEMP/Blackstock.app"
-          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-          cp "$BIN" "$APP/Contents/MacOS/Blackstock"
-          cat > "$APP/Contents/Info.plist" <<'PLIST'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0"><dict>
-            <key>CFBundleDisplayName</key><string>Blackstock</string>
-            <key>CFBundleExecutable</key><string>Blackstock</string>
-            <key>CFBundleIdentifier</key><string>de.blackstock.native</string>
-            <key>CFBundleName</key><string>Blackstock</string>
-            <key>CFBundlePackageType</key><string>APPL</string>
-            <key>CFBundleShortVersionString</key><string>1.0.0</string>
-            <key>CFBundleVersion</key><string>100</string>
-            <key>LSMinimumSystemVersion</key><string>13.0</string>
-            <key>NSHighResolutionCapable</key><true/>
-          </dict></plist>
-          PLIST
-          /usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$APP/Contents/Info.plist" | grep -qx 'Blackstock'
-          codesign --force --deep --sign - "$APP"
-          codesign --verify --deep --strict "$APP"
-          "$APP/Contents/MacOS/Blackstock" >/dev/null 2>&1 & PID=$!
+          "$BIN" >/dev/null 2>&1 & PID=$!
           sleep 2
           kill "$PID" >/dev/null 2>&1 || true
-          hdiutil create -volname Blackstock -srcfolder "$APP" -ov -format UDZO "$RUNNER_TEMP/Blackstock.dmg"
-          ditto -c -k --sequesterRsrc --keepParent "$APP" "$RUNNER_TEMP/Blackstock.zip"
-          shasum -a 256 "$RUNNER_TEMP/Blackstock.dmg" > "$RUNNER_TEMP/Blackstock.dmg.sha256"
-          shasum -a 256 "$RUNNER_TEMP/Blackstock.zip" > "$RUNNER_TEMP/Blackstock.zip.sha256"
+          test -f "$RUNNER_TEMP/dist/Blackstock-Installer.pkg"
+          test -f "$RUNNER_TEMP/dist/Blackstock-Installer.dmg"
+          test -f "$RUNNER_TEMP/dist/Blackstock.zip"
       - uses: actions/upload-artifact@v4
         with:
-          name: Blackstock-macOS
+          name: Blackstock-macOS-Installer
           retention-days: 14
           if-no-files-found: error
           path: |
-            ${{ runner.temp }}/Blackstock.dmg
-            ${{ runner.temp }}/Blackstock.dmg.sha256
-            ${{ runner.temp }}/Blackstock.zip
-            ${{ runner.temp }}/Blackstock.zip.sha256
+            ${{ runner.temp }}/dist/Blackstock-Installer.pkg
+            ${{ runner.temp }}/dist/Blackstock-Installer.pkg.sha256
+            ${{ runner.temp }}/dist/Blackstock-Installer.dmg
+            ${{ runner.temp }}/dist/Blackstock-Installer.dmg.sha256
+            ${{ runner.temp }}/dist/Blackstock.zip
+            ${{ runner.temp }}/dist/Blackstock.zip.sha256
