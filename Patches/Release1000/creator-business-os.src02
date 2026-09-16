@@ -1,0 +1,143 @@
+.bsMuted2)
+      }
+      .padding(10)
+      .background(Color.bsSurface2)
+      .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+    .buttonStyle(.plain)
+  }
+
+'''
+dashboard = dashboard.replace(marker, workflow_card + marker, 1)
+write('Sources/Blackstock/Views/CreatorOS1000View.swift', dashboard)
+
+# 4) Research and Ideas workspaces: derived entirely from live/store data, no fake market data.
+workspace = r'''import SwiftUI
+
+private enum ResearchReachBand: String, CaseIterable, Identifiable {
+  case all = "Alle Reichweiten"
+  case emerging = "Long Tail"
+  case niche = "Nische"
+  case broad = "Breit"
+  var id: String { rawValue }
+
+  func matches(_ views: Int?) -> Bool {
+    guard self != .all else { return true }
+    let value = views ?? 0
+    switch self {
+    case .all: return true
+    case .emerging: return value < 25_000
+    case .niche: return value >= 25_000 && value < 250_000
+    case .broad: return value >= 250_000
+    }
+  }
+}
+
+private struct ResearchCluster: Identifiable {
+  var id: String { topic.lowercased() }
+  let topic: String
+  let videos: [Chance]
+
+  var creators: Int { Set(videos.compactMap(\.youtubeChannelTitle)).count }
+  var medianViews: Int {
+    let values = videos.compactMap(\.youtubeViews).sorted()
+    guard !values.isEmpty else { return 0 }
+    return values[values.count / 2]
+  }
+  var shorts: Int { videos.filter { ($0.youtubeDurationSeconds ?? 9_999) < 60 }.count }
+}
+
+struct ResearchWorkspaceView: View {
+  @EnvironmentObject private var store: AppStore
+  @State private var selectedChannelID: UUID?
+  @State private var reachBand: ResearchReachBand = .all
+  @State private var query = ""
+
+  private var scoped: [Chance] {
+    let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+      .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+    return store.chancen.filter { chance in
+      guard chance.youtubeVideoID != nil else { return false }
+      guard reachBand.matches(chance.youtubeViews) else { return false }
+      if let selectedChannelID, let assigned = chance.empfohlenerKanalID, assigned != selectedChannelID { return false }
+      guard !needle.isEmpty else { return true }
+      let haystack = "\(chance.titel) \(chance.thema) \(chance.youtubeChannelTitle ?? "")"
+        .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+      return haystack.contains(needle)
+    }
+  }
+
+  private var saved: [Chance] {
+    scoped.filter { chance in
+      chance.youtubeVideoID.map(store.v100State.shortlistedVideoIDs.contains) ?? false
+    }
+  }
+
+  private var clusters: [ResearchCluster] {
+    Dictionary(grouping: scoped, by: { $0.thema.trimmingCharacters(in: .whitespacesAndNewlines) })
+      .map { ResearchCluster(topic: $0.key.isEmpty ? "Unkategorisiert" : $0.key, videos: $0.value) }
+      .sorted { lhs, rhs in
+        if lhs.videos.count == rhs.videos.count { return lhs.medianViews > rhs.medianViews }
+        return lhs.videos.count > rhs.videos.count
+      }
+  }
+
+  var body: some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: 16) {
+        PageHeader(
+          titel: "Recherche",
+          untertitel: "Marktstruktur, Nischen und konkrete YouTube-Referenzen aus den tatsächlich geladenen Daten.",
+          trailing: AnyView(channelPicker))
+        controls
+        marketOverview
+        evidenceLibrary
+      }
+      .padding(24)
+    }
+    .onAppear {
+      if selectedChannelID == nil { selectedChannelID = store.v12ActiveChannelID ?? store.liveKanaele.first?.id }
+    }
+  }
+
+  private var channelPicker: some View {
+    Picker("Kanal", selection: $selectedChannelID) {
+      Text("Alle Kanäle").tag(UUID?.none)
+      ForEach(store.liveKanaele) { channel in Text(channel.name).tag(Optional(channel.id)) }
+    }
+    .frame(width: 220)
+  }
+
+  private var controls: some View {
+    HStack(spacing: 10) {
+      HStack(spacing: 8) {
+        Image(systemName: "magnifyingglass").foregroundStyle(Color.bsMuted)
+        TextField("Thema, Video oder Creator durchsuchen", text: $query).textFieldStyle(.plain)
+      }
+      .padding(.horizontal, 11).frame(maxWidth: .infinity, minHeight: 36)
+      .background(Color.bsSurface2).clipShape(RoundedRectangle(cornerRadius: 9))
+
+      Picker("Reichweite", selection: $reachBand) {
+        ForEach(ResearchReachBand.allCases) { band in Text(band.rawValue).tag(band) }
+      }
+      .frame(width: 170)
+
+      Button { store.ausgewaehltesZiel = .chancen } label: {
+        Label("Mehr entdecken", systemImage: "safari.fill")
+      }
+      .buttonStyle(.borderedProminent).tint(Color.bsRed).foregroundStyle(.white)
+    }
+  }
+
+  private var marketOverview: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      HStack {
+        AbschnittTitel(
+          titel: "Nischen-Radar",
+          untertitel: "Keine erfundenen Marktgrößen: Anzahl geladener Videos, Creator und Median-Views je Themencluster.")
+        Spacer()
+        Text("\(scoped.count) Referenzen")
+          .font(.system(size: 9.5, weight: .semibold)).foregroundStyle(Color.bsMuted)
+      }
+      if clusters.isEmpty {
+        Text("Noch keine passenden Referenzen. Öffne Entdecken und lade weitere Themenblöcke
