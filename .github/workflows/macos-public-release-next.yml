@@ -2,6 +2,13 @@ name: Blackstock Next Public Release
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/macos-public-release-next.yml'
+      - 'Patches/**'
+      - 'blackstock-build-payload.zip'
 
 permissions:
   contents: read
@@ -110,7 +117,7 @@ jobs:
           set -euo pipefail
           "$GITHUB_WORKSPACE/Build/create-dmg.zsh"
 
-      - name: Gatekeeper und Notarisierung verifizieren
+      - name: Produktionskonfiguration, Gatekeeper und Notarisierung verifizieren
         shell: bash
         run: |
           set -euo pipefail
@@ -119,6 +126,17 @@ jobs:
           set +a
           APP="$GITHUB_WORKSPACE/dist/Blackstock.app"
           DMG="$GITHUB_WORKSPACE/dist/Blackstock-${APP_VERSION}-universal.dmg"
+          test -f "$APP/Contents/Resources/GoogleOAuth.json" || { echo 'Produktions-OAuth fehlt im App-Bundle'; exit 1; }
+          python3 - <<'PY'
+          import json, pathlib
+          p = pathlib.Path('dist/Blackstock.app/Contents/Resources/GoogleOAuth.json')
+          data = json.loads(p.read_text())
+          desktop = data.get('installed') or data.get('web') or {}
+          assert desktop.get('client_id')
+          assert desktop.get('auth_uri')
+          assert desktop.get('token_uri')
+          print('BLACKSTOCK_NEXT_OAUTH_BUNDLE_OK')
+          PY
           codesign --verify --deep --strict --verbose=2 "$APP"
           xcrun stapler validate "$DMG"
           hdiutil verify "$DMG" >/dev/null
