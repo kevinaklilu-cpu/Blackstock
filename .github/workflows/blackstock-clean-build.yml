@@ -38,12 +38,18 @@ jobs:
           fi
           grep -q 'research = "Recherche"' Sources/BlackstockApp/AppState.swift
           grep -q 'func render(project:' Sources/BlackstockApp/NativeMediaService.swift
-          grep -q 'BlackstockBrandMark' Sources/BlackstockApp/Components.swift
+          grep -q 'Text("B")' Sources/BlackstockApp/Components.swift
+          grep -q 'play.fill' Sources/BlackstockApp/Components.swift
           grep -q 'AccountConnectionSheet' Sources/BlackstockApp/CreatorShellView.swift
+          grep -q 'SidebarGroupLabel' Sources/BlackstockApp/CreatorShellView.swift
           grep -q 'Mit YouTube verbinden' Sources/BlackstockApp/OnboardingView.swift
+          grep -q 'Client Secret' Sources/BlackstockApp/OnboardingView.swift
+          grep -q 'authorizationTimedOut' Sources/BlackstockApp/GoogleYouTubeAuth.swift
           grep -q 'youtube.upload' Sources/BlackstockApp/GoogleYouTubeAuth.swift
           grep -q 'uploadType=resumable' Sources/BlackstockApp/YouTubePublishingService.swift
           grep -q 'Direkt zu YouTube' Sources/BlackstockApp/PublishView.swift
+          grep -q 'TrendBrowseRow' Sources/BlackstockApp/TrendsView.swift
+          grep -q 'ProjectLibraryCard' Sources/BlackstockApp/ProjectsView.swift
           grep -q 'Release-Paket exportieren' Sources/BlackstockApp/PublishView.swift
           grep -q 'RenderCanvas' Sources/BlackstockCore/Models.swift
           grep -q 'ReleasePackageBuilder' Sources/BlackstockCore/ReleasePackage.swift
@@ -51,6 +57,7 @@ jobs:
           grep -q 'Blackstock-Installer.pkg' Build/package-installer.sh
           grep -q 'Blackstock.icns' Build/package-installer.sh
           grep -q 'BlackstockGoogleOAuthClientID' Build/package-installer.sh
+          grep -q 'Desktop OAuth + PKCE' Build/package-installer.sh
           grep -q '/Applications' Build/package-installer.sh
       - name: Swift tests
         run: swift test
