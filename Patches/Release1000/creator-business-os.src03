@@ -1,0 +1,121 @@
+.")
+          .font(.system(size: 10)).foregroundStyle(Color.bsMuted)
+      } else {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 210), spacing: 10)], spacing: 10) {
+          ForEach(clusters) { cluster in
+            Button {
+              query = cluster.topic
+            } label: {
+              VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                  Text(cluster.topic).font(.system(size: 11, weight: .semibold)).foregroundStyle(Color.bsText).lineLimit(1)
+                  Spacer()
+                  Text("\(cluster.videos.count)").font(.system(size: 10, weight: .bold)).foregroundStyle(Color.bsRed)
+                }
+                HStack(spacing: 10) {
+                  Label("\(cluster.creators) Creator", systemImage: "person.2")
+                  Label(researchCompactNumber(cluster.medianViews), systemImage: "play.fill")
+                  if cluster.shorts > 0 { Label("\(cluster.shorts) Shorts", systemImage: "rectangle.portrait") }
+                }
+                .font(.system(size: 8.5)).foregroundStyle(Color.bsMuted)
+              }
+              .padding(11)
+              .background(Color.bsSurface2)
+              .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+            .buttonStyle(.plain)
+          }
+        }
+      }
+    }
+    .blackstockCard(16, elevated: true)
+  }
+
+  private var evidenceLibrary: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      HStack {
+        AbschnittTitel(
+          titel: "Evidence Library",
+          untertitel: saved.isEmpty ? "Alle geladenen Referenzen. Speichere relevante Videos in Entdecken." : "Gespeicherte Referenzen werden zuerst gezeigt.")
+        Spacer()
+        if !saved.isEmpty {
+          Text("\(saved.count) gespeichert").font(.system(size: 9.5, weight: .semibold)).foregroundStyle(Color.bsRed)
+        }
+      }
+      let ordered = (saved + scoped.filter { item in
+        guard let id = item.youtubeVideoID else { return true }
+        return !store.v100State.shortlistedVideoIDs.contains(id)
+      })
+      if ordered.isEmpty {
+        Text("Keine Referenzen für diesen Filter.").font(.system(size: 10)).foregroundStyle(Color.bsMuted)
+      } else {
+        LazyVStack(spacing: 0) {
+          ForEach(ordered) { chance in researchRow(chance) }
+        }
+      }
+    }
+    .blackstockCard(16)
+  }
+
+  private func researchRow(_ chance: Chance) -> some View {
+    HStack(spacing: 10) {
+      VStack(alignment: .leading, spacing: 3) {
+        Text(chance.titel).font(.system(size: 10.5, weight: .semibold)).foregroundStyle(Color.bsText).lineLimit(1)
+        HStack(spacing: 7) {
+          Text(chance.youtubeChannelTitle ?? "YouTube")
+          Text("·")
+          Text(chance.thema)
+          if let language = chance.youtubeLanguage, !language.isEmpty { Text("· \(language.uppercased())") }
+        }
+        .font(.system(size: 8.5)).foregroundStyle(Color.bsMuted)
+      }
+      Spacer()
+      if let duration = chance.youtubeDurationSeconds {
+        Text(researchDuration(duration)).font(.system(size: 8.5, weight: .medium)).foregroundStyle(Color.bsMuted)
+      }
+      Text(researchCompactNumber(chance.youtubeViews ?? 0))
+        .font(.system(size: 9.5, weight: .semibold)).foregroundStyle(Color.bsText).frame(width: 60, alignment: .trailing)
+      if let id = chance.youtubeVideoID {
+        Button {
+          store.v100State.toggleShortlist(id)
+          store.speichern()
+        } label: {
+          Image(systemName: store.v100State.shortlistedVideoIDs.contains(id) ? "bookmark.fill" : "bookmark")
+        }
+        .buttonStyle(.borderless)
+      }
+    }
+    .padding(.vertical, 8)
+    .overlay(alignment: .bottom) { Rectangle().fill(Color.bsBorder).frame(height: 1) }
+  }
+}
+
+struct IdeasWorkspaceView: View {
+  @EnvironmentObject private var store: AppStore
+  @State private var selectedChannelID: UUID?
+  @State private var query = ""
+
+  private var candidates: [Chance] {
+    let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+      .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+    let scoped = store.chancen.filter { chance in
+      guard chance.youtubeVideoID != nil else { return false }
+      if let selectedChannelID, let assigned = chance.empfohlenerKanalID, assigned != selectedChannelID { return false }
+      guard !needle.isEmpty else { return true }
+      return "\(chance.titel) \(chance.thema)".folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current).contains(needle)
+    }
+    return scoped.sorted { lhs, rhs in
+      let lSaved = lhs.youtubeVideoID.map(store.v100State.shortlistedVideoIDs.contains) ?? false
+      let rSaved = rhs.youtubeVideoID.map(store.v100State.shortlistedVideoIDs.contains) ?? false
+      if lSaved != rSaved { return lSaved && !rSaved }
+      if lhs.trendScore == rhs.trendScore { return (lhs.youtubeViews ?? 0) > (rhs.youtubeViews ?? 0) }
+      return lhs.trendScore > rhs.trendScore
+    }
+  }
+
+  var body: some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: 16) {
+        PageHeader(
+          titel: "Ideen",
+          untertitel: "Von echten Marktsignalen zu umsetzbaren Con
