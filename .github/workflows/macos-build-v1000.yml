@@ -1,4 +1,4 @@
-name: Blackstock 1.0 macOS App / DMG
+name: Blackstock macOS Build
 
 on:
   workflow_dispatch:
@@ -19,32 +19,33 @@ permissions:
   contents: read
 
 concurrency:
-  group: blackstock-1-canonical-release
+  group: blackstock-canonical-build
   cancel-in-progress: true
 
 jobs:
-  build-blackstock-1:
+  build-blackstock:
     runs-on: macos-26
     timeout-minutes: 50
     steps:
       - name: Repository auschecken
         uses: actions/checkout@v4
 
-      - name: Blackstock 1.0 kanonisch rekonstruieren
+      - name: Blackstock kanonisch rekonstruieren
         shell: bash
         run: |
           set -euo pipefail
           chmod +x "$GITHUB_WORKSPACE/Patches/Release1000/reconstruct-flow.sh"
           bash -x "$GITHUB_WORKSPACE/Patches/Release1000/reconstruct-flow.sh"
 
-      - name: Reconstructed source snapshot
+      - name: Source-Snapshot
         uses: actions/upload-artifact@v4
         with:
-          name: Blackstock-1.0-source-snapshot
+          name: Blackstock-source-snapshot
           if-no-files-found: error
           retention-days: 1
           path: |
             Sources/Blackstock/Views/CreatorOS1000View.swift
+            Sources/Blackstock/Views/CreatorBusinessWorkspaceView.swift
             Sources/Blackstock/Views/ChancenView.swift
             Sources/Blackstock/Views/ProduktionsDetailView.swift
             Sources/Blackstock/Views/YouTubePlayerView.swift
@@ -59,6 +60,7 @@ jobs:
             Sources/Blackstock/Services/YouTubeService.swift
             Sources/Blackstock/Services/NextBestActionService.swift
             Build/Release-Audit.sh
+            Build/Market-Readiness-Audit.sh
 
       - name: Release-Metadaten laden
         shell: bash
@@ -69,6 +71,7 @@ jobs:
           set +a
           test "$APP_VERSION" = "1.0.0"
           test "$BUILD_NUMBER" = "100"
+          grep -q '^Product: Blackstock$' "$GITHUB_WORKSPACE/RELEASE_MANIFEST.txt"
           echo "APP_VERSION=$APP_VERSION" >> "$GITHUB_ENV"
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
           echo "MIN_MACOS=$MIN_MACOS" >> "$GITHUB_ENV"
@@ -90,12 +93,16 @@ jobs:
           SWIFT_TARGET="arm64-apple-macosx${MIN_MACOS}" \
           "$GITHUB_WORKSPACE/Build/Release-Audit.sh"
 
+      - name: Market-Readiness-Audit
+        shell: bash
+        run: "$GITHUB_WORKSPACE/Build/Market-Readiness-Audit.sh"
+
       - name: Blackstock.app bauen
         shell: zsh {0}
         env:
           BLACKSTOCK_APP_OUTPUT: ${{ github.workspace }}/dist/Blackstock.app
-          BLACKSTOCK_BUILD_DIR: ${{ runner.temp }}/blackstock-1-native-build
-          BLACKSTOCK_BUILD_LOG: ${{ runner.temp }}/Blackstock-1-Buildprotokoll.txt
+          BLACKSTOCK_BUILD_DIR: ${{ runner.temp }}/blackstock-native-build
+          BLACKSTOCK_BUILD_LOG: ${{ runner.temp }}/Blackstock-Buildprotokoll.txt
           BLACKSTOCK_SIGN_IDENTITY: '-'
         run: |
           set -euo pipefail
@@ -110,6 +117,7 @@ jobs:
           plutil -lint "$APP/Contents/Info.plist"
           lipo "$APP/Contents/MacOS/Blackstock" -verify_arch arm64 x86_64
           codesign --verify --deep --strict --verbose=2 "$APP"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$APP/Contents/Info.plist")" = "Blackstock"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")" = "$APP_VERSION"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Contents/Info.plist")" = "$BUILD_NUMBER"
 
@@ -118,17 +126,17 @@ jobs:
         run: |
           set -euo pipefail
           APP="$GITHUB_WORKSPACE/dist/Blackstock.app"
-          "$APP/Contents/MacOS/Blackstock" >"$RUNNER_TEMP/blackstock-1-smoke.log" 2>&1 &
+          "$APP/Contents/MacOS/Blackstock" >"$RUNNER_TEMP/blackstock-smoke.log" 2>&1 &
           PID=$!
           sleep 6
           if ! kill -0 "$PID" 2>/dev/null; then
-            cat "$RUNNER_TEMP/blackstock-1-smoke.log"
+            cat "$RUNNER_TEMP/blackstock-smoke.log"
             exit 1
           fi
           kill "$PID" || true
           wait "$PID" 2>/dev/null || true
 
-      - name: Blackstock 1.0 DMG und ZIP erzeugen
+      - name: Blackstock DMG und ZIP erzeugen
         shell: zsh {0}
         run: |
           set -euo pipefail
@@ -139,22 +147,22 @@ jobs:
           ln -s /Applications "$STAGE/Programme"
           cp "$GITHUB_WORKSPACE/Distribution/INSTALLIEREN.txt" "$STAGE/INSTALLIEREN.txt"
           cd "$GITHUB_WORKSPACE/dist"
-          DMG="Blackstock-1.0.dmg"
-          ZIP="Blackstock-1.0.zip"
-          hdiutil create -volname "Blackstock 1.0" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
+          DMG="Blackstock.dmg"
+          ZIP="Blackstock.zip"
+          hdiutil create -volname "Blackstock" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
           hdiutil verify "$DMG" >/dev/null
           shasum -a 256 "$DMG" > "$DMG.sha256"
           /usr/bin/ditto -c -k --keepParent Blackstock.app "$ZIP"
           shasum -a 256 "$ZIP" > "$ZIP.sha256"
 
-      - name: Blackstock 1.0 hochladen
+      - name: Blackstock hochladen
         uses: actions/upload-artifact@v4
         with:
-          name: Blackstock-1.0-macOS
+          name: Blackstock-macOS
           if-no-files-found: error
           retention-days: 14
           path: |
-            dist/Blackstock-1.0.dmg
-            dist/Blackstock-1.0.dmg.sha256
-            dist/Blackstock-1.0.zip
-            dist/Blackstock-1.0.zip.sha256
+            dist/Blackstock.dmg
+            dist/Blackstock.dmg.sha256
+            dist/Blackstock.zip
+            dist/Blackstock.zip.sha256
