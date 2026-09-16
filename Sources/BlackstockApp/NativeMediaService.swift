@@ -5,7 +5,7 @@ import AppKit
 import BlackstockCore
 
 @MainActor final class NativeMediaService: ObservableObject {
-    enum MediaError: LocalizedError {
+    enum MediaError: LocalizedError, Sendable {
         case missingSource, exportUnavailable, exportFailed(String), frameUnavailable, videoTrackUnavailable
         var errorDescription: String? {
             switch self {
@@ -28,10 +28,10 @@ import BlackstockCore
         return seconds.isFinite && seconds > 0 ? seconds : nil
     }
 
-    func render(project: Project, to destination: URL, completion: @escaping (Result<URL, Error>) -> Void) {
-        guard let source = project.localMediaURL else { completion(.failure(MediaError.missingSource)); return }
+    func render(project: Project, to destination: URL, completion: @escaping @MainActor @Sendable (Result<URL, MediaError>) -> Void) {
+        guard let source = project.localMediaURL else { completion(.failure(.missingSource)); return }
         let asset = AVURLAsset(url: source)
-        guard let session = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetHighestQuality) else { completion(.failure(MediaError.exportUnavailable)); return }
+        guard let session = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetHighestQuality) else { completion(.failure(.exportUnavailable)); return }
 
         let duration = asset.duration.seconds
         let range = ProjectWorkflowEngine().clampedRange(for: project, duration: duration.isFinite ? duration : 0)
@@ -41,7 +41,7 @@ import BlackstockCore
         )
         if project.effectiveRenderCanvas != .source {
             do { session.videoComposition = try composition(for: asset, project: project) }
-            catch { completion(.failure(error)); return }
+            catch { completion(.failure(error as? MediaError ?? .exportFailed(error.localizedDescription))); return }
         }
 
         try? FileManager.default.removeItem(at: destination)
@@ -53,7 +53,7 @@ import BlackstockCore
         statusMessage = "Video wird gerendert …"
 
         session.exportAsynchronously { [weak self] in
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 guard let self else { return }
                 self.isRendering = false
                 let active = self.exportSession
@@ -64,11 +64,11 @@ import BlackstockCore
                     completion(.success(destination))
                 case .cancelled:
                     self.statusMessage = "Render abgebrochen"
-                    completion(.failure(MediaError.exportFailed("Der Videoexport wurde abgebrochen.")))
+                    completion(.failure(.exportFailed("Der Videoexport wurde abgebrochen.")))
                 default:
                     let message = active?.error?.localizedDescription ?? "Der Videoexport ist fehlgeschlagen."
                     self.statusMessage = message
-                    completion(.failure(MediaError.exportFailed(message)))
+                    completion(.failure(.exportFailed(message)))
                 }
             }
         }
