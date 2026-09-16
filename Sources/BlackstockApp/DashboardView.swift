@@ -7,9 +7,14 @@ struct DashboardView: View {
     @ObservedObject var trends: TrendViewModel
     let apiKey: String
 
-    private var workflow = ProjectWorkflowEngine()
+    private let workflow = ProjectWorkflowEngine()
     private var readyProjects: Int { app.projects.filter { workflow.stage(for: $0) == .ready }.count }
     private var activeProjects: Int { app.projects.filter { [.editing, .rendered, .packaging].contains(workflow.stage(for: $0)) }.count }
+
+    init(trends: TrendViewModel, apiKey: String) {
+        self.trends = trends
+        self.apiKey = apiKey
+    }
 
     var body: some View {
         ScrollView {
