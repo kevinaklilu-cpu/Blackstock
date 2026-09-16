@@ -65,15 +65,18 @@ BLACKSTOCK_ROOT="$ROOT" python3 "$TMP/source-only-studio.py"
 # Keep the final generated source compatible with the current Swift toolchain.
 python3 "$ROOT/Patches/Release1000/apply-swift63-compile-hotfix.py"
 
-# Blackstock Next integrates optional creator layers into the same rights-aware timeline.
+# Integrate the final creator layers into the same rights-aware timeline.
 python3 "$ROOT/Patches/Release1000/apply-next-generation.py"
 python3 "$ROOT/Patches/Release1000/apply-next-audit-hotfix.py"
 
+# Public product identity is Blackstock 1.0; legacy V1000 symbols are migration internals only.
+python3 "$ROOT/Patches/Release1000/apply-blackstock-1.py"
+
 chmod +x "$ROOT"/Build/*.sh "$ROOT"/Build/*.zsh
-grep -q '^APP_VERSION=1000.0.0$' "$ROOT/Build/version.env"
-grep -q '^BUILD_NUMBER=100000$' "$ROOT/Build/version.env"
-grep -q 'Blackstock 1000.0.0 (Build 100000)' "$ROOT/RELEASE_MANIFEST.txt"
-grep -q 'Product generation: Blackstock Next' "$ROOT/RELEASE_MANIFEST.txt"
+grep -q '^APP_VERSION=1.0.0$' "$ROOT/Build/version.env"
+grep -q '^BUILD_NUMBER=100$' "$ROOT/Build/version.env"
+grep -q 'Blackstock 1.0.0 (Build 100)' "$ROOT/RELEASE_MANIFEST.txt"
+grep -q 'Product: Blackstock 1.0' "$ROOT/RELEASE_MANIFEST.txt"
 grep -q 'CreatorOS1000View' "$ROOT/Sources/Blackstock/Views/RootView.swift"
 grep -q 'v1000ProduktionMitQuelleStarten' "$ROOT/Sources/Blackstock/AppStore+V1000.swift"
 grep -q 'case .command: "Dashboard"' "$ROOT/Sources/Blackstock/Models/Models.swift"
@@ -110,4 +113,4 @@ grep -q 'DisclosureGroup("Schnittdetails & Quellen")' "$ROOT/Sources/Blackstock/
 ! grep -q '"Creator OS"' "$ROOT/Sources/Blackstock/Views/CreatorOS1000View.swift"
 ! grep -q 'Top 3 automatisch erstellen' "$ROOT/Sources/Blackstock/Views/CreatorOS1000View.swift"
 grep -q 'BLACKSTOCK_1000_CORE_TESTS_OK' "$ROOT/Tests/Release1000CoreTests.swift"
-echo BLACKSTOCK_NEXT_CANONICAL_RECONSTRUCT_OK
+echo BLACKSTOCK_1_CANONICAL_RECONSTRUCT_OK
