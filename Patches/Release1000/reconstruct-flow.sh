@@ -67,6 +67,7 @@ python3 "$ROOT/Patches/Release1000/apply-swift63-compile-hotfix.py"
 
 # Blackstock Next integrates optional creator layers into the same rights-aware timeline.
 python3 "$ROOT/Patches/Release1000/apply-next-generation.py"
+python3 "$ROOT/Patches/Release1000/apply-next-audit-hotfix.py"
 
 chmod +x "$ROOT"/Build/*.sh "$ROOT"/Build/*.zsh
 grep -q '^APP_VERSION=1000.0.0$' "$ROOT/Build/version.env"
