@@ -72,6 +72,11 @@ python3 "$ROOT/Patches/Release1000/apply-next-audit-hotfix.py"
 # Public product identity is Blackstock 1.0; legacy V1000 symbols are migration internals only.
 python3 "$ROOT/Patches/Release1000/apply-blackstock-1.py"
 
+# Blackstock 1.0 market UX: platform-native actions first, plain-language dashboard,
+# no pseudo-precise opportunity numbers in the primary dashboard.
+python3 "$ROOT/Patches/Release1000/apply-market-ready-v1.py"
+python3 "$ROOT/Patches/Release1000/apply-dashboard-simplification.py"
+
 chmod +x "$ROOT"/Build/*.sh "$ROOT"/Build/*.zsh
 grep -q '^APP_VERSION=1.0.0$' "$ROOT/Build/version.env"
 grep -q '^BUILD_NUMBER=100$' "$ROOT/Build/version.env"
@@ -88,9 +93,9 @@ grep -q 'case youtubeNativeRemix' "$ROOT/Sources/Blackstock/Models/Blackstock100
 grep -q 'blackstockSyncChannelIdentity' "$ROOT/Sources/Blackstock/AppStore+Guidance.swift"
 grep -q 'Kanalthema automatisch gebunden' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
 ! grep -q 'Picker("Thema", selection: \$store.v10Thema)' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
-grep -q 'Auf YouTube remixen' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
-grep -q 'Welche Rechte hast du an der Quelldatei?' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
-grep -q 'Clip aus eigener/lizenzierter Datei' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
+grep -q 'Clip / Remix auf YouTube' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
+grep -q 'Ist das deine Datei oder darfst du sie verwenden?' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
+grep -q 'Mit eigener Datei schneiden' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
 grep -q 'Originalton als Standard' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
 grep -q 'Es wurde kein Video generiert oder hochgeladen' "$ROOT/Sources/Blackstock/AppStore+V1000.swift"
 grep -q 'watermarkAktiv = false' "$ROOT/Sources/Blackstock/AppStore+V1000.swift"
@@ -112,5 +117,6 @@ grep -q 'DisclosureGroup("Schnittdetails & Quellen")' "$ROOT/Sources/Blackstock/
 ! grep -q 'BLACKSTOCK 1000' "$ROOT/Sources/Blackstock/Views/SidebarView.swift"
 ! grep -q '"Creator OS"' "$ROOT/Sources/Blackstock/Views/CreatorOS1000View.swift"
 ! grep -q 'Top 3 automatisch erstellen' "$ROOT/Sources/Blackstock/Views/CreatorOS1000View.swift"
+! grep -q 'Text("Chance' "$ROOT/Sources/Blackstock/Views/CreatorOS1000View.swift"
 grep -q 'BLACKSTOCK_1000_CORE_TESTS_OK' "$ROOT/Tests/Release1000CoreTests.swift"
 echo BLACKSTOCK_1_CANONICAL_RECONSTRUCT_OK
