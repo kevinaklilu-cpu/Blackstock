@@ -35,7 +35,7 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x "$GITHUB_WORKSPACE/Patches/Release1000/reconstruct-flow.sh"
-          "$GITHUB_WORKSPACE/Patches/Release1000/reconstruct-flow.sh"
+          bash -x "$GITHUB_WORKSPACE/Patches/Release1000/reconstruct-flow.sh"
 
       - name: Release-Metadaten laden
         shell: bash
