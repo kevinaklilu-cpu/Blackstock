@@ -62,7 +62,7 @@ base64 -d < "$ROOT/Patches/Release1000/source-only-studio-hotfix.py.gz.b64" > "$
 gunzip -c "$TMP/source-only-studio.py.gz" > "$TMP/source-only-studio.py"
 BLACKSTOCK_ROOT="$ROOT" python3 "$TMP/source-only-studio.py"
 
-# Current Swift compatibility and integrated creator tools.
+# Current Swift compatibility and integrated product tools.
 python3 "$ROOT/Patches/Release1000/apply-swift63-compile-hotfix.py"
 python3 "$ROOT/Patches/Release1000/apply-next-generation.py"
 python3 "$ROOT/Patches/Release1000/apply-next-audit-hotfix.py"
@@ -72,7 +72,7 @@ python3 "$ROOT/Patches/Release1000/apply-dashboard-simplification.py"
 python3 "$ROOT/Patches/Release1000/apply-market-product-redesign.py"
 python3 "$ROOT/Patches/Release1000/apply-market-audit-normalization.py"
 
-# Creator Business OS: transparent source assembly, hash-verified before execution.
+# Transparent source assembly for the latest discovery/research/ideas architecture.
 cat "$ROOT/Patches/Release1000/creator-business-os.src00" \
     "$ROOT/Patches/Release1000/creator-business-os.src01" \
     "$ROOT/Patches/Release1000/creator-business-os.src02" \
@@ -82,13 +82,17 @@ cat "$ROOT/Patches/Release1000/creator-business-os.src00" \
 test "$(shasum -a 256 "$TMP/creator-business-os.py" | awk '{print $1}')" = "e1a6c0f70471795944c1f13c824775c8b3c651e916b61b21a099c8cbb7c05d12"
 BLACKSTOCK_ROOT="$ROOT" python3 "$TMP/creator-business-os.py"
 
+# Final public identity and static market-readiness gates run last so later patches cannot
+# reintroduce generation codenames or version suffixes into the product UI.
+python3 "$ROOT/Patches/Release1000/apply-final-branding-readiness.py"
 chmod +x "$ROOT"/Build/*.sh "$ROOT"/Build/*.zsh
+"$ROOT/Build/Market-Readiness-Audit.sh"
 
 # Canonical product contract.
 grep -q '^APP_VERSION=1.0.0$' "$ROOT/Build/version.env"
 grep -q '^BUILD_NUMBER=100$' "$ROOT/Build/version.env"
 grep -q 'Blackstock 1.0.0 (Build 100)' "$ROOT/RELEASE_MANIFEST.txt"
-grep -q 'Product: Blackstock 1.0' "$ROOT/RELEASE_MANIFEST.txt"
+grep -q '^Product: Blackstock$' "$ROOT/RELEASE_MANIFEST.txt"
 grep -q 'Text("BLACKSTOCK")' "$ROOT/Sources/Blackstock/Views/SidebarView.swift"
 grep -q 'case .command: "Start"' "$ROOT/Sources/Blackstock/Models/Models.swift"
 grep -q 'case .chancen: "Entdecken"' "$ROOT/Sources/Blackstock/Models/Models.swift"
@@ -103,6 +107,9 @@ grep -q 'Content Briefs' "$ROOT/Sources/Blackstock/Views/CreatorBusinessWorkspac
 grep -q '("short", "relevance", "unter 4 Min.")' "$ROOT/Sources/Blackstock/Services/YouTubeService.swift"
 ! grep -q 'relevanceLanguage", value: "en"' "$ROOT/Sources/Blackstock/Services/YouTubeService.swift"
 ! grep -q 'sourceDuration >= 240' "$ROOT/Sources/Blackstock/Services/YouTubeService.swift"
+! grep -Rqs 'Blackstock 1\.0' "$ROOT/Sources/Blackstock" --include='*.swift'
+! grep -Rqs 'Creator Studio' "$ROOT/Sources/Blackstock" --include='*.swift'
+! grep -Rqs 'Creator Business OS' "$ROOT/Sources/Blackstock" --include='*.swift'
 
 grep -q 'case youtubeNativeRemix' "$ROOT/Sources/Blackstock/Models/Blackstock1000Models.swift"
 ! grep -q 'case originalBuild' "$ROOT/Sources/Blackstock/Models/Blackstock1000Models.swift"
@@ -111,9 +118,9 @@ grep -q 'Clip / Remix auf YouTube' "$ROOT/Sources/Blackstock/Views/ChancenView.s
 grep -q 'YouTube bleibt der Hauptweg' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
 grep -q 'voiceover: voiceoverURL' "$ROOT/Sources/Blackstock/AppStore+V11.swift"
 grep -q 'musik: musicURL' "$ROOT/Sources/Blackstock/AppStore+V11.swift"
-grep -q 'Creator Studio' "$ROOT/Sources/Blackstock/Views/ProduktionsDetailView.swift"
+grep -q 'titel: "Studio"' "$ROOT/Sources/Blackstock/Views/ProduktionsDetailView.swift"
 grep -q 'Source-aware 4K' "$ROOT/Sources/Blackstock/Services/RenderQualityProfileService.swift"
 grep -q 'AVAssetExportPresetHighestQuality' "$ROOT/Sources/Blackstock/Services/MasterVideoService.swift"
 grep -q 'case time(Double)' "$ROOT/Sources/Blackstock/Views/YouTubePlayerView.swift"
 grep -q 'BLACKSTOCK_1000_CORE_TESTS_OK' "$ROOT/Tests/Release1000CoreTests.swift"
-echo BLACKSTOCK_CREATOR_BUSINESS_OS_CANONICAL_OK
+echo BLACKSTOCK_CANONICAL_OK
