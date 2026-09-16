@@ -57,7 +57,7 @@ python3 "$ROOT/Patches/Release1000/apply-player-time-compile-fix.py"
 python3 "$ROOT/Patches/Release1000/apply-clean-workflow-hotfix.py"
 python3 "$ROOT/Patches/Release1000/apply-release-audit-hotfix.py"
 
-# Rights-aware source architecture remains the safety baseline.
+# Rights-aware source architecture remains the safety baseline for local renders.
 base64 -d < "$ROOT/Patches/Release1000/source-only-studio-hotfix.py.gz.b64" > "$TMP/source-only-studio.py.gz"
 gunzip -c "$TMP/source-only-studio.py.gz" > "$TMP/source-only-studio.py"
 BLACKSTOCK_ROOT="$ROOT" python3 "$TMP/source-only-studio.py"
@@ -65,17 +65,21 @@ BLACKSTOCK_ROOT="$ROOT" python3 "$TMP/source-only-studio.py"
 # Keep the final generated source compatible with the current Swift toolchain.
 python3 "$ROOT/Patches/Release1000/apply-swift63-compile-hotfix.py"
 
-# Integrate the final creator layers into the same rights-aware timeline.
+# Integrated creator tools.
 python3 "$ROOT/Patches/Release1000/apply-next-generation.py"
 python3 "$ROOT/Patches/Release1000/apply-next-audit-hotfix.py"
 
 # Public product identity is Blackstock 1.0; legacy V1000 symbols are migration internals only.
 python3 "$ROOT/Patches/Release1000/apply-blackstock-1.py"
 
-# Blackstock 1.0 market UX: platform-native actions first, plain-language dashboard,
-# no pseudo-precise opportunity numbers in the primary dashboard.
+# Creator-first language and initial dashboard cleanup.
 python3 "$ROOT/Patches/Release1000/apply-market-ready-v1.py"
 python3 "$ROOT/Patches/Release1000/apply-dashboard-simplification.py"
+
+# Final Blackstock 1.0 market product: action-first dashboard, cached trend intelligence,
+# Shorts as trend signals, qualitative explanations and YouTube-first remix flow.
+python3 "$ROOT/Patches/Release1000/apply-market-product-redesign.py"
+python3 "$ROOT/Patches/Release1000/apply-market-audit-normalization.py"
 
 chmod +x "$ROOT"/Build/*.sh "$ROOT"/Build/*.zsh
 grep -q '^APP_VERSION=1.0.0$' "$ROOT/Build/version.env"
@@ -87,16 +91,16 @@ grep -q 'v1000ProduktionMitQuelleStarten' "$ROOT/Sources/Blackstock/AppStore+V10
 grep -q 'case .command: "Dashboard"' "$ROOT/Sources/Blackstock/Models/Models.swift"
 grep -q 'Text("BLACKSTOCK")' "$ROOT/Sources/Blackstock/Views/SidebarView.swift"
 
-# Channel-bound, rights-aware product contract.
+# Channel-bound creator contract.
 grep -q 'case youtubeNativeRemix' "$ROOT/Sources/Blackstock/Models/Blackstock1000Models.swift"
 ! grep -q 'case originalBuild' "$ROOT/Sources/Blackstock/Models/Blackstock1000Models.swift"
 grep -q 'blackstockSyncChannelIdentity' "$ROOT/Sources/Blackstock/AppStore+Guidance.swift"
 grep -q 'Kanalthema automatisch gebunden' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
 ! grep -q 'Picker("Thema", selection: \$store.v10Thema)' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
 grep -q 'Clip / Remix auf YouTube' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
-grep -q 'Ist das deine Datei oder darfst du sie verwenden?' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
-grep -q 'Mit eigener Datei schneiden' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
-grep -q 'Originalton als Standard' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
+grep -q 'Eigene Datei verwenden?' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
+grep -q 'Weitere Aktionen' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
+grep -q 'YouTube bleibt der Hauptweg' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
 grep -q 'Es wurde kein Video generiert oder hochgeladen' "$ROOT/Sources/Blackstock/AppStore+V1000.swift"
 grep -q 'watermarkAktiv = false' "$ROOT/Sources/Blackstock/AppStore+V1000.swift"
 grep -q 'publikationsmodus = .review' "$ROOT/Sources/Blackstock/AppStore+V1000.swift"
@@ -106,7 +110,7 @@ grep -q 'Creator Studio' "$ROOT/Sources/Blackstock/Views/ProduktionsDetailView.s
 grep -q 'vNextMasterNeuRendern' "$ROOT/Sources/Blackstock/AppStore+V11.swift"
 grep -q 'notDownloadableReference' "$ROOT/Sources/Blackstock/AppStore+V11.swift"
 
-# Source-aware high-quality render contract.
+# High-quality render contract.
 grep -q 'Source-aware 4K' "$ROOT/Sources/Blackstock/Services/RenderQualityProfileService.swift"
 grep -q 'sourceTrack: segments.first?.source' "$ROOT/Sources/Blackstock/Services/MasterVideoService.swift"
 grep -q 'sourceTrack: visualSegments.first?.source' "$ROOT/Sources/Blackstock/Services/MasterVideoService.swift"
@@ -117,6 +121,11 @@ grep -q 'DisclosureGroup("Schnittdetails & Quellen")' "$ROOT/Sources/Blackstock/
 ! grep -q 'BLACKSTOCK 1000' "$ROOT/Sources/Blackstock/Views/SidebarView.swift"
 ! grep -q '"Creator OS"' "$ROOT/Sources/Blackstock/Views/CreatorOS1000View.swift"
 ! grep -q 'Top 3 automatisch erstellen' "$ROOT/Sources/Blackstock/Views/CreatorOS1000View.swift"
-! grep -q 'Text("Chance' "$ROOT/Sources/Blackstock/Views/CreatorOS1000View.swift"
+! grep -q 'CHANCE ' "$ROOT/Sources/Blackstock/Views/CreatorOS1000View.swift"
+! grep -q 'mission.score' "$ROOT/Sources/Blackstock/Views/CreatorOS1000View.swift"
+grep -q 'Shorts < 1 Min.' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
+grep -q 'recomputeLearnedRank' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
+grep -q 'YOUTUBE-REFERENZ' "$ROOT/Sources/Blackstock/Views/ProduktionsDetailView.swift"
+grep -q 'Schnittplan' "$ROOT/Sources/Blackstock/Views/ProduktionsDetailView.swift"
 grep -q 'BLACKSTOCK_1000_CORE_TESTS_OK' "$ROOT/Tests/Release1000CoreTests.swift"
 echo BLACKSTOCK_1_CANONICAL_RECONSTRUCT_OK
