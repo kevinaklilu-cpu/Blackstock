@@ -30,7 +30,7 @@ jobs:
             echo 'Shipping audit found blocked product-name or unfinished markers.' >&2
             exit 1
           fi
-          grep -q 'case research = "Recherche"' Sources/BlackstockApp/AppState.swift
+          grep -q 'research = "Recherche"' Sources/BlackstockApp/AppState.swift
           grep -q 'func render(project:' Sources/BlackstockApp/NativeMediaService.swift
           grep -q 'Release-Check' Sources/BlackstockApp/PublishView.swift
           grep -q 'Nischen-Radar' Sources/BlackstockApp/ResearchView.swift
