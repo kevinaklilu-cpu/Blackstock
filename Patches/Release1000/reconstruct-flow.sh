@@ -62,85 +62,56 @@ base64 -d < "$ROOT/Patches/Release1000/source-only-studio-hotfix.py.gz.b64" > "$
 gunzip -c "$TMP/source-only-studio.py.gz" > "$TMP/source-only-studio.py"
 BLACKSTOCK_ROOT="$ROOT" python3 "$TMP/source-only-studio.py"
 
-# Keep the final generated source compatible with the current Swift toolchain.
+# Current Swift compatibility and integrated creator tools.
 python3 "$ROOT/Patches/Release1000/apply-swift63-compile-hotfix.py"
-
-# Integrated creator tools.
 python3 "$ROOT/Patches/Release1000/apply-next-generation.py"
 python3 "$ROOT/Patches/Release1000/apply-next-audit-hotfix.py"
-
-# Public product identity is Blackstock 1.0; legacy V1000 symbols are migration internals only.
 python3 "$ROOT/Patches/Release1000/apply-blackstock-1.py"
-
-# Creator-first language and initial dashboard cleanup.
 python3 "$ROOT/Patches/Release1000/apply-market-ready-v1.py"
 python3 "$ROOT/Patches/Release1000/apply-dashboard-simplification.py"
-
-# Market product baseline.
 python3 "$ROOT/Patches/Release1000/apply-market-product-redesign.py"
 python3 "$ROOT/Patches/Release1000/apply-market-audit-normalization.py"
 
-# Final Creator Business OS architecture: professional workspace navigation, niche/long-tail
-# discovery, research and ideas workspaces, secure runtime OAuth import, and modern audits.
-cat "$ROOT"/Patches/Release1000/creator-business-os.part*.b64 > "$TMP/creator-business-os.b64"
-test "$(shasum -a 256 "$TMP/creator-business-os.b64" | awk '{print $1}')" = "56e64a8073d08f9d216ec4af0163bead9d084e1545ecf0dc4617f12bc2475fb3"
-base64 -d < "$TMP/creator-business-os.b64" > "$TMP/creator-business-os.py.gz"
+# Creator Business OS: one canonical architecture for discovery, research, ideas, studio,
+# publishing, analytics and channel management. The patch contains no credentials.
+test "$(shasum -a 256 "$ROOT/Patches/Release1000/apply-creator-business-os.py.gz.b64" | awk '{print $1}')" = "0d469f252b8a4c43cd9e89572f0556f5a16e9efd8f92c41968c2468777423c6d"
+base64 -d < "$ROOT/Patches/Release1000/apply-creator-business-os.py.gz.b64" > "$TMP/creator-business-os.py.gz"
 gunzip -c "$TMP/creator-business-os.py.gz" > "$TMP/creator-business-os.py"
-test "$(shasum -a 256 "$TMP/creator-business-os.py" | awk '{print $1}')" = "cb95ea2d98de7ef526a9f9dd09aa7187486e2461edcc7b0cd7be953008867704"
+test "$(shasum -a 256 "$TMP/creator-business-os.py" | awk '{print $1}')" = "e1a6c0f70471795944c1f13c824775c8b3c651e916b61b21a099c8cbb7c05d12"
 BLACKSTOCK_ROOT="$ROOT" python3 "$TMP/creator-business-os.py"
 
 chmod +x "$ROOT"/Build/*.sh "$ROOT"/Build/*.zsh
+
+# Canonical product contract.
 grep -q '^APP_VERSION=1.0.0$' "$ROOT/Build/version.env"
 grep -q '^BUILD_NUMBER=100$' "$ROOT/Build/version.env"
 grep -q 'Blackstock 1.0.0 (Build 100)' "$ROOT/RELEASE_MANIFEST.txt"
 grep -q 'Product: Blackstock 1.0' "$ROOT/RELEASE_MANIFEST.txt"
-grep -q 'CreatorOS1000View' "$ROOT/Sources/Blackstock/Views/RootView.swift"
-grep -q 'v1000ProduktionMitQuelleStarten' "$ROOT/Sources/Blackstock/AppStore+V1000.swift"
-grep -q 'case .command: "Start"' "$ROOT/Sources/Blackstock/Models/Models.swift"
-grep -q 'case .factory: "Recherche"' "$ROOT/Sources/Blackstock/Models/Models.swift"
-grep -q 'case .bibliothek: "Ideen"' "$ROOT/Sources/Blackstock/Models/Models.swift"
 grep -q 'Text("BLACKSTOCK")' "$ROOT/Sources/Blackstock/Views/SidebarView.swift"
-grep -q 'ResearchView()' "$ROOT/Sources/Blackstock/Views/RootView.swift"
-grep -q 'IdeasView()' "$ROOT/Sources/Blackstock/Views/RootView.swift"
-grep -q 'Nischen-Radar' "$ROOT/Sources/Blackstock/Views/ResearchView.swift"
-grep -q 'Weitere Ergebnisse' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
-grep -q 'OAuth-JSON importieren' "$ROOT/Sources/Blackstock/Views/EinstellungenView.swift"
+grep -q 'case .command: "Start"' "$ROOT/Sources/Blackstock/Models/Models.swift"
+grep -q 'case .chancen: "Entdecken"' "$ROOT/Sources/Blackstock/Models/Models.swift"
+grep -q 'case .research: "Recherche"' "$ROOT/Sources/Blackstock/Models/Models.swift"
+grep -q 'case .ideen: "Ideen"' "$ROOT/Sources/Blackstock/Models/Models.swift"
+grep -q 'case .produktionen: "Studio"' "$ROOT/Sources/Blackstock/Models/Models.swift"
+grep -q 'case .veroeffentlicht: "Veröffentlichen"' "$ROOT/Sources/Blackstock/Models/Models.swift"
+grep -q 'ResearchWorkspaceView()' "$ROOT/Sources/Blackstock/Views/RootView.swift"
+grep -q 'IdeasWorkspaceView()' "$ROOT/Sources/Blackstock/Views/RootView.swift"
+grep -q 'Nischen-Radar' "$ROOT/Sources/Blackstock/Views/CreatorBusinessWorkspaceView.swift"
+grep -q 'Content Briefs' "$ROOT/Sources/Blackstock/Views/CreatorBusinessWorkspaceView.swift"
+grep -q '("short", "relevance", "unter 4 Min.")' "$ROOT/Sources/Blackstock/Services/YouTubeService.swift"
+! grep -q 'relevanceLanguage", value: "en"' "$ROOT/Sources/Blackstock/Services/YouTubeService.swift"
+! grep -q 'sourceDuration >= 240' "$ROOT/Sources/Blackstock/Services/YouTubeService.swift"
 
-# Channel-bound creator contract.
 grep -q 'case youtubeNativeRemix' "$ROOT/Sources/Blackstock/Models/Blackstock1000Models.swift"
 ! grep -q 'case originalBuild' "$ROOT/Sources/Blackstock/Models/Blackstock1000Models.swift"
 grep -q 'blackstockSyncChannelIdentity' "$ROOT/Sources/Blackstock/AppStore+Guidance.swift"
-grep -q 'Kanalthema automatisch gebunden' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
-! grep -q 'Picker("Thema", selection: \$store.v10Thema)' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
 grep -q 'Clip / Remix auf YouTube' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
-grep -q 'Eigene Datei verwenden?' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
-grep -q 'Weitere Aktionen' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
 grep -q 'YouTube bleibt der Hauptweg' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
-grep -q 'Es wurde kein Video generiert oder hochgeladen' "$ROOT/Sources/Blackstock/AppStore+V1000.swift"
-grep -q 'watermarkAktiv = false' "$ROOT/Sources/Blackstock/AppStore+V1000.swift"
-grep -q 'publikationsmodus = .review' "$ROOT/Sources/Blackstock/AppStore+V1000.swift"
 grep -q 'voiceover: voiceoverURL' "$ROOT/Sources/Blackstock/AppStore+V11.swift"
 grep -q 'musik: musicURL' "$ROOT/Sources/Blackstock/AppStore+V11.swift"
 grep -q 'Creator Studio' "$ROOT/Sources/Blackstock/Views/ProduktionsDetailView.swift"
-grep -q 'vNextMasterNeuRendern' "$ROOT/Sources/Blackstock/AppStore+V11.swift"
-grep -q 'notDownloadableReference' "$ROOT/Sources/Blackstock/AppStore+V11.swift"
-
-# High-quality render contract.
 grep -q 'Source-aware 4K' "$ROOT/Sources/Blackstock/Services/RenderQualityProfileService.swift"
-grep -q 'sourceTrack: segments.first?.source' "$ROOT/Sources/Blackstock/Services/MasterVideoService.swift"
-grep -q 'sourceTrack: visualSegments.first?.source' "$ROOT/Sources/Blackstock/Services/MasterVideoService.swift"
 grep -q 'AVAssetExportPresetHighestQuality' "$ROOT/Sources/Blackstock/Services/MasterVideoService.swift"
-
 grep -q 'case time(Double)' "$ROOT/Sources/Blackstock/Views/YouTubePlayerView.swift"
-grep -q 'DisclosureGroup("Schnittdetails & Quellen")' "$ROOT/Sources/Blackstock/Views/ProduktionsDetailView.swift"
-! grep -q 'BLACKSTOCK 1000' "$ROOT/Sources/Blackstock/Views/SidebarView.swift"
-! grep -q '"Creator OS"' "$ROOT/Sources/Blackstock/Views/CreatorOS1000View.swift"
-! grep -q 'Top 3 automatisch erstellen' "$ROOT/Sources/Blackstock/Views/CreatorOS1000View.swift"
-! grep -q 'CHANCE ' "$ROOT/Sources/Blackstock/Views/CreatorOS1000View.swift"
-! grep -q 'mission.score' "$ROOT/Sources/Blackstock/Views/CreatorOS1000View.swift"
-grep -q 'Shorts < 1 Min.' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
-grep -q 'recomputeLearnedRank' "$ROOT/Sources/Blackstock/Views/ChancenView.swift"
-grep -q 'YOUTUBE-REFERENZ' "$ROOT/Sources/Blackstock/Views/ProduktionsDetailView.swift"
-grep -q 'Schnittplan' "$ROOT/Sources/Blackstock/Views/ProduktionsDetailView.swift"
 grep -q 'BLACKSTOCK_1000_CORE_TESTS_OK' "$ROOT/Tests/Release1000CoreTests.swift"
-echo BLACKSTOCK_1_CANONICAL_RECONSTRUCT_OK
+echo BLACKSTOCK_CREATOR_BUSINESS_OS_CANONICAL_OK
