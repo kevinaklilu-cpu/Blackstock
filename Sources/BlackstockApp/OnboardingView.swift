@@ -89,7 +89,8 @@ struct OnboardingView: View {
                     Spacer()
                 }
                 .padding(36)
-                .frame(width: min(max(proxy.size.width * 0.34, 390), 500), maxHeight: .infinity, alignment: .leading)
+                .frame(width: min(max(proxy.size.width * 0.34, 390), 500), alignment: .leading)
+                .frame(maxHeight: .infinity, alignment: .leading)
                 .background(.ultraThinMaterial)
             }
         }
