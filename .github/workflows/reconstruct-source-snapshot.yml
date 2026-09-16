@@ -1,4 +1,4 @@
-name: Blackstock 1.0 Source Snapshot
+name: Blackstock Source Snapshot
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: blackstock-1-source-snapshot
+  group: blackstock-source-snapshot
   cancel-in-progress: true
 
 jobs:
@@ -21,33 +21,25 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Reconstruct final Blackstock 1.0 source
+      - name: Blackstock Source rekonstruieren
         shell: bash
         run: |
           set -euo pipefail
           chmod +x "$GITHUB_WORKSPACE/Patches/Release1000/reconstruct-flow.sh"
           "$GITHUB_WORKSPACE/Patches/Release1000/reconstruct-flow.sh"
-      - name: Upload final source snapshot
+          "$GITHUB_WORKSPACE/Build/Market-Readiness-Audit.sh"
+      - name: Blackstock Source-Snapshot hochladen
         uses: actions/upload-artifact@v4
         with:
-          name: Blackstock-1.0-final-source
+          name: Blackstock-final-source
           retention-days: 1
           if-no-files-found: error
           path: |
             Sources/Blackstock/Views/*.swift
             Sources/Blackstock/Models/*.swift
-            Sources/Blackstock/Services/YouTubeService.swift
-            Sources/Blackstock/Services/CreatorOS1000Service.swift
-            Sources/Blackstock/Services/TrendFeedScoreService.swift
-            Sources/Blackstock/Services/TrendDiscoveryPlannerService.swift
-            Sources/Blackstock/Services/NextBestActionService.swift
-            Sources/Blackstock/AppStore.swift
-            Sources/Blackstock/AppStore+Guidance.swift
-            Sources/Blackstock/AppStore+Learning.swift
-            Sources/Blackstock/AppStore+Publishing.swift
-            Sources/Blackstock/AppStore+V11.swift
-            Sources/Blackstock/AppStore+V12.swift
-            Sources/Blackstock/AppStore+V26.swift
-            Sources/Blackstock/AppStore+V1000.swift
-            Build/Release-Audit.sh
-            Build/Core-Tests.sh
+            Sources/Blackstock/Services/*.swift
+            Sources/Blackstock/AppStore*.swift
+            Build/*.sh
+            Build/*.zsh
+            Build/version.env
+            RELEASE_MANIFEST.txt
