@@ -1,4 +1,4 @@
-name: Blackstock 1000 macOS App / DMG
+name: Blackstock 1.0 macOS App / DMG
 
 on:
   workflow_dispatch:
@@ -19,18 +19,18 @@ permissions:
   contents: read
 
 concurrency:
-  group: blackstock-1000-canonical-release
+  group: blackstock-1-canonical-release
   cancel-in-progress: true
 
 jobs:
-  build-release-1000:
+  build-blackstock-1:
     runs-on: macos-26
     timeout-minutes: 50
     steps:
       - name: Repository auschecken
         uses: actions/checkout@v4
 
-      - name: Blackstock 1000 kanonisch rekonstruieren
+      - name: Blackstock 1.0 kanonisch rekonstruieren
         shell: bash
         run: |
           set -euo pipefail
@@ -44,8 +44,8 @@ jobs:
           set -a
           source "$GITHUB_WORKSPACE/Build/version.env"
           set +a
-          test "$APP_VERSION" = "1000.0.0"
-          test "$BUILD_NUMBER" = "100000"
+          test "$APP_VERSION" = "1.0.0"
+          test "$BUILD_NUMBER" = "100"
           echo "APP_VERSION=$APP_VERSION" >> "$GITHUB_ENV"
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
           echo "MIN_MACOS=$MIN_MACOS" >> "$GITHUB_ENV"
@@ -67,12 +67,12 @@ jobs:
           SWIFT_TARGET="arm64-apple-macosx${MIN_MACOS}" \
           "$GITHUB_WORKSPACE/Build/Release-Audit.sh"
 
-      - name: Universal Blackstock.app bauen
+      - name: Blackstock.app bauen
         shell: zsh {0}
         env:
           BLACKSTOCK_APP_OUTPUT: ${{ github.workspace }}/dist/Blackstock.app
-          BLACKSTOCK_BUILD_DIR: ${{ runner.temp }}/blackstock-1000-native-build
-          BLACKSTOCK_BUILD_LOG: ${{ runner.temp }}/Blackstock-1000-Buildprotokoll.txt
+          BLACKSTOCK_BUILD_DIR: ${{ runner.temp }}/blackstock-1-native-build
+          BLACKSTOCK_BUILD_LOG: ${{ runner.temp }}/Blackstock-1-Buildprotokoll.txt
           BLACKSTOCK_SIGN_IDENTITY: '-'
         run: |
           set -euo pipefail
@@ -95,17 +95,17 @@ jobs:
         run: |
           set -euo pipefail
           APP="$GITHUB_WORKSPACE/dist/Blackstock.app"
-          "$APP/Contents/MacOS/Blackstock" >"$RUNNER_TEMP/blackstock-1000-smoke.log" 2>&1 &
+          "$APP/Contents/MacOS/Blackstock" >"$RUNNER_TEMP/blackstock-1-smoke.log" 2>&1 &
           PID=$!
           sleep 6
           if ! kill -0 "$PID" 2>/dev/null; then
-            cat "$RUNNER_TEMP/blackstock-1000-smoke.log"
+            cat "$RUNNER_TEMP/blackstock-1-smoke.log"
             exit 1
           fi
           kill "$PID" || true
           wait "$PID" 2>/dev/null || true
 
-      - name: DMG und ZIP erzeugen
+      - name: Blackstock 1.0 DMG und ZIP erzeugen
         shell: zsh {0}
         run: |
           set -euo pipefail
@@ -116,21 +116,22 @@ jobs:
           ln -s /Applications "$STAGE/Programme"
           cp "$GITHUB_WORKSPACE/Distribution/INSTALLIEREN.txt" "$STAGE/INSTALLIEREN.txt"
           cd "$GITHUB_WORKSPACE/dist"
-          DMG="Blackstock-${APP_VERSION}-universal.dmg"
-          hdiutil create -volname "Blackstock ${APP_VERSION}" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
+          DMG="Blackstock-1.0.dmg"
+          ZIP="Blackstock-1.0.zip"
+          hdiutil create -volname "Blackstock 1.0" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
           hdiutil verify "$DMG" >/dev/null
           shasum -a 256 "$DMG" > "$DMG.sha256"
-          /usr/bin/ditto -c -k --keepParent Blackstock.app "Blackstock-${APP_VERSION}-universal.zip"
-          shasum -a 256 "Blackstock-${APP_VERSION}-universal.zip" > "Blackstock-${APP_VERSION}-universal.zip.sha256"
+          /usr/bin/ditto -c -k --keepParent Blackstock.app "$ZIP"
+          shasum -a 256 "$ZIP" > "$ZIP.sha256"
 
-      - name: Blackstock 1000 hochladen
+      - name: Blackstock 1.0 hochladen
         uses: actions/upload-artifact@v4
         with:
-          name: Blackstock-${{ env.APP_VERSION }}-macOS
+          name: Blackstock-1.0-macOS
           if-no-files-found: error
           retention-days: 14
           path: |
-            dist/Blackstock-${{ env.APP_VERSION }}-universal.dmg
-            dist/Blackstock-${{ env.APP_VERSION }}-universal.dmg.sha256
-            dist/Blackstock-${{ env.APP_VERSION }}-universal.zip
-            dist/Blackstock-${{ env.APP_VERSION }}-universal.zip.sha256
+            dist/Blackstock-1.0.dmg
+            dist/Blackstock-1.0.dmg.sha256
+            dist/Blackstock-1.0.zip
+            dist/Blackstock-1.0.zip.sha256
