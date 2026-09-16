@@ -1,0 +1,62 @@
+name: Blackstock Clean Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Package.swift'
+      - 'Sources/**'
+      - 'Tests/**'
+      - '.github/workflows/blackstock-clean-build.yml'
+  workflow_dispatch:
+
+jobs:
+  core-tests:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift tests
+        run: swift test
+
+  app-build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build release
+        run: swift build -c release
+      - name: Create app bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN="$(swift build -c release --show-bin-path)/Blackstock"
+          APP="$RUNNER_TEMP/Blackstock.app"
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+          cp "$BIN" "$APP/Contents/MacOS/Blackstock"
+          cat > "$APP/Contents/Info.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>CFBundleDisplayName</key><string>Blackstock</string>
+            <key>CFBundleExecutable</key><string>Blackstock</string>
+            <key>CFBundleIdentifier</key><string>de.blackstock.native</string>
+            <key>CFBundleName</key><string>Blackstock</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleShortVersionString</key><string>1.0.0</string>
+            <key>CFBundleVersion</key><string>1</string>
+            <key>LSMinimumSystemVersion</key><string>13.0</string>
+            <key>NSHighResolutionCapable</key><true/>
+          </dict></plist>
+          PLIST
+          codesign --force --deep --sign - "$APP"
+          codesign --verify --deep --strict "$APP"
+          "$APP/Contents/MacOS/Blackstock" >/dev/null 2>&1 & PID=$!
+          sleep 2
+          kill "$PID" >/dev/null 2>&1 || true
+          hdiutil create -volname Blackstock -srcfolder "$APP" -ov -format UDZO "$RUNNER_TEMP/Blackstock.dmg"
+          shasum -a 256 "$RUNNER_TEMP/Blackstock.dmg" > "$RUNNER_TEMP/Blackstock.dmg.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Blackstock-clean-macOS
+          path: |
+            ${{ runner.temp }}/Blackstock.dmg
+            ${{ runner.temp }}/Blackstock.dmg.sha256
