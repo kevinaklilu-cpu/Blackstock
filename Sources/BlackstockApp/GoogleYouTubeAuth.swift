@@ -13,25 +13,34 @@ struct YouTubeOAuthSession: Sendable {
 
 enum YouTubeOAuthError: LocalizedError {
     case missingClientID
+    case invalidClientID
     case browserCouldNotOpen
     case invalidCallback
     case stateMismatch
     case authorizationDenied(String)
+    case authorizationTimedOut
+    case authorizationCancelled
     case tokenExchangeFailed(String)
     case noChannels
 
     var errorDescription: String? {
         switch self {
         case .missingClientID:
-            return "Dieser Blackstock-Build enthält noch keine Google OAuth Client-ID."
+            return "Es fehlt die Google OAuth Desktop Client-ID. Ein Client Secret wird für Blackstock nicht benötigt."
+        case .invalidClientID:
+            return "Die Client-ID sieht ungültig aus. Verwende in Google Cloud einen OAuth-Client vom Typ „Desktopanwendung“ (…apps.googleusercontent.com)."
         case .browserCouldNotOpen:
             return "Der Google-Login konnte nicht im Browser geöffnet werden."
         case .invalidCallback:
             return "Die Google-Anmeldung hat keine gültige Antwort geliefert."
         case .stateMismatch:
-            return "Die Anmeldung wurde aus Sicherheitsgründen verworfen."
+            return "Die Anmeldung wurde aus Sicherheitsgründen verworfen. Bitte starte sie erneut."
         case .authorizationDenied(let message):
             return message
+        case .authorizationTimedOut:
+            return "Blackstock hat keine Antwort vom Google-Login erhalten. Prüfe, dass die OAuth Client-ID in Google Cloud vom Typ „Desktopanwendung“ ist. Ein Web-App-Client mit Client Secret funktioniert für diesen lokalen Desktop-Flow nicht."
+        case .authorizationCancelled:
+            return "Die YouTube-Anmeldung wurde abgebrochen."
         case .tokenExchangeFailed(let message):
             return message
         case .noChannels:
@@ -44,6 +53,8 @@ enum YouTubeOAuthError: LocalizedError {
 final class GoogleYouTubeAuth: ObservableObject {
     @Published private(set) var isConnecting = false
     @Published private(set) var statusMessage: String?
+    @Published private(set) var callbackHint: String?
+    private var activeServer: LoopbackOAuthServer?
 
     static var configuredClientID: String {
         let bundled = (Bundle.main.object(forInfoDictionaryKey: "BlackstockGoogleOAuthClientID") as? String ?? "")
@@ -52,19 +63,30 @@ final class GoogleYouTubeAuth: ObservableObject {
         return Keychain.read("youtube-oauth-client-id").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    static var desktopConfigurationHint: String {
+        "Google Cloud → Google Auth Platform → Clients → Client erstellen → Desktopanwendung. Für diesen PKCE-Flow wird kein Client Secret in Blackstock eingetragen."
+    }
+
     func connect(clientID override: String? = nil) async throws -> YouTubeOAuthSession {
         let clientID = (override ?? Self.configuredClientID).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clientID.isEmpty else { throw YouTubeOAuthError.missingClientID }
+        guard clientID.hasSuffix(".apps.googleusercontent.com") else { throw YouTubeOAuthError.invalidClientID }
 
         isConnecting = true
-        statusMessage = "Google-Anmeldung wird geöffnet …"
-        defer { isConnecting = false }
+        statusMessage = "Sicherer Google-Login wird vorbereitet …"
+        callbackHint = nil
+        defer {
+            isConnecting = false
+            activeServer = nil
+        }
 
         let verifier = Self.randomURLSafeString(byteCount: 64)
         let challenge = Self.base64URL(Data(SHA256.hash(data: Data(verifier.utf8))))
         let state = Self.randomURLSafeString(byteCount: 24)
         let server = try LoopbackOAuthServer()
+        activeServer = server
         let redirectURI = try await server.start()
+        callbackHint = "Lokaler Rückkanal aktiv · \(redirectURI.host ?? "127.0.0.1"): \(redirectURI.port ?? 0)"
 
         var components = URLComponents(string: "https://accounts.google.com/o/oauth2/v2/auth")!
         components.queryItems = [
@@ -87,7 +109,8 @@ final class GoogleYouTubeAuth: ObservableObject {
             throw YouTubeOAuthError.browserCouldNotOpen
         }
 
-        let callbackURL = try await server.waitForCallback()
+        statusMessage = "Google ist im Browser geöffnet. Nach der Freigabe kommst du automatisch zurück."
+        let callbackURL = try await server.waitForCallback(timeout: 180)
         guard let callback = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false) else {
             throw YouTubeOAuthError.invalidCallback
         }
@@ -98,7 +121,7 @@ final class GoogleYouTubeAuth: ObservableObject {
         guard values["state"] == state else { throw YouTubeOAuthError.stateMismatch }
         guard let code = values["code"], !code.isEmpty else { throw YouTubeOAuthError.invalidCallback }
 
-        statusMessage = "YouTube-Kanäle werden verbunden …"
+        statusMessage = "Google bestätigt. YouTube-Kanal wird geladen …"
         let tokens = try await exchangeCode(code, verifier: verifier, clientID: clientID, redirectURI: redirectURI)
         let channels = try await fetchChannels(accessToken: tokens.accessToken)
         guard !channels.isEmpty else { throw YouTubeOAuthError.noChannels }
@@ -111,8 +134,17 @@ final class GoogleYouTubeAuth: ObservableObject {
             Keychain.write("1", account: "youtube-connected-\(channel.id)")
         }
         Keychain.write(clientID, account: "youtube-oauth-client-id")
+        callbackHint = nil
         statusMessage = channels.count == 1 ? "\(channels[0].title) verbunden" : "\(channels.count) YouTube-Kanäle verbunden"
         return YouTubeOAuthSession(channels: channels, accessToken: tokens.accessToken, refreshToken: tokens.refreshToken)
+    }
+
+    func cancelConnection() {
+        activeServer?.cancel()
+        activeServer = nil
+        statusMessage = "Anmeldung abgebrochen"
+        callbackHint = nil
+        isConnecting = false
     }
 
     func disconnect(channelID: String) {
@@ -138,7 +170,7 @@ final class GoogleYouTubeAuth: ObservableObject {
         ]).data(using: .utf8)
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            let message = (try? JSONDecoder().decode(OAuthErrorEnvelope.self, from: data).error_description) ?? "Google konnte den Autorisierungscode nicht in Tokens tauschen."
+            let message = (try? JSONDecoder().decode(OAuthErrorEnvelope.self, from: data).error_description) ?? "Google konnte den Autorisierungscode nicht in Tokens tauschen. Prüfe, dass du eine Desktop-OAuth-Client-ID verwendest."
             throw YouTubeOAuthError.tokenExchangeFailed(message)
         }
         return try JSONDecoder().decode(OAuthTokenResponse.self, from: data)
@@ -219,6 +251,7 @@ private final class LoopbackOAuthServer: @unchecked Sendable {
     private let queue = DispatchQueue(label: "de.blackstock.oauth.loopback")
     private var callbackContinuation: CheckedContinuation<URL, Error>?
     private var pendingCallback: URL?
+    private var timeoutTimer: DispatchSourceTimer?
 
     init() throws {
         listener = try NWListener(using: .tcp, on: .any)
@@ -251,21 +284,44 @@ private final class LoopbackOAuthServer: @unchecked Sendable {
         }
     }
 
-    func waitForCallback() async throws -> URL {
+    func waitForCallback(timeout: TimeInterval) async throws -> URL {
         try await withCheckedThrowingContinuation { continuation in
             queue.async { [weak self] in
                 guard let self else { continuation.resume(throwing: YouTubeOAuthError.invalidCallback); return }
                 if let pending = self.pendingCallback {
                     self.pendingCallback = nil
                     continuation.resume(returning: pending)
-                } else {
-                    self.callbackContinuation = continuation
+                    return
                 }
+                self.callbackContinuation = continuation
+                let timer = DispatchSource.makeTimerSource(queue: self.queue)
+                timer.schedule(deadline: .now() + timeout)
+                timer.setEventHandler { [weak self] in
+                    guard let self, let current = self.callbackContinuation else { return }
+                    self.callbackContinuation = nil
+                    self.timeoutTimer?.cancel()
+                    self.timeoutTimer = nil
+                    self.listener.cancel()
+                    current.resume(throwing: YouTubeOAuthError.authorizationTimedOut)
+                }
+                self.timeoutTimer = timer
+                timer.resume()
             }
         }
     }
 
-    func cancel() { listener.cancel() }
+    func cancel() {
+        queue.async { [weak self] in
+            guard let self else { return }
+            self.listener.cancel()
+            self.timeoutTimer?.cancel()
+            self.timeoutTimer = nil
+            if let continuation = self.callbackContinuation {
+                self.callbackContinuation = nil
+                continuation.resume(throwing: YouTubeOAuthError.authorizationCancelled)
+            }
+        }
+    }
 
     private func handle(_ connection: NWConnection) {
         connection.start(queue: queue)
@@ -277,8 +333,8 @@ private final class LoopbackOAuthServer: @unchecked Sendable {
             let path = firstLine.split(separator: " ").dropFirst().first.map(String.init) ?? ""
             let callback = URL(string: "http://127.0.0.1\(path)")
             let html = """
-            <!doctype html><html><head><meta charset="utf-8"><title>Blackstock</title></head>
-            <body style="font-family:-apple-system;padding:48px;background:#0f0f0f;color:white"><h1>Blackstock ist verbunden.</h1><p>Du kannst dieses Fenster schließen und zu Blackstock zurückkehren.</p></body></html>
+            <!doctype html><html><head><meta charset="utf-8"><title>Blackstock</title><meta name="color-scheme" content="dark"></head>
+            <body style="font-family:-apple-system;padding:56px;background:#0b0b0c;color:white"><div style="max-width:560px;margin:auto"><div style="display:inline-flex;background:#ff0000;border-radius:14px;padding:10px 16px;font-weight:800;font-size:22px">B ▶</div><h1>Blackstock ist verbunden.</h1><p style="color:#aaa;font-size:18px;line-height:1.5">Du kannst dieses Fenster schließen und zu Blackstock zurückkehren.</p></div></body></html>
             """
             let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: \(html.utf8.count)\r\nConnection: close\r\n\r\n\(html)"
             connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in connection.cancel() })
@@ -288,6 +344,8 @@ private final class LoopbackOAuthServer: @unchecked Sendable {
 
     private func complete(_ url: URL) {
         listener.cancel()
+        timeoutTimer?.cancel()
+        timeoutTimer = nil
         if let continuation = callbackContinuation {
             callbackContinuation = nil
             continuation.resume(returning: url)

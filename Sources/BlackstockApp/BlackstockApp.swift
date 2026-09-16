@@ -15,7 +15,7 @@ import BlackstockCore
                 if appState.shouldShowOnboarding {
                     OnboardingView()
                 } else {
-                    CreatorShellView(trends: trends, apiKey: apiKey)
+                    CreatorShellView(trends: trends, apiKey: $apiKey)
                 }
             }
             .environmentObject(appState)

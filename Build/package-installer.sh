@@ -6,8 +6,9 @@ cd "$ROOT"
 
 OUT_DIR="${1:-dist}"
 VERSION="${BLACKSTOCK_VERSION:-1.0.0}"
-BUILD_NUMBER="${BLACKSTOCK_BUILD:-102}"
+BUILD_NUMBER="${BLACKSTOCK_BUILD:-103}"
 IDENTIFIER="de.blackstock.native"
+# Desktop OAuth + PKCE: only a client ID is embedded. A client secret does not belong in a native app bundle.
 OAUTH_CLIENT_ID="${BLACKSTOCK_GOOGLE_OAUTH_CLIENT_ID:-}"
 
 rm -rf "$OUT_DIR"
@@ -26,27 +27,40 @@ cat > "$WORK/make-icon.swift" <<'SWIFT'
 import AppKit
 import Foundation
 
-let canvas = NSSize(width: 1024, height: 1024)
-let image = NSImage(size: canvas)
+let size: CGFloat = 1024
+let image = NSImage(size: NSSize(width: size, height: size))
 image.lockFocus()
-NSColor(calibratedWhite: 0.055, alpha: 1).setFill()
-NSBezierPath(roundedRect: NSRect(x: 0, y: 0, width: 1024, height: 1024), xRadius: 220, yRadius: 220).fill()
-NSColor(red: 1, green: 0, blue: 0, alpha: 1).setFill()
-NSBezierPath(roundedRect: NSRect(x: 132, y: 292, width: 760, height: 440), xRadius: 118, yRadius: 118).fill()
-NSColor.white.setFill()
-let play = NSBezierPath()
-play.move(to: NSPoint(x: 444, y: 388))
-play.line(to: NSPoint(x: 662, y: 512))
-play.line(to: NSPoint(x: 444, y: 636))
-play.close()
-play.fill()
-image.unlockFocus()
 
+NSColor(calibratedWhite: 0.045, alpha: 1).setFill()
+NSBezierPath(roundedRect: NSRect(x: 56, y: 56, width: 912, height: 912), xRadius: 210, yRadius: 210).fill()
+
+NSColor(calibratedRed: 1, green: 0, blue: 0, alpha: 1).setFill()
+NSBezierPath(roundedRect: NSRect(x: 132, y: 307, width: 760, height: 410), xRadius: 108, yRadius: 108).fill()
+
+let paragraph = NSMutableParagraphStyle()
+paragraph.alignment = .center
+let attrs: [NSAttributedString.Key: Any] = [
+    .font: NSFont.systemFont(ofSize: 240, weight: .black),
+    .foregroundColor: NSColor.white,
+    .paragraphStyle: paragraph
+]
+("B" as NSString).draw(in: NSRect(x: 205, y: 350, width: 245, height: 300), withAttributes: attrs)
+
+NSColor(calibratedWhite: 1, alpha: 0.32).setFill()
+NSBezierPath(rect: NSRect(x: 500, y: 395, width: 6, height: 234)).fill()
+
+let play = NSBezierPath()
+play.move(to: NSPoint(x: 590, y: 402))
+play.line(to: NSPoint(x: 590, y: 622))
+play.line(to: NSPoint(x: 774, y: 512))
+play.close()
+NSColor.white.setFill()
+play.fill()
+
+image.unlockFocus()
 guard let tiff = image.tiffRepresentation,
       let bitmap = NSBitmapImageRep(data: tiff),
-      let png = bitmap.representation(using: .png, properties: [:]) else {
-    exit(1)
-}
+      let png = bitmap.representation(using: .png, properties: [:]) else { exit(1) }
 try png.write(to: URL(fileURLWithPath: CommandLine.arguments[1]))
 SWIFT
 
@@ -95,16 +109,8 @@ mkdir -p "$PAYLOAD/Applications"
 cp -R "$APP" "$PAYLOAD/Applications/Blackstock.app"
 
 COMPONENT="$WORK/Blackstock-component.pkg"
-pkgbuild \
-  --root "$PAYLOAD" \
-  --install-location / \
-  --identifier "$IDENTIFIER" \
-  --version "$VERSION" \
-  "$COMPONENT"
-
-productbuild \
-  --package "$COMPONENT" \
-  "$OUT_DIR/Blackstock-Installer.pkg"
+pkgbuild --root "$PAYLOAD" --install-location / --identifier "$IDENTIFIER" --version "$VERSION" "$COMPONENT"
+productbuild --package "$COMPONENT" "$OUT_DIR/Blackstock-Installer.pkg"
 
 STAGE="$WORK/dmg"
 mkdir -p "$STAGE"
@@ -118,16 +124,13 @@ BLACKSTOCK INSTALLIEREN
 4. Starte Blackstock anschließend über Programme oder Spotlight.
 5. Beim ersten Start verbindest du deinen YouTube-Account und wählst deinen Kanal.
 
+Für die Google-Verbindung wird eine OAuth Client-ID vom Typ „Desktopanwendung“ verwendet.
+Ein Client Secret wird in Blackstock absichtlich nicht gespeichert oder benötigt.
+
 Hinweis: Dieser Community-Build ist ad-hoc signiert. macOS kann deshalb beim ersten Start einen Sicherheitshinweis anzeigen.
 TXT
 
-hdiutil create \
-  -volname "Blackstock Installer" \
-  -srcfolder "$STAGE" \
-  -ov \
-  -format UDZO \
-  "$OUT_DIR/Blackstock-Installer.dmg"
-
+hdiutil create -volname "Blackstock Installer" -srcfolder "$STAGE" -ov -format UDZO "$OUT_DIR/Blackstock-Installer.dmg"
 ditto -c -k --sequesterRsrc --keepParent "$APP" "$OUT_DIR/Blackstock.zip"
 
 shasum -a 256 "$OUT_DIR/Blackstock-Installer.pkg" > "$OUT_DIR/Blackstock-Installer.pkg.sha256"
