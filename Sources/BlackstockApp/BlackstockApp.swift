@@ -7,7 +7,6 @@ import BlackstockCore
     @StateObject private var appState = AppState()
     @StateObject private var trends = TrendViewModel()
     @StateObject private var auth = GoogleYouTubeAuth()
-    @State private var apiKey = Keychain.read("youtube-data-api-key")
 
     var body: some Scene {
         WindowGroup {
@@ -15,7 +14,7 @@ import BlackstockCore
                 if appState.shouldShowOnboarding {
                     OnboardingView()
                 } else {
-                    CreatorShellView(trends: trends, apiKey: $apiKey)
+                    CreatorShellView(trends: trends)
                 }
             }
             .environmentObject(appState)
