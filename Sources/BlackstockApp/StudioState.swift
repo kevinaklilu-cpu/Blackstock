@@ -18,6 +18,10 @@ final class StudioState: ObservableObject {
     @Published var isRendering = false
     @Published var renderPreset: LocalRenderPreset = .hd1080
     @Published var renderArtifact: RenderArtifact?
+    @Published var isTranscribing = false
+    @Published var transcript: LocalTranscript?
+    @Published var captionURL: URL?
+    @Published var speechAuthorizationState: LocalSpeechAuthorizationState = .notDetermined
 
     private var correlationID = UUID()
 
@@ -70,6 +74,8 @@ final class StudioState: ObservableObject {
             trimEnd = seconds
             lastUndoneRevisionID = nil
             renderArtifact = nil
+            transcript = nil
+            captionURL = nil
 
             ledger.append(.init(
                 timestamp: Date(),
@@ -107,6 +113,8 @@ final class StudioState: ObservableObject {
         let revision = graph.apply(operation, actor: .user)
         lastUndoneRevisionID = nil
         renderArtifact = nil
+        transcript = nil
+        captionURL = nil
 
         ledger.append(.init(
             timestamp: Date(),
@@ -133,6 +141,8 @@ final class StudioState: ObservableObject {
         guard let restored = graph.undo() else { return }
         lastUndoneRevisionID = undone
         renderArtifact = nil
+        transcript = nil
+        captionURL = nil
 
         ledger.append(.init(
             timestamp: Date(),
@@ -154,6 +164,8 @@ final class StudioState: ObservableObject {
               let restored = graph.redo(to: id) else { return }
         lastUndoneRevisionID = nil
         renderArtifact = nil
+        transcript = nil
+        captionURL = nil
 
         ledger.append(.init(
             timestamp: Date(),
@@ -167,6 +179,77 @@ final class StudioState: ObservableObject {
         ))
 
         await refreshPreviewAfterHistoryChange()
+    }
+
+    func generateLocalCaptions(
+        localeIdentifier: String
+    ) async {
+        guard let asset else {
+            errorMessage = "Kein Produktionsmedium geladen."
+            return
+        }
+
+        isTranscribing = true
+        defer { isTranscribing = false }
+
+        let transcriber = LocalOnDeviceTranscriber()
+        var authorization = transcriber.authorizationState()
+        if authorization == .notDetermined {
+            authorization = await transcriber.requestAuthorization()
+        }
+        speechAuthorizationState = authorization
+
+        guard authorization == .authorized else {
+            errorMessage = authorization == .restricted
+                ? "Spracherkennung ist auf diesem Mac eingeschränkt."
+                : "Spracherkennung wurde nicht erlaubt."
+            return
+        }
+
+        guard transcriber.isOnDeviceAvailable(
+            localeIdentifier: localeIdentifier
+        ) else {
+            errorMessage = "Für diese Sprache ist auf diesem Mac keine On-Device-Spracherkennung verfügbar. Blackstock verwendet keinen stillen Cloud-Fallback."
+            return
+        }
+
+        do {
+            let localTranscript = try await transcriber.transcribeVideo(
+                url: asset.sourceURL,
+                localeIdentifier: localeIdentifier
+            )
+
+            let directory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("Blackstock-Captions", isDirectory: true)
+            try FileManager.default.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true
+            )
+            let outputURL = directory
+                .appendingPathComponent(asset.id.uuidString)
+                .appendingPathExtension("vtt")
+            try WebVTTCaptionWriter().write(
+                transcript: localTranscript,
+                to: outputURL
+            )
+
+            transcript = localTranscript
+            captionURL = outputURL
+
+            ledger.append(.init(
+                timestamp: Date(),
+                actor: .system,
+                stage: .editing,
+                action: "local-captions-generated",
+                summary: "On-Device-Transkript und WebVTT-Captions wurden lokal erzeugt.",
+                relatedSourceIDs: [asset.id.uuidString],
+                reversible: false,
+                correlationID: correlationID
+            ))
+            errorMessage = nil
+        } catch {
+            errorMessage = "Lokale Transkription fehlgeschlagen: \(error.localizedDescription)"
+        }
     }
 
     func render(projectID: UUID) async {
