@@ -200,7 +200,7 @@ final class StudioState: ObservableObject {
             ledger.append(.init(
                 timestamp: Date(),
                 actor: .system,
-                stage: .review,
+                stage: .editing,
                 action: "render-created",
                 summary: "Lokaler MP4-Render wurde erstellt und validiert.",
                 relatedSourceIDs: [artifact.id.uuidString],
