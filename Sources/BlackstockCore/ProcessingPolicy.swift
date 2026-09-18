@@ -158,8 +158,8 @@ public enum BuiltInProcessingProviders {
         capabilities: [.transcription, .semanticAnalysis, .clipping, .reframing, .captions, .rendering],
         costClass: .localNoAPI,
         requiresPaymentMethod: false,
-        freeQuotaDescription: nil,
-        available: true,
+        freeQuotaDescription: "Geplante lokale Pipeline; einzelne Capabilities werden erst nach realer Implementierung und Tests aktiviert.",
+        available: false,
         lastVerifiedAt: Date(timeIntervalSince1970: 1_789_776_000)
     )
 
@@ -180,8 +180,8 @@ public enum BuiltInProcessingProviders {
         capabilities: [.transcription, .semanticAnalysis],
         costClass: .freeQuota,
         requiresPaymentMethod: false,
-        freeQuotaDescription: "Workers-Free-Kontingent; Blackstock stoppt/fällt lokal zurück, bevor kostenpflichtige Nutzung entsteht.",
-        available: true,
+        freeQuotaDescription: "Workers-Free-Kontingent; Adapter noch nicht implementiert.",
+        available: false,
         lastVerifiedAt: Date(timeIntervalSince1970: 1_789_776_000)
     )
 
@@ -191,8 +191,8 @@ public enum BuiltInProcessingProviders {
         capabilities: [.transcription, .semanticAnalysis],
         costClass: .freeQuota,
         requiresPaymentMethod: false,
-        freeQuotaDescription: "Free-Tier-Ratenlimits; keine automatische Hochstufung in einen kostenpflichtigen Tarif.",
-        available: true,
+        freeQuotaDescription: "Free-Tier-Ratenlimits; Adapter noch nicht implementiert.",
+        available: false,
         lastVerifiedAt: Date(timeIntervalSince1970: 1_789_776_000)
     )
 
