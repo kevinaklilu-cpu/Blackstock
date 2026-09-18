@@ -159,12 +159,12 @@ final class StudioState: ObservableObject {
             correlationID: correlationID
         ))
 
-        refreshPreviewAfterHistoryChange()
+        await refreshPreviewAfterHistoryChange()
     }
 
     private func refreshPreviewAfterHistoryChange() async {
         do {
-            try rebuildPreview()
+            try await rebuildPreview()
             errorMessage = nil
         } catch {
             errorMessage = "Vorschau konnte nicht aktualisiert werden: \(error.localizedDescription)"
@@ -196,7 +196,7 @@ final class StudioState: ObservableObject {
 
         try await composition.insertTimeRange(range, of: source, at: .zero)
         player.replaceCurrentItem(with: AVPlayerItem(asset: composition))
-        player.seek(to: .zero)
+        await player.seek(to: .zero)
     }
 
     private func format(_ seconds: Double) -> String {
