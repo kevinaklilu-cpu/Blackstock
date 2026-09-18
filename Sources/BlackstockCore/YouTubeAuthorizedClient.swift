@@ -126,7 +126,7 @@ public struct YouTubeOpportunityCandidate: Codable, Sendable, Equatable, Identif
     }
 }
 
-public enum OpportunitySortMode: String, Codable, Sendable, CaseIterable {
+public enum OpportunitySortMode: String, Codable, Sendable, CaseIterable, Hashable {
     case newest
     case views
     case viewsPerHour
