@@ -78,14 +78,14 @@ final class StudioState: ObservableObject {
                 correlationID: correlationID
             ))
 
-            try rebuildPreview()
+            try await rebuildPreview()
             errorMessage = nil
         } catch {
             errorMessage = "Video konnte nicht geladen werden: \(error.localizedDescription)"
         }
     }
 
-    func applyTrim() {
+    func applyTrim() async {
         guard let asset else { return }
         let start = min(max(trimStart, 0), asset.durationSeconds)
         let end = min(max(trimEnd, start), asset.durationSeconds)
@@ -116,14 +116,14 @@ final class StudioState: ObservableObject {
         ))
 
         do {
-            try rebuildPreview()
+            try await rebuildPreview()
             errorMessage = nil
         } catch {
             errorMessage = "Vorschau konnte nicht aktualisiert werden: \(error.localizedDescription)"
         }
     }
 
-    func undo() {
+    func undo() async {
         let undone = graph.headID
         guard let restored = graph.undo() else { return }
         lastUndoneRevisionID = undone
@@ -140,10 +140,10 @@ final class StudioState: ObservableObject {
             correlationID: correlationID
         ))
 
-        refreshPreviewAfterHistoryChange()
+        await refreshPreviewAfterHistoryChange()
     }
 
-    func redo() {
+    func redo() async {
         guard let id = lastUndoneRevisionID,
               let restored = graph.redo(to: id) else { return }
         lastUndoneRevisionID = nil
@@ -162,7 +162,7 @@ final class StudioState: ObservableObject {
         refreshPreviewAfterHistoryChange()
     }
 
-    private func refreshPreviewAfterHistoryChange() {
+    private func refreshPreviewAfterHistoryChange() async {
         do {
             try rebuildPreview()
             errorMessage = nil
@@ -171,7 +171,7 @@ final class StudioState: ObservableObject {
         }
     }
 
-    private func rebuildPreview() throws {
+    private func rebuildPreview() async throws {
         guard let asset else {
             player.replaceCurrentItem(with: nil)
             return
@@ -194,7 +194,7 @@ final class StudioState: ObservableObject {
             )
         }
 
-        try composition.insertTimeRange(range, of: source, at: .zero)
+        try await composition.insertTimeRange(range, of: source, at: .zero)
         player.replaceCurrentItem(with: AVPlayerItem(asset: composition))
         player.seek(to: .zero)
     }
