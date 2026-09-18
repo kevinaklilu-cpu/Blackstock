@@ -354,12 +354,22 @@ struct FirstRunView: View {
             }
 
             HStack {
-                Label("Ansehen → verstehen → erst dann übernehmen", systemImage: "eye")
+                Label("Ansehen → verstehen → als Projekt übernehmen", systemImage: "eye")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Button("Blackstock öffnen") { session.finishFirstRun() }
+
+                if let selected = selectedOpportunity {
+                    Button("Als Clip verwenden") {
+                        session.useOpportunity(selected)
+                    }
                     .buttonStyle(.borderedProminent)
+                } else {
+                    Button("Blackstock öffnen") {
+                        session.finishFirstRun()
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
             }
         }
         .onAppear {
