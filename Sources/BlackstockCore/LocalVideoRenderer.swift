@@ -3,7 +3,7 @@ import Foundation
 @preconcurrency import AVFoundation
 import CryptoKit
 
-public enum LocalRenderPreset: String, Codable, Sendable, CaseIterable {
+public enum LocalRenderPreset: String, Codable, Sendable, CaseIterable, Hashable {
     case hd1080
     case uhd4K
 
