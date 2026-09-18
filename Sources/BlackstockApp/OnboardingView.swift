@@ -459,9 +459,8 @@ struct OnboardingView: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
         do {
-            let config = try auth.importDesktopOAuthJSON(from: url)
+            _ = try auth.importDesktopOAuthJSON(from: url)
             errorMessage = nil
-            auth.statusMessage = "Eigene OAuth-Konfiguration bereit: \(config.projectID ?? "Google-Projekt")"
         } catch {
             errorMessage = error.localizedDescription
         }
