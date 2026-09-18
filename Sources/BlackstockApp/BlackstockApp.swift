@@ -36,23 +36,11 @@ private struct WorkspaceShell: View {
         NavigationSplitView {
             List(selection: $selection) {
                 Label("Übersicht", systemImage: "rectangle.grid.2x2").tag("Übersicht")
-                Label("Research", systemImage: "sparkle.magnifyingglass").tag("Research")
-                Label("Projekte", systemImage: "square.stack.3d.up").tag("Projekte")
                 Label("Einstellungen", systemImage: "gearshape").tag("Einstellungen")
             }
             .navigationTitle("Blackstock")
         } detail: {
             switch selection {
-            case "Research":
-                unavailableCapability(
-                    title: "Research",
-                    explanation: "Der vollständige Research-Workspace wird erst eingeblendet, wenn Query Planner, Provenance, Zeitsemantik, Datenqualität und E2E-Tests bestehen."
-                )
-            case "Projekte":
-                unavailableCapability(
-                    title: "Projekte",
-                    explanation: "Die Projektoberfläche bleibt bis zum kanonischen Projekt-/Stage-/Recovery-Slice bewusst gesperrt."
-                )
             case "Einstellungen":
                 SettingsView(session: session)
             default:
@@ -61,17 +49,7 @@ private struct WorkspaceShell: View {
         }
     }
 
-    private func unavailableCapability(title: String, explanation: String) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(title).font(.largeTitle.bold())
-            Label("Noch nicht als Capability freigegeben", systemImage: "lock.shield")
-                .font(.headline)
-            Text(explanation).foregroundStyle(.secondary)
-            Spacer()
-        }
-        .padding(28)
-    }
-}
+
 
 private struct OverviewView: View {
     @ObservedObject var session: BlackstockSession
