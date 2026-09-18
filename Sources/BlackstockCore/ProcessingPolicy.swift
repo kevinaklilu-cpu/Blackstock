@@ -160,7 +160,7 @@ public enum BuiltInProcessingProviders {
         requiresPaymentMethod: false,
         freeQuotaDescription: nil,
         available: true,
-        lastVerifiedAt: Date(timeIntervalSince1970: 1_795_219_200)
+        lastVerifiedAt: Date(timeIntervalSince1970: 1_789_776_000)
     )
 
     public static let youtubeOfficial = ProcessingProviderDescriptor(
@@ -171,7 +171,7 @@ public enum BuiltInProcessingProviders {
         requiresPaymentMethod: false,
         freeQuotaDescription: "Offizielles API-Kontingent; kein Pay-as-you-go-Fallback durch Blackstock.",
         available: true,
-        lastVerifiedAt: Date(timeIntervalSince1970: 1_795_219_200)
+        lastVerifiedAt: Date(timeIntervalSince1970: 1_789_776_000)
     )
 
     public static let cloudflareWorkersAIFree = ProcessingProviderDescriptor(
@@ -182,7 +182,7 @@ public enum BuiltInProcessingProviders {
         requiresPaymentMethod: false,
         freeQuotaDescription: "Workers-Free-Kontingent; Blackstock stoppt/fällt lokal zurück, bevor kostenpflichtige Nutzung entsteht.",
         available: true,
-        lastVerifiedAt: Date(timeIntervalSince1970: 1_795_219_200)
+        lastVerifiedAt: Date(timeIntervalSince1970: 1_789_776_000)
     )
 
     public static let groqFree = ProcessingProviderDescriptor(
@@ -193,7 +193,7 @@ public enum BuiltInProcessingProviders {
         requiresPaymentMethod: false,
         freeQuotaDescription: "Free-Tier-Ratenlimits; keine automatische Hochstufung in einen kostenpflichtigen Tarif.",
         available: true,
-        lastVerifiedAt: Date(timeIntervalSince1970: 1_795_219_200)
+        lastVerifiedAt: Date(timeIntervalSince1970: 1_789_776_000)
     )
 
     public static let opusClipAPI = ProcessingProviderDescriptor(
@@ -204,6 +204,6 @@ public enum BuiltInProcessingProviders {
         requiresPaymentMethod: true,
         freeQuotaDescription: nil,
         available: true,
-        lastVerifiedAt: Date(timeIntervalSince1970: 1_795_219_200)
+        lastVerifiedAt: Date(timeIntervalSince1970: 1_789_776_000)
     )
 }
