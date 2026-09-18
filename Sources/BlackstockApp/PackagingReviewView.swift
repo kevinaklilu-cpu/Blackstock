@@ -7,6 +7,8 @@ struct PackagingReviewView: View {
     let project: BlackstockProject
     let asset: ProductionMediaAsset
     let artifact: RenderArtifact
+    let transcript: LocalTranscript?
+    let generatedCaptionURL: URL?
 
     @Environment(\.dismiss) private var dismiss
 
@@ -33,19 +35,39 @@ struct PackagingReviewView: View {
     init(
         project: BlackstockProject,
         asset: ProductionMediaAsset,
-        artifact: RenderArtifact
+        artifact: RenderArtifact,
+        transcript: LocalTranscript?,
+        generatedCaptionURL: URL?
     ) {
         self.project = project
         self.asset = asset
         self.artifact = artifact
+        self.transcript = transcript
+        self.generatedCaptionURL = generatedCaptionURL
         _title = State(initialValue: project.title)
+
+        if let generatedCaptionURL {
+            let language = transcript?.localeIdentifier ?? "de-DE"
+            _captionTracks = State(
+                initialValue: [
+                    PublishCaptionTrack(
+                        language: language,
+                        name: "Blackstock Captions",
+                        fileURL: generatedCaptionURL,
+                        mimeType: Self.captionMIMEType(for: generatedCaptionURL)
+                    )
+                ]
+            )
+        }
     }
 
     private var qualityReview: CreatorQualityReview {
         DeterministicQualityEvidenceBuilder().build(
             projectID: project.id,
             asset: asset,
-            artifact: artifact
+            artifact: artifact,
+            transcript: transcript,
+            captionURL: generatedCaptionURL
         )
     }
 
