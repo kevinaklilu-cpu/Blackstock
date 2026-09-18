@@ -29,7 +29,6 @@ public struct YouTubeOpportunityMetrics: Codable, Sendable, Equatable {
     public let viewCount: Int?
     public let likeCount: Int?
     public let commentCount: Int?
-    public let channelSubscriberCount: Int?
     public let publishedAt: Date?
     public let retrievedAt: Date
 
@@ -37,43 +36,14 @@ public struct YouTubeOpportunityMetrics: Codable, Sendable, Equatable {
         viewCount: Int?,
         likeCount: Int?,
         commentCount: Int?,
-        channelSubscriberCount: Int?,
         publishedAt: Date?,
         retrievedAt: Date
     ) {
         self.viewCount = viewCount
         self.likeCount = likeCount
         self.commentCount = commentCount
-        self.channelSubscriberCount = channelSubscriberCount
         self.publishedAt = publishedAt
         self.retrievedAt = retrievedAt
-    }
-
-    public var ageHours: Double? {
-        guard let publishedAt else { return nil }
-        return max(retrievedAt.timeIntervalSince(publishedAt) / 3600, 0)
-    }
-
-    public var viewsPerHour: Double? {
-        guard let views = viewCount, let hours = ageHours, hours >= 0.25 else { return nil }
-        return Double(views) / hours
-    }
-
-    public var viewsPerSubscriber: Double? {
-        guard let views = viewCount,
-              let subscribers = channelSubscriberCount,
-              subscribers > 0 else { return nil }
-        return Double(views) / Double(subscribers)
-    }
-
-    public var likeRate: Double? {
-        guard let likes = likeCount, let views = viewCount, views > 0 else { return nil }
-        return Double(likes) / Double(views)
-    }
-
-    public var commentRate: Double? {
-        guard let comments = commentCount, let views = viewCount, views > 0 else { return nil }
-        return Double(comments) / Double(views)
     }
 
     public var missingSignals: [String] {
@@ -81,7 +51,6 @@ public struct YouTubeOpportunityMetrics: Codable, Sendable, Equatable {
         if viewCount == nil { missing.append("Views") }
         if likeCount == nil { missing.append("Likes") }
         if commentCount == nil { missing.append("Kommentare") }
-        if channelSubscriberCount == nil { missing.append("Abonnentenzahl") }
         if publishedAt == nil { missing.append("Veröffentlichungszeit") }
         return missing
     }
@@ -127,53 +96,34 @@ public struct YouTubeOpportunityCandidate: Codable, Sendable, Equatable, Identif
 }
 
 public enum OpportunitySortMode: String, Codable, Sendable, CaseIterable, Hashable {
+    case relevance
     case newest
     case views
-    case viewsPerHour
-    case channelRelative
+
+    public var youtubeOrderParameter: String {
+        switch self {
+        case .relevance: return "relevance"
+        case .newest: return "date"
+        case .views: return "viewCount"
+        }
+    }
 
     public var germanTitle: String {
         switch self {
+        case .relevance: return "YouTube-Relevanz"
         case .newest: return "Neueste"
         case .views: return "Views"
-        case .viewsPerHour: return "Views/Stunde"
-        case .channelRelative: return "Kanalrelativ"
         }
     }
 
     public var germanExplanation: String {
         switch self {
+        case .relevance:
+            return "Die Reihenfolge kommt direkt aus YouTubes Relevanzsortierung für die Suchanfrage."
         case .newest:
-            return "Sortiert ausschließlich nach realem Veröffentlichungszeitpunkt."
+            return "Die Reihenfolge kommt direkt aus YouTubes Datums-Sortierung."
         case .views:
-            return "Sortiert ausschließlich nach dem von YouTube gemeldeten View Count."
-        case .viewsPerHour:
-            return "Views ÷ Stunden seit Veröffentlichung. Keine Prognose."
-        case .channelRelative:
-            return "Views ÷ öffentliche Abonnentenzahl des Quellkanals. Keine Prognose; Abonnentenzahlen können gerundet sein."
-        }
-    }
-}
-
-public extension Array where Element == YouTubeOpportunityCandidate {
-    func sorted(by mode: OpportunitySortMode) -> [YouTubeOpportunityCandidate] {
-        switch mode {
-        case .newest:
-            return sorted {
-                ($0.publishedAt ?? .distantPast) > ($1.publishedAt ?? .distantPast)
-            }
-        case .views:
-            return sorted {
-                ($0.metrics.viewCount ?? -1) > ($1.metrics.viewCount ?? -1)
-            }
-        case .viewsPerHour:
-            return sorted {
-                ($0.metrics.viewsPerHour ?? -1) > ($1.metrics.viewsPerHour ?? -1)
-            }
-        case .channelRelative:
-            return sorted {
-                ($0.metrics.viewsPerSubscriber ?? -1) > ($1.metrics.viewsPerSubscriber ?? -1)
-            }
+            return "Die Reihenfolge kommt direkt aus YouTubes View-Count-Sortierung."
         }
     }
 }
@@ -216,6 +166,7 @@ public struct YouTubeAuthorizedClient: Sendable {
     public func firstOpportunityCandidates(
         query: String,
         maxResults: Int = 12,
+        order: OpportunitySortMode = .relevance,
         session: URLSession = .shared,
         now: Date = Date()
     ) async throws -> [YouTubeOpportunityCandidate] {
@@ -225,7 +176,7 @@ public struct YouTubeAuthorizedClient: Sendable {
             .init(name: "type", value: "video"),
             .init(name: "q", value: query),
             .init(name: "maxResults", value: String(min(max(maxResults, 1), 25))),
-            .init(name: "order", value: "date")
+            .init(name: "order", value: order.youtubeOrderParameter)
         ]
 
         let searchData = try await perform(search.url!, session: session)
@@ -235,11 +186,7 @@ public struct YouTubeAuthorizedClient: Sendable {
         }
 
         let videoIDs = searchItems.compactMap(\.id.videoId)
-        let channelIDs = Array(Set(searchItems.map(\.snippet.channelId)))
-
-        async let videoDetails = loadVideoDetails(ids: videoIDs, session: session)
-        async let channelDetails = loadChannelSubscriberCounts(ids: channelIDs, session: session)
-        let (videos, subscribers) = try await (videoDetails, channelDetails)
+        let videos = try await loadVideoDetails(ids: videoIDs, session: session)
 
         return searchItems.compactMap { item in
             guard let videoID = item.id.videoId else { return nil }
@@ -248,7 +195,6 @@ public struct YouTubeAuthorizedClient: Sendable {
                 viewCount: video?.statistics.flatMap { Int($0.viewCount ?? "") },
                 likeCount: video?.statistics.flatMap { Int($0.likeCount ?? "") },
                 commentCount: video?.statistics.flatMap { Int($0.commentCount ?? "") },
-                channelSubscriberCount: subscribers[item.snippet.channelId],
                 publishedAt: item.snippet.publishedAt,
                 retrievedAt: now
             )
@@ -281,24 +227,6 @@ public struct YouTubeAuthorizedClient: Sendable {
         let data = try await perform(c.url!, session: session)
         let response = try JSONDecoder.youtube.decode(VideoListResponse.self, from: data)
         return Dictionary(uniqueKeysWithValues: response.items.map { ($0.id, $0) })
-    }
-
-    private func loadChannelSubscriberCounts(
-        ids: [String],
-        session: URLSession
-    ) async throws -> [String: Int] {
-        guard !ids.isEmpty else { return [:] }
-        var c = URLComponents(string: "https://www.googleapis.com/youtube/v3/channels")!
-        c.queryItems = [
-            .init(name: "part", value: "statistics"),
-            .init(name: "id", value: ids.joined(separator: ","))
-        ]
-        let data = try await perform(c.url!, session: session)
-        let response = try JSONDecoder.youtube.decode(ChannelStatsListResponse.self, from: data)
-        return Dictionary(uniqueKeysWithValues: response.items.compactMap {
-            guard let value = Int($0.statistics.subscriberCount ?? "") else { return nil }
-            return ($0.id, value)
-        })
     }
 
     private func perform(_ url: URL, session: URLSession) async throws -> Data {
@@ -334,13 +262,6 @@ private struct ChannelContentDetails: Decodable {
 }
 private struct RelatedPlaylists: Decodable {
     let uploads: String?
-}
-private struct ChannelStatsListResponse: Decodable {
-    let items: [ChannelStatsItem]
-}
-private struct ChannelStatsItem: Decodable {
-    let id: String
-    let statistics: ChannelStatistics
 }
 
 private struct VideoListResponse: Decodable {
