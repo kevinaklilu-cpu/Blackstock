@@ -54,7 +54,7 @@ struct YouTubeEmbeddedPlayer: NSViewRepresentable {
         </head>
         <body>
           <iframe
-            src="https://www.youtube-nocookie.com/embed/#(safeVideoID)?playsinline=1&rel=0"
+            src="https://www.youtube-nocookie.com/embed/\#(safeVideoID)?playsinline=1&rel=0"
             title="YouTube Video"
             allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
             allowfullscreen>
