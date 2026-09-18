@@ -23,6 +23,41 @@ final class CreatorQualityReviewTests: XCTestCase {
         XCTAssertTrue(review.hasUngroundedFinding)
     }
 
+    func testMissingRequiredAreaFailsCoverageGate() {
+        let evidence = QualityEvidence(
+            source: "Render-QA",
+            observedFact: "Render geprüft.",
+            reference: "render-1",
+            observedAt: Date()
+        )
+        let review = CreatorQualityReview(
+            projectID: UUID(),
+            stage: .review,
+            evidence: [evidence],
+            findings: [
+                QualityFinding(
+                    area: .renderIntegrity,
+                    severity: .info,
+                    title: "Render geprüft",
+                    explanation: "Render liegt vor.",
+                    recommendedAction: nil,
+                    evidenceIDs: [evidence.id]
+                )
+            ],
+            reviewedAt: Date()
+        )
+
+        XCTAssertFalse(
+            review.passesReleaseGate(
+                requiredAreas: [.renderIntegrity, .packaging]
+            )
+        )
+        XCTAssertEqual(
+            review.missingCoverage(requiredAreas: [.renderIntegrity, .packaging]),
+            [.packaging]
+        )
+    }
+
     func testGroundedWarningDoesNotBlockReleaseByItself() {
         let evidence = QualityEvidence(
             source: "Render-QA",
