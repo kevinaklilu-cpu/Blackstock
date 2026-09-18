@@ -11,6 +11,7 @@ struct StudioView: View {
     @State private var showRightsSheet = false
     @State private var rightsSelection: ProductionMediaAuthorization = .owned
     @State private var rightsEvidence = ""
+    @State private var rightsConfirmed = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -31,6 +32,7 @@ struct StudioView: View {
             if case .success(let urls) = result, let url = urls.first {
                 pendingURL = url
                 rightsEvidence = ""
+                rightsConfirmed = false
                 rightsSelection = .owned
                 showRightsSheet = true
             }
@@ -243,7 +245,12 @@ struct StudioView: View {
             TextField("Nachweis / Referenz, z. B. „eigene Aufnahme 18.09.2026“", text: $rightsEvidence)
                 .textFieldStyle(.roundedBorder)
 
-            Text("Blackstock speichert diesen Nachweis als Teil der Produktions-Provenance. Unklare oder verbotene Medien werden nicht freigeschaltet.")
+            Toggle(isOn: $rightsConfirmed) {
+                Text("Ich bestätige, dass ich Eigentümer bin oder die nötigen Nutzungs-, Bearbeitungs- und Veröffentlichungsrechte besitze und für diese Angabe verantwortlich bin.")
+                    .font(.callout)
+            }
+
+            Text("Blackstock speichert Bestätigung und Nachweis als Produktions-Provenance. Diese Bestätigung ersetzt keine Plattformregeln und keine tatsächlich erforderliche Lizenz.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -260,13 +267,17 @@ struct StudioView: View {
                         await state.importMovie(
                             url: url,
                             authorization: rightsSelection,
-                            rightsEvidence: rightsEvidence
+                            rightsEvidence: rightsEvidence,
+                            rightsConfirmed: rightsConfirmed
                         )
                     }
                     pendingURL = nil
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(rightsEvidence.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(
+                    rightsEvidence.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    || !rightsConfirmed
+                )
             }
         }
         .padding(24)
