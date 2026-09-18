@@ -50,6 +50,7 @@ final class WorkflowTraceEditingTests: XCTestCase {
             durationSeconds: 30,
             authorization: .unknown,
             rightsEvidence: [],
+            rightsAttestation: .init(confirmedByUser: false, attestedAt: Date()),
             importedAt: Date()
         )
         XCTAssertFalse(asset.mayEnterProduction)
@@ -62,6 +63,7 @@ final class WorkflowTraceEditingTests: XCTestCase {
             durationSeconds: 30,
             authorization: .owned,
             rightsEvidence: [],
+            rightsAttestation: .init(confirmedByUser: true, attestedAt: Date()),
             importedAt: Date()
         )
         XCTAssertFalse(withoutEvidence.mayEnterProduction)
@@ -72,9 +74,21 @@ final class WorkflowTraceEditingTests: XCTestCase {
             durationSeconds: 30,
             authorization: .owned,
             rightsEvidence: ["user-confirmed-owned"],
+            rightsAttestation: .init(confirmedByUser: true, attestedAt: Date()),
             importedAt: Date()
         )
         XCTAssertTrue(withEvidence.mayEnterProduction)
+
+        let notAttested = ProductionMediaAsset(
+            displayName: "owned.mov",
+            sourceURL: URL(fileURLWithPath: "/tmp/owned.mov"),
+            durationSeconds: 30,
+            authorization: .owned,
+            rightsEvidence: ["user-says-owned"],
+            rightsAttestation: .init(confirmedByUser: false, attestedAt: Date()),
+            importedAt: Date()
+        )
+        XCTAssertFalse(notAttested.mayEnterProduction)
     }
 
     func testEditGraphUndoRedoIsNonDestructive() {
