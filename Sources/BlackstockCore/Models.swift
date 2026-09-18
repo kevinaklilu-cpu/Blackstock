@@ -1,8 +1,34 @@
 import Foundation
 
 public struct ChannelSnapshot: Codable, Sendable, Equatable {
-    public var id: String; public var title: String; public var subscriberCount: Int; public var medianViews: Double; public var medianViewsPerHour: Double; public var recentTopics: [String]
-    public init(id: String, title: String, subscriberCount: Int = 0, medianViews: Double = 1, medianViewsPerHour: Double = 1, recentTopics: [String] = []) { self.id = id; self.title = title; self.subscriberCount = subscriberCount; self.medianViews = max(medianViews, 1); self.medianViewsPerHour = max(medianViewsPerHour, 1); self.recentTopics = recentTopics }
+    public var id: String
+    public var title: String
+    public var handle: String?
+    public var avatarURL: URL?
+    public var subscriberCount: Int
+    public var medianViews: Double
+    public var medianViewsPerHour: Double
+    public var recentTopics: [String]
+
+    public init(
+        id: String,
+        title: String,
+        handle: String? = nil,
+        avatarURL: URL? = nil,
+        subscriberCount: Int = 0,
+        medianViews: Double = 1,
+        medianViewsPerHour: Double = 1,
+        recentTopics: [String] = []
+    ) {
+        self.id = id
+        self.title = title
+        self.handle = handle
+        self.avatarURL = avatarURL
+        self.subscriberCount = subscriberCount
+        self.medianViews = max(medianViews, 1)
+        self.medianViewsPerHour = max(medianViewsPerHour, 1)
+        self.recentTopics = recentTopics
+    }
 }
 
 public enum VideoFormat: String, Codable, Sendable, CaseIterable { case short, longform; public static func infer(durationSeconds: Int) -> VideoFormat { durationSeconds <= 180 ? .short : .longform } }
