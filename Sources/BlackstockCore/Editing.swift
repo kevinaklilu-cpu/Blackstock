@@ -1,6 +1,6 @@
 import Foundation
 
-public enum ProductionMediaAuthorization: String, Codable, Sendable {
+public enum ProductionMediaAuthorization: String, Codable, Sendable, CaseIterable {
     case owned
     case licensed
     case explicitlyAuthorized
