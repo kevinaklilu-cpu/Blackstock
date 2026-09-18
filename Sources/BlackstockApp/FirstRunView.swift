@@ -370,7 +370,7 @@ struct FirstRunView: View {
                 selectedOpportunityID = sortedOpportunities.first?.id
             }
         }
-        .onChange(of: opportunitySortMode) {
+        .onChange(of: opportunitySortMode) { _ in
             if selectedOpportunityID == nil {
                 selectedOpportunityID = sortedOpportunities.first?.id
             }
