@@ -60,7 +60,8 @@ private struct WorkspaceShell: View {
                 if let project = session.activeProject {
                     StudioView(
                         project: project,
-                        opportunitySource: session.activeOpportunitySource
+                        opportunitySource: session.activeOpportunitySource,
+                        contentLanguage: session.contentLanguage
                     )
                 } else {
                     OverviewView(session: session)
