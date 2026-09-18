@@ -202,7 +202,7 @@ final class BlackstockSession: ObservableObject {
             try persist(strategy: strategy)
 
             let candidates = try await YouTubeAuthorizedClient(accessToken: accessToken)
-                .firstOpportunityCandidates(query: primaryTopic, maxResults: 12)
+                .firstOpportunityCandidates(query: primaryTopic, maxResults: 12, order: .relevance)
             guard !candidates.isEmpty else {
                 errorMessage = "YouTube hat für diesen strategischen Suchraum aktuell keine Opportunity-Kandidaten geliefert."
                 return
@@ -212,6 +212,30 @@ final class BlackstockSession: ObservableObject {
             step = .opportunities
         } catch {
             errorMessage = "Die ersten Chancen konnten nicht aus realen YouTube-Daten erstellt werden: \(describe(error))"
+        }
+    }
+
+    func reloadOpportunities(order: OpportunitySortMode) async {
+        guard let channel = selectedChannel else { return }
+        let accessToken = tokenSet?.accessToken ?? BlackstockKeychain.read("youtube.\(channel.id).accessToken")
+        guard !accessToken.isEmpty, !primaryTopic.isEmpty else { return }
+
+        isWorking = true
+        defer { isWorking = false }
+
+        do {
+            let candidates = try await YouTubeAuthorizedClient(accessToken: accessToken)
+                .firstOpportunityCandidates(
+                    query: primaryTopic,
+                    maxResults: 12,
+                    order: order
+                )
+            if !candidates.isEmpty {
+                opportunities = candidates
+                errorMessage = nil
+            }
+        } catch {
+            errorMessage = "YouTube-Sortierung konnte nicht aktualisiert werden: \(describe(error))"
         }
     }
 
