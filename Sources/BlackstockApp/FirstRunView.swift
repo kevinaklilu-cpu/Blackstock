@@ -7,7 +7,7 @@ struct FirstRunView: View {
     @ObservedObject var session: BlackstockSession
     @State private var showOAuthImporter = false
     @State private var selectedOpportunityID: String?
-    @State private var opportunitySortMode: OpportunitySortMode = .newest
+    @State private var opportunitySortMode: OpportunitySortMode = .relevance
 
     var body: some View {
         ZStack {
@@ -252,7 +252,7 @@ struct FirstRunView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Reale YouTube-Signale")
                         .font(.headline)
-                    Text("Keine Prognose · kein Virality-Score")
+                    Text("Rohdaten von YouTube · keine abgeleiteten Scores")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -280,9 +280,9 @@ struct FirstRunView: View {
                             VStack(spacing: 8) {
                                 Image(systemName: "play.slash")
                                     .font(.title)
-                                Text("Dieses Video ist laut YouTube nicht einbettbar.")
+                                Text("YouTube-Vorschau hier nicht verfügbar.")
                                     .font(.callout.weight(.semibold))
-                                Text("Blackstock verändert oder umgeht diese Provider-Einstellung nicht.")
+                                Text("Für eine automatische Verarbeitung braucht Blackstock eine freigegebene Ingest-Quelle für diesen Link.")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -328,9 +328,6 @@ struct FirstRunView: View {
                                     if let views = item.metrics.viewCount {
                                         Text(compactNumber(views) + " Views")
                                     }
-                                    if let vph = item.metrics.viewsPerHour {
-                                        Text("· " + compactNumber(Int(vph.rounded())) + "/h")
-                                    }
                                 }
                                 .font(.caption2.monospacedDigit())
                                 .foregroundStyle(.secondary)
@@ -370,9 +367,11 @@ struct FirstRunView: View {
                 selectedOpportunityID = sortedOpportunities.first?.id
             }
         }
-        .onChange(of: opportunitySortMode) { _ in
-            if selectedOpportunityID == nil {
-                selectedOpportunityID = sortedOpportunities.first?.id
+        .onChange(of: opportunitySortMode) { newMode in
+            Task {
+                selectedOpportunityID = nil
+                await session.reloadOpportunities(order: newMode)
+                selectedOpportunityID = session.opportunities.first?.id
             }
         }
     }
@@ -383,15 +382,6 @@ struct FirstRunView: View {
             HStack(spacing: 8) {
                 if let views = item.metrics.viewCount {
                     metricChip("Views", compactNumber(views), systemImage: "play.rectangle")
-                }
-                if let value = item.metrics.viewsPerHour {
-                    metricChip("Views/Stunde", compactNumber(Int(value.rounded())), systemImage: "speedometer")
-                }
-                if let subscribers = item.metrics.channelSubscriberCount {
-                    metricChip("Kanal-Abos", compactNumber(subscribers), systemImage: "person.2")
-                }
-                if let ratio = item.metrics.viewsPerSubscriber {
-                    metricChip("Views/Abos", decimal(ratio) + "×", systemImage: "divide.circle")
                 }
                 if let likes = item.metrics.likeCount {
                     metricChip("Likes", compactNumber(likes), systemImage: "hand.thumbsup")
@@ -446,7 +436,7 @@ struct FirstRunView: View {
                     )
                 }
 
-                Text("Views/Stunde = Views ÷ Stunden seit Veröffentlichung. Views/Abos = Views ÷ öffentliche Abonnentenzahl des Quellkanals. Beide Werte sind beschreibende Kennzahlen, keine Erfolgsvorhersage.")
+                Text("Blackstock zeigt hier nur von YouTube gelieferte Rohwerte. Die Reihenfolge wird über YouTubes offiziellen Search-Order-Parameter angefordert; Blackstock erzeugt daraus keinen eigenen Opportunity- oder Virality-Score.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -457,7 +447,7 @@ struct FirstRunView: View {
     }
 
     private var sortedOpportunities: [YouTubeOpportunityCandidate] {
-        session.opportunities.sorted(by: opportunitySortMode)
+        session.opportunities
     }
 
     private var selectedOpportunity: YouTubeOpportunityCandidate? {
@@ -479,9 +469,6 @@ struct FirstRunView: View {
         return String(value)
     }
 
-    private func decimal(_ value: Double) -> String {
-        String(format: value >= 10 ? "%.0f" : "%.2f", value)
-    }
 
     private var stepEyebrow: String {
         switch session.step {
