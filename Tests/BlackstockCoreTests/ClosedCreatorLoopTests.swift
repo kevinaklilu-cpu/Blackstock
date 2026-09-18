@@ -15,7 +15,7 @@ final class ClosedCreatorLoopTests: XCTestCase {
         )
 
         XCTAssertThrowsError(try context.validate()) {
-            XCTAssertEqual($0 as? PublicationPreflightError, .channelMismatch)
+            XCTAssertEqual($0 as? PublicationPreflightError, .wrongChannel)
         }
     }
 
