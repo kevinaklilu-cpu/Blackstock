@@ -7,6 +7,8 @@ public struct DeterministicQualityEvidenceBuilder: Sendable {
         projectID: UUID,
         asset: ProductionMediaAsset,
         artifact: RenderArtifact,
+        transcript: LocalTranscript? = nil,
+        captionURL: URL? = nil,
         reviewedAt: Date = Date()
     ) -> CreatorQualityReview {
         var evidence: [QualityEvidence] = []
@@ -59,6 +61,35 @@ public struct DeterministicQualityEvidenceBuilder: Sendable {
                 evidenceIDs: [renderEvidence.id]
             )
         )
+
+        if let transcript,
+           transcript.onDevice,
+           !transcript.segments.isEmpty,
+           let captionURL,
+           FileManager.default.fileExists(atPath: captionURL.path) {
+            let averageConfidence = transcript.segments
+                .map { Double($0.confidence) }
+                .reduce(0, +) / Double(transcript.segments.count)
+            let captionEvidence = QualityEvidence(
+                source: "Blackstock Local Speech",
+                observedFact: "On-Device-Transkript mit \(transcript.segments.count) Segmenten und WebVTT-Datei vorhanden; mittlere Segment-Confidence \(String(format: "%.2f", averageConfidence)).",
+                reference: captionURL.lastPathComponent,
+                observedAt: reviewedAt
+            )
+            evidence.append(captionEvidence)
+            findings.append(
+                QualityFinding(
+                    area: .captions,
+                    severity: averageConfidence < 0.70 ? .warning : .info,
+                    title: "Captions lokal erzeugt",
+                    explanation: captionEvidence.observedFact,
+                    recommendedAction: averageConfidence < 0.70
+                        ? "Caption-Text vor Veröffentlichung manuell gegen das Video prüfen."
+                        : "Captions im Review stichprobenartig prüfen.",
+                    evidenceIDs: [captionEvidence.id]
+                )
+            )
+        }
 
         return CreatorQualityReview(
             projectID: projectID,
