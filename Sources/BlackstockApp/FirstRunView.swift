@@ -7,6 +7,7 @@ struct FirstRunView: View {
     @ObservedObject var session: BlackstockSession
     @State private var showOAuthImporter = false
     @State private var selectedOpportunityID: String?
+    @State private var opportunitySortMode: OpportunitySortMode = .newest
 
     var body: some View {
         ZStack {
@@ -247,37 +248,65 @@ struct FirstRunView: View {
 
     private var opportunities: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Reale YouTube-Ergebnisse · noch keine Blackstock-Bewertung")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Reale YouTube-Signale")
+                        .font(.headline)
+                    Text("Keine Prognose · kein Virality-Score")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Picker("Sortierung", selection: $opportunitySortMode) {
+                    ForEach(OpportunitySortMode.allCases, id: \.self) { mode in
+                        Text(mode.germanTitle).tag(mode)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(maxWidth: 160)
+            }
 
             if let selected = selectedOpportunity {
-                VStack(alignment: .leading, spacing: 10) {
-                    YouTubeEmbeddedPlayer(videoID: selected.videoID)
+                VStack(alignment: .leading, spacing: 12) {
+                    if selected.embeddable != false {
+                        YouTubeEmbeddedPlayer(videoID: selected.videoID)
+                            .frame(minHeight: 260)
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                    } else {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 14)
+                                .fill(Color.primary.opacity(0.04))
+                            VStack(spacing: 8) {
+                                Image(systemName: "play.slash")
+                                    .font(.title)
+                                Text("Dieses Video ist laut YouTube nicht einbettbar.")
+                                    .font(.callout.weight(.semibold))
+                                Text("Blackstock verändert oder umgeht diese Provider-Einstellung nicht.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                         .frame(minHeight: 260)
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                    }
 
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: 5) {
                         Text(selected.title)
                             .font(.headline)
                             .lineLimit(2)
                         Text(selected.channelTitle)
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        HStack(spacing: 10) {
-                            Label("YouTube API", systemImage: "checkmark.seal")
-                            Text("Query: \(selected.query)")
-                            Text("Abruf: \(selected.retrievedAt.formatted(date: .abbreviated, time: .shortened))")
-                        }
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
                     }
+
+                    signalStrip(selected)
+                    explanationPanel(selected)
                 }
             }
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
-                    ForEach(session.opportunities.prefix(8)) { item in
+                    ForEach(sortedOpportunities.prefix(8)) { item in
                         Button {
                             selectedOpportunityID = item.id
                         } label: {
@@ -294,6 +323,17 @@ struct FirstRunView: View {
                                     .font(.caption.weight(.semibold))
                                     .lineLimit(2)
                                     .frame(width: 160, alignment: .leading)
+
+                                HStack(spacing: 5) {
+                                    if let views = item.metrics.viewCount {
+                                        Text(compactNumber(views) + " Views")
+                                    }
+                                    if let vph = item.metrics.viewsPerHour {
+                                        Text("· " + compactNumber(Int(vph.rounded())) + "/h")
+                                    }
+                                }
+                                .font(.caption2.monospacedDigit())
+                                .foregroundStyle(.secondary)
                             }
                             .padding(8)
                             .background(
@@ -302,6 +342,14 @@ struct FirstRunView: View {
                                     : Color.primary.opacity(0.03),
                                 in: RoundedRectangle(cornerRadius: 12)
                             )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .strokeBorder(
+                                        selectedOpportunity?.id == item.id
+                                            ? Color.accentColor.opacity(0.35)
+                                            : Color.clear
+                                    )
+                            )
                         }
                         .buttonStyle(.plain)
                     }
@@ -309,7 +357,7 @@ struct FirstRunView: View {
             }
 
             HStack {
-                Text("Ansehen → verstehen → erst dann übernehmen")
+                Label("Ansehen → verstehen → erst dann übernehmen", systemImage: "eye")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -319,18 +367,120 @@ struct FirstRunView: View {
         }
         .onAppear {
             if selectedOpportunityID == nil {
-                selectedOpportunityID = session.opportunities.first?.id
+                selectedOpportunityID = sortedOpportunities.first?.id
+            }
+        }
+        .onChange(of: opportunitySortMode) {
+            if selectedOpportunityID == nil {
+                selectedOpportunityID = sortedOpportunities.first?.id
             }
         }
     }
 
+    @ViewBuilder
+    private func signalStrip(_ item: YouTubeOpportunityCandidate) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                if let views = item.metrics.viewCount {
+                    metricChip("Views", compactNumber(views), systemImage: "play.rectangle")
+                }
+                if let value = item.metrics.viewsPerHour {
+                    metricChip("Views/Stunde", compactNumber(Int(value.rounded())), systemImage: "speedometer")
+                }
+                if let subscribers = item.metrics.channelSubscriberCount {
+                    metricChip("Kanal-Abos", compactNumber(subscribers), systemImage: "person.2")
+                }
+                if let ratio = item.metrics.viewsPerSubscriber {
+                    metricChip("Views/Abos", decimal(ratio) + "×", systemImage: "divide.circle")
+                }
+                if let likes = item.metrics.likeCount {
+                    metricChip("Likes", compactNumber(likes), systemImage: "hand.thumbsup")
+                }
+                if let comments = item.metrics.commentCount {
+                    metricChip("Kommentare", compactNumber(comments), systemImage: "bubble.left")
+                }
+                if let date = item.publishedAt {
+                    metricChip("Veröffentlicht", date.formatted(date: .abbreviated, time: .shortened), systemImage: "clock")
+                }
+            }
+        }
+    }
+
+    private func metricChip(_ title: String, _ value: String, systemImage: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemImage)
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(value)
+                    .font(.caption.weight(.semibold).monospacedDigit())
+                Text(title)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 9))
+    }
+
+    private func explanationPanel(_ item: YouTubeOpportunityCandidate) -> some View {
+        DisclosureGroup("Warum wird dieses Video hier gezeigt?") {
+            VStack(alignment: .leading, spacing: 8) {
+                Label(
+                    "Treffer der realen YouTube-Suche für „\(item.query)“.",
+                    systemImage: "magnifyingglass"
+                )
+                Label(
+                    "Aktuelle Sortierung: \(opportunitySortMode.germanTitle). \(opportunitySortMode.germanExplanation)",
+                    systemImage: "arrow.up.arrow.down"
+                )
+                Label(
+                    "Datenabruf: \(item.retrievedAt.formatted(date: .abbreviated, time: .shortened)).",
+                    systemImage: "clock.arrow.circlepath"
+                )
+
+                if !item.metrics.missingSignals.isEmpty {
+                    Label(
+                        "Nicht verfügbar: " + item.metrics.missingSignals.joined(separator: ", ") + ". Blackstock ersetzt fehlende Werte nicht durch Schätzungen.",
+                        systemImage: "info.circle"
+                    )
+                }
+
+                Text("Views/Stunde = Views ÷ Stunden seit Veröffentlichung. Views/Abos = Views ÷ öffentliche Abonnentenzahl des Quellkanals. Beide Werte sind beschreibende Kennzahlen, keine Erfolgsvorhersage.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .font(.caption)
+            .padding(.top, 8)
+        }
+        .font(.subheadline.weight(.semibold))
+    }
+
+    private var sortedOpportunities: [YouTubeOpportunityCandidate] {
+        session.opportunities.sorted(by: opportunitySortMode)
+    }
+
     private var selectedOpportunity: YouTubeOpportunityCandidate? {
-        guard !session.opportunities.isEmpty else { return nil }
+        guard !sortedOpportunities.isEmpty else { return nil }
         if let selectedOpportunityID,
-           let selected = session.opportunities.first(where: { $0.id == selectedOpportunityID }) {
+           let selected = sortedOpportunities.first(where: { $0.id == selectedOpportunityID }) {
             return selected
         }
-        return session.opportunities.first
+        return sortedOpportunities.first
+    }
+
+    private func compactNumber(_ value: Int) -> String {
+        if value >= 1_000_000 {
+            return String(format: "%.1fM", Double(value) / 1_000_000)
+        }
+        if value >= 1_000 {
+            return String(format: "%.1fK", Double(value) / 1_000)
+        }
+        return String(value)
+    }
+
+    private func decimal(_ value: Double) -> String {
+        String(format: value >= 10 ? "%.0f" : "%.2f", value)
     }
 
     private var stepEyebrow: String {
