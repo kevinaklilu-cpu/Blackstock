@@ -46,13 +46,13 @@ jobs:
           set -euo pipefail
           chmod +x Build/package-installer.sh
           Build/package-installer.sh "$RUNNER_TEMP/dist"
-          test -f "$RUNNER_TEMP/dist/Blackstock-Installer.pkg"
-          pkgutil --payload-files "$RUNNER_TEMP/dist/Blackstock-Installer.pkg" | grep -q 'Applications/Blackstock.app'
+          test -f "$RUNNER_TEMP/dist/Blackstock.pkg"
+          pkgutil --payload-files "$RUNNER_TEMP/dist/Blackstock.pkg" | grep -q 'Applications/Blackstock.app'
       - uses: actions/upload-artifact@v4
         with:
           name: Blackstock-development-package
           retention-days: 7
           if-no-files-found: error
           path: |
-            ${{ runner.temp }}/dist/Blackstock-Installer.pkg
-            ${{ runner.temp }}/dist/Blackstock-Installer.pkg.sha256
+            ${{ runner.temp }}/dist/Blackstock.pkg
+            ${{ runner.temp }}/dist/Blackstock.pkg.sha256
