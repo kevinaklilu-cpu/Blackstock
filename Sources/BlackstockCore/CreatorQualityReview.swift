@@ -107,6 +107,22 @@ public struct CreatorQualityReview: Codable, Sendable, Equatable, Identifiable {
         !hasUngroundedFinding && blockingFindings.isEmpty
     }
 
+    public var coveredAreas: Set<CreatorQualityArea> {
+        Set(findings.filter(\.isGrounded).map(\.area))
+    }
+
+    public func missingCoverage(
+        requiredAreas: Set<CreatorQualityArea>
+    ) -> Set<CreatorQualityArea> {
+        requiredAreas.subtracting(coveredAreas)
+    }
+
+    public func passesReleaseGate(
+        requiredAreas: Set<CreatorQualityArea>
+    ) -> Bool {
+        passesReleaseGate && missingCoverage(requiredAreas: requiredAreas).isEmpty
+    }
+
     public func findings(in area: CreatorQualityArea) -> [QualityFinding] {
         findings.filter { $0.area == area }
     }
