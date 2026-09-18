@@ -34,28 +34,26 @@ image.lockFocus()
 NSColor(calibratedWhite: 0.045, alpha: 1).setFill()
 NSBezierPath(roundedRect: NSRect(x: 56, y: 56, width: 912, height: 912), xRadius: 210, yRadius: 210).fill()
 
-NSColor(calibratedRed: 1, green: 0, blue: 0, alpha: 1).setFill()
-NSBezierPath(roundedRect: NSRect(x: 132, y: 307, width: 760, height: 410), xRadius: 108, yRadius: 108).fill()
+NSColor(calibratedWhite: 0.10, alpha: 1).setFill()
+NSBezierPath(roundedRect: NSRect(x: 150, y: 150, width: 724, height: 724), xRadius: 164, yRadius: 164).fill()
+
+// Restrained signal-red cut/timeline accent. Deliberately no play triangle or YouTube-like red video container.
+NSColor(calibratedRed: 0.86, green: 0.10, blue: 0.12, alpha: 1).setFill()
+NSBezierPath(roundedRect: NSRect(x: 242, y: 230, width: 34, height: 564), xRadius: 17, yRadius: 17).fill()
 
 let paragraph = NSMutableParagraphStyle()
 paragraph.alignment = .center
 let attrs: [NSAttributedString.Key: Any] = [
-    .font: NSFont.systemFont(ofSize: 240, weight: .black),
+    .font: NSFont.systemFont(ofSize: 430, weight: .black, width: .compressed),
     .foregroundColor: NSColor.white,
     .paragraphStyle: paragraph
 ]
-("B" as NSString).draw(in: NSRect(x: 205, y: 350, width: 245, height: 300), withAttributes: attrs)
+("B" as NSString).draw(in: NSRect(x: 278, y: 255, width: 500, height: 520), withAttributes: attrs)
 
-NSColor(calibratedWhite: 1, alpha: 0.32).setFill()
-NSBezierPath(rect: NSRect(x: 500, y: 395, width: 6, height: 234)).fill()
-
-let play = NSBezierPath()
-play.move(to: NSPoint(x: 590, y: 402))
-play.line(to: NSPoint(x: 590, y: 622))
-play.line(to: NSPoint(x: 774, y: 512))
-play.close()
-NSColor.white.setFill()
-play.fill()
+NSColor(calibratedWhite: 0.75, alpha: 0.45).setFill()
+for x in stride(from: 300.0, through: 724.0, by: 106.0) {
+    NSBezierPath(roundedRect: NSRect(x: x, y: 218, width: 54, height: 8), xRadius: 4, yRadius: 4).fill()
+}
 
 image.unlockFocus()
 guard let tiff = image.tiffRepresentation,
@@ -110,15 +108,15 @@ cp -R "$APP" "$PAYLOAD/Applications/Blackstock.app"
 
 COMPONENT="$WORK/Blackstock-component.pkg"
 pkgbuild --root "$PAYLOAD" --install-location / --identifier "$IDENTIFIER" --version "$VERSION" "$COMPONENT"
-productbuild --package "$COMPONENT" "$OUT_DIR/Blackstock-Installer.pkg"
+productbuild --package "$COMPONENT" "$OUT_DIR/Blackstock.pkg"
 
 STAGE="$WORK/dmg"
 mkdir -p "$STAGE"
-cp "$OUT_DIR/Blackstock-Installer.pkg" "$STAGE/Blackstock installieren.pkg"
+cp "$OUT_DIR/Blackstock.pkg" "$STAGE/Blackstock.pkg"
 cat > "$STAGE/Installation.txt" <<'TXT'
 BLACKSTOCK INSTALLIEREN
 
-1. Öffne „Blackstock installieren.pkg“.
+1. Öffne „Blackstock.pkg“.
 2. Folge dem macOS-Installer.
 3. Blackstock wird in /Applications installiert.
 4. Starte Blackstock anschließend über Programme oder Spotlight.
@@ -133,12 +131,12 @@ TXT
 hdiutil create -volname "Blackstock Installer" -srcfolder "$STAGE" -ov -format UDZO "$OUT_DIR/Blackstock-Installer.dmg"
 ditto -c -k --sequesterRsrc --keepParent "$APP" "$OUT_DIR/Blackstock.zip"
 
-shasum -a 256 "$OUT_DIR/Blackstock-Installer.pkg" > "$OUT_DIR/Blackstock-Installer.pkg.sha256"
+shasum -a 256 "$OUT_DIR/Blackstock.pkg" > "$OUT_DIR/Blackstock.pkg.sha256"
 shasum -a 256 "$OUT_DIR/Blackstock-Installer.dmg" > "$OUT_DIR/Blackstock-Installer.dmg.sha256"
 shasum -a 256 "$OUT_DIR/Blackstock.zip" > "$OUT_DIR/Blackstock.zip.sha256"
 
-pkgutil --check-signature "$OUT_DIR/Blackstock-Installer.pkg" || true
-pkgutil --payload-files "$OUT_DIR/Blackstock-Installer.pkg" | grep -q 'Applications/Blackstock.app'
+pkgutil --check-signature "$OUT_DIR/Blackstock.pkg" || true
+pkgutil --payload-files "$OUT_DIR/Blackstock.pkg" | grep -q 'Applications/Blackstock.app'
 
 echo "Created:"
-ls -lh "$OUT_DIR/Blackstock-Installer.pkg" "$OUT_DIR/Blackstock-Installer.dmg" "$OUT_DIR/Blackstock.zip"
+ls -lh "$OUT_DIR/Blackstock.pkg" "$OUT_DIR/Blackstock-Installer.dmg" "$OUT_DIR/Blackstock.zip"
