@@ -249,28 +249,16 @@ final class BlackstockSession: ObservableObject {
             return
         }
 
-        let strategyVersion = storedStrategyVersion(for: channel.id)
-        let now = Date()
-        let project = BlackstockProject(
-            title: opportunity.title,
-            targetChannelID: channel.id,
-            stage: .production,
-            strategyVersion: strategyVersion,
-            createdAt: now,
-            updatedAt: now
-        )
-        let source = MediaSourceReference(
-            provider: .youtube,
-            pageURL: URL(string: "https://www.youtube.com/watch?v=\(opportunity.videoID)")!,
-            externalID: opportunity.videoID,
-            discoveredAt: opportunity.retrievedAt
-        )
-
         do {
-            try Self.store(project: project)
-            try Self.store(source: source)
-            activeProject = project
-            activeOpportunitySource = source
+            let seed = try OpportunityProjectFactory().make(
+                opportunity: opportunity,
+                targetChannelID: channel.id,
+                strategyVersion: storedStrategyVersion(for: channel.id)
+            )
+            try Self.store(project: seed.project)
+            try Self.store(source: seed.source)
+            activeProject = seed.project
+            activeOpportunitySource = seed.source
             UserDefaults.standard.set(channel.id, forKey: "blackstock.workspace.channelID")
             UserDefaults.standard.set(true, forKey: "blackstock.firstRun.complete")
             onboardingComplete = true
