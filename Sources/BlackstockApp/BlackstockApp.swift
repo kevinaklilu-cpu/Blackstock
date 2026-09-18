@@ -46,12 +46,25 @@ private struct WorkspaceShell: View {
             List(selection: $selection) {
                 Label("Übersicht", systemImage: "rectangle.grid.2x2")
                     .tag("Übersicht")
+                if session.activeProject != nil {
+                    Label("Studio", systemImage: "film.stack")
+                        .tag("Studio")
+                }
                 Label("Einstellungen", systemImage: "gearshape")
                     .tag("Einstellungen")
             }
             .navigationTitle("Blackstock")
         } detail: {
             switch selection {
+            case "Studio":
+                if let project = session.activeProject {
+                    StudioView(
+                        project: project,
+                        opportunitySource: session.activeOpportunitySource
+                    )
+                } else {
+                    OverviewView(session: session)
+                }
             case "Einstellungen":
                 SettingsView(session: session)
             default:
@@ -102,6 +115,14 @@ private struct CommandPaletteView: View {
                 subtitle: "Zum aktuellen Blackstock-Workspace",
                 systemImage: "rectangle.grid.2x2",
                 destination: "Übersicht",
+                isDestructive: false
+            ),
+            .init(
+                id: "studio",
+                title: "Studio öffnen",
+                subtitle: "Aktives Projekt visuell bearbeiten",
+                systemImage: "film.stack",
+                destination: "Studio",
                 isDestructive: false
             ),
             .init(
