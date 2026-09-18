@@ -26,9 +26,9 @@ enum YouTubeOAuthError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingClientID:
-            return "Es fehlt die Google OAuth Desktop Client-ID. Ein Client Secret wird für Blackstock nicht benötigt."
+            return "Blackstock konnte die Google-Anmeldung nicht starten, weil die App nicht vollständig provisioniert ist."
         case .invalidClientID:
-            return "Die Client-ID sieht ungültig aus. Verwende in Google Cloud einen OAuth-Client vom Typ „Desktopanwendung“ (…apps.googleusercontent.com)."
+            return "Blackstock konnte die Google-Anmeldung nicht starten, weil die integrierte App-Konfiguration ungültig ist."
         case .browserCouldNotOpen:
             return "Der Google-Login konnte nicht im Browser geöffnet werden."
         case .invalidCallback:
@@ -38,7 +38,7 @@ enum YouTubeOAuthError: LocalizedError {
         case .authorizationDenied(let message):
             return message
         case .authorizationTimedOut:
-            return "Blackstock hat keine Antwort vom Google-Login erhalten. Prüfe, dass die OAuth Client-ID in Google Cloud vom Typ „Desktopanwendung“ ist. Ein Web-App-Client mit Client Secret funktioniert für diesen lokalen Desktop-Flow nicht."
+            return "Blackstock hat keine Antwort vom Google-Login erhalten. Starte die Anmeldung erneut."
         case .authorizationCancelled:
             return "Die YouTube-Anmeldung wurde abgebrochen."
         case .tokenExchangeFailed(let message):
@@ -57,18 +57,12 @@ final class GoogleYouTubeAuth: ObservableObject {
     private var activeServer: LoopbackOAuthServer?
 
     static var configuredClientID: String {
-        let bundled = (Bundle.main.object(forInfoDictionaryKey: "BlackstockGoogleOAuthClientID") as? String ?? "")
+        (Bundle.main.object(forInfoDictionaryKey: "BlackstockGoogleOAuthClientID") as? String ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        if !bundled.isEmpty { return bundled }
-        return Keychain.read("youtube-oauth-client-id").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    static var desktopConfigurationHint: String {
-        "Google Cloud → Google Auth Platform → Clients → Client erstellen → Desktopanwendung. Für diesen PKCE-Flow wird kein Client Secret in Blackstock eingetragen."
-    }
-
-    func connect(clientID override: String? = nil) async throws -> YouTubeOAuthSession {
-        let clientID = (override ?? Self.configuredClientID).trimmingCharacters(in: .whitespacesAndNewlines)
+    func connect() async throws -> YouTubeOAuthSession {
+        let clientID = Self.configuredClientID
         guard !clientID.isEmpty else { throw YouTubeOAuthError.missingClientID }
         guard clientID.hasSuffix(".apps.googleusercontent.com") else { throw YouTubeOAuthError.invalidClientID }
 
@@ -95,7 +89,6 @@ final class GoogleYouTubeAuth: ObservableObject {
             URLQueryItem(name: "response_type", value: "code"),
             URLQueryItem(name: "scope", value: [
                 "https://www.googleapis.com/auth/youtube.readonly",
-                "https://www.googleapis.com/auth/youtube.upload",
                 "https://www.googleapis.com/auth/yt-analytics.readonly"
             ].joined(separator: " ")),
             URLQueryItem(name: "access_type", value: "offline"),
@@ -133,7 +126,6 @@ final class GoogleYouTubeAuth: ObservableObject {
             Keychain.write(tokens.accessToken, account: "youtube-access-\(channel.id)")
             Keychain.write("1", account: "youtube-connected-\(channel.id)")
         }
-        Keychain.write(clientID, account: "youtube-oauth-client-id")
         callbackHint = nil
         statusMessage = channels.count == 1 ? "\(channels[0].title) verbunden" : "\(channels.count) YouTube-Kanäle verbunden"
         return YouTubeOAuthSession(channels: channels, accessToken: tokens.accessToken, refreshToken: tokens.refreshToken)
@@ -155,6 +147,10 @@ final class GoogleYouTubeAuth: ObservableObject {
 
     static func isAuthenticated(channelID: String) -> Bool {
         !Keychain.read("youtube-connected-\(channelID)").isEmpty
+    }
+
+    static func accessToken(channelID: String) -> String {
+        Keychain.read("youtube-access-\(channelID)")
     }
 
     private func exchangeCode(_ code: String, verifier: String, clientID: String, redirectURI: URL) async throws -> OAuthTokenResponse {
