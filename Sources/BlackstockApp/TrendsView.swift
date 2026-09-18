@@ -7,7 +7,7 @@ import BlackstockCore
 struct TrendsView: View {
     @EnvironmentObject private var app: AppState
     @ObservedObject var model: TrendViewModel
-    let apiKey: String
+    let accessToken: String
     @State private var selected: TrendSignal?
 
     var body: some View {
@@ -27,7 +27,7 @@ struct TrendsView: View {
                                 TrendBrowseRow(item: item, selected: (selected ?? app.activeTrend)?.id == item.id) {
                                     withAnimation(.easeInOut(duration: 0.14)) { selected = item; app.activeTrend = item }
                                 }
-                                .onAppear { model.loadMoreIfNeeded(current: item, apiKey: apiKey, regionCode: app.regionCode, channel: app.channel) }
+                                .onAppear { model.loadMoreIfNeeded(current: item, accessToken: accessToken, regionCode: app.regionCode, channel: app.channel) }
                             }
                             if model.isLoading { ProgressView().padding(18) }
                         }
@@ -42,7 +42,7 @@ struct TrendsView: View {
                 .background(Color.primary.opacity(0.012))
         }
         .onChange(of: app.activeTrend) { value in selected = value }
-        .task { if model.items.isEmpty { model.search(apiKey: apiKey, regionCode: app.regionCode, channel: app.channel) } }
+        .task { if model.items.isEmpty { model.search(accessToken: accessToken, regionCode: app.regionCode, channel: app.channel) } }
     }
 
     private var discoverHeader: some View {
@@ -64,8 +64,8 @@ struct TrendsView: View {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                 TextField("Thema oder Nische — leer = aktuell", text: $model.query)
                     .textFieldStyle(.plain)
-                    .onSubmit { model.search(apiKey: apiKey, regionCode: app.regionCode, channel: app.channel) }
-                Button { model.search(apiKey: apiKey, regionCode: app.regionCode, channel: app.channel) } label: {
+                    .onSubmit { model.search(accessToken: accessToken, regionCode: app.regionCode, channel: app.channel) }
+                Button { model.search(accessToken: accessToken, regionCode: app.regionCode, channel: app.channel) } label: {
                     Image(systemName: "arrow.right").font(.caption.weight(.bold)).frame(width: 27, height: 27)
                 }
                 .buttonStyle(.plain).background(Color.blackstockRed, in: Circle()).foregroundStyle(.white)
