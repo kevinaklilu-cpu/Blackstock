@@ -166,13 +166,29 @@ public enum BuiltInProcessingProviders {
     public static let plannedLocalIntelligence = ProcessingProviderDescriptor(
         id: "blackstock.local.intelligence",
         displayName: "Blackstock Local Intelligence",
-        capabilities: [.transcription, .semanticAnalysis, .reframing, .captions],
+        capabilities: [.semanticAnalysis, .reframing],
         costClass: .localNoAPI,
         requiresPaymentMethod: false,
         freeQuotaDescription: "Geplante lokale Speech/Vision/Core-ML-Pipeline; noch nicht freigegeben.",
         available: false,
         lastVerifiedAt: Date(timeIntervalSince1970: 1_789_776_000)
     )
+
+    public static func localSpeech(
+        available: Bool,
+        lastVerifiedAt: Date
+    ) -> ProcessingProviderDescriptor {
+        ProcessingProviderDescriptor(
+            id: "blackstock.local.speech",
+            displayName: "Blackstock Local Speech",
+            capabilities: [.transcription, .captions],
+            costClass: .localNoAPI,
+            requiresPaymentMethod: false,
+            freeQuotaDescription: "On-Device-Spracherkennung über macOS Speech; kein Cloud-Fallback.",
+            available: available,
+            lastVerifiedAt: lastVerifiedAt
+        )
+    }
 
     public static let youtubeOfficial = ProcessingProviderDescriptor(
         id: "youtube.official",
