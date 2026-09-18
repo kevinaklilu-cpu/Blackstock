@@ -243,7 +243,7 @@ public struct YouTubeResumableUploader: Sendable {
             return Self.nextOffset(fromRangeHeader: http.value(forHTTPHeaderField: "Range"))
         }
         if 200..<300 ~= http.statusCode {
-            if let id = Self.videoID(from: data) {
+            if Self.videoID(from: data) != nil {
                 return totalSize
             }
             throw YouTubeUploadError.missingVideoID
