@@ -5,6 +5,9 @@ import UniformTypeIdentifiers
 import BlackstockCore
 
 struct StudioView: View {
+    let project: BlackstockProject
+    let opportunitySource: MediaSourceReference?
+
     @StateObject private var state = StudioState()
     @State private var showImporter = false
     @State private var pendingURL: URL?
@@ -17,6 +20,11 @@ struct StudioView: View {
         VStack(spacing: 0) {
             header
             Divider()
+
+            if let opportunitySource {
+                sourceContext(opportunitySource)
+                Divider()
+            }
 
             if let asset = state.asset {
                 editor(asset)
@@ -52,12 +60,57 @@ struct StudioView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(project.title)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                Text("Zielkanal: \(project.targetChannelID)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
             Button("Video importieren …") {
                 showImporter = true
             }
             .buttonStyle(.borderedProminent)
         }
         .padding(18)
+    }
+
+    private func sourceContext(_ source: MediaSourceReference) -> some View {
+        let resolution = MediaSourceResolver().resolve(
+            source,
+            approvedProvider: nil
+        )
+
+        return HStack(spacing: 12) {
+            Image(systemName: source.provider == .youtube ? "play.rectangle" : "link")
+                .font(.title3)
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Opportunity-Quelle")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text(source.pageURL.absoluteString)
+                    .font(.callout.monospaced())
+                    .lineLimit(1)
+                    .textSelection(.enabled)
+                Text(resolution.explanation)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            if source.provider == .youtube, let videoID = source.externalID {
+                YouTubeEmbeddedPlayer(videoID: videoID)
+                    .frame(width: 220, height: 124)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 12)
+        .background(Color.primary.opacity(0.018))
     }
 
     private var emptyState: some View {
@@ -112,6 +165,19 @@ struct StudioView: View {
                     Text("\(state.graph.currentOperations.count) Änderungen")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+
+                if let artifact = state.renderArtifact {
+                    HStack {
+                        Label("Render bereit", systemImage: "checkmark.seal.fill")
+                            .font(.callout.weight(.semibold))
+                        Spacer()
+                        Text(String(artifact.sha256.prefix(12)) + "…")
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(10)
+                    .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 10))
                 }
 
                 if let error = state.errorMessage {
@@ -201,6 +267,39 @@ struct StudioView: View {
                         .font(.headline)
                     Label("Ausschnitt festlegen", systemImage: "scissors")
                     Text("Weitere Werkzeuge erscheinen erst, wenn ihre Capability real implementiert und getestet ist.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Render")
+                        .font(.headline)
+
+                    Picker("Qualität", selection: $state.renderPreset) {
+                        Text("1080p").tag(LocalRenderPreset.hd1080)
+                        Text("4K").tag(LocalRenderPreset.uhd4K)
+                    }
+                    .pickerStyle(.segmented)
+
+                    Button {
+                        Task { await state.render(projectID: project.id) }
+                    } label: {
+                        HStack {
+                            if state.isRendering {
+                                ProgressView().controlSize(.small)
+                            }
+                            Label(
+                                state.isRendering ? "Render läuft …" : "Lokalen Render erstellen",
+                                systemImage: "film"
+                            )
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(state.isRendering)
+
+                    Text("Blackstock rendert lokal auf dem Mac. Erst ein validiertes Render-Artefakt darf in Packaging/Publishing weitergehen.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
