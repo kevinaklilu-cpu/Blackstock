@@ -33,6 +33,8 @@ final class BlackstockSession: ObservableObject {
         onboardingComplete = UserDefaults.standard.bool(forKey: "blackstock.firstRun.complete")
         activeProject = Self.loadStoredProject()
         activeOpportunitySource = Self.loadStoredSource()
+        primaryTopic = UserDefaults.standard.string(forKey: "blackstock.workspace.primaryTopic") ?? ""
+        contentLanguage = UserDefaults.standard.string(forKey: "blackstock.workspace.contentLanguage") ?? "de"
     }
 
     var selectedChannel: YouTubeChannelIdentity? {
@@ -260,6 +262,8 @@ final class BlackstockSession: ObservableObject {
             activeProject = seed.project
             activeOpportunitySource = seed.source
             UserDefaults.standard.set(channel.id, forKey: "blackstock.workspace.channelID")
+            UserDefaults.standard.set(primaryTopic, forKey: "blackstock.workspace.primaryTopic")
+            UserDefaults.standard.set(contentLanguage, forKey: "blackstock.workspace.contentLanguage")
             UserDefaults.standard.set(true, forKey: "blackstock.firstRun.complete")
             onboardingComplete = true
             errorMessage = nil
@@ -271,6 +275,8 @@ final class BlackstockSession: ObservableObject {
     func finishFirstRun() {
         guard selectedChannel != nil, !opportunities.isEmpty else { return }
         UserDefaults.standard.set(selectedChannelID, forKey: "blackstock.workspace.channelID")
+        UserDefaults.standard.set(primaryTopic, forKey: "blackstock.workspace.primaryTopic")
+        UserDefaults.standard.set(contentLanguage, forKey: "blackstock.workspace.contentLanguage")
         UserDefaults.standard.set(true, forKey: "blackstock.firstRun.complete")
         onboardingComplete = true
     }
@@ -282,6 +288,10 @@ final class BlackstockSession: ObservableObject {
         activeOpportunitySource = nil
         UserDefaults.standard.removeObject(forKey: "blackstock.activeProject")
         UserDefaults.standard.removeObject(forKey: "blackstock.activeOpportunitySource")
+        UserDefaults.standard.removeObject(forKey: "blackstock.workspace.primaryTopic")
+        UserDefaults.standard.removeObject(forKey: "blackstock.workspace.contentLanguage")
+        primaryTopic = ""
+        contentLanguage = "de"
         step = .welcome
         channels = []
         selectedChannelID = nil
