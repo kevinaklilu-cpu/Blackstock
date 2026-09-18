@@ -19,10 +19,10 @@ public protocol YouTubeChannelProviding: Sendable {
 }
 
 public enum YouTubeAPIError: LocalizedError {
-    case missingAPIKey, invalidResponse, channelNotFound, api(String)
+    case missingAuthorization, invalidResponse, channelNotFound, api(String)
     public var errorDescription: String? {
         switch self {
-        case .missingAPIKey: return "Für Live-Daten fehlt ein YouTube Data API Key."
+        case .missingAuthorization: return "Für diese YouTube-Daten ist keine gültige Autorisierung verfügbar."
         case .invalidResponse: return "YouTube hat eine unerwartete Antwort geliefert."
         case .channelNotFound: return "Der YouTube-Kanal wurde nicht gefunden."
         case .api(let message): return message
@@ -32,15 +32,23 @@ public enum YouTubeAPIError: LocalizedError {
 
 public struct YouTubeDataAPIClient: YouTubeFeedProviding, YouTubeChannelProviding {
     private let apiKey: String
+    private let accessToken: String
     private let session: URLSession
 
     public init(apiKey: String, session: URLSession = .shared) {
         self.apiKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.accessToken = ""
+        self.session = session
+    }
+
+    public init(accessToken: String, session: URLSession = .shared) {
+        self.apiKey = ""
+        self.accessToken = accessToken.trimmingCharacters(in: .whitespacesAndNewlines)
         self.session = session
     }
 
     public func search(query: String, pageToken: String? = nil, maxResults: Int = 30) async throws -> YouTubeSearchPage {
-        try requireKey()
+        try requireAuthorization()
         var comps = URLComponents(string: "https://www.googleapis.com/youtube/v3/search")!
         var items = [
             URLQueryItem(name: "part", value: "snippet"),
@@ -48,12 +56,11 @@ public struct YouTubeDataAPIClient: YouTubeFeedProviding, YouTubeChannelProvidin
             URLQueryItem(name: "order", value: "date"),
             URLQueryItem(name: "q", value: query),
             URLQueryItem(name: "maxResults", value: String(clampResults(maxResults))),
-            URLQueryItem(name: "publishedAfter", value: ISO8601DateFormatter().string(from: Date().addingTimeInterval(-30 * 86400))),
-            URLQueryItem(name: "key", value: apiKey)
+            URLQueryItem(name: "publishedAfter", value: ISO8601DateFormatter().string(from: Date().addingTimeInterval(-30 * 86400)))
         ]
         if let pageToken, !pageToken.isEmpty { items.append(URLQueryItem(name: "pageToken", value: pageToken)) }
         comps.queryItems = items
-        let (data, response) = try await session.data(from: comps.url!)
+        let (data, response) = try await perform(comps)
         try validate(data: data, response: response)
         let search = try JSONDecoder.youtube.decode(SearchResponse.self, from: data)
         let ids = search.items.map(\.id.videoId).filter { !$0.isEmpty }
@@ -62,31 +69,30 @@ public struct YouTubeDataAPIClient: YouTubeFeedProviding, YouTubeChannelProvidin
     }
 
     public func popular(regionCode: String? = nil, pageToken: String? = nil, maxResults: Int = 30) async throws -> YouTubeSearchPage {
-        try requireKey()
+        try requireAuthorization()
         var comps = URLComponents(string: "https://www.googleapis.com/youtube/v3/videos")!
         var items = [
             URLQueryItem(name: "part", value: "snippet,contentDetails,statistics"),
             URLQueryItem(name: "chart", value: "mostPopular"),
-            URLQueryItem(name: "maxResults", value: String(clampResults(maxResults))),
-            URLQueryItem(name: "key", value: apiKey)
+            URLQueryItem(name: "maxResults", value: String(clampResults(maxResults)))
         ]
         if let regionCode, !regionCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { items.append(URLQueryItem(name: "regionCode", value: regionCode.uppercased())) }
         if let pageToken, !pageToken.isEmpty { items.append(URLQueryItem(name: "pageToken", value: pageToken)) }
         comps.queryItems = items
-        let (data, response) = try await session.data(from: comps.url!)
+        let (data, response) = try await perform(comps)
         try validate(data: data, response: response)
         let detail = try JSONDecoder.youtube.decode(VideoResponse.self, from: data)
         return YouTubeSearchPage(videos: metrics(from: detail.items), nextPageToken: detail.nextPageToken)
     }
 
     public func channelSnapshot(reference: String) async throws -> ChannelSnapshot {
-        try requireKey()
+        try requireAuthorization()
         var comps = URLComponents(string: "https://www.googleapis.com/youtube/v3/channels")!
-        var items = [URLQueryItem(name: "part", value: "snippet,contentDetails,statistics"), URLQueryItem(name: "key", value: apiKey)]
+        var items = [URLQueryItem(name: "part", value: "snippet,contentDetails,statistics")]
         let parsed = ChannelReference(reference)
         items.append(URLQueryItem(name: parsed.parameter, value: parsed.value))
         comps.queryItems = items
-        let (data, response) = try await session.data(from: comps.url!)
+        let (data, response) = try await perform(comps)
         try validate(data: data, response: response)
         let result = try JSONDecoder.youtube.decode(ChannelResponse.self, from: data)
         guard let channel = result.items.first else { throw YouTubeAPIError.channelNotFound }
@@ -103,10 +109,9 @@ public struct YouTubeDataAPIClient: YouTubeFeedProviding, YouTubeChannelProvidin
         comps.queryItems = [
             URLQueryItem(name: "part", value: "contentDetails"),
             URLQueryItem(name: "playlistId", value: playlistID),
-            URLQueryItem(name: "maxResults", value: String(clampResults(maxResults))),
-            URLQueryItem(name: "key", value: apiKey)
+            URLQueryItem(name: "maxResults", value: String(clampResults(maxResults)))
         ]
-        let (data, response) = try await session.data(from: comps.url!)
+        let (data, response) = try await perform(comps)
         try validate(data: data, response: response)
         let list = try JSONDecoder.youtube.decode(PlaylistItemsResponse.self, from: data)
         let ids = list.items.map(\.contentDetails.videoId)
@@ -115,8 +120,8 @@ public struct YouTubeDataAPIClient: YouTubeFeedProviding, YouTubeChannelProvidin
 
     private func fetchDetails(ids: [String]) async throws -> [VideoMetric] {
         var comps = URLComponents(string: "https://www.googleapis.com/youtube/v3/videos")!
-        comps.queryItems = [URLQueryItem(name: "part", value: "contentDetails,statistics,snippet"), URLQueryItem(name: "id", value: ids.joined(separator: ",")), URLQueryItem(name: "key", value: apiKey)]
-        let (data, response) = try await session.data(from: comps.url!)
+        comps.queryItems = [URLQueryItem(name: "part", value: "contentDetails,statistics,snippet"), URLQueryItem(name: "id", value: ids.joined(separator: ","))]
+        let (data, response) = try await perform(comps)
         try validate(data: data, response: response)
         let detail = try JSONDecoder.youtube.decode(VideoResponse.self, from: data)
         return metrics(from: detail.items)
@@ -145,7 +150,25 @@ public struct YouTubeDataAPIClient: YouTubeFeedProviding, YouTubeChannelProvidin
         return sorted.count.isMultiple(of: 2) ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid]
     }
 
-    private func requireKey() throws { if apiKey.isEmpty { throw YouTubeAPIError.missingAPIKey } }
+    private func requireAuthorization() throws {
+        if apiKey.isEmpty && accessToken.isEmpty { throw YouTubeAPIError.missingAuthorization }
+    }
+
+    private func perform(_ components: URLComponents) async throws -> (Data, URLResponse) {
+        var components = components
+        if !apiKey.isEmpty {
+            var items = components.queryItems ?? []
+            items.append(URLQueryItem(name: "key", value: apiKey))
+            components.queryItems = items
+        }
+        guard let url = components.url else { throw YouTubeAPIError.invalidResponse }
+        var request = URLRequest(url: url)
+        if !accessToken.isEmpty {
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
+        return try await session.data(for: request)
+    }
+
     private func clampResults(_ value: Int) -> Int { min(max(value, 1), 50) }
     private func validate(data: Data, response: URLResponse) throws {
         guard let http = response as? HTTPURLResponse else { throw YouTubeAPIError.invalidResponse }
