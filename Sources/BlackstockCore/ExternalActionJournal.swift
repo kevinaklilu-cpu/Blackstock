@@ -4,6 +4,7 @@ public enum ExternalActionType: String, Codable, Sendable {
     case youtubeUpload = "YOUTUBE_UPLOAD"
     case youtubeThumbnailSet = "YOUTUBE_THUMBNAIL_SET"
     case youtubeMetadataUpdate = "YOUTUBE_METADATA_UPDATE"
+    case youtubeCaptionUpload = "YOUTUBE_CAPTION_UPLOAD"
 }
 
 public enum ExternalActionState: String, Codable, Sendable {
