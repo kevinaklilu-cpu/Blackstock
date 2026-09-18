@@ -24,11 +24,15 @@ final class BlackstockSession: ObservableObject {
     @Published var isWorking = false
     @Published var errorMessage: String?
     @Published private(set) var onboardingComplete: Bool
+    @Published private(set) var activeProject: BlackstockProject?
+    @Published private(set) var activeOpportunitySource: MediaSourceReference?
 
     private var tokenSet: GoogleOAuthTokenSet?
 
     init() {
         onboardingComplete = UserDefaults.standard.bool(forKey: "blackstock.firstRun.complete")
+        activeProject = Self.loadStoredProject()
+        activeOpportunitySource = Self.loadStoredSource()
     }
 
     var selectedChannel: YouTubeChannelIdentity? {
@@ -239,6 +243,43 @@ final class BlackstockSession: ObservableObject {
         }
     }
 
+    func useOpportunity(_ opportunity: YouTubeOpportunityCandidate) {
+        guard let channel = selectedChannel else {
+            errorMessage = "Kein Zielkanal ausgewählt."
+            return
+        }
+
+        let strategyVersion = storedStrategyVersion(for: channel.id)
+        let now = Date()
+        let project = BlackstockProject(
+            title: opportunity.title,
+            targetChannelID: channel.id,
+            stage: .production,
+            strategyVersion: strategyVersion,
+            createdAt: now,
+            updatedAt: now
+        )
+        let source = MediaSourceReference(
+            provider: .youtube,
+            pageURL: URL(string: "https://www.youtube.com/watch?v=\(opportunity.videoID)")!,
+            externalID: opportunity.videoID,
+            discoveredAt: opportunity.retrievedAt
+        )
+
+        do {
+            try Self.store(project: project)
+            try Self.store(source: source)
+            activeProject = project
+            activeOpportunitySource = source
+            UserDefaults.standard.set(channel.id, forKey: "blackstock.workspace.channelID")
+            UserDefaults.standard.set(true, forKey: "blackstock.firstRun.complete")
+            onboardingComplete = true
+            errorMessage = nil
+        } catch {
+            errorMessage = "Das Blackstock-Projekt konnte nicht gespeichert werden: \(describe(error))"
+        }
+    }
+
     func finishFirstRun() {
         guard selectedChannel != nil, !opportunities.isEmpty else { return }
         UserDefaults.standard.set(selectedChannelID, forKey: "blackstock.workspace.channelID")
@@ -249,11 +290,48 @@ final class BlackstockSession: ObservableObject {
     func resetFirstRun() {
         UserDefaults.standard.set(false, forKey: "blackstock.firstRun.complete")
         onboardingComplete = false
+        activeProject = nil
+        activeOpportunitySource = nil
+        UserDefaults.standard.removeObject(forKey: "blackstock.activeProject")
+        UserDefaults.standard.removeObject(forKey: "blackstock.activeOpportunitySource")
         step = .welcome
         channels = []
         selectedChannelID = nil
         opportunities = []
         errorMessage = nil
+    }
+
+    private func storedStrategyVersion(for channelID: String) -> Int {
+        guard let data = UserDefaults.standard.data(forKey: "blackstock.strategy.\(channelID)") else { return 1 }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return (try? decoder.decode(ChannelStrategy.self, from: data).version) ?? 1
+    }
+
+    private static func store(project: BlackstockProject) throws {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        UserDefaults.standard.set(try encoder.encode(project), forKey: "blackstock.activeProject")
+    }
+
+    private static func store(source: MediaSourceReference) throws {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        UserDefaults.standard.set(try encoder.encode(source), forKey: "blackstock.activeOpportunitySource")
+    }
+
+    private static func loadStoredProject() -> BlackstockProject? {
+        guard let data = UserDefaults.standard.data(forKey: "blackstock.activeProject") else { return nil }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try? decoder.decode(BlackstockProject.self, from: data)
+    }
+
+    private static func loadStoredSource() -> MediaSourceReference? {
+        guard let data = UserDefaults.standard.data(forKey: "blackstock.activeOpportunitySource") else { return nil }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try? decoder.decode(MediaSourceReference.self, from: data)
     }
 
     private var bundledClientID: String {
