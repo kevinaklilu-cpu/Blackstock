@@ -1,0 +1,281 @@
+#if os(macOS)
+import SwiftUI
+import AVKit
+import UniformTypeIdentifiers
+import BlackstockCore
+
+struct StudioView: View {
+    @StateObject private var state = StudioState()
+    @State private var showImporter = false
+    @State private var pendingURL: URL?
+    @State private var showRightsSheet = false
+    @State private var rightsSelection: ProductionMediaAuthorization = .owned
+    @State private var rightsEvidence = ""
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            Divider()
+
+            if let asset = state.asset {
+                editor(asset)
+            } else {
+                emptyState
+            }
+        }
+        .fileImporter(
+            isPresented: $showImporter,
+            allowedContentTypes: [.movie],
+            allowsMultipleSelection: false
+        ) { result in
+            if case .success(let urls) = result, let url = urls.first {
+                pendingURL = url
+                rightsEvidence = ""
+                rightsSelection = .owned
+                showRightsSheet = true
+            }
+        }
+        .sheet(isPresented: $showRightsSheet) {
+            rightsSheet
+        }
+    }
+
+    private var header: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Studio")
+                    .font(.title2.bold())
+                Text("Vorschau und non-destruktive Bearbeitung")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Video importieren …") {
+                showImporter = true
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .padding(18)
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 18) {
+            Spacer()
+            Image(systemName: "film.stack")
+                .font(.system(size: 48))
+                .foregroundStyle(.secondary)
+            Text("Autorisiertes Produktionsvideo hinzufügen")
+                .font(.title2.bold())
+            Text("Blackstock übernimmt nur Medien in die Bearbeitung, deren Nutzung nachvollziehbar autorisiert ist.")
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: 520)
+            Button("Video auswählen …") {
+                showImporter = true
+            }
+            .buttonStyle(.borderedProminent)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func editor(_ asset: ProductionMediaAsset) -> some View {
+        HSplitView {
+            VStack(spacing: 12) {
+                VideoPlayer(player: state.player)
+                    .frame(minWidth: 620, minHeight: 360)
+                    .background(.black)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                timeline(asset)
+                    .frame(height: 112)
+
+                HStack {
+                    Button {
+                        state.undo()
+                    } label: {
+                        Label("Rückgängig", systemImage: "arrow.uturn.backward")
+                    }
+                    .disabled(state.graph.head.parentID == nil)
+
+                    Button {
+                        state.redo()
+                    } label: {
+                        Label("Wiederholen", systemImage: "arrow.uturn.forward")
+                    }
+                    .disabled(state.lastUndoneRevisionID == nil)
+
+                    Spacer()
+
+                    Text("\(state.graph.currentOperations.count) Änderungen")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let error = state.errorMessage {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(18)
+            .frame(minWidth: 700)
+
+            inspector(asset)
+                .frame(minWidth: 300, idealWidth: 330, maxWidth: 380)
+        }
+    }
+
+    private func timeline(_ asset: ProductionMediaAsset) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Timeline")
+                    .font(.headline)
+                Spacer()
+                Text(timeLabel(state.trimStart) + " – " + timeLabel(state.trimEnd))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+
+            ZStack {
+                RoundedRectangle(cornerRadius: 7)
+                    .fill(Color.primary.opacity(0.06))
+                    .frame(height: 28)
+
+                HStack(spacing: 6) {
+                    Slider(
+                        value: Binding(
+                            get: { state.trimStart },
+                            set: { state.trimStart = min($0, state.trimEnd) }
+                        ),
+                        in: 0...max(asset.durationSeconds, 0.01)
+                    )
+                    Slider(
+                        value: Binding(
+                            get: { state.trimEnd },
+                            set: { state.trimEnd = max($0, state.trimStart) }
+                        ),
+                        in: 0...max(asset.durationSeconds, 0.01)
+                    )
+                }
+                .padding(.horizontal, 10)
+            }
+
+            HStack {
+                Text("Start")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Trim anwenden") {
+                    state.applyTrim()
+                }
+                .buttonStyle(.borderedProminent)
+                Spacer()
+                Text("Ende")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(12)
+        .background(Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func inspector(_ asset: ProductionMediaAsset) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(asset.displayName)
+                        .font(.headline)
+                    Text("Dauer: \(timeLabel(asset.durationSeconds))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Aktueller Schritt")
+                        .font(.headline)
+                    Label("Ausschnitt festlegen", systemImage: "scissors")
+                    Text("Weitere Werkzeuge erscheinen erst, wenn ihre Capability real implementiert und getestet ist.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Verlauf")
+                        .font(.headline)
+
+                    ForEach(Array(state.ledger.events.reversed())) { event in
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(event.summary)
+                                .font(.caption.weight(.semibold))
+                            Text(event.timestamp.formatted(date: .omitted, time: .shortened))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+            }
+            .padding(18)
+        }
+        .background(Color.primary.opacity(0.02))
+    }
+
+    private var rightsSheet: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Produktionsmedium autorisieren")
+                .font(.title2.bold())
+
+            Text(pendingURL?.lastPathComponent ?? "Video")
+                .foregroundStyle(.secondary)
+
+            Picker("Nutzungsgrundlage", selection: $rightsSelection) {
+                Text("Eigenes Material").tag(ProductionMediaAuthorization.owned)
+                Text("Lizenziert").tag(ProductionMediaAuthorization.licensed)
+                Text("Explizit autorisiert").tag(ProductionMediaAuthorization.explicitlyAuthorized)
+            }
+
+            TextField("Nachweis / Referenz, z. B. „eigene Aufnahme 18.09.2026“", text: $rightsEvidence)
+                .textFieldStyle(.roundedBorder)
+
+            Text("Blackstock speichert diesen Nachweis als Teil der Produktions-Provenance. Unklare oder verbotene Medien werden nicht freigeschaltet.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            HStack {
+                Button("Abbrechen", role: .cancel) {
+                    showRightsSheet = false
+                    pendingURL = nil
+                }
+                Spacer()
+                Button("Importieren") {
+                    guard let url = pendingURL else { return }
+                    showRightsSheet = false
+                    Task {
+                        await state.importMovie(
+                            url: url,
+                            authorization: rightsSelection,
+                            rightsEvidence: rightsEvidence
+                        )
+                    }
+                    pendingURL = nil
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(rightsEvidence.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(24)
+        .frame(width: 520)
+    }
+
+    private func timeLabel(_ seconds: Double) -> String {
+        let total = max(Int(seconds.rounded()), 0)
+        return String(format: "%02d:%02d", total / 60, total % 60)
+    }
+}
+#endif
