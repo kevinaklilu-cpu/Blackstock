@@ -30,6 +30,7 @@ import BlackstockCore
     @Published var channel: ChannelSnapshot { didSet { persistChannel() } }
     @Published var regionCode: String { didSet { UserDefaults.standard.set(regionCode, forKey: "blackstock.region") } }
     @Published var channelStrategies: [String: ChannelStrategy] { didSet { persistChannelStrategies() } }
+    @Published var completedOnboardingChannelIDs: Set<String> { didSet { persistCompletedOnboarding() } }
     @Published private(set) var projectChannelIDs: [String: String] { didSet { persistProjectChannels() } }
 
     init() {
@@ -69,6 +70,13 @@ import BlackstockCore
         } else {
             channelStrategies = [:]
         }
+
+        if let data = UserDefaults.standard.data(forKey: "blackstock.completedOnboardingChannels"),
+           let saved = try? JSONDecoder().decode(Set<String>.self, from: data) {
+            completedOnboardingChannelIDs = saved
+        } else {
+            completedOnboardingChannelIDs = []
+        }
     }
 
     var hasAuthenticatedChannel: Bool {
@@ -77,7 +85,7 @@ import BlackstockCore
 
     var shouldShowOnboarding: Bool {
         guard hasAuthenticatedChannel, channel.id != "local" else { return true }
-        return channelStrategies[channel.id] == nil
+        return channelStrategies[channel.id] == nil || !completedOnboardingChannelIDs.contains(channel.id)
     }
 
     var activeStrategy: ChannelStrategy? {
@@ -223,6 +231,11 @@ import BlackstockCore
             effectiveFrom: now,
             version: existingVersion + 1
         )
+    }
+
+    func finishFirstRun(channelID: String) {
+        guard channelStrategies[channelID] != nil else { return }
+        completedOnboardingChannelIDs.insert(channelID)
         selection = .dashboard
     }
 
@@ -258,6 +271,12 @@ import BlackstockCore
     private func persistChannelStrategies() {
         if let data = try? JSONEncoder().encode(channelStrategies) {
             UserDefaults.standard.set(data, forKey: "blackstock.channelStrategies")
+        }
+    }
+
+    private func persistCompletedOnboarding() {
+        if let data = try? JSONEncoder().encode(completedOnboardingChannelIDs) {
+            UserDefaults.standard.set(data, forKey: "blackstock.completedOnboardingChannels")
         }
     }
 }
