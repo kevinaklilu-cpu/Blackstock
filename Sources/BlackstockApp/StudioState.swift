@@ -238,7 +238,7 @@ final class StudioState: ObservableObject {
 
             ledger.append(.init(
                 timestamp: Date(),
-                actor: .system,
+                actor: .blackstock,
                 stage: .editing,
                 action: "local-captions-generated",
                 summary: "On-Device-Transkript und WebVTT-Captions wurden lokal erzeugt.",
@@ -282,7 +282,7 @@ final class StudioState: ObservableObject {
             renderArtifact = artifact
             ledger.append(.init(
                 timestamp: Date(),
-                actor: .system,
+                actor: .blackstock,
                 stage: .editing,
                 action: "render-created",
                 summary: "Lokaler MP4-Render wurde erstellt und validiert.",
