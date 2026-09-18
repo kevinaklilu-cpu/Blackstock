@@ -5,16 +5,16 @@ import BlackstockCore
 struct DashboardView: View {
     @EnvironmentObject private var app: AppState
     @ObservedObject var trends: TrendViewModel
-    let apiKey: String
+    let accessToken: String
 
     private let workflow = ProjectWorkflowEngine()
     private var channelProjects: [Project] { app.projectsForActiveChannel }
     private var readyProjects: Int { channelProjects.filter { workflow.stage(for: $0) == .ready }.count }
     private var activeProjects: Int { channelProjects.filter { [.editing, .rendered, .packaging].contains(workflow.stage(for: $0)) }.count }
 
-    init(trends: TrendViewModel, apiKey: String) {
+    init(trends: TrendViewModel, accessToken: String) {
         self.trends = trends
-        self.apiKey = apiKey
+        self.accessToken = accessToken
     }
 
     var body: some View {
@@ -29,8 +29,8 @@ struct DashboardView: View {
             .padding(.vertical, 24)
         }
         .task {
-            if trends.items.isEmpty && !apiKey.isEmpty {
-                trends.search(apiKey: apiKey, regionCode: app.regionCode, channel: app.channel)
+            if trends.items.isEmpty && !accessToken.isEmpty {
+                trends.search(accessToken: accessToken, regionCode: app.regionCode, channel: app.channel)
             }
         }
     }
@@ -131,15 +131,15 @@ struct DashboardView: View {
 
             if trends.items.isEmpty {
                 HStack(spacing: 14) {
-                    Image(systemName: apiKey.isEmpty ? "bolt.horizontal.circle" : "waveform.path.ecg")
+                    Image(systemName: accessToken.isEmpty ? "bolt.horizontal.circle" : "waveform.path.ecg")
                         .font(.title2).foregroundStyle(.secondary)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(apiKey.isEmpty ? "Live-Trends noch nicht aktiviert" : "Noch keine Signale geladen").font(.headline)
-                        Text(apiKey.isEmpty ? "Verbinde öffentliche YouTube-Daten in den Einstellungen oder nutze die globale Suche." : (trends.errorMessage ?? "Starte eine Suche."))
+                        Text(accessToken.isEmpty ? "YouTube-Daten nicht verfügbar" : "Noch keine Signale geladen").font(.headline)
+                        Text(accessToken.isEmpty ? "Verbinde deinen YouTube-Kanal, um reale Daten zu laden." : (trends.errorMessage ?? "Starte eine Suche."))
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Button("Öffnen") { app.selection = apiKey.isEmpty ? .settings : .trends }
+                    Button("Öffnen") { app.selection = accessToken.isEmpty ? .trends : .trends }
                 }
                 .padding(18)
                 .background(Color.primary.opacity(0.032), in: RoundedRectangle(cornerRadius: 16))
