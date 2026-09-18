@@ -5,11 +5,11 @@ final class ZeroCostProcessingPolicyTests: XCTestCase {
     func testDefaultPolicyNeverPermitsPaidProvider() {
         let policy = ZeroCostProcessingPolicy()
         XCTAssertFalse(policy.permits(BuiltInProcessingProviders.opusClipAPI))
-        XCTAssertTrue(policy.permits(BuiltInProcessingProviders.localNative))
-        XCTAssertTrue(policy.permits(BuiltInProcessingProviders.cloudflareWorkersAIFree))
+        XCTAssertFalse(policy.permits(BuiltInProcessingProviders.localNative))
+        XCTAssertFalse(policy.permits(BuiltInProcessingProviders.cloudflareWorkersAIFree))
     }
 
-    func testLocalProcessingWinsBeforeFreeExternalProvider() {
+    func testUnimplementedLocalAndFreeProvidersDoNotAppearReady() {
         let route = ZeroCostProviderSelector().select(
             capability: .transcription,
             providers: [
@@ -17,8 +17,8 @@ final class ZeroCostProcessingPolicyTests: XCTestCase {
                 BuiltInProcessingProviders.localNative
             ]
         )
-        XCTAssertEqual(route.status, .ready)
-        XCTAssertEqual(route.providerID, "blackstock.local")
+        XCTAssertEqual(route.status, .freeQuotaUnavailable)
+        XCTAssertNil(route.providerID)
     }
 
     func testFreeExternalProviderCanBeUsedWhenLocalCapabilityIsUnavailable() {
