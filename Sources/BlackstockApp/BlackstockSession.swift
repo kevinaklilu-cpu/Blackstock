@@ -1,0 +1,271 @@
+#if os(macOS)
+import AppKit
+import Foundation
+import SwiftUI
+import BlackstockCore
+
+@MainActor
+final class BlackstockSession: ObservableObject {
+    enum FirstRunStep: Int, CaseIterable {
+        case welcome
+        case channel
+        case topic
+        case language
+        case preparing
+        case opportunities
+    }
+
+    @Published var step: FirstRunStep = .welcome
+    @Published var channels: [YouTubeChannelIdentity] = []
+    @Published var selectedChannelID: String?
+    @Published var primaryTopic = ""
+    @Published var contentLanguage = "de"
+    @Published var opportunities: [YouTubeOpportunityCandidate] = []
+    @Published var isWorking = false
+    @Published var errorMessage: String?
+    @Published private(set) var onboardingComplete: Bool
+
+    private var tokenSet: GoogleOAuthTokenSet?
+
+    init() {
+        onboardingComplete = UserDefaults.standard.bool(forKey: "blackstock.firstRun.complete")
+    }
+
+    var selectedChannel: YouTubeChannelIdentity? {
+        guard let selectedChannelID else { return nil }
+        return channels.first { $0.id == selectedChannelID }
+    }
+
+    var oauthConfigurationSource: String {
+        if !bundledClientID.isEmpty { return "Blackstock-Konfiguration" }
+        if !importedClientID.isEmpty { return "Eigene OAuth-JSON" }
+        return "Nicht konfiguriert"
+    }
+
+    func importOAuthJSON(from url: URL) {
+        do {
+            let data = try Data(contentsOf: url)
+            let config = try OAuthClientConfiguration.parseGoogleDesktopJSON(data)
+            try BlackstockKeychain.write(config.clientID, account: "google.oauth.importedClientID")
+            errorMessage = nil
+        } catch {
+            errorMessage = "OAuth-JSON konnte nicht übernommen werden: \(describe(error))"
+        }
+    }
+
+    func removeImportedOAuthConfiguration() {
+        do {
+            try BlackstockKeychain.write("", account: "google.oauth.importedClientID")
+            errorMessage = nil
+        } catch {
+            errorMessage = "OAuth-Konfiguration konnte nicht entfernt werden: \(describe(error))"
+        }
+    }
+
+    func connectGoogle() async {
+        errorMessage = nil
+        guard !effectiveClientID.isEmpty else {
+            errorMessage = "Keine Google-OAuth-Konfiguration verfügbar. Verwende die integrierte Blackstock-Konfiguration oder importiere eine Desktop-OAuth-JSON."
+            return
+        }
+
+        isWorking = true
+        defer { isWorking = false }
+
+        do {
+            let server = try LoopbackOAuthServer()
+            let redirectURI = try await server.start()
+            let pkce = try PKCEPair.generate()
+            let state = try PKCEPair.generate().verifier
+            let request = GoogleOAuthAuthorizationRequest(
+                clientID: effectiveClientID,
+                redirectURI: redirectURI,
+                scopes: [.youtubeReadOnly],
+                state: state,
+                pkce: pkce
+            )
+
+            guard NSWorkspace.shared.open(request.authorizationURL) else {
+                server.cancel()
+                errorMessage = "Der Systembrowser konnte nicht geöffnet werden."
+                return
+            }
+
+            let callbackURL = try await server.waitForCallback()
+            guard let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false) else {
+                throw GoogleOAuthError.invalidAuthorizationResponse
+            }
+            let items = components.queryItems ?? []
+            if let providerError = items.first(where: { $0.name == "error" })?.value {
+                errorMessage = "Google-Autorisierung abgebrochen oder abgelehnt: \(providerError)"
+                return
+            }
+            guard items.first(where: { $0.name == "state" })?.value == state else {
+                throw GoogleOAuthError.stateMismatch
+            }
+            guard let code = items.first(where: { $0.name == "code" })?.value, !code.isEmpty else {
+                throw GoogleOAuthError.invalidAuthorizationResponse
+            }
+
+            let tokens = try await GoogleOAuthTokenExchange().exchange(
+                code: code,
+                clientID: effectiveClientID,
+                redirectURI: redirectURI,
+                verifier: pkce.verifier
+            )
+            let identities = try await YouTubeAuthorizedClient(accessToken: tokens.accessToken).myChannels()
+            guard !identities.isEmpty else {
+                errorMessage = "Für dieses Google-Konto wurde kein autorisierter YouTube-Kanal gefunden."
+                return
+            }
+
+            tokenSet = tokens
+            channels = identities
+            selectedChannelID = nil
+            step = .channel
+        } catch {
+            errorMessage = "Google-Verbindung fehlgeschlagen: \(describe(error))"
+        }
+    }
+
+    func chooseChannel(_ id: String) {
+        guard channels.contains(where: { $0.id == id }) else { return }
+        selectedChannelID = id
+        do {
+            if let tokenSet {
+                try BlackstockKeychain.write(tokenSet.accessToken, account: "youtube.\(id).accessToken")
+                if let refresh = tokenSet.refreshToken, !refresh.isEmpty {
+                    try BlackstockKeychain.write(refresh, account: "youtube.\(id).refreshToken")
+                }
+                if let scope = tokenSet.scope {
+                    try BlackstockKeychain.write(scope, account: "youtube.\(id).scopes")
+                }
+            }
+            step = .topic
+            errorMessage = nil
+        } catch {
+            errorMessage = "Die autorisierte Sitzung konnte nicht sicher gespeichert werden: \(describe(error))"
+        }
+    }
+
+    func continueFromTopic() {
+        let value = primaryTopic.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else {
+            errorMessage = "Lege zuerst den strategischen Kanal-Schwerpunkt fest."
+            return
+        }
+        primaryTopic = value
+        errorMessage = nil
+        step = .language
+    }
+
+    func prepareChannelAndLoadOpportunities() async {
+        guard let channel = selectedChannel else {
+            errorMessage = "Kein Zielkanal ausgewählt."
+            return
+        }
+        guard !primaryTopic.isEmpty else {
+            errorMessage = "Kein Kanalthema festgelegt."
+            return
+        }
+
+        step = .preparing
+        isWorking = true
+        errorMessage = nil
+        opportunities = []
+        defer { isWorking = false }
+
+        do {
+            let accessToken = tokenSet?.accessToken ?? BlackstockKeychain.read("youtube.\(channel.id).accessToken")
+            guard !accessToken.isEmpty else {
+                errorMessage = "Die Google-Autorisierung ist nicht mehr verfügbar. Verbinde den Kanal erneut."
+                step = .welcome
+                return
+            }
+
+            let strategy = ChannelStrategy(
+                channelID: channel.id,
+                primaryTopic: primaryTopic,
+                topicDefinition: primaryTopic,
+                contentPromise: primaryTopic,
+                pillars: [],
+                adjacentTopics: [],
+                excludedTopics: [],
+                defaultContentLanguage: contentLanguage,
+                researchLanguages: contentLanguage == "de" ? ["de", "en"] : [contentLanguage],
+                audienceHypothesis: "",
+                objectives: [.balanced],
+                explorationPolicy: .init(),
+                effectiveFrom: Date(),
+                version: nextStrategyVersion(for: channel.id)
+            )
+            try persist(strategy: strategy)
+
+            let candidates = try await YouTubeAuthorizedClient(accessToken: accessToken)
+                .firstOpportunityCandidates(query: primaryTopic, maxResults: 12)
+            guard !candidates.isEmpty else {
+                errorMessage = "YouTube hat für diesen strategischen Suchraum aktuell keine Opportunity-Kandidaten geliefert."
+                return
+            }
+
+            opportunities = candidates
+            step = .opportunities
+        } catch {
+            errorMessage = "Die ersten Chancen konnten nicht aus realen YouTube-Daten erstellt werden: \(describe(error))"
+        }
+    }
+
+    func finishFirstRun() {
+        guard selectedChannel != nil, !opportunities.isEmpty else { return }
+        UserDefaults.standard.set(selectedChannelID, forKey: "blackstock.workspace.channelID")
+        UserDefaults.standard.set(true, forKey: "blackstock.firstRun.complete")
+        onboardingComplete = true
+    }
+
+    func resetFirstRun() {
+        UserDefaults.standard.set(false, forKey: "blackstock.firstRun.complete")
+        onboardingComplete = false
+        step = .welcome
+        channels = []
+        selectedChannelID = nil
+        opportunities = []
+        errorMessage = nil
+    }
+
+    private var bundledClientID: String {
+        (Bundle.main.object(forInfoDictionaryKey: "BlackstockGoogleOAuthClientID") as? String ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var importedClientID: String {
+        BlackstockKeychain.read("google.oauth.importedClientID")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var effectiveClientID: String {
+        bundledClientID.isEmpty ? importedClientID : bundledClientID
+    }
+
+    private func persist(strategy: ChannelStrategy) throws {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(strategy)
+        UserDefaults.standard.set(data, forKey: "blackstock.strategy.\(strategy.channelID)")
+    }
+
+    private func nextStrategyVersion(for channelID: String) -> Int {
+        guard let data = UserDefaults.standard.data(forKey: "blackstock.strategy.\(channelID)") else { return 1 }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        guard let previous = try? decoder.decode(ChannelStrategy.self, from: data) else { return 1 }
+        return previous.version + 1
+    }
+
+    private func describe(_ error: Error) -> String {
+        if let localized = error as? LocalizedError, let description = localized.errorDescription {
+            return description
+        }
+        return String(describing: error)
+    }
+}
+#endif
