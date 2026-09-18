@@ -5,7 +5,8 @@ final class CanonicalTests: XCTestCase {
     func testCapabilityHiddenUntilEveryGatePasses() async {
         let r = CapabilityRecord(capabilityID: "youtube.upload", provider: "YouTube", implementationVersion: "1", authorization: .authorized, policy: .allowed, region: .available, channel: .available, data: .available, quality: .pass, tests: .fail, lastVerifiedAt: Date())
         let registry = CapabilityRegistry(records: [r])
-        XCTAssertFalse(await registry.isVisible("youtube.upload"))
+        let visible = await registry.isVisible("youtube.upload")
+        XCTAssertFalse(visible)
     }
 
     func testWrongChannelHardStops() {
