@@ -77,6 +77,7 @@ private struct WorkspaceShell: View {
         .sheet(isPresented: $showCommandPalette) {
             CommandPaletteView(
                 currentSelection: selection,
+                hasActiveProject: session.activeProject != nil,
                 onNavigate: { destination in
                     selection = destination
                     showCommandPalette = false
@@ -92,6 +93,7 @@ private struct WorkspaceShell: View {
 
 private struct CommandPaletteView: View {
     let currentSelection: String
+    let hasActiveProject: Bool
     let onNavigate: (String) -> Void
     let onRestartFirstRun: () -> Void
 
@@ -108,7 +110,7 @@ private struct CommandPaletteView: View {
     }
 
     private var commands: [Command] {
-        [
+        var result: [Command] = [
             .init(
                 id: "overview",
                 title: "Übersicht öffnen",
@@ -116,15 +118,23 @@ private struct CommandPaletteView: View {
                 systemImage: "rectangle.grid.2x2",
                 destination: "Übersicht",
                 isDestructive: false
-            ),
-            .init(
-                id: "studio",
-                title: "Studio öffnen",
-                subtitle: "Aktives Projekt visuell bearbeiten",
-                systemImage: "film.stack",
-                destination: "Studio",
-                isDestructive: false
-            ),
+            )
+        ]
+
+        if hasActiveProject {
+            result.append(
+                .init(
+                    id: "studio",
+                    title: "Studio öffnen",
+                    subtitle: "Aktives Projekt visuell bearbeiten",
+                    systemImage: "film.stack",
+                    destination: "Studio",
+                    isDestructive: false
+                )
+            )
+        }
+
+        result.append(contentsOf: [
             .init(
                 id: "settings",
                 title: "Einstellungen öffnen",
@@ -141,7 +151,8 @@ private struct CommandPaletteView: View {
                 destination: nil,
                 isDestructive: true
             )
-        ]
+        ])
+        return result
     }
 
     private var filteredCommands: [Command] {
