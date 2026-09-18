@@ -5,10 +5,17 @@ import Network
 import CryptoKit
 import BlackstockCore
 
+enum GoogleYouTubeScope: String, Codable, Sendable, CaseIterable {
+    case youtubeReadOnly = "https://www.googleapis.com/auth/youtube.readonly"
+    case youtubeUpload = "https://www.googleapis.com/auth/youtube.upload"
+    case analyticsReadOnly = "https://www.googleapis.com/auth/yt-analytics.readonly"
+}
+
 struct YouTubeOAuthSession: Sendable {
     let channels: [ChannelSnapshot]
     let accessToken: String
     let refreshToken: String?
+    let grantedScopes: Set<String>
 }
 
 enum YouTubeOAuthError: LocalizedError {
@@ -90,7 +97,10 @@ final class GoogleYouTubeAuth: ObservableObject {
         statusMessage = "Eigene OAuth-Konfiguration entfernt."
     }
 
-    func connect() async throws -> YouTubeOAuthSession {
+    func connect(
+        requiredScopes: Set<GoogleYouTubeScope> = [.youtubeReadOnly],
+        preservingScopesFor channelID: String? = nil
+    ) async throws -> YouTubeOAuthSession {
         let clientID = Self.configuredClientID
         guard !clientID.isEmpty else { throw YouTubeOAuthError.missingClientID }
         guard clientID.hasSuffix(".apps.googleusercontent.com") else { throw YouTubeOAuthError.invalidClientID }
@@ -111,15 +121,15 @@ final class GoogleYouTubeAuth: ObservableObject {
         let redirectURI = try await server.start()
         callbackHint = "Lokaler Rückkanal aktiv · \(redirectURI.host ?? "127.0.0.1"): \(redirectURI.port ?? 0)"
 
+        let preservedScopes = channelID.map(Self.grantedScopes(channelID:)) ?? []
+        let requestedScopes = preservedScopes.union(requiredScopes.map(\.rawValue))
+
         var components = URLComponents(string: "https://accounts.google.com/o/oauth2/v2/auth")!
         components.queryItems = [
             URLQueryItem(name: "client_id", value: clientID),
             URLQueryItem(name: "redirect_uri", value: redirectURI.absoluteString),
             URLQueryItem(name: "response_type", value: "code"),
-            URLQueryItem(name: "scope", value: [
-                "https://www.googleapis.com/auth/youtube.readonly",
-                "https://www.googleapis.com/auth/yt-analytics.readonly"
-            ].joined(separator: " ")),
+            URLQueryItem(name: "scope", value: requestedScopes.sorted().joined(separator: " ")),
             URLQueryItem(name: "access_type", value: "offline"),
             URLQueryItem(name: "prompt", value: "consent select_account"),
             URLQueryItem(name: "state", value: state),
@@ -148,16 +158,26 @@ final class GoogleYouTubeAuth: ObservableObject {
         let channels = try await fetchChannels(accessToken: tokens.accessToken)
         guard !channels.isEmpty else { throw YouTubeOAuthError.noChannels }
 
+        let grantedScopes = Set((tokens.scope ?? requestedScopes.sorted().joined(separator: " "))
+            .split(separator: " ")
+            .map(String.init))
+
         for channel in channels {
             if let refresh = tokens.refreshToken, !refresh.isEmpty {
                 Keychain.write(refresh, account: "youtube-refresh-\(channel.id)")
             }
             Keychain.write(tokens.accessToken, account: "youtube-access-\(channel.id)")
+            Keychain.write(grantedScopes.sorted().joined(separator: " "), account: "youtube-scopes-\(channel.id)")
             Keychain.write("1", account: "youtube-connected-\(channel.id)")
         }
         callbackHint = nil
         statusMessage = channels.count == 1 ? "\(channels[0].title) verbunden" : "\(channels.count) YouTube-Kanäle verbunden"
-        return YouTubeOAuthSession(channels: channels, accessToken: tokens.accessToken, refreshToken: tokens.refreshToken)
+        return YouTubeOAuthSession(
+            channels: channels,
+            accessToken: tokens.accessToken,
+            refreshToken: tokens.refreshToken,
+            grantedScopes: grantedScopes
+        )
     }
 
     func cancelConnection() {
@@ -172,6 +192,7 @@ final class GoogleYouTubeAuth: ObservableObject {
         Keychain.write("", account: "youtube-refresh-\(channelID)")
         Keychain.write("", account: "youtube-access-\(channelID)")
         Keychain.write("", account: "youtube-connected-\(channelID)")
+        Keychain.write("", account: "youtube-scopes-\(channelID)")
     }
 
     static func isAuthenticated(channelID: String) -> Bool {
@@ -180,6 +201,15 @@ final class GoogleYouTubeAuth: ObservableObject {
 
     static func accessToken(channelID: String) -> String {
         Keychain.read("youtube-access-\(channelID)")
+    }
+
+    static func grantedScopes(channelID: String) -> Set<String> {
+        Set(Keychain.read("youtube-scopes-\(channelID)").split(separator: " ").map(String.init))
+    }
+
+    static func hasScopes(_ scopes: Set<GoogleYouTubeScope>, channelID: String) -> Bool {
+        let granted = grantedScopes(channelID: channelID)
+        return scopes.allSatisfy { granted.contains($0.rawValue) }
     }
 
     private func exchangeCode(_ code: String, verifier: String, clientID: String, redirectURI: URL) async throws -> OAuthTokenResponse {
@@ -219,6 +249,8 @@ final class GoogleYouTubeAuth: ObservableObject {
             ChannelSnapshot(
                 id: $0.id,
                 title: $0.snippet.title,
+                handle: $0.snippet.customUrl?.hasPrefix("@") == true ? $0.snippet.customUrl : nil,
+                avatarURL: $0.snippet.thumbnails?.defaultImage?.url,
                 subscriberCount: Int($0.statistics.subscriberCount ?? "0") ?? 0,
                 medianViews: 1,
                 medianViewsPerHour: 1,
@@ -252,12 +284,14 @@ private struct OAuthTokenResponse: Decodable {
     let refreshToken: String?
     let expiresIn: Int
     let tokenType: String
+    let scope: String?
 
     enum CodingKeys: String, CodingKey {
         case accessToken = "access_token"
         case refreshToken = "refresh_token"
         case expiresIn = "expires_in"
         case tokenType = "token_type"
+        case scope
     }
 }
 
@@ -268,7 +302,16 @@ private struct OAuthErrorEnvelope: Decodable {
 
 private struct AuthorizedChannelsResponse: Decodable { let items: [AuthorizedChannelItem] }
 private struct AuthorizedChannelItem: Decodable { let id: String; let snippet: AuthorizedChannelSnippet; let statistics: AuthorizedChannelStatistics }
-private struct AuthorizedChannelSnippet: Decodable { let title: String }
+private struct AuthorizedChannelSnippet: Decodable {
+    let title: String
+    let customUrl: String?
+    let thumbnails: AuthorizedChannelThumbnails?
+}
+private struct AuthorizedChannelThumbnails: Decodable {
+    let defaultImage: AuthorizedChannelThumbnail?
+    enum CodingKeys: String, CodingKey { case defaultImage = "default" }
+}
+private struct AuthorizedChannelThumbnail: Decodable { let url: URL }
 private struct AuthorizedChannelStatistics: Decodable { let subscriberCount: String? }
 
 private final class LoopbackOAuthServer: @unchecked Sendable {
