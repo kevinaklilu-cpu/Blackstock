@@ -1,0 +1,50 @@
+name: Blackstock Canonical CI
+
+on:
+  push:
+    branches: [main, master-prompt-canonical]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blackstock-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Canonical source guard
+        run: |
+          set -euo pipefail
+          grep -q '23c51e7d90ca653c92b04b19a7b65615fdf420f581caa16024725c4935bde827' docs/CANONICAL_SOURCE.md
+          grep -q 'NOCH NICHT MARKTREIF' README.md
+      - name: Swift tests
+        run: swift test
+      - name: Release build
+        run: swift build -c release
+
+  package:
+    runs-on: macos-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build development package
+        env:
+          BLACKSTOCK_GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.BLACKSTOCK_GOOGLE_OAUTH_CLIENT_ID }}
+        run: |
+          chmod +x Build/package.sh
+          Build/package.sh "$RUNNER_TEMP/dist"
+          test -f "$RUNNER_TEMP/dist/Blackstock.pkg"
+          pkgutil --payload-files "$RUNNER_TEMP/dist/Blackstock.pkg" | grep -q 'Applications/Blackstock.app'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Blackstock-development-pkg
+          path: |
+            ${{ runner.temp }}/dist/Blackstock.pkg
+            ${{ runner.temp }}/dist/Blackstock.pkg.sha256
+          retention-days: 7
