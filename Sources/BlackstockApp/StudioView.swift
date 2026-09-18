@@ -7,6 +7,7 @@ import BlackstockCore
 struct StudioView: View {
     let project: BlackstockProject
     let opportunitySource: MediaSourceReference?
+    let contentLanguage: String
 
     @StateObject private var state = StudioState()
     @State private var showImporter = false
@@ -55,7 +56,9 @@ struct StudioView: View {
                 PackagingReviewView(
                     project: project,
                     asset: asset,
-                    artifact: artifact
+                    artifact: artifact,
+                    transcript: state.transcript,
+                    generatedCaptionURL: state.captionURL
                 )
             }
         }
@@ -322,6 +325,49 @@ struct StudioView: View {
                 Divider()
 
                 VStack(alignment: .leading, spacing: 10) {
+                    Text("Captions")
+                        .font(.headline)
+
+                    Button {
+                        Task {
+                            await state.generateLocalCaptions(
+                                localeIdentifier: speechLocaleIdentifier
+                            )
+                        }
+                    } label: {
+                        HStack {
+                            if state.isTranscribing {
+                                ProgressView().controlSize(.small)
+                            }
+                            Label(
+                                state.isTranscribing
+                                    ? "Transkription läuft …"
+                                    : "On-Device-Captions erstellen",
+                                systemImage: "captions.bubble"
+                            )
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(state.isTranscribing)
+
+                    Text("Sprache: \(speechLocaleIdentifier) · nur On-Device; kein stiller Cloud-Fallback.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if let transcript = state.transcript {
+                        DisclosureGroup("Transkript anzeigen") {
+                            Text(transcript.text)
+                                .font(.caption)
+                                .textSelection(.enabled)
+                                .padding(.top, 6)
+                        }
+                        .font(.caption.weight(.semibold))
+                    }
+                }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 10) {
                     Text("Verlauf")
                         .font(.headline)
 
@@ -396,6 +442,18 @@ struct StudioView: View {
         }
         .padding(24)
         .frame(width: 520)
+    }
+
+    private var speechLocaleIdentifier: String {
+        switch contentLanguage {
+        case "de": return "de-DE"
+        case "en": return "en-US"
+        case "es": return "es-ES"
+        case "fr": return "fr-FR"
+        case "it": return "it-IT"
+        case "pt": return "pt-PT"
+        default: return contentLanguage
+        }
     }
 
     private func timeLabel(_ seconds: Double) -> String {
