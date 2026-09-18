@@ -21,11 +21,16 @@ final class StudioState: ObservableObject {
     func importMovie(
         url: URL,
         authorization: ProductionMediaAuthorization,
-        rightsEvidence: String
+        rightsEvidence: String,
+        rightsConfirmed: Bool
     ) async {
         let evidence = rightsEvidence.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !evidence.isEmpty else {
             errorMessage = "Hinterlege einen nachvollziehbaren Rechte- oder Eigentumsnachweis."
+            return
+        }
+        guard rightsConfirmed else {
+            errorMessage = "Bestätige zuerst, dass du die nötigen Rechte zur Verarbeitung und Veröffentlichung besitzt."
             return
         }
 
@@ -43,6 +48,10 @@ final class StudioState: ObservableObject {
                 durationSeconds: seconds,
                 authorization: authorization,
                 rightsEvidence: [evidence],
+                rightsAttestation: .init(
+                    confirmedByUser: rightsConfirmed,
+                    attestedAt: Date()
+                ),
                 importedAt: Date()
             )
             guard imported.mayEnterProduction else {
@@ -63,7 +72,7 @@ final class StudioState: ObservableObject {
                 actor: .user,
                 stage: .production,
                 action: "media-imported",
-                summary: "„\(imported.displayName)“ wurde als autorisiertes Produktionsmedium hinzugefügt.",
+                summary: "„\(imported.displayName)“ wurde mit Nutzer-Rechtebestätigung als Produktionsmedium hinzugefügt.",
                 relatedSourceIDs: [imported.id.uuidString],
                 reversible: false,
                 correlationID: correlationID
