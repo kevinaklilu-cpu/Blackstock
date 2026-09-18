@@ -26,7 +26,7 @@ enum YouTubeOAuthError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingClientID:
-            return "Blackstock konnte die Google-Anmeldung nicht starten, weil die App nicht vollständig provisioniert ist."
+            return "Blackstock benötigt eine integrierte Google-Konfiguration oder eine eigene OAuth-JSON-Datei vom Typ Desktopanwendung."
         case .invalidClientID:
             return "Blackstock konnte die Google-Anmeldung nicht starten, weil die integrierte App-Konfiguration ungültig ist."
         case .browserCouldNotOpen:
@@ -56,9 +56,38 @@ final class GoogleYouTubeAuth: ObservableObject {
     @Published private(set) var callbackHint: String?
     private var activeServer: LoopbackOAuthServer?
 
-    static var configuredClientID: String {
+    static var bundledClientID: String {
         (Bundle.main.object(forInfoDictionaryKey: "BlackstockGoogleOAuthClientID") as? String ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    static var importedClientID: String {
+        Keychain.read("google-oauth-imported-client-id").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    static var configuredClientID: String {
+        let bundled = bundledClientID
+        return bundled.isEmpty ? importedClientID : bundled
+    }
+
+    static var configurationSourceLabel: String {
+        if !bundledClientID.isEmpty { return "In Blackstock integriert" }
+        if !importedClientID.isEmpty { return "Eigene OAuth-JSON" }
+        return "Nicht konfiguriert"
+    }
+
+    @discardableResult
+    func importDesktopOAuthJSON(from url: URL) throws -> OAuthClientConfiguration {
+        let data = try Data(contentsOf: url)
+        let configuration = try OAuthClientConfiguration.parseGoogleDesktopJSON(data)
+        Keychain.write(configuration.clientID, account: "google-oauth-imported-client-id")
+        statusMessage = "OAuth-Konfiguration übernommen. Es wurde nur die Client-ID gespeichert."
+        return configuration
+    }
+
+    func removeImportedOAuthConfiguration() {
+        Keychain.write("", account: "google-oauth-imported-client-id")
+        statusMessage = "Eigene OAuth-Konfiguration entfernt."
     }
 
     func connect() async throws -> YouTubeOAuthSession {
