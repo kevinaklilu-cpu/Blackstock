@@ -155,10 +155,21 @@ public enum BuiltInProcessingProviders {
     public static let localNative = ProcessingProviderDescriptor(
         id: "blackstock.local",
         displayName: "Blackstock Local",
-        capabilities: [.transcription, .semanticAnalysis, .clipping, .reframing, .captions, .rendering],
+        capabilities: [.clipping, .rendering],
         costClass: .localNoAPI,
         requiresPaymentMethod: false,
-        freeQuotaDescription: "Geplante lokale Pipeline; einzelne Capabilities werden erst nach realer Implementierung und Tests aktiviert.",
+        freeQuotaDescription: "Lokaler AVFoundation-Schnitt und Render ohne externe API.",
+        available: true,
+        lastVerifiedAt: Date(timeIntervalSince1970: 1_789_776_000)
+    )
+
+    public static let plannedLocalIntelligence = ProcessingProviderDescriptor(
+        id: "blackstock.local.intelligence",
+        displayName: "Blackstock Local Intelligence",
+        capabilities: [.transcription, .semanticAnalysis, .reframing, .captions],
+        costClass: .localNoAPI,
+        requiresPaymentMethod: false,
+        freeQuotaDescription: "Geplante lokale Speech/Vision/Core-ML-Pipeline; noch nicht freigegeben.",
         available: false,
         lastVerifiedAt: Date(timeIntervalSince1970: 1_789_776_000)
     )
