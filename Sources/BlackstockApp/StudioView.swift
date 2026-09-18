@@ -15,6 +15,7 @@ struct StudioView: View {
     @State private var rightsSelection: ProductionMediaAuthorization = .owned
     @State private var rightsEvidence = ""
     @State private var rightsConfirmed = false
+    @State private var showPackagingReview = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -47,6 +48,16 @@ struct StudioView: View {
         }
         .sheet(isPresented: $showRightsSheet) {
             rightsSheet
+        }
+        .sheet(isPresented: $showPackagingReview) {
+            if let asset = state.asset,
+               let artifact = state.renderArtifact {
+                PackagingReviewView(
+                    project: project,
+                    asset: asset,
+                    artifact: artifact
+                )
+            }
         }
     }
 
@@ -175,6 +186,10 @@ struct StudioView: View {
                         Text(String(artifact.sha256.prefix(12)) + "…")
                             .font(.caption.monospaced())
                             .foregroundStyle(.secondary)
+                        Button("Packaging & Review") {
+                            showPackagingReview = true
+                        }
+                        .buttonStyle(.borderedProminent)
                     }
                     .padding(10)
                     .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 10))
