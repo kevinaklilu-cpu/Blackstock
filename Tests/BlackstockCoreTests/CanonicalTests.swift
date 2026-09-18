@@ -41,11 +41,16 @@ final class CanonicalTests: XCTestCase {
             lastVerifiedAt: Date()
         )
         let registry = CapabilityRegistry(records: [record])
-        XCTAssertFalse(await registry.isVisible("youtube.upload", grantedScopes: []))
-        XCTAssertTrue(await registry.isVisible(
+        let hiddenWithoutScope = await registry.isVisible(
+            "youtube.upload",
+            grantedScopes: []
+        )
+        let visibleWithScope = await registry.isVisible(
             "youtube.upload",
             grantedScopes: [GoogleOAuthScope.youtubeUpload.rawValue]
-        ))
+        )
+        XCTAssertFalse(hiddenWithoutScope)
+        XCTAssertTrue(visibleWithScope)
     }
 
     func testWrongChannelHardStops() {
