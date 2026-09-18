@@ -15,6 +15,9 @@ final class StudioState: ObservableObject {
     @Published var lastUndoneRevisionID: UUID?
     @Published var errorMessage: String?
     @Published var isLoading = false
+    @Published var isRendering = false
+    @Published var renderPreset: LocalRenderPreset = .hd1080
+    @Published var renderArtifact: RenderArtifact?
 
     private var correlationID = UUID()
 
@@ -66,6 +69,7 @@ final class StudioState: ObservableObject {
             trimStart = 0
             trimEnd = seconds
             lastUndoneRevisionID = nil
+            renderArtifact = nil
 
             ledger.append(.init(
                 timestamp: Date(),
@@ -102,6 +106,7 @@ final class StudioState: ObservableObject {
         )
         let revision = graph.apply(operation, actor: .user)
         lastUndoneRevisionID = nil
+        renderArtifact = nil
 
         ledger.append(.init(
             timestamp: Date(),
@@ -147,6 +152,7 @@ final class StudioState: ObservableObject {
         guard let id = lastUndoneRevisionID,
               let restored = graph.redo(to: id) else { return }
         lastUndoneRevisionID = nil
+        renderArtifact = nil
 
         ledger.append(.init(
             timestamp: Date(),
@@ -160,6 +166,50 @@ final class StudioState: ObservableObject {
         ))
 
         await refreshPreviewAfterHistoryChange()
+    }
+
+    func render(projectID: UUID) async {
+        guard let asset else {
+            errorMessage = "Kein Produktionsmedium geladen."
+            return
+        }
+
+        isRendering = true
+        defer { isRendering = false }
+
+        do {
+            let directory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("Blackstock-Renders", isDirectory: true)
+            try FileManager.default.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true
+            )
+            let outputURL = directory
+                .appendingPathComponent(projectID.uuidString)
+                .appendingPathExtension("mp4")
+
+            let artifact = try await LocalVideoRenderer().render(
+                projectID: projectID,
+                asset: asset,
+                graph: graph,
+                outputURL: outputURL,
+                preset: renderPreset
+            )
+            renderArtifact = artifact
+            ledger.append(.init(
+                timestamp: Date(),
+                actor: .system,
+                stage: .review,
+                action: "render-created",
+                summary: "Lokaler MP4-Render wurde erstellt und validiert.",
+                relatedSourceIDs: [artifact.id.uuidString],
+                reversible: false,
+                correlationID: correlationID
+            ))
+            errorMessage = nil
+        } catch {
+            errorMessage = "Render fehlgeschlagen: \(error.localizedDescription)"
+        }
     }
 
     private func refreshPreviewAfterHistoryChange() async {
