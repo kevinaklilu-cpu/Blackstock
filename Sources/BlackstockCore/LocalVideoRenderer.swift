@@ -24,6 +24,11 @@ public enum LocalRenderError: Error, Sendable, Equatable {
     case missingOutput
 }
 
+private final class ExportSessionBox: @unchecked Sendable {
+    let session: AVAssetExportSession
+    init(_ session: AVAssetExportSession) { self.session = session }
+}
+
 public actor LocalVideoRenderer {
     public init() {}
 
@@ -60,7 +65,7 @@ public actor LocalVideoRenderer {
             range = CMTimeRange(start: .zero, duration: duration)
         }
 
-        try composition.insertTimeRange(range, of: source, at: .zero)
+        try await composition.insertTimeRange(range, of: source, at: .zero)
 
         guard let exporter = AVAssetExportSession(
             asset: composition,
@@ -82,21 +87,23 @@ public actor LocalVideoRenderer {
         exporter.outputFileType = .mp4
         exporter.shouldOptimizeForNetworkUse = true
 
+        let exportBox = ExportSessionBox(exporter)
         try await withCheckedThrowingContinuation { continuation in
-            exporter.exportAsynchronously {
-                switch exporter.status {
+            exportBox.session.exportAsynchronously {
+                let session = exportBox.session
+                switch session.status {
                 case .completed:
                     continuation.resume()
                 case .failed, .cancelled:
                     continuation.resume(
                         throwing: LocalRenderError.exportFailed(
-                            exporter.error?.localizedDescription ?? "Unbekannter Exportfehler"
+                            session.error?.localizedDescription ?? "Unbekannter Exportfehler"
                         )
                     )
                 default:
                     continuation.resume(
                         throwing: LocalRenderError.exportFailed(
-                            "Export endete im Zustand \(exporter.status.rawValue)."
+                            "Export endete im Zustand \(session.status.rawValue)."
                         )
                     )
                 }
