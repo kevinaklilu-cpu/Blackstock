@@ -94,14 +94,14 @@ struct StudioView: View {
 
                 HStack {
                     Button {
-                        state.undo()
+                        Task { await state.undo() }
                     } label: {
                         Label("Rückgängig", systemImage: "arrow.uturn.backward")
                     }
                     .disabled(state.graph.head.parentID == nil)
 
                     Button {
-                        state.redo()
+                        Task { await state.redo() }
                     } label: {
                         Label("Wiederholen", systemImage: "arrow.uturn.forward")
                     }
@@ -170,7 +170,7 @@ struct StudioView: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button("Trim anwenden") {
-                    state.applyTrim()
+                    Task { await state.applyTrim() }
                 }
                 .buttonStyle(.borderedProminent)
                 Spacer()
