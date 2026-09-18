@@ -132,6 +132,7 @@ final class StudioState: ObservableObject {
         let undone = graph.headID
         guard let restored = graph.undo() else { return }
         lastUndoneRevisionID = undone
+        renderArtifact = nil
 
         ledger.append(.init(
             timestamp: Date(),
