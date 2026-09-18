@@ -6,6 +6,7 @@ import BlackstockCore
 struct FirstRunView: View {
     @ObservedObject var session: BlackstockSession
     @State private var showOAuthImporter = false
+    @State private var selectedOpportunityID: String?
 
     var body: some View {
         ZStack {
@@ -250,37 +251,65 @@ struct FirstRunView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            ScrollView {
-                LazyVStack(spacing: 9) {
-                    ForEach(session.opportunities.prefix(8)) { item in
-                        HStack(spacing: 12) {
-                            AsyncImage(url: item.thumbnailURL) { image in
-                                image.resizable().scaledToFill()
-                            } placeholder: {
-                                Rectangle().fill(Color.primary.opacity(0.07))
-                            }
-                            .frame(width: 112, height: 63)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
+            if let selected = selectedOpportunity {
+                VStack(alignment: .leading, spacing: 10) {
+                    YouTubeEmbeddedPlayer(videoID: selected.videoID)
+                        .frame(minHeight: 260)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
 
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(item.title)
-                                    .font(.subheadline.weight(.semibold))
-                                    .lineLimit(2)
-                                Text(item.channelTitle)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(selected.title)
+                            .font(.headline)
+                            .lineLimit(2)
+                        Text(selected.channelTitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        HStack(spacing: 10) {
+                            Label("YouTube API", systemImage: "checkmark.seal")
+                            Text("Query: \(selected.query)")
+                            Text("Abruf: \(selected.retrievedAt.formatted(date: .abbreviated, time: .shortened))")
                         }
-                        .padding(9)
-                        .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 12))
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
                     }
                 }
             }
-            .frame(maxHeight: 330)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(session.opportunities.prefix(8)) { item in
+                        Button {
+                            selectedOpportunityID = item.id
+                        } label: {
+                            VStack(alignment: .leading, spacing: 6) {
+                                AsyncImage(url: item.thumbnailURL) { image in
+                                    image.resizable().scaledToFill()
+                                } placeholder: {
+                                    Rectangle().fill(Color.primary.opacity(0.07))
+                                }
+                                .frame(width: 160, height: 90)
+                                .clipShape(RoundedRectangle(cornerRadius: 9))
+
+                                Text(item.title)
+                                    .font(.caption.weight(.semibold))
+                                    .lineLimit(2)
+                                    .frame(width: 160, alignment: .leading)
+                            }
+                            .padding(8)
+                            .background(
+                                selectedOpportunity?.id == item.id
+                                    ? Color.accentColor.opacity(0.10)
+                                    : Color.primary.opacity(0.03),
+                                in: RoundedRectangle(cornerRadius: 12)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
 
             HStack {
-                Text("Query: \(session.primaryTopic)")
+                Text("Ansehen → verstehen → erst dann übernehmen")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -288,6 +317,20 @@ struct FirstRunView: View {
                     .buttonStyle(.borderedProminent)
             }
         }
+        .onAppear {
+            if selectedOpportunityID == nil {
+                selectedOpportunityID = session.opportunities.first?.id
+            }
+        }
+    }
+
+    private var selectedOpportunity: YouTubeOpportunityCandidate? {
+        guard !session.opportunities.isEmpty else { return nil }
+        if let selectedOpportunityID,
+           let selected = session.opportunities.first(where: { $0.id == selectedOpportunityID }) {
+            return selected
+        }
+        return session.opportunities.first
     }
 
     private var stepEyebrow: String {
