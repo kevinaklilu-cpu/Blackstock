@@ -7,6 +7,7 @@ public enum GoogleOAuthScope: String, Codable, Sendable, CaseIterable {
     case youtubeUpload = "https://www.googleapis.com/auth/youtube.upload"
     case youtubeForceSSL = "https://www.googleapis.com/auth/youtube.force-ssl"
     case analyticsReadOnly = "https://www.googleapis.com/auth/yt-analytics.readonly"
+    case analyticsMonetaryReadOnly = "https://www.googleapis.com/auth/yt-analytics-monetary.readonly"
 }
 
 public struct PKCEPair: Sendable, Equatable {
