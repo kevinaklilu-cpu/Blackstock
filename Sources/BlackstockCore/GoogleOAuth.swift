@@ -5,6 +5,7 @@ import Security
 public enum GoogleOAuthScope: String, Codable, Sendable, CaseIterable {
     case youtubeReadOnly = "https://www.googleapis.com/auth/youtube.readonly"
     case youtubeUpload = "https://www.googleapis.com/auth/youtube.upload"
+    case youtubeForceSSL = "https://www.googleapis.com/auth/youtube.force-ssl"
     case analyticsReadOnly = "https://www.googleapis.com/auth/yt-analytics.readonly"
 }
 
