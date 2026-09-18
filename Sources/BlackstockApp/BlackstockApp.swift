@@ -5,12 +5,16 @@ import BlackstockCore
 @main
 struct BlackstockApp: App {
     @StateObject private var session = BlackstockSession()
+    @State private var commandPaletteRequest = 0
 
     var body: some Scene {
         WindowGroup {
             Group {
                 if session.onboardingComplete {
-                    WorkspaceShell(session: session)
+                    WorkspaceShell(
+                        session: session,
+                        commandPaletteRequest: commandPaletteRequest
+                    )
                 } else {
                     FirstRunView(session: session)
                 }
@@ -18,18 +22,32 @@ struct BlackstockApp: App {
             .frame(minWidth: 1040, minHeight: 700)
         }
         .windowStyle(.titleBar)
+        .commands {
+            CommandMenu("Blackstock") {
+                Button("Befehlspalette …") {
+                    commandPaletteRequest += 1
+                }
+                .keyboardShortcut("k", modifiers: .command)
+                .disabled(!session.onboardingComplete)
+            }
+        }
     }
 }
 
 private struct WorkspaceShell: View {
     @ObservedObject var session: BlackstockSession
+    let commandPaletteRequest: Int
+
     @State private var selection = "Übersicht"
+    @State private var showCommandPalette = false
 
     var body: some View {
         NavigationSplitView {
             List(selection: $selection) {
-                Label("Übersicht", systemImage: "rectangle.grid.2x2").tag("Übersicht")
-                Label("Einstellungen", systemImage: "gearshape").tag("Einstellungen")
+                Label("Übersicht", systemImage: "rectangle.grid.2x2")
+                    .tag("Übersicht")
+                Label("Einstellungen", systemImage: "gearshape")
+                    .tag("Einstellungen")
             }
             .navigationTitle("Blackstock")
         } detail: {
@@ -40,6 +58,133 @@ private struct WorkspaceShell: View {
                 OverviewView(session: session)
             }
         }
+        .onChange(of: commandPaletteRequest) { _ in
+            showCommandPalette = true
+        }
+        .sheet(isPresented: $showCommandPalette) {
+            CommandPaletteView(
+                currentSelection: selection,
+                onNavigate: { destination in
+                    selection = destination
+                    showCommandPalette = false
+                },
+                onRestartFirstRun: {
+                    showCommandPalette = false
+                    session.resetFirstRun()
+                }
+            )
+        }
+    }
+}
+
+private struct CommandPaletteView: View {
+    let currentSelection: String
+    let onNavigate: (String) -> Void
+    let onRestartFirstRun: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+
+    private struct Command: Identifiable {
+        let id: String
+        let title: String
+        let subtitle: String
+        let systemImage: String
+        let destination: String?
+        let isDestructive: Bool
+    }
+
+    private var commands: [Command] {
+        [
+            .init(
+                id: "overview",
+                title: "Übersicht öffnen",
+                subtitle: "Zum aktuellen Blackstock-Workspace",
+                systemImage: "rectangle.grid.2x2",
+                destination: "Übersicht",
+                isDestructive: false
+            ),
+            .init(
+                id: "settings",
+                title: "Einstellungen öffnen",
+                subtitle: "Google-/YouTube- und App-Einstellungen",
+                systemImage: "gearshape",
+                destination: "Einstellungen",
+                isDestructive: false
+            ),
+            .init(
+                id: "restart-first-run",
+                title: "First Run erneut starten",
+                subtitle: "Workspace-Auswahl und Einrichtung erneut durchlaufen",
+                systemImage: "arrow.counterclockwise",
+                destination: nil,
+                isDestructive: true
+            )
+        ]
+    }
+
+    private var filteredCommands: [Command] {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else { return commands }
+        return commands.filter {
+            $0.title.localizedCaseInsensitiveContains(needle)
+            || $0.subtitle.localizedCaseInsensitiveContains(needle)
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Image(systemName: "command")
+                    .foregroundStyle(.secondary)
+                TextField("Befehl suchen …", text: $query)
+                    .textFieldStyle(.plain)
+                    .font(.title3)
+            }
+            .padding(16)
+
+            Divider()
+
+            List(filteredCommands) { command in
+                Button {
+                    if command.id == "restart-first-run" {
+                        onRestartFirstRun()
+                    } else if let destination = command.destination {
+                        onNavigate(destination)
+                    }
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: command.systemImage)
+                            .frame(width: 22)
+                            .foregroundStyle(
+                                command.isDestructive ? AnyShapeStyle(.red) : AnyShapeStyle(.primary)
+                            )
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(command.title)
+                                .font(.headline)
+                            Text(command.subtitle)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+
+                        if command.destination == currentSelection {
+                            Image(systemName: "checkmark")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            .listStyle(.inset)
+        }
+        .frame(width: 560, height: 360)
+        .onExitCommand {
+            dismiss()
+        }
     }
 }
 
@@ -48,7 +193,8 @@ private struct OverviewView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Blackstock").font(.largeTitle.bold())
+            Text("Blackstock")
+                .font(.largeTitle.bold())
             Text("Creator Intelligence, Research, Production, Publishing & Growth OS")
                 .font(.title3)
                 .foregroundStyle(.secondary)
@@ -56,13 +202,14 @@ private struct OverviewView: View {
             GroupBox("Produktstatus") {
                 HStack {
                     Image(systemName: "hammer.fill")
-                    Text("NOCH NICHT MARKTREIF").fontWeight(.semibold)
+                    Text("NOCH NICHT MARKTREIF")
+                        .fontWeight(.semibold)
                     Spacer()
                 }
                 .padding(.vertical, 6)
             }
 
-            Text("Der First-Run nutzt reale Google-/YouTube-Autorisierung. Weitere Produktflächen bleiben unsichtbar oder klar gesperrt, bis ihre Capability-Gates bestehen.")
+            Text("Der First-Run nutzt reale Google-/YouTube-Autorisierung. Weitere Produktflächen bleiben unsichtbar, bis ihre Capability-Gates bestehen.")
                 .foregroundStyle(.secondary)
 
             Spacer()
@@ -76,7 +223,8 @@ private struct SettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Einstellungen").font(.largeTitle.bold())
+            Text("Einstellungen")
+                .font(.largeTitle.bold())
 
             GroupBox("Google / YouTube") {
                 VStack(alignment: .leading, spacing: 8) {
