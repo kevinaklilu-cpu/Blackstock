@@ -117,8 +117,17 @@ public struct PublishReviewContext: Sendable, Equatable {
         guard let qualityReview else {
             throw PublishPackageValidationError.qualityReviewMissing
         }
+        let requiredQualityAreas: Set<CreatorQualityArea> = [
+            .packaging,
+            .retentionStructure,
+            .audio,
+            .captions,
+            .visualComposition,
+            .rightsAndPolicy,
+            .renderIntegrity
+        ]
         guard qualityReview.projectID == project.id,
-              qualityReview.passesReleaseGate else {
+              qualityReview.passesReleaseGate(requiredAreas: requiredQualityAreas) else {
             throw PublishPackageValidationError.qualityReviewFailed
         }
         guard rightsValidated else {
