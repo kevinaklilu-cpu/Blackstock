@@ -3,10 +3,49 @@ import XCTest
 
 final class CanonicalTests: XCTestCase {
     func testCapabilityHiddenUntilEveryGatePasses() async {
-        let r = CapabilityRecord(capabilityID: "youtube.upload", provider: "YouTube", implementationVersion: "1", authorization: .authorized, policy: .allowed, region: .available, channel: .available, data: .available, quality: .pass, tests: .fail, lastVerifiedAt: Date())
+        let r = CapabilityRecord(
+            capabilityId: "youtube.upload",
+            provider: "YouTube",
+            implementationVersion: "1",
+            authorizationState: .authorized,
+            policyState: .allowed,
+            regionAvailability: .available,
+            channelAvailability: .available,
+            requiredScopes: [GoogleOAuthScope.youtubeUpload.rawValue],
+            dataAvailability: .available,
+            qualityStatus: .pass,
+            testStatus: .fail,
+            lastVerifiedAt: Date()
+        )
         let registry = CapabilityRegistry(records: [r])
-        let visible = await registry.isVisible("youtube.upload")
+        let visible = await registry.isVisible(
+            "youtube.upload",
+            grantedScopes: [GoogleOAuthScope.youtubeUpload.rawValue]
+        )
         XCTAssertFalse(visible)
+    }
+
+    func testCapabilityHiddenWhenRequiredScopeIsMissing() async {
+        let record = CapabilityRecord(
+            capabilityId: "youtube.upload",
+            provider: "YouTube",
+            implementationVersion: "1",
+            authorizationState: .authorized,
+            policyState: .allowed,
+            regionAvailability: .available,
+            channelAvailability: .available,
+            requiredScopes: [GoogleOAuthScope.youtubeUpload.rawValue],
+            dataAvailability: .available,
+            qualityStatus: .pass,
+            testStatus: .pass,
+            lastVerifiedAt: Date()
+        )
+        let registry = CapabilityRegistry(records: [record])
+        XCTAssertFalse(await registry.isVisible("youtube.upload", grantedScopes: []))
+        XCTAssertTrue(await registry.isVisible(
+            "youtube.upload",
+            grantedScopes: [GoogleOAuthScope.youtubeUpload.rawValue]
+        ))
     }
 
     func testWrongChannelHardStops() {
