@@ -8,6 +8,22 @@ public enum ProductionMediaAuthorization: String, Codable, Sendable, CaseIterabl
     case prohibited
 }
 
+public struct RightsAttestation: Codable, Sendable, Equatable {
+    public let confirmedByUser: Bool
+    public let attestedAt: Date
+    public let statementVersion: String
+
+    public init(
+        confirmedByUser: Bool,
+        attestedAt: Date,
+        statementVersion: String = "rights-attestation-v1"
+    ) {
+        self.confirmedByUser = confirmedByUser
+        self.attestedAt = attestedAt
+        self.statementVersion = statementVersion
+    }
+}
+
 public struct ProductionMediaAsset: Codable, Sendable, Equatable, Identifiable {
     public let id: UUID
     public let displayName: String
@@ -15,6 +31,7 @@ public struct ProductionMediaAsset: Codable, Sendable, Equatable, Identifiable {
     public let durationSeconds: Double
     public let authorization: ProductionMediaAuthorization
     public let rightsEvidence: [String]
+    public let rightsAttestation: RightsAttestation
     public let importedAt: Date
 
     public init(
@@ -24,6 +41,7 @@ public struct ProductionMediaAsset: Codable, Sendable, Equatable, Identifiable {
         durationSeconds: Double,
         authorization: ProductionMediaAuthorization,
         rightsEvidence: [String],
+        rightsAttestation: RightsAttestation,
         importedAt: Date
     ) {
         self.id = id
@@ -32,13 +50,14 @@ public struct ProductionMediaAsset: Codable, Sendable, Equatable, Identifiable {
         self.durationSeconds = max(0, durationSeconds)
         self.authorization = authorization
         self.rightsEvidence = rightsEvidence
+        self.rightsAttestation = rightsAttestation
         self.importedAt = importedAt
     }
 
     public var mayEnterProduction: Bool {
         switch authorization {
         case .owned, .licensed, .explicitlyAuthorized:
-            return !rightsEvidence.isEmpty
+            return rightsAttestation.confirmedByUser && !rightsEvidence.isEmpty
         case .unknown, .prohibited:
             return false
         }
