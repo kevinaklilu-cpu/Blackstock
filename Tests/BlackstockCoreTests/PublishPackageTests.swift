@@ -27,21 +27,9 @@ final class PublishPackageTests: XCTestCase {
             reference: artifact.id.uuidString,
             observedAt: Date()
         )
-        let quality = CreatorQualityReview(
+        let quality = completeQualityReview(
             projectID: projectID,
-            stage: .review,
-            evidence: [evidence],
-            findings: [
-                .init(
-                    area: .renderIntegrity,
-                    severity: .info,
-                    title: "Render geprüft",
-                    explanation: "Render-Artefakt wurde geprüft.",
-                    recommendedAction: nil,
-                    evidenceIDs: [evidence.id]
-                )
-            ],
-            reviewedAt: Date()
+            evidence: evidence
         )
         let package = PublishPackage(
             projectID: projectID,
@@ -148,6 +136,37 @@ final class PublishPackageTests: XCTestCase {
         }
     }
 
+    private func completeQualityReview(
+        projectID: UUID,
+        evidence: QualityEvidence
+    ) -> CreatorQualityReview {
+        let required: [CreatorQualityArea] = [
+            .packaging,
+            .retentionStructure,
+            .audio,
+            .captions,
+            .visualComposition,
+            .rightsAndPolicy,
+            .renderIntegrity
+        ]
+        return CreatorQualityReview(
+            projectID: projectID,
+            stage: .review,
+            evidence: [evidence],
+            findings: required.map { area in
+                QualityFinding(
+                    area: area,
+                    severity: .info,
+                    title: "\(area.rawValue) geprüft",
+                    explanation: "Test-Evidenz liegt vor.",
+                    recommendedAction: nil,
+                    evidenceIDs: [evidence.id]
+                )
+            },
+            reviewedAt: Date()
+        )
+    }
+
     private func makeReview(
         privacy: YouTubePrivacyStatus,
         publicPublishingAllowed: Bool,
@@ -177,21 +196,9 @@ final class PublishPackageTests: XCTestCase {
             reference: artifact.id.uuidString,
             observedAt: Date()
         )
-        let quality = CreatorQualityReview(
+        let quality = completeQualityReview(
             projectID: projectID,
-            stage: .review,
-            evidence: [evidence],
-            findings: [
-                .init(
-                    area: .renderIntegrity,
-                    severity: .info,
-                    title: "Render validiert",
-                    explanation: "Technische Prüfung bestanden.",
-                    recommendedAction: nil,
-                    evidenceIDs: [evidence.id]
-                )
-            ],
-            reviewedAt: Date()
+            evidence: evidence
         )
         let package = PublishPackage(
             projectID: projectID,
