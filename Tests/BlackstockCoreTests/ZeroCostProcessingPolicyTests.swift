@@ -33,6 +33,27 @@ final class ZeroCostProcessingPolicyTests: XCTestCase {
         XCTAssertNil(route.providerID)
     }
 
+    func testLocalSpeechProviderIsRuntimeGated() {
+        let unavailable = BuiltInProcessingProviders.localSpeech(
+            available: false,
+            lastVerifiedAt: Date()
+        )
+        let available = BuiltInProcessingProviders.localSpeech(
+            available: true,
+            lastVerifiedAt: Date()
+        )
+
+        XCTAssertFalse(ZeroCostProcessingPolicy().permits(unavailable))
+        XCTAssertTrue(ZeroCostProcessingPolicy().permits(available))
+
+        let route = ZeroCostProviderSelector().select(
+            capability: .transcription,
+            providers: [available]
+        )
+        XCTAssertEqual(route.status, .ready)
+        XCTAssertEqual(route.providerID, "blackstock.local.speech")
+    }
+
     func testFreeExternalProviderCanBeUsedWhenLocalCapabilityIsUnavailable() {
         let route = ZeroCostProviderSelector().select(
             capability: .youtubeDiscovery,
