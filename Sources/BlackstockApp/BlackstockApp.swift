@@ -18,13 +18,6 @@ struct BlackstockApp: App {
             .frame(minWidth: 1040, minHeight: 700)
         }
         .windowStyle(.titleBar)
-        .commands {
-            CommandMenu("Blackstock") {
-                Button("Befehlspalette") { }
-                    .keyboardShortcut("k", modifiers: .command)
-                    .disabled(true)
-            }
-        }
     }
 }
 
@@ -48,8 +41,7 @@ private struct WorkspaceShell: View {
             }
         }
     }
-
-
+}
 
 private struct OverviewView: View {
     @ObservedObject var session: BlackstockSession
