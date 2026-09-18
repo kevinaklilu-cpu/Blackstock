@@ -6,7 +6,7 @@ struct CreatorShellView: View {
     @EnvironmentObject private var app: AppState
     @EnvironmentObject private var auth: GoogleYouTubeAuth
     @ObservedObject var trends: TrendViewModel
-    @Binding var apiKey: String
+    private var accessToken: String { GoogleYouTubeAuth.accessToken(channelID: app.channel.id) }
     @State private var expanded = true
     @State private var showAccounts = false
     @State private var createHovered = false
@@ -182,15 +182,15 @@ struct CreatorShellView: View {
 
     @ViewBuilder private var content: some View {
         switch app.selection ?? .dashboard {
-        case .dashboard: DashboardView(trends: trends, apiKey: apiKey)
-        case .trends: TrendsView(model: trends, apiKey: apiKey)
+        case .dashboard: DashboardView(trends: trends, accessToken: accessToken)
+        case .trends: TrendsView(model: trends, accessToken: accessToken)
         case .research: ResearchView(trends: trends)
         case .ideas: IdeasView(trends: trends)
         case .projects: ProjectsView()
         case .studio: StudioView()
         case .publish: PublishView()
         case .analytics: AnalyticsView()
-        case .settings: SettingsView(apiKey: $apiKey)
+        case .settings: SettingsView()
         }
     }
 
@@ -228,7 +228,7 @@ struct CreatorShellView: View {
 
     private func runGlobalSearch() {
         app.selection = .trends
-        trends.search(apiKey: apiKey, regionCode: app.regionCode, channel: app.channel)
+        trends.search(accessToken: accessToken, regionCode: app.regionCode, channel: app.channel)
     }
 }
 
@@ -275,8 +275,6 @@ struct AccountConnectionSheet: View {
     @EnvironmentObject private var auth: GoogleYouTubeAuth
     @Environment(\.dismiss) private var dismiss
     @State private var errorMessage: String?
-    @State private var manualClientID = GoogleYouTubeAuth.configuredClientID
-    @State private var showOAuthConfig = GoogleYouTubeAuth.configuredClientID.isEmpty
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -285,9 +283,11 @@ struct AccountConnectionSheet: View {
                 Spacer()
                 Button("Fertig") { dismiss() }.keyboardShortcut(.defaultAction)
             }
+
             VStack(alignment: .leading, spacing: 4) {
                 Text("YouTube-Kanäle").font(.largeTitle.bold())
-                Text("Der aktive Kanal bestimmt Projekte, Publishing und kanalbezogene Auswertungen.").foregroundStyle(.secondary)
+                Text("Der aktive Kanal bestimmt Projekte, Publishing und kanalbezogene Auswertungen.")
+                    .foregroundStyle(.secondary)
             }
 
             if !app.connectedChannels.isEmpty {
@@ -303,7 +303,8 @@ struct AccountConnectionSheet: View {
                                 }
                                 Spacer()
                                 if app.channel.id == channel.id {
-                                    Label("Aktiv", systemImage: "checkmark.circle.fill").foregroundStyle(Color.blackstockRed)
+                                    Label("Aktiv", systemImage: "checkmark.circle.fill")
+                                        .foregroundStyle(Color.blackstockRed)
                                 } else {
                                     Button("Wechseln") { app.selectChannel(id: channel.id) }
                                 }
@@ -312,7 +313,9 @@ struct AccountConnectionSheet: View {
                                         auth.disconnect(channelID: channel.id)
                                         app.removeConnectedChannel(id: channel.id)
                                     }
-                                } label: { Image(systemName: "ellipsis") }
+                                } label: {
+                                    Image(systemName: "ellipsis")
+                                }
                             }
                             .padding(12)
                             .background(Color.blackstockPanel, in: RoundedRectangle(cornerRadius: 13))
@@ -320,18 +323,7 @@ struct AccountConnectionSheet: View {
                         }
                     }
                 }
-                .frame(maxHeight: 190)
-            }
-
-            DisclosureGroup(isExpanded: $showOAuthConfig) {
-                VStack(alignment: .leading, spacing: 9) {
-                    TextField("Desktop OAuth Client-ID", text: $manualClientID).textFieldStyle(.roundedBorder)
-                    Label("Client Secret wird bei der Desktop-App nicht eingetragen. Verwende in Google Cloud den Client-Typ „Desktopanwendung“.", systemImage: "lock.shield")
-                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(.top, 9)
-            } label: {
-                Text("OAuth-Konfiguration").font(.headline)
+                .frame(maxHeight: 250)
             }
 
             HStack {
@@ -342,32 +334,39 @@ struct AccountConnectionSheet: View {
                         Text(auth.isConnecting ? "Warte auf Google …" : "Weiteren YouTube-Account verbinden")
                     }
                 }
-                .buttonStyle(.borderedProminent).tint(.blackstockRed).disabled(auth.isConnecting)
-                if auth.isConnecting { Button("Abbrechen") { auth.cancelConnection() }.foregroundStyle(.secondary) }
+                .buttonStyle(.borderedProminent)
+                .tint(.blackstockRed)
+                .disabled(auth.isConnecting)
+
+                if auth.isConnecting {
+                    Button("Abbrechen") { auth.cancelConnection() }
+                        .foregroundStyle(.secondary)
+                }
                 Spacer()
             }
-            if let message = auth.statusMessage { Text(message).font(.caption).foregroundStyle(.secondary) }
-            if let hint = auth.callbackHint { Text(hint).font(.caption2.monospaced()).foregroundStyle(.tertiary) }
+
+            if let message = auth.statusMessage {
+                Text(message).font(.caption).foregroundStyle(.secondary)
+            }
             if let errorMessage {
-                Label(errorMessage, systemImage: "exclamationmark.triangle.fill").font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
+                Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption).foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
         }
         .padding(24)
-        .frame(width: 640, height: 560)
+        .frame(width: 640, height: 520)
     }
 
     private func connectAnotherAccount() {
         errorMessage = nil
-        let clientID = manualClientID.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !clientID.isEmpty { Keychain.write(clientID, account: "youtube-oauth-client-id") }
         Task {
             do {
-                let session = try await auth.connect(clientID: clientID.isEmpty ? nil : clientID)
+                let session = try await auth.connect()
                 app.addConnectedChannels(session.channels)
             } catch {
                 errorMessage = error.localizedDescription
-                showOAuthConfig = true
             }
         }
     }
