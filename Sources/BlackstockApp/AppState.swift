@@ -29,7 +29,7 @@ import BlackstockCore
     @Published var connectedChannels: [ChannelSnapshot] { didSet { persistConnectedChannels() } }
     @Published var channel: ChannelSnapshot { didSet { persistChannel() } }
     @Published var regionCode: String { didSet { UserDefaults.standard.set(regionCode, forKey: "blackstock.region") } }
-    @Published var onboardingSkipped: Bool { didSet { UserDefaults.standard.set(onboardingSkipped, forKey: "blackstock.onboardingSkipped") } }
+    @Published var channelStrategies: [String: ChannelStrategy] { didSet { persistChannelStrategies() } }
     @Published private(set) var projectChannelIDs: [String: String] { didSet { persistProjectChannels() } }
 
     init() {
@@ -62,21 +62,36 @@ import BlackstockCore
         }
 
         regionCode = UserDefaults.standard.string(forKey: "blackstock.region") ?? ""
-        onboardingSkipped = UserDefaults.standard.bool(forKey: "blackstock.onboardingSkipped")
+
+        if let data = UserDefaults.standard.data(forKey: "blackstock.channelStrategies"),
+           let saved = try? JSONDecoder().decode([String: ChannelStrategy].self, from: data) {
+            channelStrategies = saved
+        } else {
+            channelStrategies = [:]
+        }
     }
 
     var hasAuthenticatedChannel: Bool {
         connectedChannels.contains { GoogleYouTubeAuth.isAuthenticated(channelID: $0.id) }
     }
 
-    var shouldShowOnboarding: Bool { !hasAuthenticatedChannel && !onboardingSkipped }
+    var shouldShowOnboarding: Bool {
+        guard hasAuthenticatedChannel, channel.id != "local" else { return true }
+        return channelStrategies[channel.id] == nil
+    }
+
+    var activeStrategy: ChannelStrategy? {
+        channelStrategies[channel.id]
+    }
 
     var projectsForActiveChannel: [Project] {
         guard channel.id != "local" else { return projects }
         return projects.filter { projectChannelIDs[$0.id.uuidString] == channel.id }
     }
 
-    func channelID(for project: Project) -> String? { projectChannelIDs[project.id.uuidString] }
+    func channelID(for project: Project) -> String? {
+        project.targetChannelID ?? projectChannelIDs[project.id.uuidString]
+    }
 
     func channelTitle(for project: Project) -> String {
         guard let id = channelID(for: project) else { return "Kein Zielkanal" }
@@ -86,7 +101,13 @@ import BlackstockCore
     func openTrend(_ trend: TrendSignal) { activeTrend = trend; selection = .trends }
 
     func createProject(title: String = "Neues Projekt") {
-        let project = Project(title: title, titleVariants: [title], publishTitle: title)
+        let project = Project(
+            title: title,
+            targetChannelID: channel.id == "local" ? nil : channel.id,
+            targetChannelTitle: channel.id == "local" ? nil : channel.title,
+            titleVariants: [title],
+            publishTitle: title
+        )
         upsertProject(project)
         activeProject = project
         selection = .studio
@@ -95,6 +116,8 @@ import BlackstockCore
     func startProject(from trend: TrendSignal) {
         let project = Project(
             title: trend.video.title,
+            targetChannelID: channel.id == "local" ? nil : channel.id,
+            targetChannelTitle: channel.id == "local" ? nil : channel.title,
             sourceVideoID: trend.video.id,
             sourceEvidenceIDs: [trend.video.id],
             targetFormat: trend.recommendedFormat,
@@ -110,6 +133,8 @@ import BlackstockCore
     func startProject(from idea: ContentIdea) {
         let project = Project(
             title: idea.workingTitle,
+            targetChannelID: channel.id == "local" ? nil : channel.id,
+            targetChannelTitle: channel.id == "local" ? nil : channel.title,
             sourceVideoID: idea.sourceVideoIDs.first,
             sourceEvidenceIDs: idea.sourceVideoIDs,
             targetFormat: idea.recommendedFormat,
@@ -127,8 +152,12 @@ import BlackstockCore
     func upsertProject(_ project: Project) {
         var copy = project
         copy.updatedAt = Date()
-        if projectChannelIDs[copy.id.uuidString] == nil, channel.id != "local" {
-            projectChannelIDs[copy.id.uuidString] = channel.id
+        if copy.targetChannelID == nil, channel.id != "local" {
+            copy.targetChannelID = channel.id
+            copy.targetChannelTitle = channel.title
+        }
+        if projectChannelIDs[copy.id.uuidString] == nil, let targetChannelID = copy.targetChannelID {
+            projectChannelIDs[copy.id.uuidString] = targetChannelID
         }
         if let index = projects.firstIndex(where: { $0.id == copy.id }) { projects[index] = copy } else { projects.insert(copy, at: 0) }
         projects.sort { $0.updatedAt > $1.updatedAt }
@@ -136,8 +165,12 @@ import BlackstockCore
     }
 
     func moveProject(_ project: Project, to channelID: String) {
-        projectChannelIDs[project.id.uuidString] = channelID
-        persistProjectChannels()
+        guard let destination = connectedChannels.first(where: { $0.id == channelID }) else { return }
+        var copy = project
+        copy.targetChannelID = destination.id
+        copy.targetChannelTitle = destination.title
+        projectChannelIDs[project.id.uuidString] = destination.id
+        upsertProject(copy)
     }
 
     func deleteProject(_ project: Project) {
@@ -153,11 +186,44 @@ import BlackstockCore
 
     func addConnectedChannels(_ snapshots: [ChannelSnapshot]) {
         for snapshot in snapshots {
-            if let index = connectedChannels.firstIndex(where: { $0.id == snapshot.id }) { connectedChannels[index] = snapshot }
-            else { connectedChannels.append(snapshot) }
+            if let index = connectedChannels.firstIndex(where: { $0.id == snapshot.id }) {
+                connectedChannels[index] = snapshot
+            } else {
+                connectedChannels.append(snapshot)
+            }
         }
-        if let first = snapshots.first { channel = first }
-        onboardingSkipped = false
+    }
+
+    func completeFirstRun(
+        channelID: String,
+        primaryTopic: String,
+        contentLanguage: String,
+        now: Date = Date()
+    ) {
+        guard let selected = connectedChannels.first(where: { $0.id == channelID }) else { return }
+        channel = selected
+
+        let existingVersion = channelStrategies[channelID]?.version ?? 0
+        let researchLanguages = contentLanguage == "de" ? ["de", "en"] : [contentLanguage]
+
+        channelStrategies[channelID] = ChannelStrategy(
+            channelId: channelID,
+            primaryTopic: primaryTopic,
+            topicDefinition: primaryTopic,
+            contentPromise: primaryTopic,
+            topicPillars: [],
+            adjacentTopics: [],
+            excludedTopics: [],
+            defaultContentLanguage: contentLanguage,
+            researchLanguages: researchLanguages,
+            regionProfile: regionCode,
+            strategicAudienceHypothesis: "",
+            primaryObjectives: [.balanced],
+            explorationPolicy: .init(),
+            effectiveFrom: now,
+            version: existingVersion + 1
+        )
+        selection = .dashboard
     }
 
     func selectChannel(id: String) {
@@ -170,9 +236,6 @@ import BlackstockCore
         connectedChannels.removeAll { $0.id == id }
         if channel.id == id { channel = connectedChannels.first ?? ChannelSnapshot(id: "local", title: "Mein Kanal") }
     }
-
-    func continueWithoutAccount() { onboardingSkipped = true }
-    func showOnboardingAgain() { onboardingSkipped = false }
 
     private func persistChannel() {
         if let data = try? JSONEncoder().encode(channel) { UserDefaults.standard.set(data, forKey: "blackstock.channel") }
@@ -187,7 +250,15 @@ import BlackstockCore
     }
 
     private func persistProjectChannels() {
-        if let data = try? JSONEncoder().encode(projectChannelIDs) { UserDefaults.standard.set(data, forKey: "blackstock.projectChannels") }
+        if let data = try? JSONEncoder().encode(projectChannelIDs) {
+            UserDefaults.standard.set(data, forKey: "blackstock.projectChannels")
+        }
+    }
+
+    private func persistChannelStrategies() {
+        if let data = try? JSONEncoder().encode(channelStrategies) {
+            UserDefaults.standard.set(data, forKey: "blackstock.channelStrategies")
+        }
     }
 }
 #endif
