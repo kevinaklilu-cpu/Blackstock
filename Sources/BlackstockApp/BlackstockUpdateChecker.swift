@@ -114,6 +114,12 @@ struct BlackstockUpdateChecker: Sendable {
         case .upToDate:
             return .upToDate
         case .updateAvailable(let update):
+            BlackstockUpdateAudit.recordAvailableUpdate(
+                manifest: update,
+                manifestURL: manifestURL,
+                installerTeamID: installerTeamID,
+                bundle: bundle
+            )
             return .updateAvailable(update)
         }
     }
