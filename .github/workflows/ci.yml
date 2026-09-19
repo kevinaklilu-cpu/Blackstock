@@ -47,6 +47,8 @@ jobs:
         run: python3 Build/audit_capture.py
       - name: Professional audio audit
         run: python3 Build/audit_audio.py
+      - name: Clean-machine E2E contract audit
+        run: python3 Build/audit_clean_machine.py
       - name: Swift tests
         run: swift test
       - name: Release build
