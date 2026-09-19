@@ -115,7 +115,9 @@ else
   if [[ "$INCLUDE_E2E_SMOKE" == "1" ]]; then
     codesign --force --sign - "$APP/Contents/Helpers/BlackstockE2ESmoke"
   fi
-  codesign --force --deep --sign - "$APP"
+  codesign --force --deep \
+    --entitlements "$ROOT/Build/Blackstock.entitlements" \
+    --sign - "$APP"
 fi
 codesign --verify --deep --strict "$APP"
 
