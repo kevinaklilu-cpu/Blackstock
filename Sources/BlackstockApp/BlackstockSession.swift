@@ -84,7 +84,7 @@ final class BlackstockSession: ObservableObject {
     private var cachedPublishingJournal: ExternalActionJournal?
 
     init() {
-        try? PrivacyRetentionEnforcer().purgeExpiredUpdatePackages(
+        _ = try? PrivacyRetentionEnforcer().purgeExpiredUpdatePackages(
             in: FileManager.default.temporaryDirectory
         )
         importedOAuthClientID = BlackstockKeychain.read("google.oauth.importedClientID")
