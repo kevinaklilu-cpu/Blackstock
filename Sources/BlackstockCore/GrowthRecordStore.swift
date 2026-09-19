@@ -8,7 +8,7 @@ public enum GrowthRecordStoreError: Error, Sendable, Equatable {
 
 public enum GrowthRecordStoreSchema {
     public static let legacyUnversioned = 1
-    public static let current = 3
+    public static let current = 4
 }
 
 private struct GrowthStoreEnvelope<Value: Codable & Sendable>: Codable, Sendable {
@@ -119,7 +119,7 @@ public struct GrowthRecordStore: Sendable {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .custom { date, encoder in
             var container = encoder.singleValueContainer()
-            try container.encode(date.timeIntervalSince1970)
+            try container.encode(date.timeIntervalSinceReferenceDate)
         }
         encoder.outputFormatting = [.sortedKeys]
         let envelope = GrowthStoreEnvelope(
@@ -144,34 +144,6 @@ public struct GrowthRecordStore: Sendable {
         }
 
         let data = try Data(contentsOf: url)
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .custom { decoder in
-            let container = try decoder.singleValueContainer()
-            if let seconds = try? container.decode(Double.self) {
-                return Date(timeIntervalSince1970: seconds)
-            }
-            if let value = try? container.decode(String.self) {
-                let fractional = ISO8601DateFormatter()
-                fractional.formatOptions = [
-                    .withInternetDateTime,
-                    .withFractionalSeconds
-                ]
-                if let date = fractional.date(from: value) {
-                    return date
-                }
-
-                let legacy = ISO8601DateFormatter()
-                legacy.formatOptions = [.withInternetDateTime]
-                if let date = legacy.date(from: value) {
-                    return date
-                }
-            }
-            throw DecodingError.dataCorruptedError(
-                in: container,
-                debugDescription:
-                    "Expected Unix timestamp or ISO-8601 date."
-            )
-        }
         let object = try JSONSerialization.jsonObject(with: data)
         guard let dictionary = object as? [String: Any] else {
             throw CocoaError(.fileReadCorruptFile)
@@ -188,6 +160,9 @@ public struct GrowthRecordStore: Sendable {
                 throw GrowthRecordStoreError
                     .unsupportedFutureSchemaVersion(version)
             }
+            let decoder = dateDecoder(
+                schemaVersion: version
+            )
             let envelope = try decoder.decode(
                 GrowthStoreEnvelope<T>.self,
                 from: data
@@ -195,9 +170,60 @@ public struct GrowthRecordStore: Sendable {
             return (envelope.value, envelope.schemaVersion)
         }
 
+        let decoder = dateDecoder(
+            schemaVersion:
+                GrowthRecordStoreSchema.legacyUnversioned
+        )
         return (
             try decoder.decode(T.self, from: data),
             GrowthRecordStoreSchema.legacyUnversioned
         )
+    }
+
+    private static func dateDecoder(
+        schemaVersion: Int
+    ) -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+
+            if schemaVersion >= 4,
+               let seconds = try? container.decode(Double.self) {
+                return Date(
+                    timeIntervalSinceReferenceDate: seconds
+                )
+            }
+
+            if schemaVersion == 3,
+               let seconds = try? container.decode(Double.self) {
+                return Date(
+                    timeIntervalSince1970: seconds
+                )
+            }
+
+            if let value = try? container.decode(String.self) {
+                let fractional = ISO8601DateFormatter()
+                fractional.formatOptions = [
+                    .withInternetDateTime,
+                    .withFractionalSeconds
+                ]
+                if let date = fractional.date(from: value) {
+                    return date
+                }
+
+                let legacy = ISO8601DateFormatter()
+                legacy.formatOptions = [.withInternetDateTime]
+                if let date = legacy.date(from: value) {
+                    return date
+                }
+            }
+
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription:
+                    "Unsupported persisted date representation."
+            )
+        }
+        return decoder
     }
 }
