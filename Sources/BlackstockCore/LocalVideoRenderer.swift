@@ -192,7 +192,8 @@ public actor LocalVideoRenderer {
             .inspect(
                 url: outputURL,
                 expectedDurationSeconds: timeline.outputDurationSeconds,
-                expectedRenderSize: expectedRenderSize
+                expectedRenderSize: expectedRenderSize,
+                expectedPreset: preset
             )
         guard technicalAssessment.validated else {
             throw LocalRenderError.technicalValidationFailed(
