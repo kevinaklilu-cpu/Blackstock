@@ -22,6 +22,23 @@ CONTRACTS = {
         'kSecClassGenericPassword',
         'private static let service = "de.blackstock.app"',
     ],
+    "Sources/BlackstockCore/OAuthClientConfiguration.swift": [
+        "parseGoogleDesktopJSON",
+        "unsupportedClientType",
+        'hasSuffix(".apps.googleusercontent.com")',
+    ],
+    "Sources/BlackstockCore/OAuthClientBindingPolicy.swift": [
+        "requiresCredentialInvalidation",
+        "previousClientID",
+        "nextClientID",
+    ],
+    "Sources/BlackstockApp/BlackstockSession.swift": [
+        'deleteAccounts(',
+        'withPrefix: "youtube."',
+        "OAuthClientBindingPolicy()",
+        'account: "google.oauth.importedClientID"',
+        "clearOAuthRuntimeAuthorizationState",
+    ],
     "Sources/BlackstockCore/UpdateManifest.swift": [
         'packageURL.scheme?.lowercased() == "https"',
         'Curve25519.Signing.PublicKey',
@@ -44,6 +61,17 @@ TEST_CONTRACTS = {
         "testRejectsWrongInstallerTeam",
         "testRejectsNonDeveloperIDInstallerSignature",
         "testRejectsFailedPkgutilCheck",
+    ],
+    "Tests/BlackstockCoreTests/OAuthClientBindingPolicyTests.swift": [
+        "testSameNormalizedClientPreservesCredentials",
+        "testChangedClientInvalidatesCredentials",
+        "testAddingFirstConfiguredClientInvalidatesLegacyCredentials",
+        "testRemovingOnlyConfiguredClientInvalidatesCredentials",
+    ],
+    "Tests/BlackstockCoreTests/GoogleOAuthAndYouTubeTests.swift": [
+        "testOAuthJSONRequiresDesktopInstalledClient",
+        "testOAuthJSONRejectsMissingAndInvalidClientIDs",
+        "testOAuthJSONDoesNotExposeOrPersistClientSecret",
     ],
 }
 
