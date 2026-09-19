@@ -298,3 +298,104 @@ public struct EditGraph: Codable, Sendable, Equatable {
         return chain.reversed()
     }
 }
+
+public struct EditTimelinePlan: Sendable, Equatable {
+    public let sourceRanges: [EditTimeRange]
+
+    public init(sourceRanges: [EditTimeRange]) {
+        self.sourceRanges = sourceRanges
+    }
+
+    public var outputDurationSeconds: Double {
+        sourceRanges.reduce(0) { $0 + $1.durationSeconds }
+    }
+
+    public var hasContent: Bool {
+        outputDurationSeconds > 0.001
+    }
+}
+
+public struct EditTimelineResolver: Sendable {
+    public init() {}
+
+    public func resolve(
+        sourceDurationSeconds: Double,
+        operations: [EditOperation]
+    ) -> EditTimelinePlan {
+        let sourceDuration = max(sourceDurationSeconds, 0)
+        guard sourceDuration > 0.001 else {
+            return EditTimelinePlan(sourceRanges: [])
+        }
+
+        let trim = operations
+            .last(where: { $0.type == .trim })?
+            .timeRange
+        let baseStart = min(
+            max(trim?.startSeconds ?? 0, 0),
+            sourceDuration
+        )
+        let requestedEnd = trim?.endSeconds ?? sourceDuration
+        let baseEnd = min(
+            max(requestedEnd, baseStart),
+            sourceDuration
+        )
+        guard baseEnd - baseStart > 0.001 else {
+            return EditTimelinePlan(sourceRanges: [])
+        }
+
+        let removals = operations
+            .filter { $0.type == .removeRange }
+            .compactMap(\.timeRange)
+            .compactMap { range -> EditTimeRange? in
+                let start = max(range.startSeconds, baseStart)
+                let end = min(range.endSeconds, baseEnd)
+                guard end - start > 0.001 else { return nil }
+                return EditTimeRange(
+                    startSeconds: start,
+                    durationSeconds: end - start
+                )
+            }
+            .sorted { $0.startSeconds < $1.startSeconds }
+
+        var merged: [EditTimeRange] = []
+        for range in removals {
+            guard let last = merged.last else {
+                merged.append(range)
+                continue
+            }
+            if range.startSeconds <= last.endSeconds + 0.001 {
+                let end = max(last.endSeconds, range.endSeconds)
+                merged[merged.count - 1] = EditTimeRange(
+                    startSeconds: last.startSeconds,
+                    durationSeconds: end - last.startSeconds
+                )
+            } else {
+                merged.append(range)
+            }
+        }
+
+        var kept: [EditTimeRange] = []
+        var cursor = baseStart
+        for removal in merged {
+            if removal.startSeconds - cursor > 0.001 {
+                kept.append(
+                    EditTimeRange(
+                        startSeconds: cursor,
+                        durationSeconds: removal.startSeconds - cursor
+                    )
+                )
+            }
+            cursor = max(cursor, removal.endSeconds)
+        }
+        if baseEnd - cursor > 0.001 {
+            kept.append(
+                EditTimeRange(
+                    startSeconds: cursor,
+                    durationSeconds: baseEnd - cursor
+                )
+            )
+        }
+
+        return EditTimelinePlan(sourceRanges: kept)
+    }
+}

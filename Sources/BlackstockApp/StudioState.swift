@@ -345,6 +345,74 @@ final class StudioState: ObservableObject {
         }
     }
 
+    func applyRemoveRange() async {
+        guard let asset else { return }
+
+        let start = min(max(trimStart, 0), asset.durationSeconds)
+        let end = min(max(trimEnd, start), asset.durationSeconds)
+        guard end - start > 0.05 else {
+            errorMessage = "Der zu entfernende Bereich ist zu kurz."
+            return
+        }
+
+        let operation = EditOperation(
+            type: .removeRange,
+            timeRange: .init(
+                startSeconds: start,
+                durationSeconds: end - start
+            ),
+            createdAt: Date()
+        )
+        let resolver = EditTimelineResolver()
+        let currentPlan = resolver.resolve(
+            sourceDurationSeconds: asset.durationSeconds,
+            operations: graph.currentOperations
+        )
+        let nextPlan = resolver.resolve(
+            sourceDurationSeconds: asset.durationSeconds,
+            operations: graph.currentOperations + [operation]
+        )
+        guard nextPlan.hasContent else {
+            errorMessage = "Die Auswahl würde den gesamten verbleibenden Inhalt entfernen."
+            return
+        }
+        guard nextPlan.outputDurationSeconds
+                < currentPlan.outputDurationSeconds - 0.001 else {
+            errorMessage = "Die Auswahl liegt außerhalb des aktuellen Schnitts oder wurde bereits entfernt."
+            return
+        }
+
+        let before = graph.headID
+        let revision = graph.apply(operation, actor: .user)
+        lastUndoneRevisionID = nil
+        renderArtifact = nil
+        transcript = nil
+        captionURL = nil
+        transcriptStructure = nil
+        retentionAdvisory = nil
+        retentionAdvisorAvailability = nil
+
+        ledger.append(.init(
+            timestamp: Date(),
+            actor: .user,
+            stage: .editing,
+            action: "range-removed",
+            summary: "Bereich entfernt: \(format(start)) bis \(format(end)).",
+            beforeRevisionID: before,
+            afterRevisionID: revision.id,
+            reversible: true,
+            correlationID: correlationID
+        ))
+
+        do {
+            try await rebuildPreview()
+            persistWorkspaceIfPossible()
+            errorMessage = nil
+        } catch {
+            errorMessage = "Schnitt-Vorschau konnte nicht aktualisiert werden: \(error.localizedDescription)"
+        }
+    }
+
     func undo() async {
         let undone = graph.headID
         guard let restored = graph.undo() else { return }
@@ -664,21 +732,31 @@ final class StudioState: ObservableObject {
         let source = AVURLAsset(url: asset.sourceURL)
         let composition = AVMutableComposition()
 
-        let trim = graph.currentOperations.last(where: { $0.type == .trim })?.timeRange
-        let range: CMTimeRange
-        if let trim {
-            range = CMTimeRange(
-                start: CMTime(seconds: trim.startSeconds, preferredTimescale: 600),
-                duration: CMTime(seconds: trim.durationSeconds, preferredTimescale: 600)
-            )
-        } else {
-            range = CMTimeRange(
-                start: .zero,
-                duration: CMTime(seconds: asset.durationSeconds, preferredTimescale: 600)
-            )
+        let timeline = EditTimelineResolver().resolve(
+            sourceDurationSeconds: asset.durationSeconds,
+            operations: graph.currentOperations
+        )
+        guard timeline.hasContent else {
+            throw CocoaError(.fileReadCorruptFile)
         }
 
-        try await composition.insertTimeRange(range, of: source, at: .zero)
+        for sourceRange in timeline.sourceRanges {
+            let range = CMTimeRange(
+                start: CMTime(
+                    seconds: sourceRange.startSeconds,
+                    preferredTimescale: 600
+                ),
+                duration: CMTime(
+                    seconds: sourceRange.durationSeconds,
+                    preferredTimescale: 600
+                )
+            )
+            try await composition.insertTimeRange(
+                range,
+                of: source,
+                at: composition.duration
+            )
+        }
         let item = AVPlayerItem(asset: composition)
 
         if let reframe = graph.currentOperations

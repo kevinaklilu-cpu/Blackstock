@@ -280,16 +280,26 @@ struct StudioView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Button("Trim anwenden") {
+                Button("Als Trim setzen") {
                     Task { await state.applyTrim() }
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled(!editingEnabled)
+
+                Button("Auswahl entfernen") {
+                    Task { await state.applyRemoveRange() }
+                }
+                .buttonStyle(.bordered)
                 .disabled(!editingEnabled)
                 Spacer()
                 Text("Ende")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
+
+            Text("Trim und Entfernen bleiben non-destruktiv im EditGraph und können rückgängig gemacht werden.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
         .padding(12)
         .background(Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 12))

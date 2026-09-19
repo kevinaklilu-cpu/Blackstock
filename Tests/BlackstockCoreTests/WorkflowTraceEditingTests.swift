@@ -122,6 +122,92 @@ final class WorkflowTraceEditingTests: XCTestCase {
         XCTAssertEqual(graph.head.actor, .acceptedAIProposal)
     }
 
+    func testTimelineResolverCombinesTrimAndOverlappingRemoveRanges() {
+        let operations = [
+            EditOperation(
+                type: .trim,
+                timeRange: .init(
+                    startSeconds: 10,
+                    durationSeconds: 60
+                ),
+                createdAt: Date(timeIntervalSince1970: 1)
+            ),
+            EditOperation(
+                type: .removeRange,
+                timeRange: .init(
+                    startSeconds: 20,
+                    durationSeconds: 10
+                ),
+                createdAt: Date(timeIntervalSince1970: 2)
+            ),
+            EditOperation(
+                type: .removeRange,
+                timeRange: .init(
+                    startSeconds: 25,
+                    durationSeconds: 10
+                ),
+                createdAt: Date(timeIntervalSince1970: 3)
+            ),
+            EditOperation(
+                type: .removeRange,
+                timeRange: .init(
+                    startSeconds: 60,
+                    durationSeconds: 20
+                ),
+                createdAt: Date(timeIntervalSince1970: 4)
+            )
+        ]
+
+        let plan = EditTimelineResolver().resolve(
+            sourceDurationSeconds: 100,
+            operations: operations
+        )
+
+        XCTAssertEqual(
+            plan.sourceRanges,
+            [
+                EditTimeRange(
+                    startSeconds: 10,
+                    durationSeconds: 10
+                ),
+                EditTimeRange(
+                    startSeconds: 35,
+                    durationSeconds: 25
+                )
+            ]
+        )
+        XCTAssertEqual(plan.outputDurationSeconds, 35, accuracy: 0.001)
+    }
+
+    func testTimelineResolverDetectsEmptyEditResult() {
+        let operations = [
+            EditOperation(
+                type: .trim,
+                timeRange: .init(
+                    startSeconds: 10,
+                    durationSeconds: 20
+                ),
+                createdAt: Date(timeIntervalSince1970: 1)
+            ),
+            EditOperation(
+                type: .removeRange,
+                timeRange: .init(
+                    startSeconds: 0,
+                    durationSeconds: 100
+                ),
+                createdAt: Date(timeIntervalSince1970: 2)
+            )
+        ]
+
+        let plan = EditTimelineResolver().resolve(
+            sourceDurationSeconds: 100,
+            operations: operations
+        )
+
+        XCTAssertFalse(plan.hasContent)
+        XCTAssertTrue(plan.sourceRanges.isEmpty)
+    }
+
     func testActivityLedgerPreservesCorrelationTrace() {
         let correlation = UUID()
         var ledger = ActivityLedger()

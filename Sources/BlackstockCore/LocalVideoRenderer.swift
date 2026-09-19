@@ -21,6 +21,7 @@ public enum LocalRenderError: Error, Sendable, Equatable {
     case exportSessionUnavailable
     case unsupportedOutputType
     case missingVideoTrack
+    case emptyEditResult
     case reframePlanUnavailable
     case exportFailed(String)
     case missingOutput
@@ -46,7 +47,11 @@ public actor LocalVideoRenderer {
         }
 
         let unsupported = graph.currentOperations.first {
-            ![EditOperationType.trim, EditOperationType.reframe].contains($0.type)
+            ![
+                EditOperationType.trim,
+                EditOperationType.removeRange,
+                EditOperationType.reframe
+            ].contains($0.type)
         }
         if let unsupported {
             throw LocalRenderError.unsupportedEditOperation(unsupported.type)
@@ -55,19 +60,36 @@ public actor LocalVideoRenderer {
         let source = AVURLAsset(url: asset.sourceURL)
         let composition = AVMutableComposition()
 
-        let trim = graph.currentOperations.last(where: { $0.type == .trim })?.timeRange
-        let range: CMTimeRange
-        if let trim {
-            range = CMTimeRange(
-                start: CMTime(seconds: trim.startSeconds, preferredTimescale: 600),
-                duration: CMTime(seconds: trim.durationSeconds, preferredTimescale: 600)
-            )
-        } else {
-            let duration = try await source.load(.duration)
-            range = CMTimeRange(start: .zero, duration: duration)
+        let sourceDuration = try await source.load(.duration)
+        let sourceDurationSeconds = max(
+            CMTimeGetSeconds(sourceDuration),
+            0
+        )
+        let timeline = EditTimelineResolver().resolve(
+            sourceDurationSeconds: sourceDurationSeconds,
+            operations: graph.currentOperations
+        )
+        guard timeline.hasContent else {
+            throw LocalRenderError.emptyEditResult
         }
 
-        try await composition.insertTimeRange(range, of: source, at: .zero)
+        for sourceRange in timeline.sourceRanges {
+            let range = CMTimeRange(
+                start: CMTime(
+                    seconds: sourceRange.startSeconds,
+                    preferredTimescale: 600
+                ),
+                duration: CMTime(
+                    seconds: sourceRange.durationSeconds,
+                    preferredTimescale: 600
+                )
+            )
+            try await composition.insertTimeRange(
+                range,
+                of: source,
+                at: composition.duration
+            )
+        }
 
         guard let exporter = AVAssetExportSession(
             asset: composition,
