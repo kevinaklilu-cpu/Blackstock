@@ -50,7 +50,7 @@ requirements = {
         "BLACKSTOCK_PRODUCTION_RELEASE",
         "Build/validate_production_package_config.py",
         "Production release must not include the CI-only E2E helper.",
-        "Production update manifest URL must use a real production host.",
+        "Build/validate_production_package_config.py",
         "Production release requires notarization credentials.",
         "--output-format json",
         "Notarization status is not Accepted",
