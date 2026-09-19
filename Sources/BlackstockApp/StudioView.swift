@@ -29,6 +29,19 @@ struct StudioView: View {
                 Divider()
             }
 
+            if let notice = state.workspaceRecoveryNotice {
+                HStack(spacing: 10) {
+                    Image(systemName: "arrow.clockwise.circle.fill")
+                    Text(notice)
+                        .font(.callout)
+                    Spacer()
+                }
+                .padding(.horizontal, 18)
+                .padding(.vertical, 10)
+                .background(Color.primary.opacity(0.035))
+                Divider()
+            }
+
             if let asset = state.asset {
                 editor(asset)
             } else {
