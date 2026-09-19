@@ -91,8 +91,8 @@ public extension BlackstockStage {
             return .init(
                 stage: self,
                 title: "Veröffentlichungspaket",
-                purpose: "Metadaten, Thumbnail, Captions und technische QC vorbereiten.",
-                nextAction: "Packaging-Evidence vervollständigen und Review speichern.",
+                purpose: "Metadaten, Vorschaubild, Untertitel und technische Qualitätsprüfung vorbereiten.",
+                nextAction: "Paket-Belege vervollständigen und Prüfung speichern.",
                 recommendedSurface: .studio
             )
         case .review:
@@ -100,14 +100,14 @@ public extension BlackstockStage {
                 stage: self,
                 title: "Prüfung",
                 purpose: "Finales Artefakt, Rechte, Qualität und Zielkanal vor Remote-Aktion prüfen.",
-                nextAction: "Publish-Review prüfen und Upload ausdrücklich bestätigen.",
+                nextAction: "Veröffentlichungsprüfung kontrollieren und Upload ausdrücklich bestätigen.",
                 recommendedSurface: .studio
             )
         case .publishing:
             return .init(
                 stage: self,
                 title: "Veröffentlichung",
-                purpose: "Den bestätigten YouTube-Upload und Resume-Zustand nachvollziehbar ausführen.",
+                purpose: "Den bestätigten YouTube-Upload und Fortsetzungszustand nachvollziehbar ausführen.",
                 nextAction: "Upload- und Resume-Status prüfen.",
                 recommendedSurface: .studio
             )
