@@ -1,0 +1,66 @@
+#!/usr/bin/env python3
+from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+errors = []
+
+requirements = {
+    "Package.swift": [
+        'name: "BlackstockE2ESmoke"',
+    ],
+    "Sources/BlackstockE2ESmoke/main.swift": [
+        "BLACKSTOCK_E2E_PASS",
+        "SyntheticMediaFactory",
+        "LocalVideoRenderer()",
+        "LocalAudioTechnicalInspector()",
+        "LocalAudioSignalAnalyzer()",
+        "LocalLoudnessAnalyzer()",
+        "YouTubeResumableUploader(",
+        "ExternalActionJournal",
+        "YouTubeAnalyticsClient(",
+        "GrowthLearningEngine()",
+        "persistenceRoundTrip",
+    ],
+    "Build/package.sh": [
+        "BLACKSTOCK_INCLUDE_E2E_SMOKE",
+        "Contents/Helpers/BlackstockE2ESmoke",
+    ],
+    ".github/workflows/ci.yml": [
+        'BLACKSTOCK_INCLUDE_E2E_SMOKE: "1"',
+        "Run installed creator-loop E2E",
+        "/Applications/Blackstock.app/Contents/Helpers/BlackstockE2ESmoke",
+        "BLACKSTOCK_E2E_PASS",
+        'data["renderValidated"] is True',
+        'data["qualityReviewPassed"] is True',
+        'data["uploadJournalCommitted"] is True',
+        'data["analyticsViews"] == 1234',
+        'data["persistenceRoundTrip"] is True',
+    ],
+}
+
+for relative, markers in requirements.items():
+    path = ROOT / relative
+    if not path.is_file():
+        errors.append(f"missing clean-machine E2E file: {relative}")
+        continue
+    text = path.read_text(encoding="utf-8")
+    for marker in markers:
+        if marker not in text:
+            errors.append(f"{relative}: missing E2E contract marker: {marker}")
+
+package = (ROOT / "Build/package.sh").read_text(encoding="utf-8")
+if 'INCLUDE_E2E_SMOKE="${BLACKSTOCK_INCLUDE_E2E_SMOKE:-0}"' not in package:
+    errors.append("E2E helper must remain opt-in and absent from production packages by default")
+
+if errors:
+    print("Clean-machine E2E audit failed:", file=sys.stderr)
+    for error in errors:
+        print(f"- {error}", file=sys.stderr)
+    sys.exit(1)
+
+print(
+    "Clean-machine E2E audit passed: CI installs the package and runs the "
+    "opt-in creator-loop helper from /Applications with real local media "
+    "processing and mocked external HTTP boundaries."
+)
