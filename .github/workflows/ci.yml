@@ -73,7 +73,8 @@ jobs:
               "videoTrackPresent": true,
               "projectID": "00000000-0000-0000-0000-000000000101",
               "recordedLaunchID": "00000000-0000-0000-0000-000000000201",
-              "persistedFilePath": "$CAMERA"
+              "persistedFilePath": "$CAMERA",
+              "persistedFileSHA256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
             },
             "microphone": {
               "permissionGranted": true,
@@ -83,7 +84,8 @@ jobs:
               "decodedSamples": 24000,
               "projectID": "00000000-0000-0000-0000-000000000102",
               "recordedLaunchID": "00000000-0000-0000-0000-000000000202",
-              "persistedFilePath": "$MICROPHONE"
+              "persistedFilePath": "$MICROPHONE",
+              "persistedFileSHA256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
             },
             "screen": {
               "permissionGranted": true,
@@ -93,7 +95,8 @@ jobs:
               "videoTrackPresent": true,
               "projectID": "00000000-0000-0000-0000-000000000103",
               "recordedLaunchID": "00000000-0000-0000-0000-000000000203",
-              "persistedFilePath": "$SCREEN"
+              "persistedFilePath": "$SCREEN",
+              "persistedFileSHA256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
             },
             "systemAudio": {
               "permissionGranted": true,
@@ -103,7 +106,8 @@ jobs:
               "decodedSamples": 48000,
               "projectID": "00000000-0000-0000-0000-000000000103",
               "recordedLaunchID": "00000000-0000-0000-0000-000000000203",
-              "persistedFilePath": "$SCREEN"
+              "persistedFilePath": "$SCREEN",
+              "persistedFileSHA256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
             },
             "deniedPermissionHardStopPassed": true,
             "temporaryCleanupPassed": true,
