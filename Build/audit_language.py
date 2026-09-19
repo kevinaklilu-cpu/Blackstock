@@ -18,7 +18,7 @@ BANNED_PRODUCT_TERMS = [
     "Reframe", "On-Device",
 ]
 
-string_pattern = re.compile(r'"(?:\\\\.|[^"\\\\])*"')
+string_pattern = re.compile(r'"(?:\\.|[^"\\])*"')
 errors = []
 
 for relative in UI_FILES:
@@ -42,7 +42,7 @@ if packaging.is_file():
 strategy = ROOT / "Sources/BlackstockApp/BlackstockSession.swift"
 if strategy.is_file():
     text = strategy.read_text(encoding="utf-8")
-    for marker in ['@Published var contentLanguage = "de"', '"blackstock.workspace.contentLanguage"', "defaultContentLanguage: contentLanguage"]:
+    for marker in ['@Published var contentLanguage = "de"', '"blackstock.workspace.contentLanguage"', "contentLanguage: contentLanguage"]:
         if marker not in text:
             errors.append(f"BlackstockSession.swift: missing persisted content-language marker: {marker}")
 
