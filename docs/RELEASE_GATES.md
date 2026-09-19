@@ -15,7 +15,7 @@ Statuswerte: **PASS / FAIL / BLOCKED_EXTERNAL**.
 | Rights | PASS |
 | Capture | FAIL |
 | Editing | PASS |
-| Audio | FAIL |
+| Audio | PASS |
 | Captions | PASS |
 | Packaging | PASS |
 | Video QC / 4K | PASS |
@@ -68,7 +68,7 @@ Hinweis: **Editing = PASS** umfasst den persistenten nicht-destruktiven EditGrap
 
 Hinweis: **Capture = FAIL** bleibt vorerst bewusst bestehen, obwohl die eigentlichen Aufnahme-Pipelines inzwischen implementiert sind: Kamera wird lokal über AVFoundation als Movie aufgezeichnet und kann ein freigegebenes Mikrofon einbetten; das Mikrofon besitzt zusätzlich eine eigenständige AAC/M4A-Aufnahme, die als versioniertes Zusatz-Capture im Projekt-Workspace gespeichert wird; Bildschirm und Systemaudio werden gemeinsam über ScreenCaptureKit aufgenommen, auf macOS 15+ direkt über RecordingOutput und auf macOS 13/14 über einen AVAssetWriter-Fallback. Alle Resultate laufen vor der Projektübernahme durch die explizite Rechtebestätigung, temporäre Dateien werden bei Abbruch bzw. nach erfolgreicher Übernahme bereinigt, und `Build/audit_capture.py` erzwingt diese Verträge in der Canonical-CI. Für PASS fehlt jetzt nur noch ein realer Hardware-/Permission-Smoke auf unterstützten Macs, weil Kamera-, Mikrofon- und Screen-Recording nicht seriös in einem headless CI-Runner als echte Geräteaufnahme bewiesen werden können.
 
-Hinweis: **Audio bleibt FAIL**. Bereits vorhanden und belegt sind Messungen des finalen gerenderten Edits, nicht des Rohmaterials: Blackstock prüft Audiospur, Sample-Rate und Kanalzahl und analysiert lokal PCM-Samples für Peak, RMS und Full-Scale-Samples. Fehlende Audiospur oder eine Analyse ohne Samples sind Blocker; mögliche Qualitätsprobleme bleiben als Warnungen und eine hörbare Prüfung auf Verständlichkeit, Störgeräusche und Pegelsprünge bleibt explizite Review-Evidenz. Peak/RMS werden nicht fälschlich als LUFS ausgegeben.
+Hinweis: **Audio = PASS** basiert auf Messungen des aktuellen finalen Renders: Blackstock prüft Audiospur, Sample-Rate und Kanalzahl, analysiert PCM-Samples separat für Peak/RMS/Full-Scale und führt zusätzlich einen eigenen ITU-R-BS.1770-Messpfad für Integrated LUFS, maximale Momentary-/Short-Term-Loudness und oversampelten True Peak aus. Peak/RMS werden ausdrücklich nicht als LUFS/dBTP umbenannt. Fehlende Audiospur, fehlende Samples oder unvollständige professionelle Loudness-/True-Peak-Evidenz blockieren die Freigabe; True Peak über 0 dBTP wird als Warnung ausgewiesen. Referenztests und `Build/audit_audio.py` sichern den Vertrag in der Canonical-CI.
 
 Hinweis: **Captions = PASS** basiert auf der transkribierten editierten Timeline, nicht auf dem ungeänderten Quellmedium. WebVTT/SRT werden vor dem Review technisch validiert; ungültige UTF-8-Daten, fehlende/ungültige Timings, leere Cues, nicht-monotone Reihenfolge und Überlappungen blockieren die Veröffentlichung. Caption-Uploads laufen zusätzlich journaled/idempotent über den gebundenen YouTube-Publishing-Pfad.
 
@@ -90,6 +90,5 @@ Hinweis: **Migration = PASS** basiert auf versionierter Persistenz für Studio-W
 
 Hinweis: **Updater = FAIL** bleibt absichtlich bestehen. Manifest-Signatur, HTTPS-Pflicht, SHA-256-Paketprüfung und Developer-ID-Installer-Teamprüfung sind implementiert; für PASS fehlen weiterhin eine reale Produktions-Endpoint-Konfiguration und ein vollständiger Update-E2E gegen ein tatsächlich signiertes Release.
 
-Hinweis zur strikten Gate-Auslegung: **Audio** benötigt zusätzlich den im Canonical-Gate geforderten professionellen Audio-Toolset-Nachweis; Die vorhandenen Teilimplementierungen bleiben erhalten, reichen aber bewusst nicht für PASS.
 
 **STATUS: NOCH NICHT MARKTREIF**
