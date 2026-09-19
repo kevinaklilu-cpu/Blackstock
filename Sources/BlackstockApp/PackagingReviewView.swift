@@ -12,6 +12,7 @@ struct PackagingReviewView: View {
     let generatedCaptionURL: URL?
     let audioTechnicalAssessment: AudioTechnicalAssessment?
     let audioSignalAssessment: AudioSignalAssessment?
+    let audioLoudnessAssessment: AudioLoudnessAssessment?
     let storyboard: StoryboardPlan?
 
     @Environment(\.dismiss) private var dismiss
@@ -52,6 +53,7 @@ struct PackagingReviewView: View {
         generatedCaptionURL: URL?,
         audioTechnicalAssessment: AudioTechnicalAssessment?,
         audioSignalAssessment: AudioSignalAssessment?,
+        audioLoudnessAssessment: AudioLoudnessAssessment?,
         storyboard: StoryboardPlan?
     ) {
         self.session = session
@@ -62,6 +64,7 @@ struct PackagingReviewView: View {
         self.generatedCaptionURL = generatedCaptionURL
         self.audioTechnicalAssessment = audioTechnicalAssessment
         self.audioSignalAssessment = audioSignalAssessment
+        self.audioLoudnessAssessment = audioLoudnessAssessment
         self.storyboard = storyboard
         let saved = session.loadPublishPreparation(
             projectID: project.id
@@ -130,6 +133,7 @@ struct PackagingReviewView: View {
             captionURL: generatedCaptionURL,
             audioTechnicalAssessment: audioTechnicalAssessment,
             audioSignalAssessment: audioSignalAssessment,
+            audioLoudnessAssessment: audioLoudnessAssessment,
             thumbnailAssessment: thumbnailAssessment
         )
     }
@@ -755,7 +759,30 @@ struct PackagingReviewView: View {
                     Text("Full-Scale-Samples: \(signal.snapshot.fullScaleSampleCount)")
                 }
 
-                Text("Diese Messwerte sind Evidenz, ersetzen aber nicht die hörbare Prüfung auf Verständlichkeit und Störgeräusche.")
+                if let loudness = audioLoudnessAssessment {
+                    Divider()
+                    Text("Professionelle Loudness-Messung")
+                        .font(.caption.weight(.semibold))
+                    if let integrated = loudness.snapshot.integratedLUFS {
+                        Text("Integrated: \(String(format: "%.2f", integrated)) LUFS")
+                    }
+                    if let momentary = loudness.snapshot.maximumMomentaryLUFS {
+                        Text("Max. Momentary: \(String(format: "%.2f", momentary)) LUFS")
+                    }
+                    if let shortTerm = loudness.snapshot.maximumShortTermLUFS {
+                        Text("Max. Short-term: \(String(format: "%.2f", shortTerm)) LUFS")
+                    }
+                    if let truePeak = loudness.snapshot.truePeakDBTP {
+                        Text("True Peak: \(String(format: "%.2f", truePeak)) dBTP")
+                    }
+                    Text("ITU-R BS.1770 · 48-kHz K-Weighting · gated Integrated Loudness")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Professionelle LUFS-/True-Peak-Messung nicht verfügbar.")
+                        .foregroundStyle(.secondary)
+                }
+
+                Text("Messwerte sind technische Evidenz; die hörbare Prüfung auf Verständlichkeit, Störgeräusche und Pegelsprünge bleibt zusätzlich erforderlich.")
                     .foregroundStyle(.secondary)
             }
             .font(.caption)
