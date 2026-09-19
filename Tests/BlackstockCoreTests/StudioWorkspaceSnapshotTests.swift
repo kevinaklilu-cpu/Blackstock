@@ -403,4 +403,143 @@ final class StudioWorkspaceSnapshotTests: XCTestCase {
         XCTAssertEqual(restored, snapshot)
     }
 
+    func testLegacyPublishPreparationLoadsAndIsMarkedForMigration() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let projectID = UUID()
+        let renderID = UUID()
+        let package = PublishPackage(
+            projectID: projectID,
+            targetChannelID: "channel-A",
+            renderArtifactID: renderID,
+            metadata: YouTubeUploadMetadata(
+                title: "Legacy",
+                description: "",
+                privacyStatus: .privateVideo,
+                selfDeclaredMadeForKids: false
+            ),
+            thumbnail: nil,
+            captions: []
+        )
+        let snapshot = PublishPreparationSnapshot(
+            package: package,
+            qualityReview: CreatorQualityReview(
+                projectID: projectID,
+                stage: .review,
+                evidence: [],
+                findings: [],
+                reviewedAt: Date(timeIntervalSince1970: 2)
+            ),
+            packagingVariants: nil,
+            savedAt: Date(timeIntervalSince1970: 3)
+        )
+
+        let store = ProjectWorkspaceStore(rootURL: root)
+        let directory = try store.projectDirectory(projectID: projectID)
+        let url = directory.appendingPathComponent(
+            "publish-preparation.json"
+        )
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(snapshot).write(
+            to: url,
+            options: [.atomic]
+        )
+
+        let result = try store
+            .loadPublishPreparationWithMigration(
+                projectID: projectID
+            )
+
+        XCTAssertEqual(result.snapshot, snapshot)
+        XCTAssertEqual(
+            result.migratedFromSchemaVersion,
+            PublishPreparationSchema.legacyUnversioned
+        )
+    }
+
+    func testPublishPreparationSaveWritesCurrentSchemaEnvelope() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let projectID = UUID()
+        let snapshot = PublishPreparationSnapshot(
+            package: PublishPackage(
+                projectID: projectID,
+                targetChannelID: "channel-A",
+                renderArtifactID: UUID(),
+                metadata: YouTubeUploadMetadata(
+                    title: "Envelope",
+                    description: "",
+                    privacyStatus: .privateVideo,
+                    selfDeclaredMadeForKids: false
+                ),
+                thumbnail: nil,
+                captions: []
+            ),
+            qualityReview: CreatorQualityReview(
+                projectID: projectID,
+                stage: .review,
+                evidence: [],
+                findings: [],
+                reviewedAt: Date(timeIntervalSince1970: 2)
+            ),
+            packagingVariants: nil,
+            savedAt: Date(timeIntervalSince1970: 3)
+        )
+        let store = ProjectWorkspaceStore(rootURL: root)
+
+        try store.savePublishPreparation(snapshot)
+
+        let url = root
+            .appendingPathComponent(projectID.uuidString, isDirectory: true)
+            .appendingPathComponent("publish-preparation.json")
+        let data = try Data(contentsOf: url)
+        let object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data)
+                as? [String: Any]
+        )
+
+        XCTAssertEqual(
+            object["schemaVersion"] as? Int,
+            PublishPreparationSchema.current
+        )
+        XCTAssertNotNil(object["snapshot"])
+    }
+
+    func testFuturePublishPreparationSchemaHardStops() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let projectID = UUID()
+        let store = ProjectWorkspaceStore(rootURL: root)
+        let directory = try store.projectDirectory(projectID: projectID)
+        let url = directory.appendingPathComponent(
+            "publish-preparation.json"
+        )
+        let futureVersion = PublishPreparationSchema.current + 1
+        try Data(
+            """
+            {"schemaVersion":\(futureVersion),"snapshot":{}}
+            """.utf8
+        ).write(to: url, options: [.atomic])
+
+        XCTAssertThrowsError(
+            try store.loadPublishPreparationWithMigration(
+                projectID: projectID
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? WorkspaceMigrationError,
+                .unsupportedFutureSchemaVersion(futureVersion)
+            )
+        }
+    }
+
+
 }
