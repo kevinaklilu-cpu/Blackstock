@@ -28,7 +28,8 @@ final class CaptureHardwareSmokeEvidenceTests:
             videoTrackPresent: true,
             projectID: projectID,
             recordedLaunchID: previousLaunch,
-            persistedFilePath: cameraFile.path
+            persistedFilePath: cameraFile.path,
+            persistedFileSHA256: "4bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a"
         )
         evidence.microphone = .init(
             permissionGranted: true,
@@ -38,7 +39,8 @@ final class CaptureHardwareSmokeEvidenceTests:
             decodedSamples: 24_000,
             projectID: projectID,
             recordedLaunchID: previousLaunch,
-            persistedFilePath: microphoneFile.path
+            persistedFilePath: microphoneFile.path,
+            persistedFileSHA256: "4bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a"
         )
         evidence.screen = .init(
             permissionGranted: true,
@@ -48,7 +50,8 @@ final class CaptureHardwareSmokeEvidenceTests:
             videoTrackPresent: true,
             projectID: projectID,
             recordedLaunchID: previousLaunch,
-            persistedFilePath: screenFile.path
+            persistedFilePath: screenFile.path,
+            persistedFileSHA256: "4bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a"
         )
         evidence.systemAudio = .init(
             permissionGranted: true,
@@ -58,7 +61,8 @@ final class CaptureHardwareSmokeEvidenceTests:
             decodedSamples: 48_000,
             projectID: projectID,
             recordedLaunchID: previousLaunch,
-            persistedFilePath: screenFile.path
+            persistedFilePath: screenFile.path,
+            persistedFileSHA256: "4bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a"
         )
 
         evidence.recordDeniedHardStop(
@@ -115,7 +119,8 @@ final class CaptureHardwareSmokeEvidenceTests:
                         : nil,
                 projectID: projectID,
                 recordedLaunchID: launchID,
-                persistedFilePath: file.path
+                persistedFilePath: file.path,
+                persistedFileSHA256: "4bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a"
             )
         }
 
