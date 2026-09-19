@@ -189,6 +189,7 @@ struct FirstRunView: View {
     private var topic: some View {
         VStack(alignment: .leading, spacing: 14) {
             TextField("z. B. KI für Selbstständige", text: $session.primaryTopic)
+                .accessibilityLabel("Strategischer Kanal-Schwerpunkt")
                 .textFieldStyle(.roundedBorder)
                 .font(.title3)
             Text("Das ist der strategische Kern für künftige Research- und Opportunity-Abfragen, nicht nur ein einzelnes Suchkeyword.")
@@ -263,6 +264,7 @@ struct FirstRunView: View {
                     }
                 }
                 .labelsHidden()
+                .accessibilityLabel("Opportunity-Sortierung")
                 .pickerStyle(.menu)
                 .frame(maxWidth: 160)
             }
@@ -271,6 +273,7 @@ struct FirstRunView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     if selected.embeddable != false {
                         YouTubeEmbeddedPlayer(videoID: selected.videoID)
+                            .accessibilityLabel("YouTube-Vorschau: \(selected.title)")
                             .frame(minHeight: 260)
                             .clipShape(RoundedRectangle(cornerRadius: 14))
                     } else {
