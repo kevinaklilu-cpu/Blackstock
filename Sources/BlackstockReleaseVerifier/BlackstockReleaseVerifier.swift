@@ -29,7 +29,7 @@ private enum ReleaseVerifierError: Error, LocalizedError {
         case .appIdentityMismatch:
             return "Die installierte App ist nicht mit der erwarteten Developer-ID-Application-Team-ID signiert."
         case .incompleteNotaryArguments:
-            return "Notary-Submission-ID und Keychain-Profil müssen gemeinsam angegeben werden."
+            return "Notary-Submission-ID benötigt entweder ein Keychain-Profil oder vollständig konfigurierte API-Key-Zugangsdaten."
         case .notarizationNotAccepted(let status):
             return "Apple-Notarisierung ist nicht Accepted, sondern \(status)."
         }
@@ -273,26 +273,59 @@ private struct BlackstockReleaseVerifierMain {
     ) throws -> String? {
         let id = arguments.notarySubmissionID
         let profile = arguments.notaryKeychainProfile
+        let keyPath = arguments.notaryKeyPath
+        let keyID = arguments.notaryKeyID
+        let issuer = arguments.notaryIssuer
 
-        if (id == nil) != (profile == nil) {
+        let apiValues = [keyPath, keyID, issuer]
+        let apiConfigured = apiValues.allSatisfy { $0 != nil }
+        let apiPartiallyConfigured =
+            apiValues.contains { $0 != nil }
+                && !apiConfigured
+
+        if apiPartiallyConfigured
+            || (profile != nil && apiConfigured)
+            || (id == nil && (profile != nil || apiConfigured))
+            || (id != nil && profile == nil && !apiConfigured) {
             throw ReleaseVerifierError.incompleteNotaryArguments
         }
-        guard let id, let profile else {
+        guard let id else {
             return nil
         }
+
+        var notaryArguments = [
+            "notarytool",
+            "info",
+            id
+        ]
+        if let profile {
+            notaryArguments += [
+                "--keychain-profile",
+                profile
+            ]
+        } else if let keyPath,
+                  let keyID,
+                  let issuer {
+            notaryArguments += [
+                "--key",
+                keyPath,
+                "--key-id",
+                keyID,
+                "--issuer",
+                issuer
+            ]
+        } else {
+            throw ReleaseVerifierError.incompleteNotaryArguments
+        }
+        notaryArguments += [
+            "--output-format",
+            "json"
+        ]
 
         let result = try requireSuccessful(
             run(
                 "/usr/bin/xcrun",
-                [
-                    "notarytool",
-                    "info",
-                    id,
-                    "--keychain-profile",
-                    profile,
-                    "--output-format",
-                    "json"
-                ]
+                notaryArguments
             ),
             command: "xcrun notarytool info"
         )
@@ -376,6 +409,9 @@ private struct Arguments {
     let installedAppURL: URL?
     let notarySubmissionID: String?
     let notaryKeychainProfile: String?
+    let notaryKeyPath: String?
+    let notaryKeyID: String?
+    let notaryIssuer: String?
     let outputURL: URL?
 
     static func parse(
@@ -439,6 +475,12 @@ private struct Arguments {
                 values["--notary-submission-id"],
             notaryKeychainProfile:
                 values["--notary-keychain-profile"],
+            notaryKeyPath:
+                values["--notary-key"],
+            notaryKeyID:
+                values["--notary-key-id"],
+            notaryIssuer:
+                values["--notary-issuer"],
             outputURL: values["--output"].map {
                 URL(fileURLWithPath: $0)
             }
