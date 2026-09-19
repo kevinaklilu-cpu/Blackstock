@@ -111,7 +111,7 @@ public struct YouTubeResumableUploader: Sendable {
             createdAt: now,
             updatedAt: now
         )
-        await journal.upsert(entry)
+        try await journal.upsert(entry)
 
         let uploadURL: URL
         if let saved = entry.remoteSessionURL {
@@ -122,7 +122,7 @@ public struct YouTubeResumableUploader: Sendable {
                 session: session
             )
             entry.updatedAt = Date()
-            await journal.upsert(entry)
+            try await journal.upsert(entry)
         } else {
             uploadURL = try await createUploadSession(
                 fileSize: fileSize,
@@ -134,7 +134,7 @@ public struct YouTubeResumableUploader: Sendable {
             entry.remoteSessionURL = uploadURL
             entry.nextByteOffset = 0
             entry.updatedAt = Date()
-            await journal.upsert(entry)
+            try await journal.upsert(entry)
         }
 
         do {
@@ -155,7 +155,7 @@ public struct YouTubeResumableUploader: Sendable {
             entry.nextByteOffset = fileSize
             entry.lastError = nil
             entry.updatedAt = Date()
-            await journal.upsert(entry)
+            try await journal.upsert(entry)
 
             return .init(
                 videoID: videoID,
@@ -166,7 +166,7 @@ public struct YouTubeResumableUploader: Sendable {
             entry = await journal.entry(for: idempotencyKey) ?? entry
             entry.lastError = String(describing: error)
             entry.updatedAt = Date()
-            await journal.upsert(entry)
+            try await journal.upsert(entry)
             throw error
         }
     }
@@ -298,7 +298,7 @@ public struct YouTubeResumableUploader: Sendable {
                 if var entry = await journal.entry(for: idempotencyKey) {
                     entry.nextByteOffset = offset
                     entry.updatedAt = Date()
-                    await journal.upsert(entry)
+                    try await journal.upsert(entry)
                 }
                 continue
             }
