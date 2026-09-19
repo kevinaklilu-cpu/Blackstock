@@ -109,7 +109,8 @@ final class BlackstockSession: ObservableObject {
         return "Nicht konfiguriert"
     }
 
-    func importOAuthJSON(from url: URL) {
+    @discardableResult
+    func importOAuthJSON(from url: URL) -> Bool {
         let hasSecurityScopedAccess = url.startAccessingSecurityScopedResource()
         defer {
             if hasSecurityScopedAccess {
@@ -148,8 +149,10 @@ final class BlackstockSession: ObservableObject {
                 clearChannelSelection: clientChanged
             )
             errorMessage = nil
+            return true
         } catch {
             errorMessage = "OAuth-JSON konnte nicht übernommen werden: \(describe(error))"
+            return false
         }
     }
 
@@ -301,7 +304,8 @@ final class BlackstockSession: ObservableObject {
         )
     }
 
-    func removeImportedOAuthConfiguration() {
+    @discardableResult
+    func removeImportedOAuthConfiguration() -> Bool {
         do {
             let previousClientID = effectiveClientID
             let nextClientID = bundledClientID
@@ -325,8 +329,10 @@ final class BlackstockSession: ObservableObject {
                 clearChannelSelection: clientChanged
             )
             errorMessage = nil
+            return true
         } catch {
             errorMessage = "OAuth-Konfiguration konnte nicht entfernt werden: \(describe(error))"
+            return false
         }
     }
 
