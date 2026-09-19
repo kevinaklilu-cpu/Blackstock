@@ -111,24 +111,39 @@ public struct DeterministicQualityEvidenceBuilder: Sendable {
             )
         }
 
+        var audioTechnicalEvidence: QualityEvidence?
         if let audioTechnicalAssessment {
             let snapshot = audioTechnicalAssessment.snapshot
             let channels = snapshot.channelCount.map(String.init) ?? "unbekannt"
             let sampleRate = snapshot.sampleRateHz.map {
                 String(Int($0.rounded())) + " Hz"
             } ?? "unbekannt"
-            evidence.append(
-                QualityEvidence(
-                    source: "Blackstock Local Audio Technical Inspector",
-                    observedFact: snapshot.hasAudioTrack
-                        ? "Audiospur vorhanden; Sample-Rate \(sampleRate); Kanäle \(channels)."
-                        : "Keine Audiospur erkannt.",
-                    reference: asset.id.uuidString,
-                    observedAt: snapshot.inspectedAt
-                )
+            let item = QualityEvidence(
+                source: "Blackstock Local Audio Technical Inspector",
+                observedFact: snapshot.hasAudioTrack
+                    ? "Audiospur im aktuellen Render vorhanden; Sample-Rate \(sampleRate); Kanäle \(channels)."
+                    : "Im aktuellen Render wurde keine Audiospur erkannt.",
+                reference: artifact.id.uuidString,
+                observedAt: snapshot.inspectedAt
             )
+            evidence.append(item)
+            audioTechnicalEvidence = item
+
+            if !snapshot.hasAudioTrack {
+                findings.append(
+                    QualityFinding(
+                        area: .audio,
+                        severity: .blocker,
+                        title: "Keine Audiospur im Render",
+                        explanation: item.observedFact,
+                        recommendedAction: "Render und Quellmedium prüfen, bevor veröffentlicht wird.",
+                        evidenceIDs: [item.id]
+                    )
+                )
+            }
         }
 
+        var audioSignalEvidence: QualityEvidence?
         if let audioSignalAssessment {
             let snapshot = audioSignalAssessment.snapshot
             let peak = snapshot.peakDBFS.map {
@@ -137,14 +152,70 @@ public struct DeterministicQualityEvidenceBuilder: Sendable {
             let rms = snapshot.rmsDBFS.map {
                 String(format: "%.2f dBFS", $0)
             } ?? "nicht messbar"
-            evidence.append(
-                QualityEvidence(
-                    source: "Blackstock Local PCM Analyzer",
-                    observedFact: "Peak \(peak); RMS \(rms); analysierte Samples \(snapshot.analyzedSampleCount); Full-Scale-Samples \(snapshot.fullScaleSampleCount).",
-                    reference: asset.id.uuidString,
-                    observedAt: snapshot.inspectedAt
-                )
+            let item = QualityEvidence(
+                source: "Blackstock Local PCM Analyzer",
+                observedFact: "Aktueller Render: Peak \(peak); RMS \(rms); analysierte Samples \(snapshot.analyzedSampleCount); Full-Scale-Samples \(snapshot.fullScaleSampleCount).",
+                reference: artifact.id.uuidString,
+                observedAt: snapshot.inspectedAt
             )
+            evidence.append(item)
+            audioSignalEvidence = item
+        }
+
+        if let technical = audioTechnicalAssessment,
+           technical.snapshot.hasAudioTrack,
+           let signal = audioSignalAssessment,
+           let technicalEvidence = audioTechnicalEvidence,
+           let signalEvidence = audioSignalEvidence {
+            if signal.snapshot.analyzedSampleCount == 0 {
+                findings.append(
+                    QualityFinding(
+                        area: .audio,
+                        severity: .blocker,
+                        title: "Audioanalyse ohne Samples",
+                        explanation: "Die Audiospur ist vorhanden, aber der lokale PCM-Analyzer konnte keine Samples aus dem aktuellen Render auswerten.",
+                        recommendedAction: "Render erneut erzeugen oder das Audioformat prüfen.",
+                        evidenceIDs: [technicalEvidence.id, signalEvidence.id]
+                    )
+                )
+            } else {
+                findings.append(
+                    QualityFinding(
+                        area: .audio,
+                        severity: .info,
+                        title: "Audio des finalen Renders technisch analysiert",
+                        explanation: "Audiospur vorhanden und \(signal.snapshot.analyzedSampleCount) PCM-Samples des aktuellen Renders wurden lokal ausgewertet.",
+                        recommendedAction: nil,
+                        evidenceIDs: [technicalEvidence.id, signalEvidence.id]
+                    )
+                )
+
+                if technical.findings.contains(.lowSampleRate) {
+                    findings.append(
+                        QualityFinding(
+                            area: .audio,
+                            severity: .warning,
+                            title: "Niedrige Sample-Rate erkannt",
+                            explanation: "Die gemessene Sample-Rate liegt unter 44.100 Hz.",
+                            recommendedAction: "Quelle und Export-Einstellungen prüfen, wenn höhere Audioqualität erwartet wird.",
+                            evidenceIDs: [technicalEvidence.id]
+                        )
+                    )
+                }
+
+                if signal.findings.contains(.fullScaleSamplesDetected) {
+                    findings.append(
+                        QualityFinding(
+                            area: .audio,
+                            severity: .warning,
+                            title: "Full-Scale-Samples erkannt",
+                            explanation: "Der lokale PCM-Analyzer hat Samples am digitalen Vollpegel erkannt.",
+                            recommendedAction: "Im finalen Review gezielt auf hörbares Clipping oder Verzerrungen prüfen.",
+                            evidenceIDs: [signalEvidence.id]
+                        )
+                    )
+                }
+            }
         }
 
         if let thumbnailAssessment {
