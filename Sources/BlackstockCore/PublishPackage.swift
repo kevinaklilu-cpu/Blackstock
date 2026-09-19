@@ -63,15 +63,18 @@ public struct PublishPackage: Codable, Sendable, Equatable {
 public struct PublishPreparationSnapshot: Codable, Sendable, Equatable {
     public let package: PublishPackage
     public let qualityReview: CreatorQualityReview
+    public let packagingVariants: PackagingVariantSet?
     public let savedAt: Date
 
     public init(
         package: PublishPackage,
         qualityReview: CreatorQualityReview,
+        packagingVariants: PackagingVariantSet? = nil,
         savedAt: Date
     ) {
         self.package = package
         self.qualityReview = qualityReview
+        self.packagingVariants = packagingVariants
         self.savedAt = savedAt
     }
 }
