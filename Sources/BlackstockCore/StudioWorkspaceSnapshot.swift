@@ -217,6 +217,36 @@ public struct ProjectWorkspaceStore: Sendable {
         )
     }
 
+    public func restorePrimary(
+        _ snapshot: StudioWorkspaceSnapshot
+    ) throws {
+        let directory = try projectDirectory(
+            projectID: snapshot.projectID
+        )
+        let primaryURL = directory.appendingPathComponent(
+            "studio-workspace.json"
+        )
+        if FileManager.default.fileExists(
+            atPath: primaryURL.path
+        ) {
+            try FileManager.default.removeItem(
+                at: primaryURL
+            )
+        }
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.sortedKeys]
+        let envelope = WorkspacePersistenceEnvelope(
+            snapshot: snapshot,
+            writtenAt: Date()
+        )
+        try encoder.encode(envelope).write(
+            to: primaryURL,
+            options: [.atomic]
+        )
+    }
+
     public func load(
         projectID: UUID
     ) throws -> StudioWorkspaceSnapshot? {
