@@ -78,6 +78,9 @@ final class BlackstockSession: ObservableObject {
     private var cachedPublishingJournal: ExternalActionJournal?
 
     init() {
+        try? PrivacyRetentionEnforcer().purgeExpiredUpdatePackages(
+            in: FileManager.default.temporaryDirectory
+        )
         importedOAuthClientID = BlackstockKeychain.read("google.oauth.importedClientID")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         onboardingComplete = UserDefaults.standard.bool(forKey: "blackstock.firstRun.complete")
@@ -134,6 +137,51 @@ final class BlackstockSession: ObservableObject {
         channels = []
         selectedChannelID = nil
         return removed
+    }
+
+    @discardableResult
+    func revokeGoogleAuthorization() async throws -> Int {
+        let channelID = workspaceChannelID ?? selectedChannelID
+        if let channelID {
+            let refreshToken = BlackstockKeychain.read(
+                "youtube.\(channelID).refreshToken"
+            )
+            let accessToken = BlackstockKeychain.read(
+                "youtube.\(channelID).accessToken"
+            )
+            let token = refreshToken.isEmpty ? accessToken : refreshToken
+            if !token.isEmpty {
+                try await GoogleOAuthRevoker().revoke(token: token)
+            }
+        }
+        return try removeLocalGoogleCredentials()
+    }
+
+    func exportLocalPrivacyData(
+        to destinationDirectory: URL
+    ) throws -> PrivacyDataExportReport {
+        let base = try FileManager.default.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        let root = base.appendingPathComponent(
+            "Blackstock",
+            isDirectory: true
+        )
+        let defaults = UserDefaults.standard.dictionaryRepresentation()
+            .filter { $0.key.hasPrefix("blackstock.") }
+        let plist = try PropertyListSerialization.data(
+            fromPropertyList: defaults,
+            format: .xml,
+            options: 0
+        )
+        return try PrivacyDataExporter().export(
+            applicationSupportRoot: root,
+            userDefaultsPlist: plist,
+            destinationDirectory: destinationDirectory
+        )
     }
 
     @discardableResult
