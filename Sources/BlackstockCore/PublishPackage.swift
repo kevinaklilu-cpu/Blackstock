@@ -60,6 +60,22 @@ public struct PublishPackage: Codable, Sendable, Equatable {
     }
 }
 
+public struct PublishPreparationSnapshot: Codable, Sendable, Equatable {
+    public let package: PublishPackage
+    public let qualityReview: CreatorQualityReview
+    public let savedAt: Date
+
+    public init(
+        package: PublishPackage,
+        qualityReview: CreatorQualityReview,
+        savedAt: Date
+    ) {
+        self.package = package
+        self.qualityReview = qualityReview
+        self.savedAt = savedAt
+    }
+}
+
 public enum PublishPackageValidationError: Error, Sendable, Equatable {
     case projectMismatch
     case projectStageNotReady
