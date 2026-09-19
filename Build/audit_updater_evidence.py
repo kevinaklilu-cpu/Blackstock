@@ -17,6 +17,8 @@ requirements = {
     "Tests/BlackstockCoreTests/InAppUpdateEvidenceTests.swift": [
         "testVerifiedUpdateCompletesOnlyAfterTargetBuildLaunch",
         "testPackageVerificationRejectsDifferentManifest",
+        "testInstallerOpenRequiresVerifiedPackage",
+        "testInstallerOpenRejectsDifferentManifest",
     ],
     "Sources/BlackstockApp/BlackstockUpdateChecker.swift": [
         "BlackstockUpdateAudit.recordAvailableUpdate",
