@@ -43,6 +43,8 @@ jobs:
         run: python3 Build/audit_research.py
       - name: Product journey audit
         run: python3 Build/audit_journey.py
+      - name: Capture foundation audit
+        run: python3 Build/audit_capture.py
       - name: Swift tests
         run: swift test
       - name: Release build
