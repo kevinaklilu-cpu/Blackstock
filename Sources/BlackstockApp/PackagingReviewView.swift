@@ -186,6 +186,9 @@ struct PackagingReviewView: View {
                 description: effectiveDescription,
                 tags: tagsArray,
                 categoryID: nil,
+                defaultLanguage: session.contentLanguage,
+                defaultAudioLanguage: transcript?.localeIdentifier
+                    ?? session.contentLanguage,
                 privacyStatus: privacyStatus,
                 selfDeclaredMadeForKids: madeForKids
             ),
