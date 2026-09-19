@@ -60,6 +60,22 @@ private struct PublishPreparationEnvelope: Codable, Sendable, Equatable {
     let snapshot: PublishPreparationSnapshot
 }
 
+public struct PublishPreparationLoadResult: Sendable, Equatable {
+    public let snapshot: PublishPreparationSnapshot?
+    public let recoveredFromBackup: Bool
+    public let migratedFromSchemaVersion: Int?
+
+    public init(
+        snapshot: PublishPreparationSnapshot?,
+        recoveredFromBackup: Bool,
+        migratedFromSchemaVersion: Int? = nil
+    ) {
+        self.snapshot = snapshot
+        self.recoveredFromBackup = recoveredFromBackup
+        self.migratedFromSchemaVersion = migratedFromSchemaVersion
+    }
+}
+
 public enum WorkspaceSchema {
     public static let legacyUnversioned = 1
     public static let current = 2
@@ -235,9 +251,22 @@ public struct ProjectWorkspaceStore: Sendable {
         let directory = try projectDirectory(
             projectID: snapshot.package.projectID
         )
-        let url = directory.appendingPathComponent(
+        let primaryURL = directory.appendingPathComponent(
             "publish-preparation.json"
         )
+        let backupURL = directory.appendingPathComponent(
+            "publish-preparation.backup.json"
+        )
+
+        if FileManager.default.fileExists(atPath: primaryURL.path),
+           let primaryData = try? Data(contentsOf: primaryURL),
+           (try? decodePublishPreparationData(
+                primaryData,
+                expectedProjectID: snapshot.package.projectID
+           )) != nil {
+            try primaryData.write(to: backupURL, options: [.atomic])
+        }
+
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.sortedKeys]
@@ -246,36 +275,83 @@ public struct ProjectWorkspaceStore: Sendable {
             snapshot: snapshot
         )
         let data = try encoder.encode(envelope)
-        try data.write(to: url, options: [.atomic])
+        try data.write(to: primaryURL, options: [.atomic])
     }
 
     public func loadPublishPreparation(
         projectID: UUID
     ) throws -> PublishPreparationSnapshot? {
-        let url = rootURL
-            .appendingPathComponent(
-                projectID.uuidString,
-                isDirectory: true
-            )
-            .appendingPathComponent(
-                "publish-preparation.json"
-            )
+        try loadPublishPreparationWithRecovery(
+            projectID: projectID
+        ).snapshot
+    }
 
-        guard FileManager.default.fileExists(
-            atPath: url.path
-        ) else {
-            return nil
+    public func loadPublishPreparationWithRecovery(
+        projectID: UUID
+    ) throws -> PublishPreparationLoadResult {
+        let directory = rootURL.appendingPathComponent(
+            projectID.uuidString,
+            isDirectory: true
+        )
+        let primaryURL = directory.appendingPathComponent(
+            "publish-preparation.json"
+        )
+        let backupURL = directory.appendingPathComponent(
+            "publish-preparation.backup.json"
+        )
+
+        let primaryExists = FileManager.default.fileExists(
+            atPath: primaryURL.path
+        )
+        let backupExists = FileManager.default.fileExists(
+            atPath: backupURL.path
+        )
+
+        guard primaryExists || backupExists else {
+            return PublishPreparationLoadResult(
+                snapshot: nil,
+                recoveredFromBackup: false
+            )
         }
 
-        let data = try Data(contentsOf: url)
+        if primaryExists {
+            do {
+                let data = try Data(contentsOf: primaryURL)
+                let decoded = try decodePublishPreparationData(
+                    data,
+                    expectedProjectID: projectID
+                )
+                if decoded.schemaVersion
+                    < PublishPreparationSchema.current {
+                    try savePublishPreparation(decoded.snapshot)
+                }
+                return PublishPreparationLoadResult(
+                    snapshot: decoded.snapshot,
+                    recoveredFromBackup: false,
+                    migratedFromSchemaVersion: decoded.schemaVersion
+                        < PublishPreparationSchema.current
+                        ? decoded.schemaVersion
+                        : nil
+                )
+            } catch {
+                guard backupExists else { throw error }
+            }
+        }
+
+        let backupData = try Data(contentsOf: backupURL)
         let decoded = try decodePublishPreparationData(
-            data,
+            backupData,
             expectedProjectID: projectID
         )
-        if decoded.schemaVersion < PublishPreparationSchema.current {
-            try savePublishPreparation(decoded.snapshot)
-        }
-        return decoded.snapshot
+        try savePublishPreparation(decoded.snapshot)
+        return PublishPreparationLoadResult(
+            snapshot: decoded.snapshot,
+            recoveredFromBackup: true,
+            migratedFromSchemaVersion: decoded.schemaVersion
+                < PublishPreparationSchema.current
+                ? decoded.schemaVersion
+                : nil
+        )
     }
 
     public func save(
