@@ -51,7 +51,7 @@ Der Verifier verlangt deshalb:
 - identische Paket-URL,
 - identischen SHA-256 des Release-Pakets,
 - identischen Git-Source-Commit-SHA zwischen Capture-Hardware-Evidenz, signiertem Produktionsrelease, installierter App und In-App-Updater-Evidenz,
-- identische erwartete Apple-Installer-Team-ID,
+- identische Apple-Team-ID zwischen der tatsächlich signierten Capture-App, dem Produktionsrelease und dem In-App-Updater,
 - Produktions-App unter `/Applications/Blackstock.app`.
 
 Damit kann zum Beispiel kein erfolgreicher Hardware-Smoke von Build 100 mit einem signierten Build 101 oder einem Update-Paket eines anderen Hashes kombiniert werden.
@@ -67,6 +67,7 @@ Die reale Capture-Evidenz wird von Blackstock selbst erzeugt. Sie enthält für 
 - SHA-256 dieser Datei,
 - Aufnahme-Launch-ID,
 - Source-Commit-SHA des installierten Blackstock-Bundles,
+- tatsächliche `Developer ID Application`-Team-ID der laufenden App,
 - Restart-Launch-ID,
 - Hard-Stop-Nachweis bei verweigerter Berechtigung,
 - Temp-Cleanup-Nachweis.
