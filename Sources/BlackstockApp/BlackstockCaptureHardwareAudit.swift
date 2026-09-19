@@ -191,6 +191,8 @@ enum BlackstockCaptureHardwareAudit {
                 == metadata.version,
            existing.blackstockBuild
                 == metadata.build,
+           existing.blackstockSourceCommitSHA
+                == metadata.sourceCommitSHA,
            existing.hardwareModel == model,
            existing.installedFromPackage
                 == installed {
@@ -203,6 +205,8 @@ enum BlackstockCaptureHardwareAudit {
                 metadata.version,
             blackstockBuild:
                 metadata.build,
+            blackstockSourceCommitSHA:
+                metadata.sourceCommitSHA,
             macOSVersion:
                 ProcessInfo.processInfo
                     .operatingSystemVersionString,
@@ -268,7 +272,11 @@ enum BlackstockCaptureHardwareAudit {
     }
 
     private static func currentMetadata()
-        -> (version: String, build: String) {
+        -> (
+            version: String,
+            build: String,
+            sourceCommitSHA: String
+        ) {
         let version = (
             Bundle.main.object(
                 forInfoDictionaryKey:
@@ -285,9 +293,22 @@ enum BlackstockCaptureHardwareAudit {
         ).trimmingCharacters(
             in: .whitespacesAndNewlines
         )
+        let sourceCommitSHA = (
+            Bundle.main.object(
+                forInfoDictionaryKey:
+                    "BlackstockSourceCommitSHA"
+            ) as? String ?? "UNBEKANNT"
+        ).trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
         return (
             version.isEmpty ? "UNBEKANNT" : version,
-            build.isEmpty ? "UNBEKANNT" : build
+            build.isEmpty ? "UNBEKANNT" : build,
+            sourceCommitSHA.count == 40
+                && sourceCommitSHA
+                    .allSatisfy({ $0.isHexDigit })
+                ? sourceCommitSHA.lowercased()
+                : "UNBEKANNT"
         )
     }
 
