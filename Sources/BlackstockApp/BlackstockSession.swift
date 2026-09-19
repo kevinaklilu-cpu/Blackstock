@@ -54,6 +54,12 @@ final class BlackstockSession: ObservableObject {
     @Published var channels: [YouTubeChannelIdentity] = []
     @Published var selectedChannelID: String?
     @Published var primaryTopic = ""
+    @Published var strategyContentPromise = ""
+    @Published var strategyAudienceHypothesis = ""
+    @Published var strategyPillarsText = ""
+    @Published var strategyAdjacentTopicsText = ""
+    @Published var strategyExcludedTopicsText = ""
+    @Published var strategyObjective: StrategicObjective = .balanced
     @Published var contentLanguage = "de"
     @Published var opportunities: [YouTubeOpportunityCandidate] = []
     @Published var isWorking = false
@@ -247,6 +253,12 @@ final class BlackstockSession: ObservableObject {
         channels = []
         selectedChannelID = nil
         primaryTopic = ""
+        strategyContentPromise = ""
+        strategyAudienceHypothesis = ""
+        strategyPillarsText = ""
+        strategyAdjacentTopicsText = ""
+        strategyExcludedTopicsText = ""
+        strategyObjective = .balanced
         contentLanguage = "de"
         opportunities = []
         isWorking = false
@@ -1296,6 +1308,24 @@ final class BlackstockSession: ObservableObject {
             errorMessage = "Lege zuerst den strategischen Kanal-Schwerpunkt fest."
             return
         }
+        guard !strategyContentPromise.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        ).isEmpty else {
+            errorMessage = "Beschreibe zuerst das konkrete Content-Versprechen des Kanals."
+            return
+        }
+        guard !strategyAudienceHypothesis.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        ).isEmpty else {
+            errorMessage = "Beschreibe zuerst die Zielgruppe, für die der Kanal Inhalte erstellt."
+            return
+        }
+        guard !ChannelStrategyDraft.list(
+            from: strategyPillarsText
+        ).isEmpty else {
+            errorMessage = "Lege mindestens eine inhaltliche Säule fest."
+            return
+        }
         primaryTopic = value
         errorMessage = nil
         step = .language
@@ -1325,20 +1355,17 @@ final class BlackstockSession: ObservableObject {
                 return
             }
 
-            let strategy = ChannelStrategy(
-                channelID: channel.id,
+            let strategy = try ChannelStrategyDraft(
                 primaryTopic: primaryTopic,
-                topicDefinition: primaryTopic,
-                contentPromise: primaryTopic,
-                pillars: [],
-                adjacentTopics: [],
-                excludedTopics: [],
-                defaultContentLanguage: contentLanguage,
-                researchLanguages: contentLanguage == "de" ? ["de", "en"] : [contentLanguage],
-                audienceHypothesis: "",
-                objectives: [.balanced],
-                explorationPolicy: .init(),
-                effectiveFrom: Date(),
+                contentPromise: strategyContentPromise,
+                audienceHypothesis: strategyAudienceHypothesis,
+                pillarsText: strategyPillarsText,
+                adjacentTopicsText: strategyAdjacentTopicsText,
+                excludedTopicsText: strategyExcludedTopicsText,
+                objective: strategyObjective
+            ).makeStrategy(
+                channelID: channel.id,
+                contentLanguage: contentLanguage,
                 version: nextStrategyVersion(for: channel.id)
             )
             try persist(strategy: strategy)
