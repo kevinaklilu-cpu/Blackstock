@@ -877,10 +877,13 @@ final class BlackstockSession: ObservableObject {
                 order: .time
             )
 
-            guard page.threads.allSatisfy({
-                $0.videoID == record.youtubeVideoID
-                && $0.channelID == project.targetChannelID
-            }) else {
+            do {
+                try YouTubeCommentContextGuard().validate(
+                    page: page,
+                    expectedVideoID: record.youtubeVideoID,
+                    expectedChannelID: project.targetChannelID
+                )
+            } catch {
                 latestCommentPage = nil
                 latestCommentsVideoID = nil
                 errorMessage = "Kommentarabruf gestoppt: YouTube lieferte Daten für einen unerwarteten Video- oder Kanalkontext."
