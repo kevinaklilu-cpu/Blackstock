@@ -54,7 +54,7 @@ final class CanonicalTests: XCTestCase {
     }
 
     func testWrongChannelHardStops() {
-        let c = PublicationPreflightContext(projectTargetChannelID: "A", workspaceChannelID: "B", authorizedUploadChannelID: "A", renderValidated: true, rightsValidated: true, authorizationAvailable: true, quotaAvailable: true, networkAvailable: true)
+        let c = PublicationPreflightContext(projectTargetChannelID: "A", workspaceChannelID: "B", authorizedUploadChannelID: "A", renderValidated: true, rightsValidated: true, authorizationAvailable: true, quotaState: .unknown, networkAvailable: true)
         XCTAssertThrowsError(try c.validate()) { XCTAssertEqual($0 as? PublicationPreflightError, .wrongChannel) }
     }
 
