@@ -20,6 +20,8 @@ public enum LocalRenderError: Error, Sendable, Equatable {
     case unsupportedEditOperation(EditOperationType)
     case exportSessionUnavailable
     case unsupportedOutputType
+    case missingVideoTrack
+    case reframePlanUnavailable
     case exportFailed(String)
     case missingOutput
 }
@@ -44,7 +46,7 @@ public actor LocalVideoRenderer {
         }
 
         let unsupported = graph.currentOperations.first {
-            ![EditOperationType.trim].contains($0.type)
+            ![EditOperationType.trim, EditOperationType.reframe].contains($0.type)
         }
         if let unsupported {
             throw LocalRenderError.unsupportedEditOperation(unsupported.type)
@@ -72,6 +74,49 @@ public actor LocalVideoRenderer {
             presetName: preset.avPresetName
         ) else {
             throw LocalRenderError.exportSessionUnavailable
+        }
+
+        if let reframe = graph.currentOperations
+            .last(where: { $0.type == .reframe })?
+            .reframeSpec {
+            let sourceTracks = try await source.loadTracks(withMediaType: .video)
+            let compositionTracks = try await composition.loadTracks(withMediaType: .video)
+            guard let sourceTrack = sourceTracks.first,
+                  let compositionTrack = compositionTracks.first else {
+                throw LocalRenderError.missingVideoTrack
+            }
+
+            let naturalSize = try await sourceTrack.load(.naturalSize)
+            let preferredTransform = try await sourceTrack.load(.preferredTransform)
+            let renderSize = preset.renderSize(for: reframe.aspectRatio)
+
+            guard let plan = ReframeTransformPlan.make(
+                naturalSize: naturalSize,
+                preferredTransform: preferredTransform,
+                spec: reframe,
+                renderSize: renderSize
+            ) else {
+                throw LocalRenderError.reframePlanUnavailable
+            }
+
+            let duration = try await composition.load(.duration)
+            let instruction = AVMutableVideoCompositionInstruction()
+            instruction.timeRange = CMTimeRange(start: .zero, duration: duration)
+
+            let layer = AVMutableVideoCompositionLayerInstruction(
+                assetTrack: compositionTrack
+            )
+            layer.setTransform(plan.transform, at: .zero)
+            instruction.layerInstructions = [layer]
+
+            let videoComposition = AVMutableVideoComposition()
+            videoComposition.instructions = [instruction]
+            videoComposition.renderSize = CGSize(
+                width: plan.renderWidth,
+                height: plan.renderHeight
+            )
+            videoComposition.frameDuration = CMTime(value: 1, timescale: 30)
+            exporter.videoComposition = videoComposition
         }
 
         let supported = exporter.supportedFileTypes
