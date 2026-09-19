@@ -86,6 +86,7 @@ public enum PublishPackageValidationError: Error, Sendable, Equatable {
     case qualityReviewFailed
     case rightsNotValidated
     case titleMissing
+    case metadataInvalid
     case publicPublishingNotAllowed
     case userConfirmationRequired
 }
@@ -155,6 +156,11 @@ public struct PublishReviewContext: Sendable, Equatable {
         }
         guard !package.metadata.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw PublishPackageValidationError.titleMissing
+        }
+        do {
+            try YouTubeMetadataValidator().validate(package.metadata)
+        } catch {
+            throw PublishPackageValidationError.metadataInvalid
         }
         if package.metadata.privacyStatus != .privateVideo && !publicPublishingAllowed {
             throw PublishPackageValidationError.publicPublishingNotAllowed
