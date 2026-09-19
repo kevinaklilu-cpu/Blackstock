@@ -43,6 +43,8 @@ required = [
     "staplerValidated",
     "gatekeeperInstallerAccepted",
     "installedAppPath",
+    "installedAppVersion",
+    "installedAppBuild",
     "developerIDApplicationVerified",
     "gatekeeperApplicationAccepted",
     "notarySubmissionID",
@@ -75,7 +77,7 @@ for key in ["manifestURL", "packageURL"]:
         fail(f"{key} must use a real production host")
 
 version_pattern = re.compile(r"^\d+(?:\.\d+){0,3}$")
-for key in ["currentVersion", "targetVersion"]:
+for key in ["currentVersion", "targetVersion", "installedAppVersion"]:
     if not version_pattern.fullmatch(str(data[key])):
         fail(f"{key} must be a numeric dotted version")
 
@@ -86,10 +88,11 @@ def version_tuple(value):
 try:
     current_build = int(data["currentBuild"])
     target_build = int(data["targetBuild"])
+    installed_app_build = int(data["installedAppBuild"])
 except (TypeError, ValueError):
     fail("build values must be integers")
 
-if current_build <= 0 or target_build <= 0:
+if current_build <= 0 or target_build <= 0 or installed_app_build <= 0:
     fail("build values must be positive")
 
 current_version = version_tuple(data["currentVersion"])
@@ -98,6 +101,11 @@ if target_version < current_version:
     fail("targetVersion must not be older than currentVersion")
 if target_version == current_version and target_build <= current_build:
     fail("target build must be newer when version is unchanged")
+
+if str(data["installedAppVersion"]) != str(data["targetVersion"]):
+    fail("installedAppVersion must equal targetVersion")
+if installed_app_build != target_build:
+    fail("installedAppBuild must equal targetBuild")
 
 sha = str(data["packageSHA256"]).lower()
 if not re.fullmatch(r"[0-9a-f]{64}", sha):
@@ -120,8 +128,8 @@ for key in [
     if data[key] is not True:
         fail(f"{key} must be true")
 
-if not str(data["installedAppPath"] or "").strip():
-    fail("installedAppPath must be present for full signing/Gatekeeper evidence")
+if str(data["installedAppPath"] or "").strip() != "/Applications/Blackstock.app":
+    fail("installedAppPath must be /Applications/Blackstock.app")
 
 if not str(data["notarySubmissionID"] or "").strip():
     fail("notarySubmissionID must be present")
