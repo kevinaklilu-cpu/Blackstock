@@ -414,8 +414,8 @@ struct StudioView: View {
                         .font(.headline)
 
                     Picker("Qualität", selection: $state.renderPreset) {
-                        Text("1080p").tag(LocalRenderPreset.hd1080)
-                        Text("4K").tag(LocalRenderPreset.uhd4K)
+                        Text("Bis 1080p").tag(LocalRenderPreset.hd1080)
+                        Text("Bis 4K").tag(LocalRenderPreset.uhd4K)
                     }
                     .pickerStyle(.segmented)
 
