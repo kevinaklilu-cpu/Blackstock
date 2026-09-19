@@ -1,9 +1,20 @@
 import Foundation
 
-public enum PublishingChannelIdentityValidationError: Error, Sendable, Equatable {
+public enum PublishingChannelIdentityValidationError: Error, LocalizedError, Sendable, Equatable {
     case noAuthorizedChannel
     case ambiguousAuthorizedChannels
     case targetChannelMismatch
+
+    public var errorDescription: String? {
+        switch self {
+        case .noAuthorizedChannel:
+            return "Google hat keinen eindeutig autorisierten YouTube-Kanal geliefert."
+        case .ambiguousAuthorizedChannels:
+            return "Google hat mehrere autorisierte YouTube-Kanäle geliefert. Blackstock führt deshalb keinen Upload aus."
+        case .targetChannelMismatch:
+            return "Der unmittelbar autorisierte YouTube-Kanal stimmt nicht mit dem Projekt-Zielkanal überein."
+        }
+    }
 }
 
 public struct PublishingChannelIdentityGuard: Sendable {
