@@ -44,7 +44,7 @@ public struct OpportunityProjectFactory: Sendable {
         let project = BlackstockProject(
             title: opportunity.title,
             targetChannelID: channel,
-            stage: .production,
+            stage: .research,
             strategyVersion: max(strategyVersion, 1),
             createdAt: now,
             updatedAt: now
