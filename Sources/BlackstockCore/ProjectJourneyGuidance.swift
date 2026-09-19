@@ -34,7 +34,7 @@ public extension BlackstockStage {
         case .discovery:
             return .init(
                 stage: self,
-                title: "Discovery",
+                title: "Chancen",
                 purpose: "Reale Opportunity-Signale und Quellen prüfen.",
                 nextAction: "Eine belegte Opportunity für Research auswählen.",
                 recommendedSurface: .none
@@ -42,7 +42,7 @@ public extension BlackstockStage {
         case .research:
             return .init(
                 stage: self,
-                title: "Research",
+                title: "Recherche",
                 purpose: "Quellen und relevante Provider-Daten nachvollziehbar prüfen.",
                 nextAction: "Research-Evidence vervollständigen.",
                 recommendedSurface: .none
@@ -58,7 +58,7 @@ public extension BlackstockStage {
         case .production:
             return .init(
                 stage: self,
-                title: "Production",
+                title: "Produktion",
                 purpose: "Ein autorisiertes Produktionsmedium mit Rechte-Nachweis vorbereiten.",
                 nextAction: "Medium importieren und Rechte bestätigen.",
                 recommendedSurface: .studio
@@ -66,7 +66,7 @@ public extension BlackstockStage {
         case .preview:
             return .init(
                 stage: self,
-                title: "Preview",
+                title: "Vorschau",
                 purpose: "Das echte Produktionsmedium vor strukturellen Edits prüfen.",
                 nextAction: "Vorschau prüfen und Storyboard starten.",
                 recommendedSurface: .studio
@@ -82,7 +82,7 @@ public extension BlackstockStage {
         case .editing:
             return .init(
                 stage: self,
-                title: "Editing",
+                title: "Bearbeitung",
                 purpose: "Non-destruktive Edits im EditGraph prüfen und rendern.",
                 nextAction: "Schnitt finalisieren und Packaging & Review öffnen.",
                 recommendedSurface: .studio
@@ -90,7 +90,7 @@ public extension BlackstockStage {
         case .packaging:
             return .init(
                 stage: self,
-                title: "Packaging",
+                title: "Veröffentlichungspaket",
                 purpose: "Metadaten, Thumbnail, Captions und technische QC vorbereiten.",
                 nextAction: "Packaging-Evidence vervollständigen und Review speichern.",
                 recommendedSurface: .studio
@@ -98,7 +98,7 @@ public extension BlackstockStage {
         case .review:
             return .init(
                 stage: self,
-                title: "Review",
+                title: "Prüfung",
                 purpose: "Finales Artefakt, Rechte, Qualität und Zielkanal vor Remote-Aktion prüfen.",
                 nextAction: "Publish-Review prüfen und Upload ausdrücklich bestätigen.",
                 recommendedSurface: .studio
@@ -106,7 +106,7 @@ public extension BlackstockStage {
         case .publishing:
             return .init(
                 stage: self,
-                title: "Publishing",
+                title: "Veröffentlichung",
                 purpose: "Den bestätigten YouTube-Upload und Resume-Zustand nachvollziehbar ausführen.",
                 nextAction: "Upload- und Resume-Status prüfen.",
                 recommendedSurface: .studio
@@ -114,7 +114,7 @@ public extension BlackstockStage {
         case .published:
             return .init(
                 stage: self,
-                title: "Published / Learning",
+                title: "Veröffentlicht / Lernen",
                 purpose: "Reale YouTube-Ergebnisse beobachten und belegte Lernfakten festhalten.",
                 nextAction: "Analytics und veröffentlichte Kommentare beobachten.",
                 recommendedSurface: .overview
