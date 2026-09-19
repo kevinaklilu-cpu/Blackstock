@@ -27,6 +27,18 @@ private enum PublishingSessionError: Error, LocalizedError {
     }
 }
 
+struct LocalPrivacyDeletionSummary {
+    let keychainEntriesRemoved: Int
+    let userDefaultsKeysRemoved: Int
+    let localFilesRemoved: Int
+    let localDirectoriesRemoved: Int
+    let failures: [String]
+
+    var isComplete: Bool {
+        failures.isEmpty
+    }
+}
+
 @MainActor
 final class BlackstockSession: ObservableObject {
     enum FirstRunStep: Int, CaseIterable {
@@ -117,6 +129,84 @@ final class BlackstockSession: ObservableObject {
         channels = []
         selectedChannelID = nil
         return removed
+    }
+
+    @discardableResult
+    func removeAllLocalBlackstockData() -> LocalPrivacyDeletionSummary {
+        var keychainEntriesRemoved = 0
+        var userDefaultsKeysRemoved = 0
+        var localFilesRemoved = 0
+        var localDirectoriesRemoved = 0
+        var failures: [String] = []
+
+        do {
+            keychainEntriesRemoved = try BlackstockKeychain
+                .deleteAccounts(withPrefix: "")
+        } catch {
+            failures.append(
+                "Keychain-Daten konnten nicht vollständig entfernt werden: \(describe(error))"
+            )
+        }
+
+        let defaults = UserDefaults.standard
+        let blackstockKeys = defaults.dictionaryRepresentation().keys
+            .filter { $0.hasPrefix("blackstock.") }
+        for key in blackstockKeys {
+            defaults.removeObject(forKey: key)
+            userDefaultsKeysRemoved += 1
+        }
+
+        do {
+            let base = try FileManager.default.url(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask,
+                appropriateFor: nil,
+                create: true
+            )
+            let root = base.appendingPathComponent(
+                "Blackstock",
+                isDirectory: true
+            )
+            let report = try LocalDataCleaner()
+                .deleteDirectoryIfPresent(root)
+            localFilesRemoved = report.fileCount
+            localDirectoriesRemoved = report.directoryCount
+        } catch {
+            failures.append(
+                "Lokale Projekt-/Growth-Daten konnten nicht vollständig entfernt werden: \(describe(error))"
+            )
+        }
+
+        tokenSet = nil
+        cachedPublishingJournal = nil
+        importedOAuthClientID = ""
+        onboardingComplete = !failures.isEmpty
+        activeProject = nil
+        activeOpportunitySource = nil
+        publishingAuthorizedChannelID = nil
+        analyticsAuthorizedChannelID = nil
+        lastPublishingResult = nil
+        latestGrowthLearning = nil
+        step = .welcome
+        channels = []
+        selectedChannelID = nil
+        primaryTopic = ""
+        contentLanguage = "de"
+        opportunities = []
+        isWorking = false
+        isAuthorizingPublishing = false
+        isPublishing = false
+        isAuthorizingAnalytics = false
+        isCollectingAnalytics = false
+        errorMessage = nil
+
+        return LocalPrivacyDeletionSummary(
+            keychainEntriesRemoved: keychainEntriesRemoved,
+            userDefaultsKeysRemoved: userDefaultsKeysRemoved,
+            localFilesRemoved: localFilesRemoved,
+            localDirectoriesRemoved: localDirectoriesRemoved,
+            failures: failures
+        )
     }
 
     func removeImportedOAuthConfiguration() {
