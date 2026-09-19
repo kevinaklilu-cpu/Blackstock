@@ -32,6 +32,8 @@ required_root = [
     "macOSVersion",
     "hardwareModel",
     "installedFromPackage",
+    "applicationTeamID",
+    "developerIDApplicationVerified",
     "camera",
     "microphone",
     "screen",
@@ -47,7 +49,7 @@ for key in required_root:
     if key not in data:
         fail(f"missing field: {key}")
 
-if data["schemaVersion"] != 2:
+if data["schemaVersion"] != 3:
     fail("unsupported schemaVersion")
 
 try:
@@ -66,8 +68,13 @@ source_commit = str(data["blackstockSourceCommitSHA"]).strip().lower()
 if not re.fullmatch(r"[0-9a-f]{40}", source_commit):
     fail("blackstockSourceCommitSHA must be a 40-character hexadecimal Git commit SHA")
 
+application_team_id = str(data["applicationTeamID"]).strip()
+if not re.fullmatch(r"[A-Za-z0-9]+", application_team_id):
+    fail("applicationTeamID must be non-empty ASCII alphanumeric")
+
 for key in [
     "installedFromPackage",
+    "developerIDApplicationVerified",
     "deniedPermissionHardStopPassed",
     "temporaryCleanupPassed",
     "appRestartPersistencePassed",
