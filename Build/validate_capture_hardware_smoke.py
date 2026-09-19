@@ -3,6 +3,7 @@ import json
 import sys
 from datetime import datetime
 from pathlib import Path
+from uuid import UUID
 
 def fail(message):
     print(f"Capture hardware smoke validation failed: {message}", file=sys.stderr)
@@ -35,6 +36,9 @@ required_root = [
     "deniedPermissionHardStopPassed",
     "temporaryCleanupPassed",
     "appRestartPersistencePassed",
+    "restartVerifiedLaunchID",
+    "deniedPermissionKinds",
+    "temporaryCleanupKinds",
 ]
 for key in required_root:
     if key not in data:
@@ -49,8 +53,11 @@ except ValueError:
     fail("testedAt must be ISO-8601")
 
 for key in ["blackstockVersion", "blackstockBuild", "macOSVersion", "hardwareModel"]:
-    if not str(data[key]).strip():
+    value = str(data[key]).strip()
+    if not value:
         fail(f"{key} must not be empty")
+    if value.upper() == "UNBEKANNT":
+        fail(f"{key} must not be unknown")
 
 for key in [
     "installedFromPackage",
@@ -66,7 +73,15 @@ def validate_capture(name, require_video=False, require_samples=False):
     if not isinstance(item, dict):
         fail(f"{name} must be an object")
 
-    for key in ["permissionGranted", "recordingCreated", "durationSeconds", "persistedToProject"]:
+    for key in [
+        "permissionGranted",
+        "recordingCreated",
+        "durationSeconds",
+        "persistedToProject",
+        "projectID",
+        "recordedLaunchID",
+        "persistedFilePath",
+    ]:
         if key not in item:
             fail(f"{name}.{key} is required")
 
@@ -76,6 +91,18 @@ def validate_capture(name, require_video=False, require_samples=False):
         fail(f"{name}.recordingCreated must be true")
     if item["persistedToProject"] is not True:
         fail(f"{name}.persistedToProject must be true")
+
+    try:
+        UUID(str(item["projectID"]))
+        recording_launch = UUID(str(item["recordedLaunchID"]))
+    except (ValueError, TypeError):
+        fail(f"{name} projectID/recordedLaunchID must be UUIDs")
+
+    persisted_path = Path(str(item["persistedFilePath"]))
+    if not persisted_path.is_absolute():
+        fail(f"{name}.persistedFilePath must be absolute")
+    if not persisted_path.is_file():
+        fail(f"{name}.persistedFilePath must still exist")
 
     try:
         duration = float(item["durationSeconds"])
@@ -95,9 +122,48 @@ def validate_capture(name, require_video=False, require_samples=False):
         if samples <= 0:
             fail(f"{name}.decodedSamples must be greater than zero")
 
-validate_capture("camera", require_video=True)
-validate_capture("microphone", require_samples=True)
-validate_capture("screen", require_video=True)
-validate_capture("systemAudio", require_samples=True)
+    return recording_launch, persisted_path
+
+camera_launch, camera_path = validate_capture(
+    "camera",
+    require_video=True,
+)
+microphone_launch, microphone_path = validate_capture(
+    "microphone",
+    require_samples=True,
+)
+screen_launch, screen_path = validate_capture(
+    "screen",
+    require_video=True,
+)
+system_audio_launch, system_audio_path = validate_capture(
+    "systemAudio",
+    require_samples=True,
+)
+
+if screen_path != system_audio_path:
+    fail("screen and systemAudio must reference the same ScreenCaptureKit file")
+
+try:
+    restart_launch = UUID(str(data["restartVerifiedLaunchID"]))
+except (ValueError, TypeError):
+    fail("restartVerifiedLaunchID must be a UUID")
+
+for capture_launch in [
+    camera_launch,
+    microphone_launch,
+    screen_launch,
+    system_audio_launch,
+]:
+    if capture_launch == restart_launch:
+        fail("restartVerifiedLaunchID must differ from every recording launch")
+
+required_kinds = {"camera", "microphone", "screen", "systemAudio"}
+for key in ["deniedPermissionKinds", "temporaryCleanupKinds"]:
+    raw = data[key]
+    if not isinstance(raw, list):
+        fail(f"{key} must be an array")
+    if not required_kinds.issubset(set(map(str, raw))):
+        fail(f"{key} must contain all four canonical capture kinds")
 
 print("Capture hardware smoke evidence is valid.")
