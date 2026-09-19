@@ -67,6 +67,16 @@ enum BlackstockCaptureHardwareAudit {
             let kinds = canonicalKinds(
                 for: kind
             )
+            evidence.temporaryCleanupKinds
+                .subtract(kinds)
+            evidence.temporaryCleanupPassed =
+                Set(CaptureKind.allCases)
+                    .isSubset(
+                        of: evidence
+                            .temporaryCleanupKinds
+                    )
+            evidence.appRestartPersistencePassed =
+                false
 
             for canonicalKind in kinds {
                 let permissionGranted =
@@ -165,12 +175,17 @@ enum BlackstockCaptureHardwareAudit {
         store: CaptureHardwareSmokeEvidenceStore
     ) throws -> CaptureHardwareSmokeEvidence {
         let metadata = currentMetadata()
+        let model = hardwareModel()
+        let installed = installedFromPackage()
 
         if let existing = try store.load(),
            existing.blackstockVersion
                 == metadata.version,
            existing.blackstockBuild
-                == metadata.build {
+                == metadata.build,
+           existing.hardwareModel == model,
+           existing.installedFromPackage
+                == installed {
             return existing
         }
 
@@ -183,9 +198,8 @@ enum BlackstockCaptureHardwareAudit {
             macOSVersion:
                 ProcessInfo.processInfo
                     .operatingSystemVersionString,
-            hardwareModel: hardwareModel(),
-            installedFromPackage:
-                installedFromPackage()
+            hardwareModel: model,
+            installedFromPackage: installed
         )
     }
 
