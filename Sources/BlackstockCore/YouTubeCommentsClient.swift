@@ -90,6 +90,27 @@ public struct YouTubeCommentThreadPage: Codable, Sendable, Equatable {
     }
 }
 
+public enum YouTubeCommentContextError: Error, Sendable, Equatable {
+    case unexpectedThreadContext
+}
+
+public struct YouTubeCommentContextGuard: Sendable {
+    public init() {}
+
+    public func validate(
+        page: YouTubeCommentThreadPage,
+        expectedVideoID: String,
+        expectedChannelID: String
+    ) throws {
+        guard page.threads.allSatisfy({
+            $0.videoID == expectedVideoID
+            && $0.channelID == expectedChannelID
+        }) else {
+            throw YouTubeCommentContextError.unexpectedThreadContext
+        }
+    }
+}
+
 public enum YouTubeCommentsError: Error, Sendable, Equatable {
     case invalidVideoID
     case invalidResponse
