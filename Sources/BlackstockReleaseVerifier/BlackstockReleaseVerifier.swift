@@ -10,6 +10,7 @@ private enum ReleaseVerifierError: Error, LocalizedError {
     case commandFailed(String, Int32, String)
     case appIdentityMismatch
     case installedAppVersionMismatch
+    case installedAppSourceCommitMismatch
     case missingCaptureEntitlements
     case incompleteNotaryArguments
     case notarizationNotAccepted(String)
@@ -32,6 +33,8 @@ private enum ReleaseVerifierError: Error, LocalizedError {
             return "Die installierte App ist nicht mit der erwarteten Developer-ID-Application-Team-ID signiert."
         case .installedAppVersionMismatch:
             return "Die installierte App entspricht nicht exakt Manifest-Version und -Build."
+        case .installedAppSourceCommitMismatch:
+            return "Die installierte App stammt nicht aus dem im signierten Manifest gebundenen Source-Commit."
         case .missingCaptureEntitlements:
             return "Der installierten Produktions-App fehlen die Hardened-Runtime-Entitlements für Kamera oder Audioeingang."
         case .incompleteNotaryArguments:
@@ -57,6 +60,7 @@ private struct ReleaseVerificationEvidence: Codable {
     let targetVersion: String
     let targetBuild: Int
     let packageSHA256: String
+    let sourceCommitSHA: String
     let installerTeamID: String
     let manifestSignatureVerified: Bool
     let updateAvailabilityVerified: Bool
@@ -67,6 +71,7 @@ private struct ReleaseVerificationEvidence: Codable {
     let installedAppPath: String?
     let installedAppVersion: String?
     let installedAppBuild: Int?
+    let installedAppSourceCommitSHA: String?
     let cameraEntitlementVerified: Bool?
     let audioInputEntitlementVerified: Bool?
     let developerIDApplicationVerified: Bool?
@@ -199,6 +204,7 @@ private struct BlackstockReleaseVerifierMain {
         var applicationGatekeeperAccepted: Bool?
         var installedAppVersion: String?
         var installedAppBuild: Int?
+        var installedAppSourceCommitSHA: String?
         var cameraEntitlementVerified: Bool?
         var audioInputEntitlementVerified: Bool?
         if let appURL = arguments.installedAppURL {
@@ -262,6 +268,22 @@ private struct BlackstockReleaseVerifierMain {
             installedAppVersion = appVersion
             installedAppBuild = appBuild
 
+            guard let appSourceCommitSHA =
+                    info["BlackstockSourceCommitSHA"]
+                        as? String,
+                  appSourceCommitSHA.count == 40,
+                  appSourceCommitSHA.allSatisfy({
+                      $0.isHexDigit
+                  }),
+                  appSourceCommitSHA.lowercased()
+                    == manifest.sourceCommitSHA.lowercased()
+            else {
+                throw ReleaseVerifierError
+                    .installedAppSourceCommitMismatch
+            }
+            installedAppSourceCommitSHA =
+                appSourceCommitSHA.lowercased()
+
             let entitlements = try requireSuccessful(
                 run(
                     "/usr/bin/codesign",
@@ -317,7 +339,7 @@ private struct BlackstockReleaseVerifierMain {
         )
 
         return ReleaseVerificationEvidence(
-            schemaVersion: 1,
+            schemaVersion: 2,
             verifiedAt: Date(),
             manifestURL: arguments.manifestURL,
             packageURL: manifest.packageURL,
@@ -326,6 +348,8 @@ private struct BlackstockReleaseVerifierMain {
             targetVersion: manifest.version,
             targetBuild: manifest.build,
             packageSHA256: manifest.sha256,
+            sourceCommitSHA:
+                manifest.sourceCommitSHA.lowercased(),
             installerTeamID: arguments.installerTeamID,
             manifestSignatureVerified: true,
             updateAvailabilityVerified: true,
@@ -336,6 +360,8 @@ private struct BlackstockReleaseVerifierMain {
             installedAppPath: arguments.installedAppURL?.path,
             installedAppVersion: installedAppVersion,
             installedAppBuild: installedAppBuild,
+            installedAppSourceCommitSHA:
+                installedAppSourceCommitSHA,
             cameraEntitlementVerified:
                 cameraEntitlementVerified,
             audioInputEntitlementVerified:
