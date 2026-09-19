@@ -115,6 +115,12 @@ def normalize_source_commit(value, label):
         fail(f"{label} must be a 40-character hexadecimal Git commit SHA")
     return value
 
+def normalize_sha256(value, label):
+    value = str(value).strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", value):
+        fail(f"{label} must be a 64-character hexadecimal SHA-256")
+    return value
+
 def main():
     args = parse_args()
     statuses = release_gate_statuses()
@@ -269,6 +275,28 @@ def main():
             "refer to the same exact source commit"
         )
 
+    capture_executable_sha256 = normalize_sha256(
+        capture.get("applicationExecutableSHA256"),
+        "capture.applicationExecutableSHA256",
+    )
+    release_executable_sha256 = normalize_sha256(
+        release.get("installedAppExecutableSHA256"),
+        "release.installedAppExecutableSHA256",
+    )
+    updater_executable_sha256 = normalize_sha256(
+        updater.get("observedInstalledExecutableSHA256"),
+        "updater.observedInstalledExecutableSHA256",
+    )
+    if len({
+        capture_executable_sha256,
+        release_executable_sha256,
+        updater_executable_sha256,
+    }) != 1:
+        fail(
+            "capture, production release and updater evidence do not "
+            "refer to the same exact installed Blackstock executable"
+        )
+
     if release.get("installedAppPath") != "/Applications/Blackstock.app":
         fail(
             "production release evidence must verify "
@@ -289,6 +317,7 @@ def main():
         "packageURL": release.get("packageURL"),
         "packageSHA256": release.get("packageSHA256"),
         "sourceCommitSHA": release_source_commit,
+        "executableSHA256": release_executable_sha256,
         "captureEvidence": str(capture_path),
         "productionReleaseEvidence": str(release_path),
         "inAppUpdateEvidence": str(updater_path),
