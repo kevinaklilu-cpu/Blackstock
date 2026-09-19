@@ -183,6 +183,53 @@ public struct ProjectWorkspaceStore: Sendable {
         return destination
     }
 
+    public func savePublishPreparation(
+        _ snapshot: PublishPreparationSnapshot
+    ) throws {
+        let directory = try projectDirectory(
+            projectID: snapshot.package.projectID
+        )
+        let url = directory.appendingPathComponent(
+            "publish-preparation.json"
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.sortedKeys]
+        let data = try encoder.encode(snapshot)
+        try data.write(to: url, options: [.atomic])
+    }
+
+    public func loadPublishPreparation(
+        projectID: UUID
+    ) throws -> PublishPreparationSnapshot? {
+        let url = rootURL
+            .appendingPathComponent(
+                projectID.uuidString,
+                isDirectory: true
+            )
+            .appendingPathComponent(
+                "publish-preparation.json"
+            )
+
+        guard FileManager.default.fileExists(
+            atPath: url.path
+        ) else {
+            return nil
+        }
+
+        let data = try Data(contentsOf: url)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let snapshot = try decoder.decode(
+            PublishPreparationSnapshot.self,
+            from: data
+        )
+        guard snapshot.package.projectID == projectID else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        return snapshot
+    }
+
     public func save(
         _ snapshot: StudioWorkspaceSnapshot
     ) throws {

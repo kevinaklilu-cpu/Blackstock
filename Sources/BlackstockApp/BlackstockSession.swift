@@ -130,20 +130,7 @@ final class BlackstockSession: ObservableObject {
             }
         }
 
-        let base = try FileManager.default.url(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        )
-        let root = base
-            .appendingPathComponent("Blackstock", isDirectory: true)
-            .appendingPathComponent("Projects", isDirectory: true)
-        try FileManager.default.createDirectory(
-            at: root,
-            withIntermediateDirectories: true
-        )
-        return try ProjectWorkspaceStore(rootURL: root)
+        return try projectWorkspaceStore()
             .importPackagingAsset(
                 sourceURL: url,
                 projectID: projectID,
@@ -748,11 +735,9 @@ final class BlackstockSession: ObservableObject {
             packagingVariants: packagingVariants,
             savedAt: Date()
         )
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        let data = try encoder.encode(snapshot)
-        UserDefaults.standard.set(
-            data,
+        try projectWorkspaceStore()
+            .savePublishPreparation(snapshot)
+        UserDefaults.standard.removeObject(
             forKey: "blackstock.publish-preparation.\(package.projectID.uuidString)"
         )
     }
@@ -760,17 +745,36 @@ final class BlackstockSession: ObservableObject {
     func loadPublishPreparation(
         projectID: UUID
     ) -> PublishPreparationSnapshot? {
-        guard let data = UserDefaults.standard.data(
-            forKey: "blackstock.publish-preparation.\(projectID.uuidString)"
-        ) else {
+        do {
+            let store = try projectWorkspaceStore()
+            if let snapshot = try store.loadPublishPreparation(
+                projectID: projectID
+            ) {
+                return snapshot
+            }
+
+            // One-time migration from the earlier UserDefaults storage.
+            let key = "blackstock.publish-preparation.\(projectID.uuidString)"
+            guard let data = UserDefaults.standard.data(
+                forKey: key
+            ) else {
+                return nil
+            }
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let snapshot = try decoder.decode(
+                PublishPreparationSnapshot.self,
+                from: data
+            )
+            guard snapshot.package.projectID == projectID else {
+                return nil
+            }
+            try store.savePublishPreparation(snapshot)
+            UserDefaults.standard.removeObject(forKey: key)
+            return snapshot
+        } catch {
             return nil
         }
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return try? decoder.decode(
-            PublishPreparationSnapshot.self,
-            from: data
-        )
     }
 
     func publishingJournal() throws -> ExternalActionJournal {
@@ -860,6 +864,23 @@ final class BlackstockSession: ObservableObject {
         try? growthRecordStore().loadLearning(
             projectID: projectID
         )
+    }
+
+    private func projectWorkspaceStore() throws -> ProjectWorkspaceStore {
+        let base = try FileManager.default.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        let root = base
+            .appendingPathComponent("Blackstock", isDirectory: true)
+            .appendingPathComponent("Projects", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: root,
+            withIntermediateDirectories: true
+        )
+        return ProjectWorkspaceStore(rootURL: root)
     }
 
     private func growthRecordStore() throws -> GrowthRecordStore {

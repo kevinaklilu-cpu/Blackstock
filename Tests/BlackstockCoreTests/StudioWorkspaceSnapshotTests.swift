@@ -109,4 +109,48 @@ final class StudioWorkspaceSnapshotTests: XCTestCase {
         XCTAssertNotEqual(caption, captionSource)
     }
 
+
+    func testPublishPreparationRoundTripsInProjectWorkspace() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let projectID = UUID()
+        let renderID = UUID()
+        let package = PublishPackage(
+            projectID: projectID,
+            targetChannelID: "channel-A",
+            renderArtifactID: renderID,
+            metadata: YouTubeUploadMetadata(
+                title: "Video",
+                description: "Beschreibung",
+                privacyStatus: .privateVideo,
+                selfDeclaredMadeForKids: false
+            ),
+            thumbnail: nil,
+            captions: []
+        )
+        let review = CreatorQualityReview(
+            projectID: projectID,
+            stage: .review,
+            evidence: [],
+            findings: [],
+            reviewedAt: Date(timeIntervalSince1970: 4)
+        )
+        let snapshot = PublishPreparationSnapshot(
+            package: package,
+            qualityReview: review,
+            packagingVariants: PackagingVariantSet(),
+            savedAt: Date(timeIntervalSince1970: 5)
+        )
+        let store = ProjectWorkspaceStore(rootURL: root)
+
+        try store.savePublishPreparation(snapshot)
+        let restored = try XCTUnwrap(
+            store.loadPublishPreparation(projectID: projectID)
+        )
+
+        XCTAssertEqual(restored, snapshot)
+    }
+
 }
