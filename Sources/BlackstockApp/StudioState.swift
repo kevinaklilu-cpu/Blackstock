@@ -23,6 +23,7 @@ final class StudioState: ObservableObject {
     @Published var captionURL: URL?
     @Published var speechAuthorizationState: LocalSpeechAuthorizationState = .notDetermined
     @Published var audioTechnicalAssessment: AudioTechnicalAssessment?
+    @Published var audioSignalAssessment: AudioSignalAssessment?
 
     private var correlationID = UUID()
 
@@ -78,6 +79,7 @@ final class StudioState: ObservableObject {
             transcript = nil
             captionURL = nil
             audioTechnicalAssessment = nil
+            audioSignalAssessment = nil
 
             ledger.append(.init(
                 timestamp: Date(),
@@ -97,6 +99,17 @@ final class StudioState: ObservableObject {
                     .inspect(url: imported.sourceURL)
             } catch {
                 audioTechnicalAssessment = nil
+            }
+
+            if audioTechnicalAssessment?.snapshot.hasAudioTrack == true {
+                do {
+                    audioSignalAssessment = try await LocalAudioSignalAnalyzer()
+                        .analyze(url: imported.sourceURL)
+                } catch {
+                    audioSignalAssessment = nil
+                }
+            } else {
+                audioSignalAssessment = nil
             }
 
             errorMessage = nil
