@@ -420,6 +420,8 @@ private struct SettingsView: View {
     @ObservedObject var session: BlackstockSession
     @State private var showCredentialRemovalConfirmation = false
     @State private var credentialStatusMessage: String?
+    @State private var showLocalDataRemovalConfirmation = false
+    @State private var localDataStatusMessage: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -476,6 +478,53 @@ private struct SettingsView: View {
                 Button("Abbrechen", role: .cancel) {}
             } message: {
                 Text("Diese Aktion meldet Blackstock lokal ab. Sie widerruft keine Berechtigung im Google-Konto und löscht keine Projektdateien.")
+            }
+
+            GroupBox("Datenschutz & lokale Daten") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Blackstock speichert Projekt-, Growth- und Workspace-Daten lokal im Benutzerprofil. Google-/YouTube-Zugangsdaten liegen im macOS-Keychain.")
+
+                    Button(
+                        "Alle lokalen Blackstock-Daten löschen",
+                        role: .destructive
+                    ) {
+                        showLocalDataRemovalConfirmation = true
+                    }
+
+                    Text("Löscht lokale Projekte, Renders, Captions, Thumbnails, Growth-Daten, Blackstock-Einstellungen, gespeicherte Google-/YouTube-Anmeldedaten und eine importierte OAuth-Client-Konfiguration von diesem Mac.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if let localDataStatusMessage {
+                        Text(localDataStatusMessage)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 6)
+            }
+            .confirmationDialog(
+                "Alle lokalen Blackstock-Daten löschen?",
+                isPresented: $showLocalDataRemovalConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button(
+                    "Lokale Daten endgültig löschen",
+                    role: .destructive
+                ) {
+                    let summary = session.removeAllLocalBlackstockData()
+                    if summary.isComplete {
+                        localDataStatusMessage = nil
+                    } else {
+                        localDataStatusMessage = summary.failures.joined(
+                            separator: " "
+                        )
+                    }
+                }
+                Button("Abbrechen", role: .cancel) {}
+            } message: {
+                Text("Diese Aktion ist lokal endgültig. Sie löscht keine bereits veröffentlichten YouTube-Videos und widerruft keine Berechtigungen direkt im Google-Konto.")
             }
 
             Button("First Run erneut starten", role: .destructive) {
