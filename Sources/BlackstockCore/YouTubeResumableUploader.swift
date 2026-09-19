@@ -55,8 +55,15 @@ public enum YouTubeUploadError: Error, Sendable, Equatable {
     case invalidResponse
     case missingUploadLocation
     case uploadFailed(Int)
+    case expiredUploadSession
     case missingVideoID
     case journalChannelMismatch
+}
+
+enum YouTubeResumableUploadStatus: Sendable, Equatable {
+    case incomplete(nextOffset: Int64)
+    case completed(videoID: String)
+    case expired
 }
 
 public struct YouTubeUploadResult: Codable, Sendable, Equatable {
@@ -132,16 +139,55 @@ public struct YouTubeResumableUploader: Sendable {
         )
         try await journal.upsert(entry)
 
-        let uploadURL: URL
+        var uploadURL: URL
         if let saved = entry.remoteSessionURL {
-            uploadURL = saved
-            entry.nextByteOffset = try await queryNextOffset(
+            let status = try await queryUploadStatus(
                 uploadURL: saved,
                 totalSize: fileSize,
                 session: session
             )
-            entry.updatedAt = Date()
-            try await journal.upsert(entry)
+            switch status {
+            case .incomplete(let nextOffset):
+                uploadURL = saved
+                entry.nextByteOffset = nextOffset
+                entry.lastError = nil
+                entry.updatedAt = Date()
+                try await journal.upsert(entry)
+
+            case .completed(let videoID):
+                entry.state = .remoteCommitted
+                entry.remoteResourceID = videoID
+                entry.nextByteOffset = fileSize
+                entry.lastError = nil
+                entry.updatedAt = Date()
+                try await journal.upsert(entry)
+                return .init(
+                    videoID: videoID,
+                    idempotencyKey: idempotencyKey,
+                    reusedCommittedAction: true
+                )
+
+            case .expired:
+                entry.state = .prepared
+                entry.remoteSessionURL = nil
+                entry.nextByteOffset = 0
+                entry.lastError = "YouTube resumable session expired; a new session is required."
+                entry.updatedAt = Date()
+                try await journal.upsert(entry)
+
+                uploadURL = try await createUploadSession(
+                    fileSize: fileSize,
+                    mimeType: artifact.mimeType,
+                    metadata: metadata,
+                    session: session
+                )
+                entry.state = .remoteSessionCreated
+                entry.remoteSessionURL = uploadURL
+                entry.nextByteOffset = 0
+                entry.lastError = nil
+                entry.updatedAt = Date()
+                try await journal.upsert(entry)
+            }
         } else {
             uploadURL = try await createUploadSession(
                 fileSize: fileSize,
@@ -152,6 +198,7 @@ public struct YouTubeResumableUploader: Sendable {
             entry.state = .remoteSessionCreated
             entry.remoteSessionURL = uploadURL
             entry.nextByteOffset = 0
+            entry.lastError = nil
             entry.updatedAt = Date()
             try await journal.upsert(entry)
         }
@@ -183,6 +230,12 @@ public struct YouTubeResumableUploader: Sendable {
             )
         } catch {
             entry = await journal.entry(for: idempotencyKey) ?? entry
+            if let uploadError = error as? YouTubeUploadError,
+               uploadError == .expiredUploadSession {
+                entry.state = .prepared
+                entry.remoteSessionURL = nil
+                entry.nextByteOffset = 0
+            }
             entry.lastError = String(describing: error)
             entry.updatedAt = Date()
             try await journal.upsert(entry)
@@ -264,11 +317,11 @@ public struct YouTubeResumableUploader: Sendable {
         return uploadURL
     }
 
-    private func queryNextOffset(
+    private func queryUploadStatus(
         uploadURL: URL,
         totalSize: Int64,
         session: URLSession
-    ) async throws -> Int64 {
+    ) async throws -> YouTubeResumableUploadStatus {
         let request = Self.resumableStatusRequest(
             uploadURL: uploadURL,
             totalSize: totalSize,
@@ -280,16 +333,11 @@ public struct YouTubeResumableUploader: Sendable {
             throw YouTubeUploadError.invalidResponse
         }
 
-        if http.statusCode == 308 {
-            return Self.nextOffset(fromRangeHeader: http.value(forHTTPHeaderField: "Range"))
-        }
-        if 200..<300 ~= http.statusCode {
-            if Self.videoID(from: data) != nil {
-                return totalSize
-            }
-            throw YouTubeUploadError.missingVideoID
-        }
-        throw YouTubeUploadError.uploadFailed(http.statusCode)
+        return try Self.resumableStatus(
+            statusCode: http.statusCode,
+            rangeHeader: http.value(forHTTPHeaderField: "Range"),
+            data: data
+        )
     }
 
     private func uploadChunks(
@@ -342,6 +390,9 @@ public struct YouTubeResumableUploader: Sendable {
                 continue
             }
 
+            if http.statusCode == 404 {
+                throw YouTubeUploadError.expiredUploadSession
+            }
             guard 200..<300 ~= http.statusCode else {
                 throw YouTubeUploadError.uploadFailed(http.statusCode)
             }
@@ -410,6 +461,30 @@ public struct YouTubeResumableUploader: Sendable {
             throw YouTubeUploadError.invalidFile
         }
         return Int64(size)
+    }
+
+    static func resumableStatus(
+        statusCode: Int,
+        rangeHeader: String?,
+        data: Data
+    ) throws -> YouTubeResumableUploadStatus {
+        if statusCode == 308 {
+            return .incomplete(
+                nextOffset: nextOffset(
+                    fromRangeHeader: rangeHeader
+                )
+            )
+        }
+        if statusCode == 404 {
+            return .expired
+        }
+        if 200..<300 ~= statusCode {
+            guard let videoID = videoID(from: data) else {
+                throw YouTubeUploadError.missingVideoID
+            }
+            return .completed(videoID: videoID)
+        }
+        throw YouTubeUploadError.uploadFailed(statusCode)
     }
 
     static func nextOffset(fromRangeHeader range: String?) -> Int64 {
