@@ -346,7 +346,7 @@ private struct OverviewView: View {
                 if !due.isEmpty {
                     Text(
                         "Fällig: "
-                        + due.map { $0.window.rawValue }
+                        + due.map { $0.window.germanTitle }
                             .joined(separator: ", ")
                     )
                     .font(.caption)
