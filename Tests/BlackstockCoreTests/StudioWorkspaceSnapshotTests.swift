@@ -89,6 +89,49 @@ final class StudioWorkspaceSnapshotTests: XCTestCase {
         XCTAssertEqual(recovered.snapshot, first)
     }
 
+    func testRecoveredBackupCanRepairPrimaryWithoutDestroyingBackup() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let projectID = UUID()
+        let store = ProjectWorkspaceStore(rootURL: root)
+        let snapshot = StudioWorkspaceSnapshot(
+            projectID: projectID,
+            mediaAsset: nil,
+            editGraph: EditGraph(createdAt: Date(timeIntervalSince1970: 1)),
+            activityLedger: ActivityLedger(),
+            storyboard: StoryboardPlan(
+                projectID: projectID,
+                updatedAt: Date(timeIntervalSince1970: 2)
+            ),
+            trimStart: 0,
+            trimEnd: 10,
+            transcript: nil,
+            captionURL: nil,
+            renderArtifact: nil,
+            updatedAt: Date(timeIntervalSince1970: 3)
+        )
+
+        try store.save(snapshot)
+        try store.save(snapshot)
+
+        let directory = try store.projectDirectory(projectID: projectID)
+        let primary = directory.appendingPathComponent("studio-workspace.json")
+        let backup = directory.appendingPathComponent("studio-workspace.backup.json")
+        try Data("corrupt".utf8).write(to: primary, options: [.atomic])
+
+        let recovered = try XCTUnwrap(store.loadResult(projectID: projectID))
+        XCTAssertEqual(recovered.source, .backup)
+
+        try store.restorePrimary(recovered.snapshot)
+
+        let restored = try XCTUnwrap(store.loadResult(projectID: projectID))
+        XCTAssertEqual(restored.source, .primary)
+        XCTAssertEqual(restored.snapshot, snapshot)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: backup.path))
+    }
+
     func testLegacyRawSnapshotStillLoadsForMigration() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
