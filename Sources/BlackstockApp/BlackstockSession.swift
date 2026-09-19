@@ -180,7 +180,7 @@ final class BlackstockSession: ObservableObject {
         tokenSet = nil
         cachedPublishingJournal = nil
         importedOAuthClientID = ""
-        onboardingComplete = false
+        onboardingComplete = !failures.isEmpty
         activeProject = nil
         activeOpportunitySource = nil
         publishingAuthorizedChannelID = nil
