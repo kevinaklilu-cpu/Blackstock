@@ -1,6 +1,22 @@
 import Foundation
 
-public enum StrategicObjective: String, Codable, Sendable, CaseIterable { case balanced, reach, watchTime, subscribers, revenue }
+public enum StrategicObjective: String, Codable, Sendable, CaseIterable {
+    case balanced
+    case reach
+    case watchTime
+    case subscribers
+    case revenue
+
+    public var germanTitle: String {
+        switch self {
+        case .balanced: return "Ausgewogen"
+        case .reach: return "Reichweite"
+        case .watchTime: return "Wiedergabezeit"
+        case .subscribers: return "Abonnenten"
+        case .revenue: return "Umsatz"
+        }
+    }
+}
 
 public struct HistoricalChannelProfile: Codable, Sendable, Equatable {
     public var observedTopics: [String]
