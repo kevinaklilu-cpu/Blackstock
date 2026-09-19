@@ -24,7 +24,7 @@ try:
 except Exception as error:
     fail(f"invalid JSON: {error}")
 
-if envelope.get("schemaVersion") != 2:
+if envelope.get("schemaVersion") != 3:
     fail("unsupported schemaVersion")
 
 value = envelope.get("value")
@@ -50,6 +50,7 @@ required = [
     "observedInstalledVersion",
     "observedInstalledBuild",
     "observedInstalledSourceCommitSHA",
+    "observedInstalledExecutableSHA256",
     "postUpdateLaunchVerifiedAt",
 ]
 for key in required:
@@ -119,6 +120,12 @@ for label, commit in [
         fail(f"{label} must be a 40-character hexadecimal Git commit SHA")
 if observed_source_commit != target_source_commit:
     fail("observed installed source commit must equal target source commit")
+
+observed_executable_sha256 = str(
+    value["observedInstalledExecutableSHA256"]
+).lower()
+if not re.fullmatch(r"[0-9a-f]{64}", observed_executable_sha256):
+    fail("observedInstalledExecutableSHA256 must be a 64-character hexadecimal SHA-256")
 
 time_keys = [
     "startedAt",
