@@ -25,10 +25,21 @@ requirements = {
         "BlackstockUpdateAudit.recordVerifiedPackage",
     ],
     "Sources/BlackstockApp/BlackstockApp.swift": [
+        "BlackstockUpdateInstallationPreflight()",
+        "BlackstockUpdateAudit",
+        ".recordVerifiedPackage",
         "BlackstockUpdateAudit.recordInstallerOpened",
+        "NSWorkspace.shared.open",
+        "Developer-ID-Installer-Team",
     ],
     "Sources/BlackstockApp/BlackstockSession.swift": [
         "BlackstockUpdateAudit.reconcilePostUpdateLaunch",
+    ],
+    "Sources/BlackstockApp/BlackstockUpdateInstallationPreflight.swift": [
+        "UpdatePackageIntegrityVerifier().verify",
+        "BlackstockInstallerPackageVerifier().verify",
+        "BlackstockUpdateInstallerTeamID",
+        "missingInstallerTeamID",
     ],
     "Sources/BlackstockApp/BlackstockUpdateAudit.swift": [
         "update-evidence.json",
