@@ -65,6 +65,43 @@ for relative, markers in CRITICAL.items():
                 f"{relative}:{line}: icon-only Button without accessibilityLabel"
             )
 
+
+# Strict canonical accessibility contracts beyond labels.
+SCALING_AND_PRESENTATION = [
+    "Sources/BlackstockApp/FirstRunView.swift",
+    "Sources/BlackstockApp/StudioView.swift",
+    "Sources/BlackstockApp/PackagingReviewView.swift",
+    "Sources/BlackstockApp/BlackstockApp.swift",
+]
+
+for relative in SCALING_AND_PRESENTATION:
+    path = ROOT / relative
+    if not path.is_file():
+        continue
+    text = path.read_text(encoding="utf-8")
+
+    if ".font(.system(size:" in text:
+        errors.append(f"{relative}: fixed point font size defeats text scaling")
+
+    if "withAnimation(" in text or ".animation(" in text:
+        errors.append(f"{relative}: custom animation requires Reduced Motion handling")
+
+    if "Color(red:" in text or "Color(.sRGB" in text:
+        errors.append(f"{relative}: hard-coded RGB color bypasses system contrast behavior")
+
+app = ROOT / "Sources/BlackstockApp/BlackstockApp.swift"
+if app.is_file():
+    app_text = app.read_text(encoding="utf-8")
+    for marker in [
+        "@FocusState private var queryFocused: Bool",
+        ".focused($queryFocused)",
+        "queryFocused = true",
+        '.keyboardShortcut("k", modifiers: .command)',
+        ".onExitCommand",
+    ]:
+        if marker not in app_text:
+            errors.append(f"BlackstockApp.swift: missing keyboard/focus contract: {marker}")
+
 if errors:
     print("Accessibility audit failed:", file=sys.stderr)
     for error in errors:
