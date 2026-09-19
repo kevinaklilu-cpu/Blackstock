@@ -9,6 +9,7 @@ private enum ReleaseVerifierError: Error, LocalizedError {
     case noUpdateAvailable
     case commandFailed(String, Int32, String)
     case appIdentityMismatch
+    case installedAppVersionMismatch
     case incompleteNotaryArguments
     case notarizationNotAccepted(String)
 
@@ -28,6 +29,8 @@ private enum ReleaseVerifierError: Error, LocalizedError {
             return "\(command) schlug mit Status \(status) fehl: \(output)"
         case .appIdentityMismatch:
             return "Die installierte App ist nicht mit der erwarteten Developer-ID-Application-Team-ID signiert."
+        case .installedAppVersionMismatch:
+            return "Die installierte App entspricht nicht exakt Manifest-Version und -Build."
         case .incompleteNotaryArguments:
             return "Notary-Submission-ID benötigt entweder ein Keychain-Profil oder vollständig konfigurierte API-Key-Zugangsdaten."
         case .notarizationNotAccepted(let status):
@@ -59,6 +62,8 @@ private struct ReleaseVerificationEvidence: Codable {
     let staplerValidated: Bool
     let gatekeeperInstallerAccepted: Bool
     let installedAppPath: String?
+    let installedAppVersion: String?
+    let installedAppBuild: Int?
     let developerIDApplicationVerified: Bool?
     let gatekeeperApplicationAccepted: Bool?
     let notarySubmissionID: String?
@@ -187,6 +192,8 @@ private struct BlackstockReleaseVerifierMain {
 
         var applicationVerified: Bool?
         var applicationGatekeeperAccepted: Bool?
+        var installedAppVersion: String?
+        var installedAppBuild: Int?
         if let appURL = arguments.installedAppURL {
             _ = try requireSuccessful(
                 run(
@@ -222,6 +229,31 @@ private struct BlackstockReleaseVerifierMain {
                 throw ReleaseVerifierError.appIdentityMismatch
             }
             applicationVerified = true
+
+            let infoURL = appURL
+                .appendingPathComponent("Contents")
+                .appendingPathComponent("Info.plist")
+            let infoData = try Data(contentsOf: infoURL)
+            guard let info = try PropertyListSerialization
+                    .propertyList(
+                        from: infoData,
+                        options: [],
+                        format: nil
+                    ) as? [String: Any],
+                  let appVersion =
+                    info["CFBundleShortVersionString"]
+                        as? String,
+                  let appBuildString =
+                    info["CFBundleVersion"]
+                        as? String,
+                  let appBuild = Int(appBuildString),
+                  appVersion == manifest.version,
+                  appBuild == manifest.build else {
+                throw ReleaseVerifierError
+                    .installedAppVersionMismatch
+            }
+            installedAppVersion = appVersion
+            installedAppBuild = appBuild
 
             _ = try requireSuccessful(
                 run(
@@ -260,6 +292,8 @@ private struct BlackstockReleaseVerifierMain {
             staplerValidated: true,
             gatekeeperInstallerAccepted: true,
             installedAppPath: arguments.installedAppURL?.path,
+            installedAppVersion: installedAppVersion,
+            installedAppBuild: installedAppBuild,
             developerIDApplicationVerified: applicationVerified,
             gatekeeperApplicationAccepted:
                 applicationGatekeeperAccepted,
