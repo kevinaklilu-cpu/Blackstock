@@ -21,7 +21,7 @@ Statuswerte: **PASS / FAIL / BLOCKED_EXTERNAL**.
 | Video QC / 4K | FAIL |
 | Publishing | FAIL |
 | Wrong Channel E2E | PASS |
-| Upload Resume | FAIL |
+| Upload Resume | PASS |
 | Analytics | FAIL |
 | Comments | PASS |
 | Security | FAIL |
@@ -41,5 +41,7 @@ Hinweis: **Installer = PASS** basiert auf der Canonical-CI: Das erzeugte `.pkg` 
 Hinweis: **Comments = PASS** bezieht sich auf den implementierten read-only Pfad für veröffentlichte Videos: GET-only YouTube-CommentThreads, Plaintext, Pagination, spezifische Providerfehler, erneute Zielkanal-Identitätsprüfung und Video-/Kanal-Kontext-Hard-Stop. Schreib-, Antwort- oder Moderationsaktionen sind daraus ausdrücklich nicht abgeleitet.
 
 Hinweis: **Wrong Channel E2E = PASS** basiert auf den deterministischen Hard-Stop-Tests: Ein falscher Workspace-Kanal oder falscher autorisierter Upload-Kanal stoppt vor Datei-/Journal-Mutation. Zusätzlich muss die aktuell von YouTube gelieferte autorisierte Kanalidentität eindeutig und exakt dem Projekt-Zielkanal entsprechen.
+
+Hinweis: **Upload Resume = PASS** basiert auf dem produktiven persistenten External-Action-Journal und deterministischen Resume-Tests: eine gespeicherte YouTube-Resumable-Session wird nach Unterbrechung erneut abgefragt, der von YouTube bestätigte Remote-Byte-Offset wird übernommen, alle Status-/Chunk-PUTs bleiben authentifiziert, Fortschritt wird persistent gespeichert und bereits remote abgeschlossene Uploads werden idempotent wiederverwendet statt doppelt hochgeladen.
 
 **STATUS: NOCH NICHT MARKTREIF**
