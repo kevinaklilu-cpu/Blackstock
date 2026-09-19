@@ -246,10 +246,174 @@ private struct OverviewView: View {
             Text("Der First-Run nutzt reale Google-/YouTube-Autorisierung. Weitere Produktflächen bleiben unsichtbar, bis ihre Capability-Gates bestehen.")
                 .foregroundStyle(.secondary)
 
+            if let project = session.activeProject,
+               project.stage == .published,
+               let record = session.loadPublishedRecord(
+                    projectID: project.id
+               ) {
+                growthLoopCard(
+                    project: project,
+                    record: record
+                )
+            }
+
             Spacer()
         }
         .padding(28)
     }
+
+    @ViewBuilder
+    private func growthLoopCard(
+        project: BlackstockProject,
+        record: PublishedVideoRecord
+    ) -> some View {
+        GroupBox("Publishing → Analytics → Lernen") {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(project.title)
+                            .font(.headline)
+                        Text("YouTube Video-ID: \(record.youtubeVideoID)")
+                            .font(.caption.monospaced())
+                            .textSelection(.enabled)
+                    }
+                    Spacer()
+                }
+
+                let due = GrowthObservationPlanner().duePlans(
+                    for: record,
+                    now: Date()
+                )
+                let next = GrowthObservationPlanner().nextDueAt(
+                    for: record,
+                    now: Date()
+                )
+
+                if session.analyticsAuthorizedChannelID
+                    == project.targetChannelID {
+                    HStack {
+                        Button {
+                            Task {
+                                await session.collectDueGrowthObservations()
+                            }
+                        } label: {
+                            HStack {
+                                if session.isCollectingAnalytics {
+                                    ProgressView().controlSize(.small)
+                                }
+                                Label(
+                                    session.isCollectingAnalytics
+                                        ? "Analytics werden aktualisiert …"
+                                        : "Fällige Analytics aktualisieren",
+                                    systemImage: "chart.line.uptrend.xyaxis"
+                                )
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(
+                            session.isCollectingAnalytics
+                            || due.isEmpty
+                        )
+
+                        if due.isEmpty {
+                            Text("Aktuell kein Beobachtungsfenster fällig.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                } else {
+                    Button {
+                        Task {
+                            await session.authorizeAnalytics()
+                        }
+                    } label: {
+                        HStack {
+                            if session.isAuthorizingAnalytics {
+                                ProgressView().controlSize(.small)
+                            }
+                            Label(
+                                session.isAuthorizingAnalytics
+                                    ? "Analytics-Autorisierung läuft …"
+                                    : "YouTube Analytics aktivieren",
+                                systemImage: "key"
+                            )
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(session.isAuthorizingAnalytics)
+                }
+
+                if !due.isEmpty {
+                    Text(
+                        "Fällig: "
+                        + due.map { $0.window.rawValue }
+                            .joined(separator: ", ")
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                } else if let next {
+                    Text(
+                        "Nächster geplanter Check: "
+                        + next.formatted(
+                            date: .abbreviated,
+                            time: .shortened
+                        )
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+
+                if let learning = session.latestGrowthLearning {
+                    Divider()
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Belegte Lernfakten")
+                            .font(.headline)
+                        ForEach(
+                            Array(learning.facts.enumerated()),
+                            id: \.offset
+                        ) { _, fact in
+                            Label(fact, systemImage: "circle.fill")
+                                .font(.caption)
+                        }
+                        if let question = learning.nextQuestion {
+                            Text(question)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                } else if !record.observations.isEmpty {
+                    let learning = GrowthLearningEngine()
+                        .summarize(record)
+                    if let learning {
+                        Divider()
+                        ForEach(
+                            Array(learning.facts.enumerated()),
+                            id: \.offset
+                        ) { _, fact in
+                            Text("• " + fact)
+                                .font(.caption)
+                        }
+                    }
+                } else {
+                    Text("Noch keine vollständige YouTube-Analytics-Beobachtung gespeichert. Verzögerte Daten werden nicht als Nullwerte interpretiert.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let error = session.errorMessage {
+                    Label(
+                        error,
+                        systemImage: "exclamationmark.triangle"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 6)
+        }
+    }
+
 }
 
 private struct SettingsView: View {
