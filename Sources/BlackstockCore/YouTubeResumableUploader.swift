@@ -269,10 +269,11 @@ public struct YouTubeResumableUploader: Sendable {
         totalSize: Int64,
         session: URLSession
     ) async throws -> Int64 {
-        var request = URLRequest(url: uploadURL)
-        request.httpMethod = "PUT"
-        request.setValue("0", forHTTPHeaderField: "Content-Length")
-        request.setValue("bytes */\(totalSize)", forHTTPHeaderField: "Content-Range")
+        let request = Self.resumableStatusRequest(
+            uploadURL: uploadURL,
+            totalSize: totalSize,
+            accessToken: accessToken
+        )
 
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
@@ -314,16 +315,14 @@ public struct YouTubeResumableUploader: Sendable {
                 throw YouTubeUploadError.invalidFile
             }
 
-            let end = offset + Int64(data.count) - 1
-            var request = URLRequest(url: uploadURL)
-            request.httpMethod = "PUT"
-            request.setValue(mimeType, forHTTPHeaderField: "Content-Type")
-            request.setValue(String(data.count), forHTTPHeaderField: "Content-Length")
-            request.setValue(
-                "bytes \(offset)-\(end)/\(totalSize)",
-                forHTTPHeaderField: "Content-Range"
+            let request = Self.resumableChunkRequest(
+                uploadURL: uploadURL,
+                mimeType: mimeType,
+                totalSize: totalSize,
+                offset: offset,
+                data: data,
+                accessToken: accessToken
             )
-            request.httpBody = data
 
             let (responseData, response) = try await session.data(for: request)
             guard let http = response as? HTTPURLResponse else {
@@ -353,6 +352,56 @@ public struct YouTubeResumableUploader: Sendable {
         }
 
         throw YouTubeUploadError.missingVideoID
+    }
+
+    static func resumableStatusRequest(
+        uploadURL: URL,
+        totalSize: Int64,
+        accessToken: String
+    ) -> URLRequest {
+        var request = URLRequest(url: uploadURL)
+        request.httpMethod = "PUT"
+        request.setValue(
+            "Bearer \(accessToken)",
+            forHTTPHeaderField: "Authorization"
+        )
+        request.setValue("0", forHTTPHeaderField: "Content-Length")
+        request.setValue(
+            "bytes */\(totalSize)",
+            forHTTPHeaderField: "Content-Range"
+        )
+        return request
+    }
+
+    static func resumableChunkRequest(
+        uploadURL: URL,
+        mimeType: String,
+        totalSize: Int64,
+        offset: Int64,
+        data: Data,
+        accessToken: String
+    ) -> URLRequest {
+        let end = offset + Int64(data.count) - 1
+        var request = URLRequest(url: uploadURL)
+        request.httpMethod = "PUT"
+        request.setValue(
+            "Bearer \(accessToken)",
+            forHTTPHeaderField: "Authorization"
+        )
+        request.setValue(
+            mimeType,
+            forHTTPHeaderField: "Content-Type"
+        )
+        request.setValue(
+            String(data.count),
+            forHTTPHeaderField: "Content-Length"
+        )
+        request.setValue(
+            "bytes \(offset)-\(end)/\(totalSize)",
+            forHTTPHeaderField: "Content-Range"
+        )
+        request.httpBody = data
+        return request
     }
 
     private static func fileSize(_ url: URL) throws -> Int64 {
