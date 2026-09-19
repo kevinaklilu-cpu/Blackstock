@@ -113,6 +113,8 @@ requirements = {
         "reconcilePostRestart",
         'capture-hardware-smoke.json',
         '"/Applications/Blackstock.app"',
+        "operatingSystemVersionString",
+        "existing.macOSVersion == osVersion",
         "CryptoKit",
         "SHA256()",
         "persistedFileSHA256",
