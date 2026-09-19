@@ -35,6 +35,8 @@ jobs:
         run: python3 Build/audit_temporal.py
       - name: Grounding and provenance audit
         run: python3 Build/audit_grounding.py
+      - name: Discovery audit
+        run: python3 Build/audit_discovery.py
       - name: Swift tests
         run: swift test
       - name: Release build
