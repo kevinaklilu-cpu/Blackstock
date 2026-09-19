@@ -110,8 +110,17 @@ struct CaptureCapabilityPanel: View {
         Button {
             Task {
                 requesting = kind
-                _ = await CaptureCapabilityProbe()
-                    .requestAuthorization(for: kind)
+                let granted =
+                    await CaptureCapabilityProbe()
+                        .requestAuthorization(
+                            for: kind
+                        )
+                if !granted {
+                    BlackstockCaptureHardwareAudit
+                        .recordDeniedPermission(
+                            for: kind
+                        )
+                }
                 snapshot = CaptureCapabilityProbe()
                     .inspect()
                 requesting = nil
