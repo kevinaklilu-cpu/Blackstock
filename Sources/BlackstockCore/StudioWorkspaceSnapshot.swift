@@ -60,6 +60,29 @@ private struct StudioWorkspaceEnvelope: Codable, Sendable, Equatable {
     let snapshot: StudioWorkspaceSnapshot
 }
 
+public enum PublishPreparationSchema {
+    public static let legacyUnversioned = 1
+    public static let current = 2
+}
+
+private struct PublishPreparationEnvelope: Codable, Sendable, Equatable {
+    let schemaVersion: Int
+    let snapshot: PublishPreparationSnapshot
+}
+
+public struct PublishPreparationLoadResult: Sendable, Equatable {
+    public let snapshot: PublishPreparationSnapshot?
+    public let migratedFromSchemaVersion: Int?
+
+    public init(
+        snapshot: PublishPreparationSnapshot?,
+        migratedFromSchemaVersion: Int? = nil
+    ) {
+        self.snapshot = snapshot
+        self.migratedFromSchemaVersion = migratedFromSchemaVersion
+    }
+}
+
 public struct WorkspaceLoadResult: Sendable, Equatable {
     public let snapshot: StudioWorkspaceSnapshot?
     public let recoveredFromBackup: Bool
@@ -226,13 +249,25 @@ public struct ProjectWorkspaceStore: Sendable {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.sortedKeys]
-        let data = try encoder.encode(snapshot)
+        let envelope = PublishPreparationEnvelope(
+            schemaVersion: PublishPreparationSchema.current,
+            snapshot: snapshot
+        )
+        let data = try encoder.encode(envelope)
         try data.write(to: url, options: [.atomic])
     }
 
     public func loadPublishPreparation(
         projectID: UUID
     ) throws -> PublishPreparationSnapshot? {
+        try loadPublishPreparationWithMigration(
+            projectID: projectID
+        ).snapshot
+    }
+
+    public func loadPublishPreparationWithMigration(
+        projectID: UUID
+    ) throws -> PublishPreparationLoadResult {
         let url = rootURL
             .appendingPathComponent(
                 projectID.uuidString,
@@ -245,20 +280,56 @@ public struct ProjectWorkspaceStore: Sendable {
         guard FileManager.default.fileExists(
             atPath: url.path
         ) else {
-            return nil
+            return PublishPreparationLoadResult(snapshot: nil)
         }
 
         let data = try Data(contentsOf: url)
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        let snapshot = try decoder.decode(
-            PublishPreparationSnapshot.self,
-            from: data
-        )
+        let object = try JSONSerialization.jsonObject(with: data)
+        guard let dictionary = object as? [String: Any] else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+
+        let snapshot: PublishPreparationSnapshot
+        let schemaVersion: Int
+
+        if let rawVersion = dictionary["schemaVersion"] {
+            guard let version = rawVersion as? Int,
+                  version > 0 else {
+                throw WorkspaceMigrationError.invalidSchemaVersion(
+                    (rawVersion as? Int) ?? 0
+                )
+            }
+            guard version <= PublishPreparationSchema.current else {
+                throw WorkspaceMigrationError
+                    .unsupportedFutureSchemaVersion(version)
+            }
+            let envelope = try decoder.decode(
+                PublishPreparationEnvelope.self,
+                from: data
+            )
+            snapshot = envelope.snapshot
+            schemaVersion = envelope.schemaVersion
+        } else {
+            snapshot = try decoder.decode(
+                PublishPreparationSnapshot.self,
+                from: data
+            )
+            schemaVersion = PublishPreparationSchema.legacyUnversioned
+        }
+
         guard snapshot.package.projectID == projectID else {
             throw CocoaError(.fileReadCorruptFile)
         }
-        return snapshot
+
+        return PublishPreparationLoadResult(
+            snapshot: snapshot,
+            migratedFromSchemaVersion: schemaVersion
+                < PublishPreparationSchema.current
+                ? schemaVersion
+                : nil
+        )
     }
 
     public func save(
