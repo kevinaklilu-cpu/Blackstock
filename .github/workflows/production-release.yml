@@ -177,6 +177,7 @@ jobs:
         env:
           BLACKSTOCK_VERSION: ${{ inputs.version }}
           BLACKSTOCK_BUILD: ${{ inputs.build }}
+          BLACKSTOCK_SOURCE_COMMIT_SHA: ${{ github.sha }}
           BLACKSTOCK_GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.BLACKSTOCK_GOOGLE_OAUTH_CLIENT_ID }}
           BLACKSTOCK_CODESIGN_IDENTITY: ${{ secrets.BLACKSTOCK_CODESIGN_IDENTITY }}
           BLACKSTOCK_INSTALLER_IDENTITY: ${{ secrets.BLACKSTOCK_INSTALLER_IDENTITY }}
@@ -214,9 +215,10 @@ jobs:
       - name: Validate local production artifacts
         env:
           TEAM_ID: ${{ secrets.BLACKSTOCK_APPLE_TEAM_ID }}
+          SOURCE_COMMIT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          python3 - "$RUNNER_TEMP/dist" "${{ inputs.manifest_url }}" "$TEAM_ID" <<'PY'
+          python3 - "$RUNNER_TEMP/dist" "${{ inputs.manifest_url }}" "$TEAM_ID" "$SOURCE_COMMIT_SHA" <<'PY'
           import hashlib
           import json
           import pathlib
@@ -225,6 +227,7 @@ jobs:
           root = pathlib.Path(sys.argv[1])
           manifest_url = sys.argv[2]
           team_id = sys.argv[3]
+          source_commit_sha = sys.argv[4]
 
           manifest = json.loads(
               (root / "update-manifest.json").read_text()
@@ -255,11 +258,14 @@ jobs:
               "installerTeamID": team_id,
               "notarySubmissionID": notary["id"],
               "notaryStatus": notary["status"],
+              "sourceCommitSHA": source_commit_sha,
           }
           (root / "production-build-metadata.json").write_text(
               json.dumps(metadata, indent=2, sort_keys=True) + "\n"
           )
           PY
+
+          test "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sourceCommitSHA"])' "$RUNNER_TEMP/dist/production-build-metadata.json")" = "$SOURCE_COMMIT_SHA"
 
           pkgutil --check-signature "$RUNNER_TEMP/dist/Blackstock.pkg"             | tee "$RUNNER_TEMP/dist/pkg-signature.txt"
           grep -q 'Developer ID Installer' "$RUNNER_TEMP/dist/pkg-signature.txt"
