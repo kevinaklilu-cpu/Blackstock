@@ -267,7 +267,7 @@ public struct CaptionTechnicalInspector: Sendable {
             return false
         }
 
-        var index = timingIndex + 1
+        let index = timingIndex + 1
         while index < lines.count {
             let value = lines[index]
                 .trimmingCharacters(in: .whitespacesAndNewlines)
