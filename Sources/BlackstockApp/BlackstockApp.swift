@@ -59,6 +59,7 @@ private struct WorkspaceShell: View {
             case "Studio":
                 if let project = session.activeProject {
                     StudioView(
+                        session: session,
                         project: project,
                         opportunitySource: session.activeOpportunitySource,
                         contentLanguage: session.contentLanguage
