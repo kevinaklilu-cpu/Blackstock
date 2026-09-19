@@ -185,6 +185,9 @@ enum BlackstockCaptureHardwareAudit {
         let metadata = currentMetadata()
         let model = hardwareModel()
         let installed = installedFromPackage()
+        let signing = applicationSigningMetadata(
+            expectedTeamID: metadata.expectedTeamID
+        )
 
         if let existing = try store.load(),
            existing.blackstockVersion
@@ -195,7 +198,11 @@ enum BlackstockCaptureHardwareAudit {
                 == metadata.sourceCommitSHA,
            existing.hardwareModel == model,
            existing.installedFromPackage
-                == installed {
+                == installed,
+           existing.applicationTeamID
+                == signing.teamID,
+           existing.developerIDApplicationVerified
+                == signing.verified {
             return existing
         }
 
@@ -211,7 +218,10 @@ enum BlackstockCaptureHardwareAudit {
                 ProcessInfo.processInfo
                     .operatingSystemVersionString,
             hardwareModel: model,
-            installedFromPackage: installed
+            installedFromPackage: installed,
+            applicationTeamID: signing.teamID,
+            developerIDApplicationVerified:
+                signing.verified
         )
     }
 
@@ -275,7 +285,8 @@ enum BlackstockCaptureHardwareAudit {
         -> (
             version: String,
             build: String,
-            sourceCommitSHA: String
+            sourceCommitSHA: String,
+            expectedTeamID: String
         ) {
         let version = (
             Bundle.main.object(
@@ -301,6 +312,14 @@ enum BlackstockCaptureHardwareAudit {
         ).trimmingCharacters(
             in: .whitespacesAndNewlines
         )
+        let expectedTeamID = (
+            Bundle.main.object(
+                forInfoDictionaryKey:
+                    "BlackstockUpdateInstallerTeamID"
+            ) as? String ?? ""
+        ).trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
         return (
             version.isEmpty ? "UNBEKANNT" : version,
             build.isEmpty ? "UNBEKANNT" : build,
@@ -308,8 +327,66 @@ enum BlackstockCaptureHardwareAudit {
                 && sourceCommitSHA
                     .allSatisfy({ $0.isHexDigit })
                 ? sourceCommitSHA.lowercased()
-                : "UNBEKANNT"
+                : "UNBEKANNT",
+            expectedTeamID
         )
+    }
+
+    private static func applicationSigningMetadata(
+        expectedTeamID: String
+    ) -> (teamID: String, verified: Bool) {
+        guard !expectedTeamID.isEmpty else {
+            return ("", false)
+        }
+
+        let process = Process()
+        process.executableURL = URL(
+            fileURLWithPath: "/usr/bin/codesign"
+        )
+        process.arguments = [
+            "--display",
+            "--verbose=4",
+            Bundle.main.bundleURL.path
+        ]
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+            guard process.terminationStatus == 0 else {
+                return ("", false)
+            }
+            let output = String(
+                decoding: pipe.fileHandleForReading
+                    .readDataToEndOfFile(),
+                as: UTF8.self
+            )
+            let prefix = "TeamIdentifier="
+            guard let line = output
+                    .split(whereSeparator: \.isNewline)
+                    .map(String.init)
+                    .first(where: {
+                        $0.hasPrefix(prefix)
+                    }) else {
+                return ("", false)
+            }
+            let teamID = String(
+                line.dropFirst(prefix.count)
+            ).trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+            let verified =
+                output.contains(
+                    "Authority=Developer ID Application"
+                )
+                && teamID == expectedTeamID
+            return (teamID, verified)
+        } catch {
+            return ("", false)
+        }
     }
 
     private static func installedFromPackage()
