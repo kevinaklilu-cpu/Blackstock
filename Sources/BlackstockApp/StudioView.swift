@@ -324,12 +324,42 @@ struct StudioView: View {
                         Slider(value: $state.reframeFocalY, in: 0...1)
                     }
 
-                    Button("Reframe anwenden") {
-                        Task { await state.applyReframe() }
-                    }
-                    .buttonStyle(.bordered)
+                    HStack {
+                        Button {
+                            Task { await state.suggestFocalPoint() }
+                        } label: {
+                            HStack {
+                                if state.isSuggestingFocalPoint {
+                                    ProgressView().controlSize(.small)
+                                }
+                                Label(
+                                    state.isSuggestingFocalPoint
+                                        ? "Vision analysiert …"
+                                        : "Fokus vorschlagen",
+                                    systemImage: "viewfinder"
+                                )
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(state.isSuggestingFocalPoint)
 
-                    Text("Der Fokuspunkt bleibt vollständig manuell kontrollierbar. Vorschau und finaler Render verwenden dieselbe Crop-Geometrie.")
+                        Button("Reframe anwenden") {
+                            Task { await state.applyReframe() }
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+
+                    if let proposal = state.focalPointProposal {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(proposal.explanation)
+                                .font(.caption.weight(.semibold))
+                            Text("\(proposal.observationCount) relevante Beobachtungen aus \(proposal.sampledFrameCount) Stichproben. Noch nicht angewendet.")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    Text("Vision darf nur die Regler vorpositionieren. Erst „Reframe anwenden“ schreibt eine Änderung in den EditGraph; Vorschau und finaler Render verwenden danach dieselbe Crop-Geometrie.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
