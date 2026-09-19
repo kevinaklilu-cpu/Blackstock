@@ -110,6 +110,132 @@ final class StudioWorkspaceSnapshotTests: XCTestCase {
     }
 
 
+    func testWorkspaceRecoversLastValidatedBackupAfterPrimaryCorruption() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let projectID = UUID()
+        let store = ProjectWorkspaceStore(rootURL: root)
+        let first = StudioWorkspaceSnapshot(
+            projectID: projectID,
+            mediaAsset: nil,
+            editGraph: EditGraph(createdAt: Date(timeIntervalSince1970: 1)),
+            activityLedger: ActivityLedger(),
+            storyboard: StoryboardPlan(
+                projectID: projectID,
+                updatedAt: Date(timeIntervalSince1970: 2)
+            ),
+            trimStart: 0,
+            trimEnd: 10,
+            transcript: nil,
+            captionURL: nil,
+            renderArtifact: nil,
+            updatedAt: Date(timeIntervalSince1970: 3)
+        )
+        let second = StudioWorkspaceSnapshot(
+            projectID: projectID,
+            mediaAsset: nil,
+            editGraph: EditGraph(createdAt: Date(timeIntervalSince1970: 4)),
+            activityLedger: ActivityLedger(),
+            storyboard: StoryboardPlan(
+                projectID: projectID,
+                updatedAt: Date(timeIntervalSince1970: 5)
+            ),
+            trimStart: 1,
+            trimEnd: 8,
+            transcript: nil,
+            captionURL: nil,
+            renderArtifact: nil,
+            updatedAt: Date(timeIntervalSince1970: 6)
+        )
+
+        try store.save(first)
+        try store.save(second)
+
+        let projectDirectory = root
+            .appendingPathComponent(projectID.uuidString, isDirectory: true)
+        let primaryURL = projectDirectory
+            .appendingPathComponent("studio-workspace.json")
+        let backupURL = projectDirectory
+            .appendingPathComponent("studio-workspace.backup.json")
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: backupURL.path))
+        try Data("{broken-json".utf8).write(
+            to: primaryURL,
+            options: [.atomic]
+        )
+
+        let recovered = try store.loadWithRecovery(projectID: projectID)
+
+        XCTAssertTrue(recovered.recoveredFromBackup)
+        XCTAssertEqual(recovered.snapshot, first)
+    }
+
+    func testInvalidPrimaryIsNeverPromotedOverExistingValidatedBackup() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let projectID = UUID()
+        let store = ProjectWorkspaceStore(rootURL: root)
+        let first = StudioWorkspaceSnapshot(
+            projectID: projectID,
+            mediaAsset: nil,
+            editGraph: EditGraph(createdAt: Date(timeIntervalSince1970: 1)),
+            activityLedger: ActivityLedger(),
+            storyboard: StoryboardPlan(
+                projectID: projectID,
+                updatedAt: Date(timeIntervalSince1970: 2)
+            ),
+            trimStart: 0,
+            trimEnd: 10,
+            transcript: nil,
+            captionURL: nil,
+            renderArtifact: nil,
+            updatedAt: Date(timeIntervalSince1970: 3)
+        )
+        let second = StudioWorkspaceSnapshot(
+            projectID: projectID,
+            mediaAsset: nil,
+            editGraph: EditGraph(createdAt: Date(timeIntervalSince1970: 4)),
+            activityLedger: ActivityLedger(),
+            storyboard: StoryboardPlan(
+                projectID: projectID,
+                updatedAt: Date(timeIntervalSince1970: 5)
+            ),
+            trimStart: 2,
+            trimEnd: 9,
+            transcript: nil,
+            captionURL: nil,
+            renderArtifact: nil,
+            updatedAt: Date(timeIntervalSince1970: 6)
+        )
+
+        try store.save(first)
+        try store.save(second)
+
+        let projectDirectory = root
+            .appendingPathComponent(projectID.uuidString, isDirectory: true)
+        let primaryURL = projectDirectory
+            .appendingPathComponent("studio-workspace.json")
+        try Data("not-json".utf8).write(to: primaryURL, options: [.atomic])
+
+        try store.save(second)
+
+        let backupURL = projectDirectory
+            .appendingPathComponent("studio-workspace.backup.json")
+        let backupData = try Data(contentsOf: backupURL)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let backup = try decoder.decode(
+            StudioWorkspaceSnapshot.self,
+            from: backupData
+        )
+
+        XCTAssertEqual(backup, first)
+    }
+
     func testPublishPreparationRoundTripsInProjectWorkspace() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
