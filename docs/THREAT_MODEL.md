@@ -17,7 +17,7 @@ Blackstock ist eine lokale macOS-Anwendung für Recherche, Produktion, Publishin
 
 1. **macOS App / lokaler Benutzerkontext** – Blackstock-Code und lokaler Application-Support-Bereich.
 2. **macOS Keychain** – separates Betriebssystem-Sicherheitsboundary für OAuth-Geheimnisse.
-3. **Browser ↔ Loopback OAuth** – untrusted Browser-Eingang; nur 127.0.0.1 und der fest definierte Callback-Pfad sind zulässig.
+3. **Browser ↔ Loopback OAuth** – untrusted Browser-Eingang; der Listener bindet ausschließlich an 127.0.0.1 und akzeptiert nur den dokumentierten Root-Callback `/` auf dem dynamischen Loopback-Port.
 4. **Google/YouTube APIs** – externe Providergrenze; Responses gelten nicht implizit als zum Projekt passend und werden gegen Projekt-/Kanal-/Video-Kontext geprüft.
 5. **Update-Infrastruktur** – Netzwerk und CDN sind untrusted; Vertrauen entsteht erst durch Ed25519-Manifest-Signatur, SHA-256-Paketbindung und Developer-ID-Installer-Teamprüfung.
 6. **Lokale Persistenz** – Dateien können beschädigt, veraltet oder aus einer inkompatiblen Zukunftsversion stammen; Schema- und Projektbindung werden vor Verwendung validiert.
@@ -45,7 +45,7 @@ Nicht als durch die App lösbar angenommen werden vollständige Kompromittierung
 - Authorization Code Flow mit PKCE S256.
 - Kryptografisch zufälliger OAuth-State.
 - Callback-Listener bindet ausschließlich an `127.0.0.1`.
-- Nur `/oauth2/callback` wird akzeptiert.
+- Nur der Root-Pfad `/` wird akzeptiert; die Redirect-URI entspricht Googles Desktop-Loopback-Form `http://127.0.0.1:<dynamischer Port>`.
 - Capability-basierte minimale Scopes; Scope-Erweiterungen verlangen neue Autorisierung.
 - OAuth-Token, Scopes und Client-Bindung werden im macOS-Keychain gespeichert.
 - Keychain-Einträge verwenden `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`.
