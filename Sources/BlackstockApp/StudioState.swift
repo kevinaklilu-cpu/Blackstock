@@ -441,7 +441,7 @@ final class StudioState: ObservableObject {
             .last(where: { $0.type == .reframe })?
             .reframeSpec {
             let sourceTracks = try await source.loadTracks(withMediaType: .video)
-            let compositionTracks = try await composition.loadTracks(withMediaType: .video)
+            let compositionTracks = composition.tracks(withMediaType: .video)
 
             if let sourceTrack = sourceTracks.first,
                let compositionTrack = compositionTracks.first {
@@ -457,7 +457,7 @@ final class StudioState: ObservableObject {
                     spec: reframe,
                     renderSize: renderSize
                 ) {
-                    let duration = try await composition.load(.duration)
+                    let duration = composition.duration
                     let instruction = AVMutableVideoCompositionInstruction()
                     instruction.timeRange = CMTimeRange(
                         start: .zero,
