@@ -32,6 +32,9 @@ required_root = [
     "macOSVersion",
     "hardwareModel",
     "installedFromPackage",
+    "installerReceiptPackageID",
+    "installerReceiptVersion",
+    "installerReceiptVerified",
     "applicationTeamID",
     "developerIDApplicationVerified",
     "applicationExecutableSHA256",
@@ -50,7 +53,7 @@ for key in required_root:
     if key not in data:
         fail(f"missing field: {key}")
 
-if data["schemaVersion"] != 4:
+if data["schemaVersion"] != 5:
     fail("unsupported schemaVersion")
 
 try:
@@ -69,6 +72,13 @@ source_commit = str(data["blackstockSourceCommitSHA"]).strip().lower()
 if not re.fullmatch(r"[0-9a-f]{40}", source_commit):
     fail("blackstockSourceCommitSHA must be a 40-character hexadecimal Git commit SHA")
 
+receipt_package_id = str(data["installerReceiptPackageID"]).strip()
+receipt_version = str(data["installerReceiptVersion"]).strip()
+if receipt_package_id != "de.blackstock.app":
+    fail("installerReceiptPackageID must equal de.blackstock.app")
+if receipt_version != str(data["blackstockVersion"]).strip():
+    fail("installerReceiptVersion must equal blackstockVersion")
+
 application_team_id = str(data["applicationTeamID"]).strip()
 if not re.fullmatch(r"[A-Za-z0-9]+", application_team_id):
     fail("applicationTeamID must be non-empty ASCII alphanumeric")
@@ -81,6 +91,7 @@ if not re.fullmatch(r"[0-9a-f]{64}", application_executable_sha256):
 
 for key in [
     "installedFromPackage",
+    "installerReceiptVerified",
     "developerIDApplicationVerified",
     "deniedPermissionHardStopPassed",
     "temporaryCleanupPassed",
