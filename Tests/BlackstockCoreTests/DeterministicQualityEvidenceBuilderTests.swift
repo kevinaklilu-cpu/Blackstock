@@ -196,7 +196,7 @@ final class DeterministicQualityEvidenceBuilderTests: XCTestCase {
         XCTAssertFalse(review.blockingFindings.isEmpty)
     }
 
-    func testAudioMeasurementsBecomeEvidenceWithoutAutoPassingAudioGate() {
+    func testFinalRenderAudioMeasurementsProvideGroundedAudioCoverage() {
         let projectID = UUID()
         let asset = ProductionMediaAsset(
             displayName: "video.mov",
@@ -254,7 +254,118 @@ final class DeterministicQualityEvidenceBuilderTests: XCTestCase {
                 $0.source == "Blackstock Local PCM Analyzer"
             }
         )
-        XCTAssertFalse(review.coveredAreas.contains(.audio))
+        XCTAssertTrue(review.coveredAreas.contains(.audio))
+        XCTAssertTrue(
+            review.findings(in: .audio).contains {
+                $0.title == "Audio des finalen Renders technisch analysiert"
+                    && $0.severity == .info
+            }
+        )
+        XCTAssertTrue(review.blockingFindings.isEmpty)
+    }
+
+    func testMissingAudioTrackCreatesBlockingAudioFinding() {
+        let projectID = UUID()
+        let asset = ProductionMediaAsset(
+            displayName: "video.mov",
+            sourceURL: URL(fileURLWithPath: "/tmp/video.mov"),
+            durationSeconds: 10,
+            authorization: .owned,
+            rightsEvidence: ["eigene Aufnahme"],
+            rightsAttestation: .init(
+                confirmedByUser: true,
+                attestedAt: Date()
+            ),
+            importedAt: Date()
+        )
+        let artifact = RenderArtifact(
+            projectID: projectID,
+            fileURL: URL(fileURLWithPath: "/tmp/video.mp4"),
+            sha256: "abc",
+            mimeType: "video/mp4",
+            validated: true,
+            createdAt: Date()
+        )
+        let technical = AudioTechnicalAssessment.evaluate(
+            .init(
+                hasAudioTrack: false,
+                sampleRateHz: nil,
+                channelCount: nil,
+                inspectedAt: Date()
+            )
+        )
+
+        let review = DeterministicQualityEvidenceBuilder().build(
+            projectID: projectID,
+            asset: asset,
+            artifact: artifact,
+            audioTechnicalAssessment: technical
+        )
+
+        XCTAssertTrue(review.coveredAreas.contains(.audio))
+        XCTAssertTrue(
+            review.findings(in: .audio).contains {
+                $0.title == "Keine Audiospur im Render"
+                    && $0.severity == .blocker
+            }
+        )
+        XCTAssertFalse(review.blockingFindings.isEmpty)
+    }
+
+    func testAudioWithoutAnalyzedSamplesCreatesBlockingFinding() {
+        let projectID = UUID()
+        let asset = ProductionMediaAsset(
+            displayName: "video.mov",
+            sourceURL: URL(fileURLWithPath: "/tmp/video.mov"),
+            durationSeconds: 10,
+            authorization: .owned,
+            rightsEvidence: ["eigene Aufnahme"],
+            rightsAttestation: .init(
+                confirmedByUser: true,
+                attestedAt: Date()
+            ),
+            importedAt: Date()
+        )
+        let artifact = RenderArtifact(
+            projectID: projectID,
+            fileURL: URL(fileURLWithPath: "/tmp/video.mp4"),
+            sha256: "abc",
+            mimeType: "video/mp4",
+            validated: true,
+            createdAt: Date()
+        )
+        let technical = AudioTechnicalAssessment.evaluate(
+            .init(
+                hasAudioTrack: true,
+                sampleRateHz: 48_000,
+                channelCount: 2,
+                inspectedAt: Date()
+            )
+        )
+        let signal = AudioSignalAssessment.evaluate(
+            .init(
+                peakDBFS: nil,
+                rmsDBFS: nil,
+                analyzedSampleCount: 0,
+                fullScaleSampleCount: 0,
+                inspectedAt: Date()
+            )
+        )
+
+        let review = DeterministicQualityEvidenceBuilder().build(
+            projectID: projectID,
+            asset: asset,
+            artifact: artifact,
+            audioTechnicalAssessment: technical,
+            audioSignalAssessment: signal
+        )
+
+        XCTAssertTrue(
+            review.findings(in: .audio).contains {
+                $0.title == "Audioanalyse ohne Samples"
+                    && $0.severity == .blocker
+            }
+        )
     }
 
     func testThumbnailFactsBecomeEvidenceWithoutAutoPassingPackaging() {
