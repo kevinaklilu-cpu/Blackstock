@@ -50,10 +50,11 @@ enum BlackstockCaptureHardwareAudit {
 
         let decodedSamples: Int64
         do {
-            decodedSamples =
+            let assessment =
                 try await LocalAudioSignalAnalyzer()
                     .analyze(url: fileURL)
-                    .snapshot
+            decodedSamples =
+                assessment.snapshot
                     .analyzedSampleCount
         } catch {
             decodedSamples = 0
