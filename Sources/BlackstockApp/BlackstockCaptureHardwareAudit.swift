@@ -77,6 +77,8 @@ enum BlackstockCaptureHardwareAudit {
                     )
             evidence.appRestartPersistencePassed =
                 false
+            evidence.restartVerifiedLaunchID =
+                nil
 
             for canonicalKind in kinds {
                 let permissionGranted =
@@ -141,6 +143,7 @@ enum BlackstockCaptureHardwareAudit {
             evidence.reconcileRestartPersistence(
                 currentLaunchID: launchID
             )
+            evidence.testedAt = Date()
         }
     }
 
