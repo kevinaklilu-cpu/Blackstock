@@ -1,0 +1,224 @@
+name: Blackstock Verify Published Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      manifest_url:
+        description: "Veröffentlichte Produktions-Manifest-URL (HTTPS)"
+        required: true
+        type: string
+      current_version:
+        description: "Ausgangsversion für Update-Verfügbarkeit"
+        required: true
+        type: string
+      current_build:
+        description: "Ausgangs-Build für Update-Verfügbarkeit"
+        required: true
+        type: string
+      notary_submission_id:
+        description: "Apple Notary Submission ID des veröffentlichten Pakets"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blackstock-verify-published-release
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate verification inputs
+        env:
+          MANIFEST_URL: ${{ inputs.manifest_url }}
+          CURRENT_VERSION: ${{ inputs.current_version }}
+          CURRENT_BUILD: ${{ inputs.current_build }}
+          SUBMISSION_ID: ${{ inputs.notary_submission_id }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          import re
+          from urllib.parse import urlparse
+
+          url = os.environ["MANIFEST_URL"].strip()
+          parsed = urlparse(url)
+          if parsed.scheme.lower() != "https" or not parsed.hostname:
+              raise SystemExit("manifest_url must be an absolute HTTPS URL")
+          host = parsed.hostname.lower()
+          if (
+              host == "localhost"
+              or host.startswith("127.")
+              or host.endswith(".invalid")
+              or host.endswith(".example")
+              or host.endswith(".test")
+          ):
+              raise SystemExit("manifest_url must use a real production host")
+
+          version = os.environ["CURRENT_VERSION"].strip()
+          if not re.fullmatch(r"\d+(?:\.\d+){0,3}", version):
+              raise SystemExit("current_version must be numeric dotted notation")
+
+          build = os.environ["CURRENT_BUILD"].strip()
+          if not build.isdigit() or int(build) <= 0:
+              raise SystemExit("current_build must be a positive integer")
+
+          submission = os.environ["SUBMISSION_ID"].strip()
+          if not re.fullmatch(
+              r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+              submission,
+          ):
+              raise SystemExit("notary_submission_id must be a UUID")
+          PY
+
+      - name: Validate required verification secrets
+        env:
+          PUBLIC_KEY: ${{ secrets.BLACKSTOCK_UPDATE_PUBLIC_KEY_BASE64 }}
+          TEAM_ID: ${{ secrets.BLACKSTOCK_APPLE_TEAM_ID }}
+          NOTARY_KEY: ${{ secrets.BLACKSTOCK_NOTARY_KEY_P8_BASE64 }}
+          NOTARY_KEY_ID: ${{ secrets.BLACKSTOCK_NOTARY_KEY_ID }}
+          NOTARY_ISSUER: ${{ secrets.BLACKSTOCK_NOTARY_ISSUER }}
+        run: |
+          set -euo pipefail
+          for name in             PUBLIC_KEY             TEAM_ID             NOTARY_KEY             NOTARY_KEY_ID             NOTARY_ISSUER
+          do
+            if [[ -z "${!name}" ]]; then
+              echo "Missing required verification secret: $name" >&2
+              exit 1
+            fi
+          done
+
+      - name: Write notarization API key
+        env:
+          NOTARY_KEY: ${{ secrets.BLACKSTOCK_NOTARY_KEY_P8_BASE64 }}
+        run: |
+          set -euo pipefail
+          NOTARY_KEY_PATH="$RUNNER_TEMP/AuthKey.p8"
+          echo "BLACKSTOCK_NOTARY_KEY_PATH=$NOTARY_KEY_PATH" >> "$GITHUB_ENV"
+          python3 - "$NOTARY_KEY_PATH" <<'PY'
+          import base64
+          import os
+          import pathlib
+          import sys
+
+          pathlib.Path(sys.argv[1]).write_bytes(
+              base64.b64decode(
+                  os.environ["NOTARY_KEY"],
+                  validate=True,
+              )
+          )
+          PY
+          chmod 600 "$NOTARY_KEY_PATH"
+
+      - name: Build release verifier
+        run: swift build -c release --product BlackstockReleaseVerifier
+
+      - name: Verify remote manifest and package before installation
+        env:
+          PUBLIC_KEY: ${{ secrets.BLACKSTOCK_UPDATE_PUBLIC_KEY_BASE64 }}
+          TEAM_ID: ${{ secrets.BLACKSTOCK_APPLE_TEAM_ID }}
+          NOTARY_KEY_ID: ${{ secrets.BLACKSTOCK_NOTARY_KEY_ID }}
+          NOTARY_ISSUER: ${{ secrets.BLACKSTOCK_NOTARY_ISSUER }}
+        run: |
+          set -euo pipefail
+          BIN_DIR="$(swift build -c release --show-bin-path)"
+          "$BIN_DIR/BlackstockReleaseVerifier"             --manifest-url "${{ inputs.manifest_url }}"             --public-key-base64 "$PUBLIC_KEY"             --installer-team-id "$TEAM_ID"             --current-version "${{ inputs.current_version }}"             --current-build "${{ inputs.current_build }}"             --notary-submission-id "${{ inputs.notary_submission_id }}"             --notary-key "$BLACKSTOCK_NOTARY_KEY_PATH"             --notary-key-id "$NOTARY_KEY_ID"             --notary-issuer "$NOTARY_ISSUER"             --output "$RUNNER_TEMP/preinstall-release-evidence.json"
+          grep -q '"manifestSignatureVerified" : true'             "$RUNNER_TEMP/preinstall-release-evidence.json"
+          grep -q '"packageHashVerified" : true'             "$RUNNER_TEMP/preinstall-release-evidence.json"
+
+      - name: Download already verified package for clean installation
+        env:
+          MANIFEST_URL: ${{ inputs.manifest_url }}
+        run: |
+          set -euo pipefail
+          MANIFEST="$RUNNER_TEMP/production-manifest.json"
+          PACKAGE="$RUNNER_TEMP/Blackstock-production.pkg"
+
+          curl             --fail             --location             --proto '=https'             --tlsv1.2             "$MANIFEST_URL"             --output "$MANIFEST"
+
+          PACKAGE_URL="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["packageURL"])' "$MANIFEST")"
+          EXPECTED_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sha256"])' "$MANIFEST")"
+
+          case "$PACKAGE_URL" in
+            https://*) ;;
+            *)
+              echo "Manifest packageURL is not HTTPS." >&2
+              exit 1
+              ;;
+          esac
+
+          curl             --fail             --location             --proto '=https'             --tlsv1.2             "$PACKAGE_URL"             --output "$PACKAGE"
+
+          ACTUAL_SHA="$(shasum -a 256 "$PACKAGE" | awk '{print $1}')"
+          test "$EXPECTED_SHA" = "$ACTUAL_SHA"
+
+      - name: Install verified production package
+        run: |
+          set -euo pipefail
+          sudo rm -rf /Applications/Blackstock.app
+          sudo installer             -pkg "$RUNNER_TEMP/Blackstock-production.pkg"             -target /
+          test -x /Applications/Blackstock.app/Contents/MacOS/Blackstock
+          plutil -lint /Applications/Blackstock.app/Contents/Info.plist
+
+      - name: Produce full production release evidence
+        env:
+          PUBLIC_KEY: ${{ secrets.BLACKSTOCK_UPDATE_PUBLIC_KEY_BASE64 }}
+          TEAM_ID: ${{ secrets.BLACKSTOCK_APPLE_TEAM_ID }}
+          NOTARY_KEY_ID: ${{ secrets.BLACKSTOCK_NOTARY_KEY_ID }}
+          NOTARY_ISSUER: ${{ secrets.BLACKSTOCK_NOTARY_ISSUER }}
+        run: |
+          set -euo pipefail
+          BIN_DIR="$(swift build -c release --show-bin-path)"
+          "$BIN_DIR/BlackstockReleaseVerifier"             --manifest-url "${{ inputs.manifest_url }}"             --public-key-base64 "$PUBLIC_KEY"             --installer-team-id "$TEAM_ID"             --current-version "${{ inputs.current_version }}"             --current-build "${{ inputs.current_build }}"             --installed-app "/Applications/Blackstock.app"             --notary-submission-id "${{ inputs.notary_submission_id }}"             --notary-key "$BLACKSTOCK_NOTARY_KEY_PATH"             --notary-key-id "$NOTARY_KEY_ID"             --notary-issuer "$NOTARY_ISSUER"             --output "$RUNNER_TEMP/release-evidence.json"
+
+          python3 Build/validate_production_release_evidence.py             "$RUNNER_TEMP/release-evidence.json"
+
+      - name: Launch verified production app
+        run: |
+          set -euo pipefail
+          APP_BIN="/Applications/Blackstock.app/Contents/MacOS/Blackstock"
+          LOG="$RUNNER_TEMP/production-app-launch.log"
+
+          "$APP_BIN" >"$LOG" 2>&1 &
+          pid=$!
+          sleep 3
+
+          if ! kill -0 "$pid" 2>/dev/null; then
+            echo "Verified production app exited during launch smoke." >&2
+            cat "$LOG" || true
+            exit 1
+          fi
+
+          kill -TERM "$pid"
+          for _ in {1..10}; do
+            if ! kill -0 "$pid" 2>/dev/null; then
+              exit 0
+            fi
+            sleep 0.5
+          done
+
+          kill -KILL "$pid" 2>/dev/null || true
+          echo "Verified production app required forced termination." >&2
+          cat "$LOG" || true
+          exit 1
+
+      - name: Upload production verification evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: Blackstock-production-release-evidence
+          path: |
+            ${{ runner.temp }}/release-evidence.json
+            ${{ runner.temp }}/preinstall-release-evidence.json
+            ${{ runner.temp }}/production-manifest.json
+            ${{ runner.temp }}/production-app-launch.log
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Cleanup notarization key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/AuthKey.p8"
