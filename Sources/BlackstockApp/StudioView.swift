@@ -358,7 +358,36 @@ struct StudioView: View {
                             }
                         }
 
-                        Text("Diese Prüfung bewertet nur Audiospur, Sample-Rate und Kanalzahl. Loudness, Clipping und Sprachverständlichkeit bleiben separate Gates.")
+                        if let signal = state.audioSignalAssessment {
+                            Divider()
+
+                            HStack(spacing: 10) {
+                                if let peak = signal.snapshot.peakDBFS {
+                                    metricPill("Peak", String(format: "%.1f dBFS", peak))
+                                }
+                                if let rms = signal.snapshot.rmsDBFS {
+                                    metricPill("RMS", String(format: "%.1f dBFS", rms))
+                                }
+                            }
+
+                            if signal.snapshot.fullScaleSampleCount > 0 {
+                                Label(
+                                    "\(signal.snapshot.fullScaleSampleCount) Full-Scale-Samples erkannt",
+                                    systemImage: "exclamationmark.triangle.fill"
+                                )
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                            } else if signal.snapshot.analyzedSampleCount > 0 {
+                                Label(
+                                    "Keine Full-Scale-Samples in \(signal.snapshot.analyzedSampleCount) analysierten Samples erkannt.",
+                                    systemImage: "checkmark.circle"
+                                )
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            }
+                        }
+
+                        Text("Peak/RMS sind Messwerte, keine LUFS-Messung und keine Qualitätsnote. Sprachverständlichkeit bleibt eine eigene Hörprüfung.")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     } else {
@@ -488,6 +517,25 @@ struct StudioView: View {
         }
         .padding(24)
         .frame(width: 520)
+    }
+
+    private func metricPill(
+        _ title: String,
+        _ value: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(value)
+                .font(.caption.weight(.semibold).monospacedDigit())
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(
+            Color.primary.opacity(0.04),
+            in: RoundedRectangle(cornerRadius: 8)
+        )
     }
 
     private func audioFindingText(
