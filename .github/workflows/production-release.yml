@@ -1,0 +1,283 @@
+name: Blackstock Production Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release-Version, z. B. 1.0.0"
+        required: true
+        type: string
+      build:
+        description: "Positive Build-Nummer"
+        required: true
+        type: string
+      manifest_url:
+        description: "Reale HTTPS-URL des veröffentlichten update-manifest.json"
+        required: true
+        type: string
+      package_url:
+        description: "Reale HTTPS-URL des veröffentlichten Blackstock.pkg"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blackstock-production-release
+  cancel-in-progress: false
+
+jobs:
+  build-sign-notarize:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate release inputs
+        env:
+          VERSION: ${{ inputs.version }}
+          BUILD: ${{ inputs.build }}
+          MANIFEST_URL: ${{ inputs.manifest_url }}
+          PACKAGE_URL: ${{ inputs.package_url }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          import re
+          from urllib.parse import urlparse
+
+          version = os.environ["VERSION"].strip()
+          build = os.environ["BUILD"].strip()
+          if not re.fullmatch(r"\d+(?:\.\d+){0,3}", version):
+              raise SystemExit("version must be numeric dotted notation")
+          if not build.isdigit() or int(build) <= 0:
+              raise SystemExit("build must be a positive integer")
+
+          for key in ["MANIFEST_URL", "PACKAGE_URL"]:
+              value = os.environ[key].strip()
+              parsed = urlparse(value)
+              if parsed.scheme.lower() != "https" or not parsed.hostname:
+                  raise SystemExit(f"{key} must be an absolute HTTPS URL")
+              host = parsed.hostname.lower()
+              if (
+                  host == "localhost"
+                  or host.startswith("127.")
+                  or host.endswith(".invalid")
+                  or host.endswith(".example")
+                  or host.endswith(".test")
+              ):
+                  raise SystemExit(f"{key} must use a real production host")
+          PY
+
+      - name: Validate required production secrets
+        env:
+          APP_CERT: ${{ secrets.BLACKSTOCK_APP_CERT_P12_BASE64 }}
+          APP_CERT_PASSWORD: ${{ secrets.BLACKSTOCK_APP_CERT_PASSWORD }}
+          INSTALLER_CERT: ${{ secrets.BLACKSTOCK_INSTALLER_CERT_P12_BASE64 }}
+          INSTALLER_CERT_PASSWORD: ${{ secrets.BLACKSTOCK_INSTALLER_CERT_PASSWORD }}
+          APP_IDENTITY: ${{ secrets.BLACKSTOCK_CODESIGN_IDENTITY }}
+          INSTALLER_IDENTITY: ${{ secrets.BLACKSTOCK_INSTALLER_IDENTITY }}
+          TEAM_ID: ${{ secrets.BLACKSTOCK_APPLE_TEAM_ID }}
+          NOTARY_KEY: ${{ secrets.BLACKSTOCK_NOTARY_KEY_P8_BASE64 }}
+          NOTARY_KEY_ID: ${{ secrets.BLACKSTOCK_NOTARY_KEY_ID }}
+          NOTARY_ISSUER: ${{ secrets.BLACKSTOCK_NOTARY_ISSUER }}
+          UPDATE_PRIVATE_KEY: ${{ secrets.BLACKSTOCK_UPDATE_PRIVATE_KEY_BASE64 }}
+          UPDATE_PUBLIC_KEY: ${{ secrets.BLACKSTOCK_UPDATE_PUBLIC_KEY_BASE64 }}
+        run: |
+          set -euo pipefail
+          for name in             APP_CERT             APP_CERT_PASSWORD             INSTALLER_CERT             INSTALLER_CERT_PASSWORD             APP_IDENTITY             INSTALLER_IDENTITY             TEAM_ID             NOTARY_KEY             NOTARY_KEY_ID             NOTARY_ISSUER             UPDATE_PRIVATE_KEY             UPDATE_PUBLIC_KEY
+          do
+            if [[ -z "${!name}" ]]; then
+              echo "Missing required production secret: $name" >&2
+              exit 1
+            fi
+          done
+
+      - name: Import Developer ID certificates
+        env:
+          APP_CERT: ${{ secrets.BLACKSTOCK_APP_CERT_P12_BASE64 }}
+          APP_CERT_PASSWORD: ${{ secrets.BLACKSTOCK_APP_CERT_PASSWORD }}
+          INSTALLER_CERT: ${{ secrets.BLACKSTOCK_INSTALLER_CERT_P12_BASE64 }}
+          INSTALLER_CERT_PASSWORD: ${{ secrets.BLACKSTOCK_INSTALLER_CERT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN="$RUNNER_TEMP/blackstock-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 32)"
+          echo "BLACKSTOCK_RELEASE_KEYCHAIN=$KEYCHAIN" >> "$GITHUB_ENV"
+          echo "BLACKSTOCK_RELEASE_KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> "$GITHUB_ENV"
+
+          python3 - "$RUNNER_TEMP/app-cert.p12" "$RUNNER_TEMP/installer-cert.p12" <<'PY'
+          import base64
+          import os
+          import pathlib
+          import sys
+
+          pathlib.Path(sys.argv[1]).write_bytes(
+              base64.b64decode(os.environ["APP_CERT"], validate=True)
+          )
+          pathlib.Path(sys.argv[2]).write_bytes(
+              base64.b64decode(os.environ["INSTALLER_CERT"], validate=True)
+          )
+          PY
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN"
+
+          security import "$RUNNER_TEMP/app-cert.p12"             -k "$KEYCHAIN"             -P "$APP_CERT_PASSWORD"             -A             -T /usr/bin/codesign             -T /usr/bin/security
+
+          security import "$RUNNER_TEMP/installer-cert.p12"             -k "$KEYCHAIN"             -P "$INSTALLER_CERT_PASSWORD"             -A             -T /usr/bin/productbuild             -T /usr/bin/productsign             -T /usr/bin/security
+
+          security set-key-partition-list             -S apple-tool:,apple:             -s             -k "$KEYCHAIN_PASSWORD"             "$KEYCHAIN"
+
+          security find-identity -v "$KEYCHAIN"
+
+      - name: Write notarization API key
+        env:
+          NOTARY_KEY: ${{ secrets.BLACKSTOCK_NOTARY_KEY_P8_BASE64 }}
+        run: |
+          set -euo pipefail
+          NOTARY_KEY_PATH="$RUNNER_TEMP/AuthKey.p8"
+          echo "BLACKSTOCK_NOTARY_KEY_PATH=$NOTARY_KEY_PATH" >> "$GITHUB_ENV"
+          python3 - "$NOTARY_KEY_PATH" <<'PY'
+          import base64
+          import os
+          import pathlib
+          import sys
+
+          pathlib.Path(sys.argv[1]).write_bytes(
+              base64.b64decode(
+                  os.environ["NOTARY_KEY"],
+                  validate=True,
+              )
+          )
+          PY
+          chmod 600 "$NOTARY_KEY_PATH"
+
+      - name: Verify configured identities and team
+        env:
+          APP_IDENTITY: ${{ secrets.BLACKSTOCK_CODESIGN_IDENTITY }}
+          INSTALLER_IDENTITY: ${{ secrets.BLACKSTOCK_INSTALLER_IDENTITY }}
+          TEAM_ID: ${{ secrets.BLACKSTOCK_APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          security find-identity -v "$BLACKSTOCK_RELEASE_KEYCHAIN"             | grep -F "$APP_IDENTITY"
+          security find-identity -v "$BLACKSTOCK_RELEASE_KEYCHAIN"             | grep -F "$INSTALLER_IDENTITY"
+          [[ "$APP_IDENTITY" == *"$TEAM_ID"* ]]
+          [[ "$INSTALLER_IDENTITY" == *"$TEAM_ID"* ]]
+
+      - name: Build sign and notarize production package
+        env:
+          BLACKSTOCK_VERSION: ${{ inputs.version }}
+          BLACKSTOCK_BUILD: ${{ inputs.build }}
+          BLACKSTOCK_GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.BLACKSTOCK_GOOGLE_OAUTH_CLIENT_ID }}
+          BLACKSTOCK_CODESIGN_IDENTITY: ${{ secrets.BLACKSTOCK_CODESIGN_IDENTITY }}
+          BLACKSTOCK_INSTALLER_IDENTITY: ${{ secrets.BLACKSTOCK_INSTALLER_IDENTITY }}
+          BLACKSTOCK_NOTARY_KEY_ID: ${{ secrets.BLACKSTOCK_NOTARY_KEY_ID }}
+          BLACKSTOCK_NOTARY_ISSUER: ${{ secrets.BLACKSTOCK_NOTARY_ISSUER }}
+          BLACKSTOCK_NOTARY_EVIDENCE_PATH: ${{ runner.temp }}/dist/notary-response.json
+          BLACKSTOCK_UPDATE_MANIFEST_URL: ${{ inputs.manifest_url }}
+          BLACKSTOCK_UPDATE_PUBLIC_KEY_BASE64: ${{ secrets.BLACKSTOCK_UPDATE_PUBLIC_KEY_BASE64 }}
+          BLACKSTOCK_UPDATE_INSTALLER_TEAM_ID: ${{ secrets.BLACKSTOCK_APPLE_TEAM_ID }}
+          BLACKSTOCK_INCLUDE_E2E_SMOKE: "0"
+        run: |
+          set -euo pipefail
+          chmod +x Build/package.sh
+          Build/package.sh "$RUNNER_TEMP/dist"
+
+          test -s "$RUNNER_TEMP/dist/Blackstock.pkg"
+          test -s "$RUNNER_TEMP/dist/Blackstock.pkg.sha256"
+          test -s "$RUNNER_TEMP/dist/notary-response.json"
+
+          if pkgutil --payload-files "$RUNNER_TEMP/dist/Blackstock.pkg"             | grep -q 'BlackstockE2ESmoke\|BlackstockReleaseVerifier'; then
+            echo "Developer-only helper leaked into production package." >&2
+            exit 1
+          fi
+
+      - name: Generate signed production update manifest
+        env:
+          BLACKSTOCK_UPDATE_PRIVATE_KEY_BASE64: ${{ secrets.BLACKSTOCK_UPDATE_PRIVATE_KEY_BASE64 }}
+        run: |
+          set -euo pipefail
+          swift Build/generate_update_manifest.swift             --package "$RUNNER_TEMP/dist/Blackstock.pkg"             --package-url "${{ inputs.package_url }}"             --version "${{ inputs.version }}"             --build "${{ inputs.build }}"             --output "$RUNNER_TEMP/dist/update-manifest.json"
+
+          test -s "$RUNNER_TEMP/dist/update-manifest.json"
+
+      - name: Validate local production artifacts
+        env:
+          TEAM_ID: ${{ secrets.BLACKSTOCK_APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          python3 - "$RUNNER_TEMP/dist" "${{ inputs.manifest_url }}" "$TEAM_ID" <<'PY'
+          import hashlib
+          import json
+          import pathlib
+          import sys
+
+          root = pathlib.Path(sys.argv[1])
+          manifest_url = sys.argv[2]
+          team_id = sys.argv[3]
+
+          manifest = json.loads(
+              (root / "update-manifest.json").read_text()
+          )
+          package = root / "Blackstock.pkg"
+          digest = hashlib.sha256(package.read_bytes()).hexdigest()
+
+          if manifest["sha256"] != digest:
+              raise SystemExit("manifest SHA-256 does not match package")
+          if manifest["packageURL"] != "${{ inputs.package_url }}":
+              raise SystemExit("manifest packageURL mismatch")
+
+          notary = json.loads(
+              (root / "notary-response.json").read_text()
+          )
+          if str(notary.get("status", "")).casefold() != "accepted":
+              raise SystemExit("notarization is not Accepted")
+          if not notary.get("id"):
+              raise SystemExit("notarization submission id is missing")
+
+          metadata = {
+              "schemaVersion": 1,
+              "version": manifest["version"],
+              "build": manifest["build"],
+              "manifestURL": manifest_url,
+              "packageURL": manifest["packageURL"],
+              "packageSHA256": digest,
+              "installerTeamID": team_id,
+              "notarySubmissionID": notary["id"],
+              "notaryStatus": notary["status"],
+          }
+          (root / "production-build-metadata.json").write_text(
+              json.dumps(metadata, indent=2, sort_keys=True) + "\n"
+          )
+          PY
+
+          pkgutil --check-signature "$RUNNER_TEMP/dist/Blackstock.pkg"             | tee "$RUNNER_TEMP/dist/pkg-signature.txt"
+          grep -q 'Developer ID Installer' "$RUNNER_TEMP/dist/pkg-signature.txt"
+          grep -q "(${TEAM_ID})" "$RUNNER_TEMP/dist/pkg-signature.txt"
+          xcrun stapler validate "$RUNNER_TEMP/dist/Blackstock.pkg"
+
+      - name: Upload production release bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: Blackstock-production-${{ inputs.version }}-${{ inputs.build }}
+          path: |
+            ${{ runner.temp }}/dist/Blackstock.pkg
+            ${{ runner.temp }}/dist/Blackstock.pkg.sha256
+            ${{ runner.temp }}/dist/update-manifest.json
+            ${{ runner.temp }}/dist/notary-response.json
+            ${{ runner.temp }}/dist/production-build-metadata.json
+            ${{ runner.temp }}/dist/pkg-signature.txt
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Cleanup signing material
+        if: always()
+        run: |
+          set +e
+          rm -f             "$RUNNER_TEMP/app-cert.p12"             "$RUNNER_TEMP/installer-cert.p12"             "$RUNNER_TEMP/AuthKey.p8"
+          if [[ -n "${BLACKSTOCK_RELEASE_KEYCHAIN:-}" ]]; then
+            security delete-keychain "$BLACKSTOCK_RELEASE_KEYCHAIN"
+          fi
