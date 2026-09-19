@@ -633,6 +633,8 @@ private struct SettingsView: View {
     @ObservedObject var session: BlackstockSession
     @State private var showCredentialRemovalConfirmation = false
     @State private var credentialStatusMessage: String?
+    @State private var isRevokingGoogleAccess = false
+    @State private var privacyExportStatusMessage: String?
     @State private var showLocalDataRemovalConfirmation = false
     @State private var localDataStatusMessage: String?
     @State private var isCheckingForUpdates = false
@@ -663,6 +665,39 @@ private struct SettingsView: View {
                     }
 
                     Text("Entfernt lokal gespeicherte YouTube-Zugriffs-, Refresh- und Scope-Daten aus dem macOS-Keychain. Die OAuth-Client-Konfiguration und deine Projektdateien bleiben erhalten.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Button {
+                        Task {
+                            isRevokingGoogleAccess = true
+                            defer { isRevokingGoogleAccess = false }
+                            do {
+                                let removed = try await session
+                                    .revokeGoogleAuthorization()
+                                credentialStatusMessage = removed > 0
+                                    ? "Google-Berechtigung wurde widerrufen und \(removed) lokale Keychain-Einträge wurden entfernt."
+                                    : "Google-Berechtigung wurde widerrufen; es waren keine lokalen YouTube-Keychain-Einträge gespeichert."
+                            } catch {
+                                credentialStatusMessage = "Google-Berechtigung konnte nicht vollständig widerrufen werden: \(error.localizedDescription)"
+                            }
+                        }
+                    } label: {
+                        HStack {
+                            if isRevokingGoogleAccess {
+                                ProgressView().controlSize(.small)
+                            }
+                            Label(
+                                isRevokingGoogleAccess
+                                    ? "Google-Berechtigung wird widerrufen …"
+                                    : "Google-Berechtigung widerrufen",
+                                systemImage: "person.crop.circle.badge.xmark"
+                            )
+                        }
+                    }
+                    .disabled(isRevokingGoogleAccess)
+
+                    Text("Widerruft die aktuell verwendete Google-OAuth-Berechtigung beim Provider und entfernt anschließend die lokalen YouTube-Zugangsdaten.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
@@ -834,6 +869,61 @@ private struct SettingsView: View {
             GroupBox("Datenschutz & lokale Daten") {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Blackstock speichert Projekt-, Wachstums- und Arbeitsbereichsdaten lokal im Benutzerprofil. Google-/YouTube-Zugangsdaten liegen im macOS-Keychain.")
+
+                    Button {
+                        let panel = NSOpenPanel()
+                        panel.canChooseFiles = false
+                        panel.canChooseDirectories = true
+                        panel.allowsMultipleSelection = false
+                        panel.prompt = "Exportieren"
+                        panel.message = "Wähle einen lokalen Ordner für deinen Blackstock-Datenschutzexport."
+                        if panel.runModal() == .OK,
+                           let destination = panel.url {
+                            do {
+                                let report = try session.exportLocalPrivacyData(
+                                    to: destination
+                                )
+                                privacyExportStatusMessage = "Datenschutzexport erstellt: \(report.exportURL.path). Keychain-Tokens sind nicht enthalten."
+                            } catch {
+                                privacyExportStatusMessage = "Datenschutzexport fehlgeschlagen: \(error.localizedDescription)"
+                            }
+                        }
+                    } label: {
+                        Label(
+                            "Lokale Blackstock-Daten exportieren",
+                            systemImage: "square.and.arrow.up"
+                        )
+                    }
+
+                    Text("Der Export bleibt lokal im gewählten Ordner und enthält keine OAuth-Access-/Refresh-Tokens oder andere Keychain-Geheimnisse.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if let privacyExportStatusMessage {
+                        Text(privacyExportStatusMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+
+                    Divider()
+
+                    Text("Aufbewahrung")
+                        .font(.headline)
+                    ForEach(
+                        Array(PrivacyRetentionPolicy.canonical.enumerated()),
+                        id: \.offset
+                    ) { _, rule in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(rule.dataClass)
+                                .font(.caption.weight(.semibold))
+                            Text(rule.rationale)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    Divider()
 
                     Button(
                         "Alle lokalen Blackstock-Daten löschen",
