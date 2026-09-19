@@ -63,7 +63,9 @@ struct StudioView: View {
                     asset: asset,
                     artifact: artifact,
                     transcript: state.transcript,
-                    generatedCaptionURL: state.captionURL
+                    generatedCaptionURL: state.captionURL,
+                    audioTechnicalAssessment: state.audioTechnicalAssessment,
+                    audioSignalAssessment: state.audioSignalAssessment
                 )
             }
         }
