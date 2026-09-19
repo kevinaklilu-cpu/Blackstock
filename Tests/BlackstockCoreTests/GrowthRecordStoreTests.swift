@@ -17,7 +17,7 @@ final class GrowthRecordStoreTests: XCTestCase {
             experimentID: nil,
             targetChannelID: "channel-A",
             youtubeVideoID: "video-A",
-            publishedAt: Date(timeIntervalSince1970: 100)
+            publishedAt: Date(timeIntervalSince1970: 100.123456)
         )
         try store.save(record: record)
 
@@ -32,7 +32,7 @@ final class GrowthRecordStoreTests: XCTestCase {
             observationIDs: [],
             facts: ["Fakt"],
             nextQuestion: "Frage?",
-            createdAt: Date(timeIntervalSince1970: 200)
+            createdAt: Date(timeIntervalSince1970: 200.654321)
         )
         try store.save(
             learning: learning,
@@ -99,6 +99,56 @@ final class GrowthRecordStoreTests: XCTestCase {
             GrowthRecordStoreSchema.current
         )
         XCTAssertNotNil(object["value"])
+    }
+
+
+    func testVersionTwoEnvelopeWithISO8601DatesMigratesToCurrentSchema() throws {
+        struct LegacyEnvelope<Value: Codable>: Codable {
+            let schemaVersion: Int
+            let value: Value
+        }
+
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let projectID = UUID()
+        let store = GrowthRecordStore(rootURL: root)
+        let directory = try store.projectDirectory(projectID: projectID)
+        let url = directory.appendingPathComponent("published-video.json")
+        let record = PublishedVideoRecord(
+            projectID: projectID,
+            experimentID: nil,
+            targetChannelID: "channel-A",
+            youtubeVideoID: "video-A",
+            publishedAt: Date(timeIntervalSince1970: 100)
+        )
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let envelope = LegacyEnvelope(
+            schemaVersion: 2,
+            value: record
+        )
+        try encoder.encode(envelope).write(
+            to: url,
+            options: [.atomic]
+        )
+
+        XCTAssertEqual(
+            try store.loadRecord(projectID: projectID),
+            record
+        )
+
+        let data = try Data(contentsOf: url)
+        let object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data)
+                as? [String: Any]
+        )
+        XCTAssertEqual(
+            object["schemaVersion"] as? Int,
+            GrowthRecordStoreSchema.current
+        )
     }
 
     func testFutureGrowthSchemaHardStops() throws {
