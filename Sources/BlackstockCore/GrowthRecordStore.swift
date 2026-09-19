@@ -16,6 +16,22 @@ private struct GrowthStoreEnvelope<Value: Codable & Sendable>: Codable, Sendable
     let value: Value
 }
 
+public struct GrowthStoreLoadResult<Value: Codable & Sendable & Equatable>: Sendable, Equatable {
+    public let value: Value?
+    public let recoveredFromBackup: Bool
+    public let migratedFromSchemaVersion: Int?
+
+    public init(
+        value: Value?,
+        recoveredFromBackup: Bool,
+        migratedFromSchemaVersion: Int? = nil
+    ) {
+        self.value = value
+        self.recoveredFromBackup = recoveredFromBackup
+        self.migratedFromSchemaVersion = migratedFromSchemaVersion
+    }
+}
+
 public struct GrowthRecordStore: Sendable {
     public let rootURL: URL
 
@@ -32,12 +48,23 @@ public struct GrowthRecordStore: Sendable {
         let url = directory.appendingPathComponent(
             "published-video.json"
         )
-        try Self.writeVersioned(record, to: url)
+        try Self.writeVersionedWithBackup(
+            record,
+            primaryURL: url
+        )
     }
 
     public func loadRecord(
         projectID: UUID
     ) throws -> PublishedVideoRecord? {
+        try loadRecordWithRecovery(
+            projectID: projectID
+        ).value
+    }
+
+    public func loadRecordWithRecovery(
+        projectID: UUID
+    ) throws -> GrowthStoreLoadResult<PublishedVideoRecord> {
         let url = rootURL
             .appendingPathComponent(
                 projectID.uuidString,
@@ -46,19 +73,24 @@ public struct GrowthRecordStore: Sendable {
             .appendingPathComponent(
                 "published-video.json"
             )
-        guard let decoded: (PublishedVideoRecord, Int) = try Self.readVersioned(
+        let result = try Self.readVersionedWithRecovery(
             PublishedVideoRecord.self,
-            from: url
-        ) else {
-            return nil
+            primaryURL: url
+        )
+        guard let record = result.value else {
+            return result
         }
-        guard decoded.0.projectID == projectID else {
+        guard record.projectID == projectID else {
             throw CocoaError(.fileReadCorruptFile)
         }
-        if decoded.1 < GrowthRecordStoreSchema.current {
-            try Self.writeVersioned(decoded.0, to: url)
+        if let migrated = result.migratedFromSchemaVersion,
+           migrated < GrowthRecordStoreSchema.current {
+            try Self.writeVersionedWithBackup(
+                record,
+                primaryURL: url
+            )
         }
-        return decoded.0
+        return result
     }
 
     public func save(
@@ -71,12 +103,23 @@ public struct GrowthRecordStore: Sendable {
         let url = directory.appendingPathComponent(
             "growth-learning.json"
         )
-        try Self.writeVersioned(learning, to: url)
+        try Self.writeVersionedWithBackup(
+            learning,
+            primaryURL: url
+        )
     }
 
     public func loadLearning(
         projectID: UUID
     ) throws -> GrowthLearningRecord? {
+        try loadLearningWithRecovery(
+            projectID: projectID
+        ).value
+    }
+
+    public func loadLearningWithRecovery(
+        projectID: UUID
+    ) throws -> GrowthStoreLoadResult<GrowthLearningRecord> {
         let url = rootURL
             .appendingPathComponent(
                 projectID.uuidString,
@@ -85,16 +128,19 @@ public struct GrowthRecordStore: Sendable {
             .appendingPathComponent(
                 "growth-learning.json"
             )
-        guard let decoded: (GrowthLearningRecord, Int) = try Self.readVersioned(
+        let result = try Self.readVersionedWithRecovery(
             GrowthLearningRecord.self,
-            from: url
-        ) else {
-            return nil
+            primaryURL: url
+        )
+        if let learning = result.value,
+           let migrated = result.migratedFromSchemaVersion,
+           migrated < GrowthRecordStoreSchema.current {
+            try Self.writeVersionedWithBackup(
+                learning,
+                primaryURL: url
+            )
         }
-        if decoded.1 < GrowthRecordStoreSchema.current {
-            try Self.writeVersioned(decoded.0, to: url)
-        }
-        return decoded.0
+        return result
     }
 
     public func projectDirectory(
@@ -110,6 +156,101 @@ public struct GrowthRecordStore: Sendable {
             withIntermediateDirectories: true
         )
         return directory
+    }
+
+    private static func backupURL(
+        for primaryURL: URL
+    ) -> URL {
+        let basename = primaryURL
+            .deletingPathExtension()
+            .lastPathComponent
+        return primaryURL
+            .deletingLastPathComponent()
+            .appendingPathComponent(
+                basename + ".backup.json"
+            )
+    }
+
+    private static func writeVersionedWithBackup<T: Codable & Sendable>(
+        _ value: T,
+        primaryURL: URL
+    ) throws {
+        let backup = backupURL(for: primaryURL)
+        if FileManager.default.fileExists(
+            atPath: primaryURL.path
+        ),
+           let primaryData = try? Data(
+                contentsOf: primaryURL
+           ),
+           (try? decodeVersioned(
+                T.self,
+                data: primaryData
+           )) != nil {
+            try primaryData.write(
+                to: backup,
+                options: [.atomic]
+            )
+        }
+        try writeVersioned(value, to: primaryURL)
+    }
+
+    private static func readVersionedWithRecovery<
+        T: Codable & Sendable & Equatable
+    >(
+        _ type: T.Type,
+        primaryURL: URL
+    ) throws -> GrowthStoreLoadResult<T> {
+        let backup = backupURL(for: primaryURL)
+        let primaryExists = FileManager.default.fileExists(
+            atPath: primaryURL.path
+        )
+        let backupExists = FileManager.default.fileExists(
+            atPath: backup.path
+        )
+        guard primaryExists || backupExists else {
+            return GrowthStoreLoadResult(
+                value: nil,
+                recoveredFromBackup: false
+            )
+        }
+
+        if primaryExists {
+            do {
+                let data = try Data(contentsOf: primaryURL)
+                let decoded: (T, Int) = try decodeVersioned(
+                    T.self,
+                    data: data
+                )
+                return GrowthStoreLoadResult(
+                    value: decoded.0,
+                    recoveredFromBackup: false,
+                    migratedFromSchemaVersion:
+                        decoded.1
+                        < GrowthRecordStoreSchema.current
+                        ? decoded.1
+                        : nil
+                )
+            } catch {
+                guard backupExists else {
+                    throw error
+                }
+            }
+        }
+
+        let backupData = try Data(contentsOf: backup)
+        let decoded: (T, Int) = try decodeVersioned(
+            T.self,
+            data: backupData
+        )
+        return GrowthStoreLoadResult(
+            value: decoded.0,
+            recoveredFromBackup: true,
+            migratedFromSchemaVersion:
+                decoded.1
+                < GrowthRecordStoreSchema.current
+                ? decoded.1
+                : nil
+        )
     }
 
     private static func writeVersioned<T: Codable & Sendable>(
@@ -130,20 +271,15 @@ public struct GrowthRecordStore: Sendable {
         )
     }
 
-    private static func readVersioned<T: Codable & Sendable>(
+    private static func decodeVersioned<T: Codable & Sendable>(
         _ type: T.Type,
-        from url: URL
-    ) throws -> (T, Int)? {
-        guard FileManager.default.fileExists(
-            atPath: url.path
-        ) else {
-            return nil
-        }
-
-        let data = try Data(contentsOf: url)
+        data: Data
+    ) throws -> (T, Int) {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        let object = try JSONSerialization.jsonObject(with: data)
+        let object = try JSONSerialization.jsonObject(
+            with: data
+        )
         guard let dictionary = object as? [String: Any] else {
             throw CocoaError(.fileReadCorruptFile)
         }
@@ -163,7 +299,10 @@ public struct GrowthRecordStore: Sendable {
                 GrowthStoreEnvelope<T>.self,
                 from: data
             )
-            return (envelope.value, envelope.schemaVersion)
+            return (
+                envelope.value,
+                envelope.schemaVersion
+            )
         }
 
         return (
