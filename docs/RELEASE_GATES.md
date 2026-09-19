@@ -88,7 +88,7 @@ Hinweis: **Recovery = PASS** basiert auf validierter lokaler Workspace-Wiederher
 
 Hinweis: **Migration = PASS** basiert auf versionierter Persistenz für Studio-Workspace, Publish-Preparation sowie Published-/Growth-Learning-Daten. Growth-Persistenz liegt aktuell auf Schema v4: v1/v2-ISO-8601-Daten und v3-Unix-Zeitstempel bleiben lesbar und werden deterministisch auf die verlustfreie aktuelle Zeitdarstellung migriert. Unversionierte Legacy-Dateien werden ebenfalls migriert und erneut atomar gespeichert; unbekannte Future-Schema-Versionen führen zum Hard-Stop statt zu stiller Fehlinterpretation.
 
-Hinweis: **Updater = FAIL** bleibt absichtlich bestehen. Manifest-Signatur, HTTPS-Pflicht, SHA-256-Paketprüfung und Developer-ID-Installer-Teamprüfung sind implementiert; für PASS fehlen weiterhin eine reale Produktions-Endpoint-Konfiguration und ein vollständiger Update-E2E gegen ein tatsächlich signiertes Release.
+Hinweis: **Updater = FAIL** bleibt absichtlich bestehen. Manifest-Signatur, HTTPS-Pflicht, SHA-256-Paketprüfung und Developer-ID-Installer-Teamprüfung sind implementiert. Zusätzlich protokolliert Blackstock jetzt eine versionierte lokale In-App-Evidenzkette: akzeptiertes signiertes Manifest → verifiziertes Paket/Installer-Team → tatsächlich geöffneter macOS-Installer → nach Installation gestarteter exakter Manifest-Ziel-Build. `Build/audit_updater_evidence.py` und `Build/validate_in_app_update_evidence.py` sichern diesen Vertrag. Für PASS fehlen weiterhin die reale Produktions-Endpoint-Konfiguration, das tatsächlich Developer-ID-signierte/notarisierte Release und ein vollständiger echter In-App-Versionswechsel.
 
 
 **STATUS: NOCH NICHT MARKTREIF**
