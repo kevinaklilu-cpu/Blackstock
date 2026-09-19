@@ -62,6 +62,59 @@ final class ClosedCreatorLoopTests: XCTestCase {
         XCTAssertEqual(YouTubeResumableUploader.nextOffset(fromRangeHeader: nil), 0)
     }
 
+    func testResumableStatusRequestCarriesBearerAuthorization() {
+        let request = YouTubeResumableUploader.resumableStatusRequest(
+            uploadURL: URL(string: "https://upload.youtube.test/session")!,
+            totalSize: 1_024,
+            accessToken: "access-token"
+        )
+
+        XCTAssertEqual(request.httpMethod, "PUT")
+        XCTAssertEqual(
+            request.value(forHTTPHeaderField: "Authorization"),
+            "Bearer access-token"
+        )
+        XCTAssertEqual(
+            request.value(forHTTPHeaderField: "Content-Range"),
+            "bytes */1024"
+        )
+        XCTAssertEqual(
+            request.value(forHTTPHeaderField: "Content-Length"),
+            "0"
+        )
+    }
+
+    func testResumableChunkRequestCarriesBearerAuthorizationAndRange() {
+        let data = Data([1, 2, 3, 4])
+        let request = YouTubeResumableUploader.resumableChunkRequest(
+            uploadURL: URL(string: "https://upload.youtube.test/session")!,
+            mimeType: "video/mp4",
+            totalSize: 10,
+            offset: 4,
+            data: data,
+            accessToken: "access-token"
+        )
+
+        XCTAssertEqual(request.httpMethod, "PUT")
+        XCTAssertEqual(
+            request.value(forHTTPHeaderField: "Authorization"),
+            "Bearer access-token"
+        )
+        XCTAssertEqual(
+            request.value(forHTTPHeaderField: "Content-Type"),
+            "video/mp4"
+        )
+        XCTAssertEqual(
+            request.value(forHTTPHeaderField: "Content-Range"),
+            "bytes 4-7/10"
+        )
+        XCTAssertEqual(
+            request.value(forHTTPHeaderField: "Content-Length"),
+            "4"
+        )
+        XCTAssertEqual(request.httpBody, data)
+    }
+
     func testUploadResponseExtractsRealYouTubeVideoID() {
         let data = Data(#"{"id":"youtube-video-123","kind":"youtube#video"}"#.utf8)
         XCTAssertEqual(
