@@ -47,7 +47,7 @@ struct FirstRunView: View {
             Text("Vom Signal\nzum nächsten Video.")
                 .font(.system(size: 44, weight: .bold, design: .rounded))
                 .tracking(-1.1)
-            Text("Research, Produktion, Publishing und echtes Lernen aus deinem YouTube-Kanal – mit nachvollziehbaren Quellen statt erfundenen Scores.")
+            Text("Recherche, Produktion, Veröffentlichung und echtes Lernen aus deinem YouTube-Kanal – mit nachvollziehbaren Quellen statt erfundenen Scores.")
                 .font(.title3)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -497,7 +497,7 @@ struct FirstRunView: View {
     private var stepTitle: String {
         switch session.step {
         case .welcome: "Willkommen bei Blackstock"
-        case .channel: "Welcher Kanal ist dein Workspace?"
+        case .channel: "Welcher Kanal ist dein Arbeitsbereich?"
         case .topic: "Wofür soll dein Kanal stehen?"
         case .language: "Sprache deiner Inhalte"
         case .preparing: "Blackstock bereitet deinen Kanal vor"

@@ -367,7 +367,7 @@ final class BlackstockSession: ObservableObject {
 
     func authorizePublishing() async {
         guard let project = activeProject else {
-            errorMessage = "Kein aktives Projekt für Publishing vorhanden."
+            errorMessage = "Kein aktives Projekt für die Veröffentlichung vorhanden."
             return
         }
         guard !effectiveClientID.isEmpty else {
@@ -395,7 +395,7 @@ final class BlackstockSession: ObservableObject {
                     )
                 } catch {
                     publishingAuthorizedChannelID = nil
-                    errorMessage = "Publishing bleibt gesperrt: \(error.localizedDescription)"
+                    errorMessage = "Veröffentlichung bleibt gesperrt: \(error.localizedDescription)"
                     return
                 }
                 publishingAuthorizedChannelID = project.targetChannelID
@@ -415,7 +415,7 @@ final class BlackstockSession: ObservableObject {
 
             guard let grantedScopeString = tokens.scope else {
                 publishingAuthorizedChannelID = nil
-                errorMessage = "Google hat keine verifizierbare Scope-Liste zurückgegeben. Blackstock aktiviert Publishing nicht."
+                errorMessage = "Google hat keine verifizierbare Scope-Liste zurückgegeben. Blackstock aktiviert die Veröffentlichung nicht."
                 return
             }
 
@@ -424,7 +424,7 @@ final class BlackstockSession: ObservableObject {
             )
             guard requestedScopes.isSubset(of: granted) else {
                 publishingAuthorizedChannelID = nil
-                errorMessage = "Nicht alle für Publishing benötigten Google-Berechtigungen wurden gewährt."
+                errorMessage = "Nicht alle für die Veröffentlichung benötigten Google-Berechtigungen wurden gewährt."
                 return
             }
 
@@ -438,7 +438,7 @@ final class BlackstockSession: ObservableObject {
                 )
             } catch {
                 publishingAuthorizedChannelID = nil
-                errorMessage = "Publishing bleibt gesperrt: \(error.localizedDescription)"
+                errorMessage = "Veröffentlichung bleibt gesperrt: \(error.localizedDescription)"
                 return
             }
 
@@ -465,7 +465,7 @@ final class BlackstockSession: ObservableObject {
             publishingAuthorizedChannelID = project.targetChannelID
         } catch {
             publishingAuthorizedChannelID = nil
-            errorMessage = "Publishing-Autorisierung fehlgeschlagen: \(describe(error))"
+            errorMessage = "Autorisierung für die Veröffentlichung fehlgeschlagen: \(describe(error))"
         }
     }
 
@@ -475,7 +475,7 @@ final class BlackstockSession: ObservableObject {
         userConfirmed: Bool
     ) async {
         guard userConfirmed else {
-            errorMessage = "Bestätige den finalen Remote-Upload ausdrücklich."
+            errorMessage = "Bestätige den finalen externen Upload ausdrücklich."
             return
         }
         guard var project = activeProject else {
@@ -484,18 +484,18 @@ final class BlackstockSession: ObservableObject {
         }
         guard let authorizedChannelID = publishingAuthorizedChannelID,
               authorizedChannelID == project.targetChannelID else {
-            errorMessage = "Publishing ist für den Projekt-Zielkanal noch nicht verifiziert."
+            errorMessage = "Die Veröffentlichung ist für den Projekt-Zielkanal noch nicht verifiziert."
             return
         }
         guard let workspaceChannelID,
               workspaceChannelID == project.targetChannelID else {
-            errorMessage = "Workspace- und Projekt-Zielkanal stimmen nicht überein."
+            errorMessage = "Arbeitsbereich- und Projekt-Zielkanal stimmen nicht überein."
             return
         }
         guard let preparation = loadPublishPreparation(
             projectID: project.id
         ) else {
-            errorMessage = "Kein eingefrorener Publish-Review vorhanden."
+            errorMessage = "Keine eingefrorene Veröffentlichungsprüfung vorhanden."
             return
         }
 
@@ -506,7 +506,7 @@ final class BlackstockSession: ObservableObject {
         do {
             guard project.stage == .review
                     || project.stage == .publishing else {
-                errorMessage = "Projekt ist nicht im Review-/Publishing-Status."
+                errorMessage = "Projekt ist nicht im Prüf-/Veröffentlichungsstatus."
                 return
             }
 
@@ -545,8 +545,8 @@ final class BlackstockSession: ObservableObject {
                 .currentState() == .available
             guard networkAvailable else {
                 errorMessage = project.stage == .review
-                    ? "Upload gestoppt: Keine Netzwerkverbindung. Das Projekt bleibt im Review-Status."
-                    : "Upload pausiert: Keine Netzwerkverbindung. Der bestehende Publishing-/Resume-Zustand bleibt erhalten."
+                    ? "Upload gestoppt: Keine Netzwerkverbindung. Das Projekt bleibt im Prüfstatus."
+                    : "Upload pausiert: Keine Netzwerkverbindung. Der bestehende Veröffentlichungs-/Fortsetzungszustand bleibt erhalten."
                 return
             }
 
@@ -555,7 +555,7 @@ final class BlackstockSession: ObservableObject {
                     to: .publishing,
                     at: Date()
                 ) else {
-                    errorMessage = "Projekt konnte nach bestandenem Preflight nicht in den Publishing-Status wechseln."
+                    errorMessage = "Projekt konnte nach bestandener Vorprüfung nicht in den Veröffentlichungsstatus wechseln."
                     return
                 }
                 try Self.store(project: project)
@@ -563,7 +563,7 @@ final class BlackstockSession: ObservableObject {
             }
 
             guard project.stage == .publishing else {
-                errorMessage = "Projekt ist nicht im Publishing-Status."
+                errorMessage = "Projekt ist nicht im Veröffentlichungsstatus."
                 return
             }
 
@@ -613,7 +613,7 @@ final class BlackstockSession: ObservableObject {
             lastPublishingResult = result
             errorMessage = nil
         } catch {
-            errorMessage = "Publishing fehlgeschlagen oder wurde unterbrochen: \(describe(error)). Der Journal-/Resume-Zustand bleibt erhalten."
+            errorMessage = "Veröffentlichung fehlgeschlagen oder wurde unterbrochen: \(describe(error)). Der Protokoll-/Fortsetzungszustand bleibt erhalten."
         }
     }
 
@@ -730,13 +730,13 @@ final class BlackstockSession: ObservableObject {
     ) async {
         guard let project = activeProject,
               project.stage == .published else {
-            errorMessage = "Analytics-Learning ist erst nach erfolgreichem Publishing verfügbar."
+            errorMessage = "Lernen aus Analytics-Daten ist erst nach erfolgreicher Veröffentlichung verfügbar."
             return
         }
         guard var record = loadPublishedRecord(
             projectID: project.id
         ) else {
-            errorMessage = "Kein PublishedVideoRecord für dieses Projekt vorhanden."
+            errorMessage = "Kein Datensatz des veröffentlichten Videos für dieses Projekt vorhanden."
             return
         }
 
