@@ -497,6 +497,7 @@ jobs:
       - name: Build development package
         env:
           BLACKSTOCK_GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.BLACKSTOCK_GOOGLE_OAUTH_CLIENT_ID }}
+          BLACKSTOCK_SOURCE_COMMIT_SHA: ${{ github.sha }}
           BLACKSTOCK_INCLUDE_E2E_SMOKE: "1"
         run: |
           chmod +x Build/package.sh
@@ -537,6 +538,7 @@ jobs:
           test -x /Applications/Blackstock.app/Contents/Helpers/BlackstockE2ESmoke
           plutil -lint /Applications/Blackstock.app/Contents/Info.plist
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' /Applications/Blackstock.app/Contents/Info.plist)" = "de.blackstock.app"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :BlackstockSourceCommitSHA' /Applications/Blackstock.app/Contents/Info.plist)" = "${GITHUB_SHA}"
           test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' /Applications/Blackstock.app/Contents/Info.plist)" = "13.0"
           codesign --verify --deep --strict --verbose=2 /Applications/Blackstock.app
           codesign --display --verbose=4 /Applications/Blackstock.app 2>&1 \
