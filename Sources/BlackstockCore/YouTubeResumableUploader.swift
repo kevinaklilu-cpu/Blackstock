@@ -65,6 +65,11 @@ public struct YouTubeUploadResult: Codable, Sendable, Equatable {
     public let reusedCommittedAction: Bool
 }
 
+enum ResumableUploadSessionStatus: Sendable, Equatable {
+    case incomplete(nextOffset: Int64)
+    case completed(videoID: String)
+}
+
 public struct YouTubeResumableUploader: Sendable {
     public let accessToken: String
     public let chunkSize: Int
@@ -135,13 +140,29 @@ public struct YouTubeResumableUploader: Sendable {
         let uploadURL: URL
         if let saved = entry.remoteSessionURL {
             uploadURL = saved
-            entry.nextByteOffset = try await queryNextOffset(
+            let status = try await querySessionStatus(
                 uploadURL: saved,
                 totalSize: fileSize,
                 session: session
             )
-            entry.updatedAt = Date()
-            try await journal.upsert(entry)
+            switch status {
+            case .incomplete(let nextOffset):
+                entry.nextByteOffset = nextOffset
+                entry.updatedAt = now
+                try await journal.upsert(entry)
+            case .completed(let videoID):
+                entry.state = .remoteCommitted
+                entry.remoteResourceID = videoID
+                entry.nextByteOffset = fileSize
+                entry.lastError = nil
+                entry.updatedAt = now
+                try await journal.upsert(entry)
+                return .init(
+                    videoID: videoID,
+                    idempotencyKey: idempotencyKey,
+                    reusedCommittedAction: true
+                )
+            }
         } else {
             uploadURL = try await createUploadSession(
                 fileSize: fileSize,
@@ -264,11 +285,11 @@ public struct YouTubeResumableUploader: Sendable {
         return uploadURL
     }
 
-    private func queryNextOffset(
+    private func querySessionStatus(
         uploadURL: URL,
         totalSize: Int64,
         session: URLSession
-    ) async throws -> Int64 {
+    ) async throws -> ResumableUploadSessionStatus {
         let request = Self.resumableStatusRequest(
             uploadURL: uploadURL,
             totalSize: totalSize,
@@ -280,16 +301,11 @@ public struct YouTubeResumableUploader: Sendable {
             throw YouTubeUploadError.invalidResponse
         }
 
-        if http.statusCode == 308 {
-            return Self.nextOffset(fromRangeHeader: http.value(forHTTPHeaderField: "Range"))
-        }
-        if 200..<300 ~= http.statusCode {
-            if Self.videoID(from: data) != nil {
-                return totalSize
-            }
-            throw YouTubeUploadError.missingVideoID
-        }
-        throw YouTubeUploadError.uploadFailed(http.statusCode)
+        return try Self.resumableSessionStatus(
+            statusCode: http.statusCode,
+            rangeHeader: http.value(forHTTPHeaderField: "Range"),
+            responseData: data
+        )
     }
 
     private func uploadChunks(
@@ -410,6 +426,29 @@ public struct YouTubeResumableUploader: Sendable {
             throw YouTubeUploadError.invalidFile
         }
         return Int64(size)
+    }
+
+    static func resumableSessionStatus(
+        statusCode: Int,
+        rangeHeader: String?,
+        responseData: Data
+    ) throws -> ResumableUploadSessionStatus {
+        if statusCode == 308 {
+            return .incomplete(
+                nextOffset: nextOffset(
+                    fromRangeHeader: rangeHeader
+                )
+            )
+        }
+
+        if 200..<300 ~= statusCode {
+            guard let videoID = videoID(from: responseData) else {
+                throw YouTubeUploadError.missingVideoID
+            }
+            return .completed(videoID: videoID)
+        }
+
+        throw YouTubeUploadError.uploadFailed(statusCode)
     }
 
     static func nextOffset(fromRangeHeader range: String?) -> Int64 {
