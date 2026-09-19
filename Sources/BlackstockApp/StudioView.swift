@@ -13,6 +13,7 @@ struct StudioView: View {
     @StateObject private var state = StudioState()
     @State private var showImporter = false
     @State private var pendingURL: URL?
+    @State private var pendingCaptureKind: CaptureKind?
     @State private var showRightsSheet = false
     @State private var rightsSelection: ProductionMediaAuthorization = .owned
     @State private var rightsEvidence = ""
@@ -42,6 +43,7 @@ struct StudioView: View {
         ) { result in
             if case .success(let urls) = result, let url = urls.first {
                 pendingURL = url
+                pendingCaptureKind = nil
                 rightsEvidence = ""
                 rightsConfirmed = false
                 rightsSelection = .owned
@@ -155,8 +157,15 @@ struct StudioView: View {
             }
             .buttonStyle(.borderedProminent)
 
-            CaptureCapabilityPanel()
-                .frame(maxWidth: 620)
+            CaptureCapabilityPanel { url, kind in
+                pendingURL = url
+                pendingCaptureKind = kind
+                rightsSelection = .owned
+                rightsEvidence = "Direkt mit Blackstock aufgezeichnet: \(kind.germanTitle)"
+                rightsConfirmed = false
+                showRightsSheet = true
+            }
+            .frame(maxWidth: 620)
 
             Spacer()
         }
@@ -664,7 +673,7 @@ struct StudioView: View {
             Text("Produktionsmedium autorisieren")
                 .font(.title2.bold())
 
-            Text(pendingURL?.lastPathComponent ?? "Video")
+            Text(pendingURL?.lastPathComponent ?? "Produktionsmedium")
                 .foregroundStyle(.secondary)
 
             Picker("Nutzungsgrundlage", selection: $rightsSelection) {
@@ -688,11 +697,19 @@ struct StudioView: View {
             HStack {
                 Button("Abbrechen", role: .cancel) {
                     showRightsSheet = false
+                    if pendingCaptureKind != nil,
+                       let pendingURL {
+                        try? FileManager.default.removeItem(
+                            at: pendingURL
+                        )
+                    }
                     pendingURL = nil
+                    pendingCaptureKind = nil
                 }
                 Spacer()
                 Button("Importieren") {
                     guard let url = pendingURL else { return }
+                    let wasDirectCapture = pendingCaptureKind != nil
                     showRightsSheet = false
                     Task {
                         await state.importMovie(
@@ -702,14 +719,21 @@ struct StudioView: View {
                             rightsEvidence: rightsEvidence,
                             rightsConfirmed: rightsConfirmed
                         )
-                        if state.asset != nil,
-                           currentStage == .production {
-                            _ = session.advanceActiveProject(
-                                to: .preview
-                            )
+                        if state.asset != nil {
+                            if wasDirectCapture {
+                                try? FileManager.default.removeItem(
+                                    at: url
+                                )
+                            }
+                            if currentStage == .production {
+                                _ = session.advanceActiveProject(
+                                    to: .preview
+                                )
+                            }
                         }
+                        pendingURL = nil
+                        pendingCaptureKind = nil
                     }
-                    pendingURL = nil
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(
