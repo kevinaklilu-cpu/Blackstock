@@ -326,6 +326,8 @@ final class StudioState: ObservableObject {
         renderArtifact = nil
         transcript = nil
         captionURL = nil
+        audioTechnicalAssessment = nil
+        audioSignalAssessment = nil
         transcriptStructure = nil
         retentionAdvisory = nil
         retentionAdvisorAvailability = nil
@@ -394,6 +396,8 @@ final class StudioState: ObservableObject {
         renderArtifact = nil
         transcript = nil
         captionURL = nil
+        audioTechnicalAssessment = nil
+        audioSignalAssessment = nil
         transcriptStructure = nil
         retentionAdvisory = nil
         retentionAdvisorAvailability = nil
@@ -426,6 +430,8 @@ final class StudioState: ObservableObject {
         renderArtifact = nil
         transcript = nil
         captionURL = nil
+        audioTechnicalAssessment = nil
+        audioSignalAssessment = nil
         transcriptStructure = nil
         retentionAdvisory = nil
         retentionAdvisorAvailability = nil
@@ -453,6 +459,8 @@ final class StudioState: ObservableObject {
         renderArtifact = nil
         transcript = nil
         captionURL = nil
+        audioTechnicalAssessment = nil
+        audioSignalAssessment = nil
         transcriptStructure = nil
         retentionAdvisory = nil
         retentionAdvisorAvailability = nil
@@ -526,6 +534,8 @@ final class StudioState: ObservableObject {
         let revision = graph.apply(operation, actor: .user)
         lastUndoneRevisionID = nil
         renderArtifact = nil
+        audioTechnicalAssessment = nil
+        audioSignalAssessment = nil
 
         ledger.append(.init(
             timestamp: Date(),
@@ -720,6 +730,9 @@ final class StudioState: ObservableObject {
                 preset: renderPreset
             )
             renderArtifact = artifact
+            await refreshAudioInspection(
+                for: artifact.fileURL
+            )
             ledger.append(.init(
                 timestamp: Date(),
                 actor: .blackstock,
