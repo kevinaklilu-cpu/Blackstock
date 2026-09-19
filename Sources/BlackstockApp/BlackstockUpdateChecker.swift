@@ -5,7 +5,7 @@ import BlackstockCore
 enum BlackstockUpdateCheckResult: Sendable, Equatable {
     case notConfigured
     case upToDate
-    case updateAvailable(version: String, build: Int, packageURL: URL)
+    case updateAvailable(BlackstockUpdateManifest)
 }
 
 enum BlackstockUpdateCheckError: Error, LocalizedError {
@@ -103,11 +103,7 @@ struct BlackstockUpdateChecker: Sendable {
         case .upToDate:
             return .upToDate
         case .updateAvailable(let update):
-            return .updateAvailable(
-                version: update.version,
-                build: update.build,
-                packageURL: update.packageURL
-            )
+            return .updateAvailable(update)
         }
     }
 }
