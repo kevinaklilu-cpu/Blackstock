@@ -31,6 +31,7 @@ struct PackagingReviewView: View {
     @State private var useStoryboardChapters = false
     @State private var thumbnailAssessment: ThumbnailTechnicalAssessment?
     @State private var packagingVariants: PackagingVariantSet
+    @State private var showFinalPublishConfirmation = false
 
     private let requiredQualityAreas: Set<CreatorQualityArea> = [
         .packaging,
@@ -238,6 +239,26 @@ struct PackagingReviewView: View {
                 thumbnailAssessment = try? ThumbnailTechnicalInspector()
                     .inspect(url: url)
             }
+        }
+        .confirmationDialog(
+            "Wirklich zu YouTube hochladen?",
+            isPresented: $showFinalPublishConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Jetzt hochladen", role: .destructive) {
+                Task {
+                    await session.publishPreparedReview(
+                        artifact: artifact,
+                        asset: asset,
+                        userConfirmed: true
+                    )
+                }
+            }
+            Button("Abbrechen", role: .cancel) {}
+        } message: {
+            Text(
+                "Zielkanal: \(project.targetChannelID) · Sichtbarkeit: \(draftPackage.metadata.privacyStatus.rawValue). Diese Aktion erstellt bzw. setzt reale YouTube-Ressourcen."
+            )
         }
         .fileImporter(
             isPresented: $showCaptionImporter,
@@ -886,6 +907,44 @@ struct PackagingReviewView: View {
                 Text("Der echte Upload bleibt bis zur finalen Remote-Bestätigung getrennt. Public/Unlisted ist nur nach extern verifiziertem YouTube-Compliance-Gate verfügbar.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+
+                if currentStage == .review || currentStage == .publishing {
+                    Button {
+                        showFinalPublishConfirmation = true
+                    } label: {
+                        HStack {
+                            if session.isPublishing {
+                                ProgressView().controlSize(.small)
+                            }
+                            Label(
+                                session.isPublishing
+                                    ? "Upload läuft …"
+                                    : "Final zu YouTube hochladen …",
+                                systemImage: "arrow.up.circle.fill"
+                            )
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(session.isPublishing)
+                }
+
+                if let result = session.lastPublishingResult {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label(
+                            "YouTube-Upload bestätigt",
+                            systemImage: "checkmark.circle.fill"
+                        )
+                        .foregroundStyle(.green)
+                        Text("Video-ID: \(result.videoID)")
+                            .font(.caption.monospaced())
+                            .textSelection(.enabled)
+                        if result.uploadReused {
+                            Text("Der bereits journaled Remote-Upload wurde wiederverwendet; kein Doppel-Upload.")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
             } else {
                 Button {
                     Task {
