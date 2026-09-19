@@ -89,6 +89,37 @@ requirements = {
         "testVersionTwoWorkspaceEnvelopeMigratesToCurrentSchema",
         "testSupplementalCaptureRightsRoundTripInWorkspace",
     ],
+    "Sources/BlackstockCore/CaptureHardwareSmokeEvidence.swift": [
+        "CaptureHardwareSmokeEvidence",
+        "CaptureHardwareSmokeEvidenceStore",
+        "allCanonicalPathsPass",
+        "recordDeniedHardStop",
+        "recordTemporaryCleanup",
+        "reconcileRestartPersistence",
+        "persistedFilePath",
+    ],
+    "Tests/BlackstockCoreTests/CaptureHardwareSmokeEvidenceTests.swift": [
+        "testCompleteEvidenceRequiresAllFourPathsAndExternalChecks",
+        "testRestartPersistenceRequiresDifferentProcessLaunch",
+        "testStoreRoundTripsValidatorCompatibleShape",
+    ],
+    "Sources/BlackstockApp/BlackstockCaptureHardwareAudit.swift": [
+        "LocalAudioSignalAnalyzer",
+        "loadTracks(withMediaType: .video)",
+        "recordDeniedPermission",
+        "recordPersistedCapture",
+        "recordTemporaryCleanup",
+        "reconcilePostRestart",
+        'capture-hardware-smoke.json',
+        '"/Applications/Blackstock.app"',
+    ],
+    "Build/validate_capture_hardware_smoke.py": [
+        "durationSeconds must be at least 5 seconds",
+        "decodedSamples must be greater than zero",
+        "videoTrackPresent must be true",
+        "installedFromPackage",
+        "appRestartPersistencePassed",
+    ],
 }
 
 errors = []
