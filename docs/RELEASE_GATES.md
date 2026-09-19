@@ -26,7 +26,7 @@ Statuswerte: **PASS / FAIL / BLOCKED_EXTERNAL**.
 | Comments | PASS |
 | Security | PASS |
 | Privacy | PASS |
-| Accessibility | FAIL |
+| Accessibility | PASS |
 | Recovery | PASS |
 | Migration | PASS |
 | Installer | PASS |
@@ -45,6 +45,8 @@ Hinweis: **Wrong Channel E2E = PASS** basiert auf den deterministischen Hard-Sto
 Hinweis: **Upload Resume = PASS** basiert auf dem deterministischen Resumable-Upload-End-to-End-Test: Eine vorhandene Remote-Session wird abgefragt, der von YouTube gemeldete Remote-Offset gewinnt gegenüber lokalem Zwischenstand, nur der verbleibende Byte-Range wird übertragen, jeder PUT ist authentifiziert und der Fortschritt wird persistent bis `remoteCommitted` mit Video-ID und finalem Offset fortgeschrieben.
 
 Hinweis: **Analytics = PASS** basiert auf den deterministischen YouTube-Analytics-Contract- und Kontexttests: Abrufe sind an ein veröffentlichtes Projekt, denselben Projekt-Datensatz, denselben Zielkanal und eine konkrete Video-ID gebunden; vor dem Abruf wird die aktuell autorisierte YouTube-Kanalidentität erneut validiert. Fehlende Provider-Zeilen bleiben fehlend statt als Nullwerte erfunden zu werden, und inkonsistente Responses führen zum Hard-Stop.
+
+Hinweis: **Accessibility = PASS** basiert auf expliziter VoiceOver-Semantik für die kritischen First-Run-, Studio- und Veröffentlichungsprüfungs-Kontrollen, inklusive dynamischer Accessibility-Werte für Trim-/Reframe-Regler sowie Beschriftungen für icon-only Aktionen und Controls mit ausgeblendeten sichtbaren Labels. Die Canonical-CI führt zusätzlich `Build/audit_accessibility.py` aus und blockiert Regressionen bei diesen Semantik-Verträgen.
 
 Hinweis: **Security = PASS** bezieht sich auf die deterministisch abgesicherten App-Pfade: Google Desktop OAuth verwendet PKCE S256 und zufälligen State, der Callback lauscht ausschließlich auf 127.0.0.1 und akzeptiert nur den erwarteten Callback-Pfad, OAuth-Berechtigungen werden capability-basiert minimiert und bei Erweiterung neu autorisiert, Tokens/Scopes/OAuth-Client-Bindung liegen im gerätegebundenen macOS-Keychain mit Zugriff nur im entsperrten Zustand, und ein Wechsel der OAuth-Client-ID invalidiert die bestehende Autorisierung. Zusätzlich sind Update-Manifest, Paket-Hash und Developer-ID-Installer-Team kryptografisch bzw. systemseitig gebunden. Die separaten Apple-Gates Signing, Notarization und Gatekeeper bleiben davon unberührt und weiterhin BLOCKED_EXTERNAL.
 
