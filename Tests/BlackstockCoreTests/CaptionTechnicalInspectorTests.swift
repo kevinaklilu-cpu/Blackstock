@@ -113,6 +113,48 @@ final class CaptionTechnicalInspectorTests: XCTestCase {
         )
     }
 
+    func testOverlappingCuesAreBlocked() throws {
+        let url = try writeTemporary(
+            extension: "vtt",
+            contents: """
+            WEBVTT
+
+            00:00:00.000 --> 00:00:03.000
+            Erster Cue.
+
+            00:00:02.500 --> 00:00:04.000
+            Überlappender Cue.
+            """
+        )
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let assessment = try CaptionTechnicalInspector().inspect(url: url)
+
+        XCTAssertFalse(assessment.uploadCompatible)
+        XCTAssertTrue(assessment.blockers.contains(.overlappingCues))
+    }
+
+    func testNonMonotonicCueOrderIsBlocked() throws {
+        let url = try writeTemporary(
+            extension: "srt",
+            contents: """
+            1
+            00:00:05,000 --> 00:00:06,000
+            Später Cue.
+
+            2
+            00:00:02,000 --> 00:00:03,000
+            Früher Cue.
+            """
+        )
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let assessment = try CaptionTechnicalInspector().inspect(url: url)
+
+        XCTAssertFalse(assessment.uploadCompatible)
+        XCTAssertTrue(assessment.blockers.contains(.nonMonotonicCueOrder))
+    }
+
     private func writeTemporary(
         extension fileExtension: String,
         contents: String
