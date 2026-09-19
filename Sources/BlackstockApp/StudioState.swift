@@ -34,6 +34,7 @@ final class StudioState: ObservableObject {
     @Published var retentionAdvisorAvailability: LocalRetentionAdvisorAvailability?
     @Published var isAnalyzingRetention = false
     @Published var storyboard: StoryboardPlan?
+    @Published var workspaceRecoveryNotice: String?
 
     private var correlationID = UUID()
     private var activeProjectID: UUID?
@@ -61,6 +62,7 @@ final class StudioState: ObservableObject {
                 renderArtifact = snapshot.renderArtifact
 
                 if loadResult.source == .backup {
+                    workspaceRecoveryNotice = "Blackstock hat den letzten lesbaren Projektstand aus der Backup-Kopie wiederhergestellt."
                     ledger.append(.init(
                         timestamp: Date(),
                         actor: .blackstock,
@@ -89,6 +91,7 @@ final class StudioState: ObservableObject {
                         )
                     )
                 } else if loadResult.source == .legacy {
+                    workspaceRecoveryNotice = "Ein älterer Projektstand wurde in das aktuelle Workspace-Format migriert."
                     ledger.append(.init(
                         timestamp: Date(),
                         actor: .blackstock,
@@ -141,6 +144,7 @@ final class StudioState: ObservableObject {
                 return
             }
 
+            workspaceRecoveryNotice = nil
             loadStoryboard(projectID: projectID)
             persistWorkspaceIfPossible()
         } catch {
