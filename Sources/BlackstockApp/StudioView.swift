@@ -515,6 +515,67 @@ struct StudioView: View {
                     }
                 }
 
+                if let structure = state.transcriptStructure {
+                    Divider()
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Retention & Struktur")
+                            .font(.headline)
+
+                        ForEach(structure.factualSummary, id: \.self) { fact in
+                            Label(fact, systemImage: "ruler")
+                                .font(.caption)
+                        }
+
+                        Button {
+                            Task { await state.analyzeRetentionLocally() }
+                        } label: {
+                            HStack {
+                                if state.isAnalyzingRetention {
+                                    ProgressView().controlSize(.small)
+                                }
+                                Label(
+                                    state.isAnalyzingRetention
+                                        ? "Lokales Modell analysiert …"
+                                        : "Lokale Hinweise erstellen",
+                                    systemImage: "sparkles"
+                                )
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(
+                            state.isAnalyzingRetention
+                            || state.retentionAdvisorAvailability != .available
+                        )
+
+                        if let availability = state.retentionAdvisorAvailability,
+                           availability != .available {
+                            Text(retentionAvailabilityText(availability))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        if let advisory = state.retentionAdvisory {
+                            DisclosureGroup("Hinweise anzeigen") {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text(advisory.text)
+                                        .font(.caption)
+                                        .textSelection(.enabled)
+                                    Text("Quelle: \(advisory.source) · keine Release-Evidenz")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                                .padding(.top, 6)
+                            }
+                            .font(.caption.weight(.semibold))
+                        }
+
+                        Text("Blackstock misst die Struktur-Fakten deterministisch. Generative Hinweise sind optional, lokal und ersetzen keine Sichtprüfung oder echte Analytics.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
                 Divider()
 
                 VStack(alignment: .leading, spacing: 10) {
@@ -611,6 +672,23 @@ struct StudioView: View {
             Color.primary.opacity(0.04),
             in: RoundedRectangle(cornerRadius: 8)
         )
+    }
+
+    private func retentionAvailabilityText(
+        _ availability: LocalRetentionAdvisorAvailability
+    ) -> String {
+        switch availability {
+        case .available:
+            return "Lokale Retention-Hinweise sind verfügbar."
+        case .unsupportedOS:
+            return "Lokale Foundation-Models-Hinweise benötigen eine unterstützte macOS-Version."
+        case .frameworkUnavailable:
+            return "Foundation Models sind in dieser Laufzeit nicht verfügbar."
+        case .modelUnavailable:
+            return "Das lokale Apple-Intelligence-Modell ist auf diesem Mac derzeit nicht verfügbar."
+        case .unsupportedLanguage:
+            return "Das lokale Modell unterstützt die Content-Sprache derzeit nicht."
+        }
     }
 
     private func audioFindingText(
