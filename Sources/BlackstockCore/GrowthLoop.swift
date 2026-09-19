@@ -5,6 +5,15 @@ public enum GrowthObservationWindow: String, Codable, Sendable, CaseIterable {
     case first72Hours = "FIRST_72_HOURS"
     case first7Days = "FIRST_7_DAYS"
     case first28Days = "FIRST_28_DAYS"
+
+    public var germanTitle: String {
+        switch self {
+        case .first24Hours: return "24 Std."
+        case .first72Hours: return "72 Std."
+        case .first7Days: return "7 Tage"
+        case .first28Days: return "28 Tage"
+        }
+    }
 }
 
 public enum GrowthObjective: String, Codable, Sendable, CaseIterable {
