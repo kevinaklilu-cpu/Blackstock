@@ -108,6 +108,7 @@ private struct CommandPaletteView: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var query = ""
+    @FocusState private var queryFocused: Bool
 
     private struct Command: Identifiable {
         let id: String
@@ -181,6 +182,8 @@ private struct CommandPaletteView: View {
                 TextField("Befehl suchen …", text: $query)
                     .textFieldStyle(.plain)
                     .font(.title3)
+                    .focused($queryFocused)
+                    .accessibilityLabel("Befehl suchen")
             }
             .padding(16)
 
@@ -223,6 +226,9 @@ private struct CommandPaletteView: View {
             .listStyle(.inset)
         }
         .frame(width: 560, height: 360)
+        .task {
+            queryFocused = true
+        }
         .onExitCommand {
             dismiss()
         }
