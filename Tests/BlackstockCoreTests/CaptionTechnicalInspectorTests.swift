@@ -22,8 +22,11 @@ final class CaptionTechnicalInspectorTests: XCTestCase {
         XCTAssertTrue(assessment.uploadCompatible)
         XCTAssertEqual(assessment.snapshot.format, .webVTT)
         XCTAssertEqual(assessment.snapshot.cueCount, 2)
+        let lastCueEnd = try XCTUnwrap(
+            assessment.snapshot.lastCueEndSeconds
+        )
         XCTAssertEqual(
-            assessment.snapshot.lastCueEndSeconds,
+            lastCueEnd,
             5,
             accuracy: 0.001
         )
