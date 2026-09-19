@@ -32,7 +32,7 @@ final class OpportunityProjectFactoryTests: XCTestCase {
 
         XCTAssertEqual(seed.project.targetChannelID, "target-channel")
         XCTAssertEqual(seed.project.strategyVersion, 3)
-        XCTAssertEqual(seed.project.stage, .production)
+        XCTAssertEqual(seed.project.stage, .research)
         XCTAssertEqual(seed.source.provider, .youtube)
         XCTAssertEqual(seed.source.externalID, "abc123")
         XCTAssertEqual(
