@@ -1288,7 +1288,7 @@ final class BlackstockSession: ObservableObject {
                 return
             }
 
-            let strategy = try currentStrategyDraft().makeStrategy(
+            let candidateStrategy = try currentStrategyDraft().makeStrategy(
                 channelID: channel.id,
                 defaultContentLanguage: contentLanguage,
                 researchLanguages: contentLanguage == "de"
@@ -1297,7 +1297,14 @@ final class BlackstockSession: ObservableObject {
                 effectiveFrom: Date(),
                 version: nextStrategyVersion(for: channel.id)
             )
-            try persist(strategy: strategy)
+            let strategy: ChannelStrategy
+            if let existing = storedStrategy(for: channel.id),
+               existing.hasSameConfiguration(as: candidateStrategy) {
+                strategy = existing
+            } else {
+                strategy = candidateStrategy
+                try persist(strategy: strategy)
+            }
 
             let candidates = try await YouTubeAuthorizedClient(accessToken: accessToken)
                 .firstOpportunityCandidates(query: primaryTopic, maxResults: 12, order: .relevance)
@@ -1438,11 +1445,19 @@ final class BlackstockSession: ObservableObject {
         )
     }
 
-    private func storedStrategyVersion(for channelID: String) -> Int {
-        guard let data = UserDefaults.standard.data(forKey: "blackstock.strategy.\(channelID)") else { return 1 }
+    private func storedStrategy(for channelID: String) -> ChannelStrategy? {
+        guard let data = UserDefaults.standard.data(
+            forKey: "blackstock.strategy.\(channelID)"
+        ) else {
+            return nil
+        }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        return (try? decoder.decode(ChannelStrategy.self, from: data).version) ?? 1
+        return try? decoder.decode(ChannelStrategy.self, from: data)
+    }
+
+    private func storedStrategyVersion(for channelID: String) -> Int {
+        storedStrategy(for: channelID)?.version ?? 1
     }
 
     private static func store(project: BlackstockProject) throws {
@@ -1507,11 +1522,7 @@ final class BlackstockSession: ObservableObject {
     }
 
     private func nextStrategyVersion(for channelID: String) -> Int {
-        guard let data = UserDefaults.standard.data(forKey: "blackstock.strategy.\(channelID)") else { return 1 }
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        guard let previous = try? decoder.decode(ChannelStrategy.self, from: data) else { return 1 }
-        return previous.version + 1
+        (storedStrategy(for: channelID)?.version ?? 0) + 1
     }
 
     private func describe(_ error: Error) -> String {
