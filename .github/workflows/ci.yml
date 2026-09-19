@@ -41,6 +41,16 @@ jobs:
           Build/package.sh "$RUNNER_TEMP/dist"
           test -f "$RUNNER_TEMP/dist/Blackstock.pkg"
           pkgutil --payload-files "$RUNNER_TEMP/dist/Blackstock.pkg" | grep -q 'Applications/Blackstock.app'
+      - name: Install package on clean runner
+        run: |
+          set -euo pipefail
+          sudo rm -rf /Applications/Blackstock.app
+          sudo installer -pkg "$RUNNER_TEMP/dist/Blackstock.pkg" -target /
+          test -x /Applications/Blackstock.app/Contents/MacOS/Blackstock
+          plutil -lint /Applications/Blackstock.app/Contents/Info.plist
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' /Applications/Blackstock.app/Contents/Info.plist)" = "de.blackstock.app"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' /Applications/Blackstock.app/Contents/Info.plist)" = "13.0"
+          codesign --verify --deep --strict --verbose=2 /Applications/Blackstock.app
       - uses: actions/upload-artifact@v4
         with:
           name: Blackstock-development-pkg
