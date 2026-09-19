@@ -6,11 +6,25 @@ let package = Package(
     platforms: [.macOS(.v13)],
     products: [
         .library(name: "BlackstockCore", targets: ["BlackstockCore"]),
-        .executable(name: "Blackstock", targets: ["BlackstockApp"])
+        .executable(name: "Blackstock", targets: ["BlackstockApp"]),
+        .executable(
+            name: "BlackstockE2ESmoke",
+            targets: ["BlackstockE2ESmoke"]
+        )
     ],
     targets: [
         .target(name: "BlackstockCore"),
-        .executableTarget(name: "BlackstockApp", dependencies: ["BlackstockCore"]),
-        .testTarget(name: "BlackstockCoreTests", dependencies: ["BlackstockCore"])
+        .executableTarget(
+            name: "BlackstockApp",
+            dependencies: ["BlackstockCore"]
+        ),
+        .executableTarget(
+            name: "BlackstockE2ESmoke",
+            dependencies: ["BlackstockCore"]
+        ),
+        .testTarget(
+            name: "BlackstockCoreTests",
+            dependencies: ["BlackstockCore"]
+        )
     ]
 )
