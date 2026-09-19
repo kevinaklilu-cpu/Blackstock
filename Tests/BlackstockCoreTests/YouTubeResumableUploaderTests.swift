@@ -128,7 +128,7 @@ final class YouTubeResumableUploaderTests: XCTestCase {
                 "bytes 4-9/10"
             )
             XCTAssertEqual(
-                request.httpBody,
+                Self.requestBodyData(request),
                 Data("456789".utf8)
             )
             let response = HTTPURLResponse(
@@ -185,6 +185,40 @@ final class YouTubeResumableUploaderTests: XCTestCase {
         XCTAssertEqual(persisted.state, .remoteCommitted)
         XCTAssertEqual(persisted.remoteResourceID, "video-123")
         XCTAssertEqual(persisted.nextByteOffset, 10)
+    }
+
+    private static func requestBodyData(
+        _ request: URLRequest
+    ) -> Data? {
+        if let body = request.httpBody {
+            return body
+        }
+        guard let stream = request.httpBodyStream else {
+            return nil
+        }
+
+        stream.open()
+        defer { stream.close() }
+
+        var result = Data()
+        var buffer = [UInt8](repeating: 0, count: 4_096)
+        while stream.hasBytesAvailable {
+            let count = stream.read(
+                &buffer,
+                maxLength: buffer.count
+            )
+            if count < 0 {
+                return nil
+            }
+            if count == 0 {
+                break
+            }
+            result.append(
+                buffer,
+                count: count
+            )
+        }
+        return result
     }
 
     func testResumeRequestBuildersAuthenticateEveryPut() {
