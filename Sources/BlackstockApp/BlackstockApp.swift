@@ -634,6 +634,8 @@ private struct SettingsView: View {
     @State private var credentialStatusMessage: String?
     @State private var showLocalDataRemovalConfirmation = false
     @State private var localDataStatusMessage: String?
+    @State private var isCheckingForUpdates = false
+    @State private var updateStatusMessage: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -690,6 +692,60 @@ private struct SettingsView: View {
                 Button("Abbrechen", role: .cancel) {}
             } message: {
                 Text("Diese Aktion meldet Blackstock lokal ab. Sie widerruft keine Berechtigung im Google-Konto und löscht keine Projektdateien.")
+            }
+
+            GroupBox("Updates") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Button {
+                        Task {
+                            isCheckingForUpdates = true
+                            defer { isCheckingForUpdates = false }
+
+                            do {
+                                switch try await BlackstockUpdateChecker().check() {
+                                case .notConfigured:
+                                    updateStatusMessage = "Update-Prüfung ist in diesem Build noch nicht konfiguriert."
+                                case .upToDate:
+                                    updateStatusMessage = "Blackstock ist auf dem aktuellen Stand."
+                                case .updateAvailable(let version, let build, _):
+                                    updateStatusMessage = "Update verfügbar: Version \(version), Build \(build). Automatische Installation bleibt deaktiviert, bis die Release-Infrastruktur vollständig freigegeben ist."
+                                }
+                            } catch {
+                                if let localized = error as? LocalizedError,
+                                   let description = localized.errorDescription {
+                                    updateStatusMessage = "Update-Prüfung fehlgeschlagen: \(description)"
+                                } else {
+                                    updateStatusMessage = "Update-Prüfung fehlgeschlagen: \(error.localizedDescription)"
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack {
+                            if isCheckingForUpdates {
+                                ProgressView().controlSize(.small)
+                            }
+                            Label(
+                                isCheckingForUpdates
+                                    ? "Updates werden geprüft …"
+                                    : "Nach Updates suchen",
+                                systemImage: "arrow.triangle.2.circlepath"
+                            )
+                        }
+                    }
+                    .disabled(isCheckingForUpdates)
+
+                    Text("Blackstock akzeptiert nur HTTPS-Manifeste mit gültiger Ed25519-Signatur. Dieser Build prüft nur die Verfügbarkeit; Download und Installation erfolgen nicht automatisch.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if let updateStatusMessage {
+                        Text(updateStatusMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 6)
             }
 
             GroupBox("Datenschutz & lokale Daten") {

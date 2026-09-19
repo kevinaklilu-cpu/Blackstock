@@ -13,6 +13,8 @@ PUBLIC_PUBLISHING_APPROVED="${BLACKSTOCK_YOUTUBE_PUBLIC_PUBLISHING_APPROVED:-0}"
 APP_SIGN_IDENTITY="${BLACKSTOCK_CODESIGN_IDENTITY:-}"
 INSTALLER_SIGN_IDENTITY="${BLACKSTOCK_INSTALLER_IDENTITY:-}"
 NOTARY_PROFILE="${BLACKSTOCK_NOTARY_KEYCHAIN_PROFILE:-}"
+UPDATE_MANIFEST_URL="${BLACKSTOCK_UPDATE_MANIFEST_URL:-}"
+UPDATE_PUBLIC_KEY="${BLACKSTOCK_UPDATE_PUBLIC_KEY_BASE64:-}"
 
 if [[ "$PUBLIC_PUBLISHING_APPROVED" == "1" ]]; then
   PUBLIC_PUBLISHING_PLIST="<true/>"
@@ -50,6 +52,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <key>NSSpeechRecognitionUsageDescription</key><string>Blackstock transkribiert autorisierte Produktionsmedien lokal auf diesem Mac, wenn On-Device-Spracherkennung verfügbar ist.</string>
 <key>BlackstockGoogleOAuthClientID</key><string>${OAUTH_CLIENT_ID}</string>
 <key>BlackstockYouTubePublicPublishingApproved</key>${PUBLIC_PUBLISHING_PLIST}
+<key>BlackstockUpdateManifestURL</key><string>${UPDATE_MANIFEST_URL}</string>
+<key>BlackstockUpdatePublicKeyBase64</key><string>${UPDATE_PUBLIC_KEY}</string>
 </dict></plist>
 PLIST
 
