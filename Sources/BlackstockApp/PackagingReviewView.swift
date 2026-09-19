@@ -453,9 +453,9 @@ struct PackagingReviewView: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Thumbnail")
+                        Text("Vorschaubild")
                             .font(.headline)
-                        Text(thumbnailURL?.lastPathComponent ?? "Noch kein Thumbnail gewählt")
+                        Text(thumbnailURL?.lastPathComponent ?? "Noch kein Vorschaubild gewählt")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -495,7 +495,7 @@ struct PackagingReviewView: View {
         _ assessment: ThumbnailTechnicalAssessment
     ) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Technische Thumbnail-Prüfung")
+            Text("Technische Vorschaubild-Prüfung")
                 .font(.caption.weight(.semibold))
 
             Text(
@@ -537,7 +537,7 @@ struct PackagingReviewView: View {
                 .foregroundStyle(.green)
             }
 
-            Text("Technische Kompatibilität ist keine Bewertung der kreativen Thumbnail-Qualität.")
+            Text("Technische Kompatibilität ist keine Bewertung der kreativen Vorschaubild-Qualität.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
@@ -553,7 +553,7 @@ struct PackagingReviewView: View {
     ) -> String {
         switch blocker {
         case .unsupportedMimeType:
-            return "Dieses Dateiformat wird vom YouTube-Thumbnail-Upload nicht unterstützt."
+            return "Dieses Dateiformat wird vom YouTube-Vorschaubild-Upload nicht unterstützt."
         case .exceedsFiftyMB:
             return "Die Datei überschreitet das aktuelle 50-MB-Uploadlimit."
         case .invalidDimensions:
@@ -575,7 +575,7 @@ struct PackagingReviewView: View {
     private var packagingVariantsSection: some View {
         GroupBox("Varianten des Veröffentlichungspakets") {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Bis zu drei Titel-/Thumbnail-Kombinationen vorbereiten. Blackstock markiert keinen Gewinner ohne echte YouTube-Testdaten.")
+                Text("Bis zu drei Titel-/Vorschaubild-Kombinationen vorbereiten. Blackstock markiert keinen Gewinner ohne echte YouTube-Testdaten.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -587,7 +587,7 @@ struct PackagingReviewView: View {
                                 .lineLimit(1)
                             Text(
                                 variant.thumbnailURL?.lastPathComponent
-                                    ?? "Kein Thumbnail"
+                                    ?? "Kein Vorschaubild"
                             )
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -623,7 +623,7 @@ struct PackagingReviewView: View {
                     }
                 } label: {
                     Label(
-                        "Aktuellen Titel/Thumbnail als Variante sichern",
+                        "Aktuellen Titel/Vorschaubild als Variante sichern",
                         systemImage: "plus"
                     )
                 }
@@ -793,7 +793,7 @@ struct PackagingReviewView: View {
     private func areaQuestion(_ area: CreatorQualityArea) -> String {
         switch area {
         case .packaging:
-            return "Versprechen Titel und Thumbnail ehrlich, klar und passend, was das Video tatsächlich liefert?"
+            return "Versprechen Titel und Vorschaubild ehrlich, klar und passend, was das Video tatsächlich liefert?"
         case .retentionStructure:
             return "Startet das Video ohne unnötigen Leerlauf und bleibt die Struktur verständlich und fokussiert?"
         case .audio:
