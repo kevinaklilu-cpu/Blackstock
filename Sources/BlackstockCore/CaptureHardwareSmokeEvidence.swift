@@ -64,12 +64,13 @@ public struct CaptureHardwareSmokeEvidence:
     Codable,
     Sendable,
     Equatable {
-    public static let currentSchemaVersion = 1
+    public static let currentSchemaVersion = 2
 
     public var schemaVersion: Int
     public var testedAt: Date
     public var blackstockVersion: String
     public var blackstockBuild: String
+    public var blackstockSourceCommitSHA: String
     public var macOSVersion: String
     public var hardwareModel: String
     public var installedFromPackage: Bool
@@ -91,6 +92,7 @@ public struct CaptureHardwareSmokeEvidence:
         testedAt: Date,
         blackstockVersion: String,
         blackstockBuild: String,
+        blackstockSourceCommitSHA: String,
         macOSVersion: String,
         hardwareModel: String,
         installedFromPackage: Bool
@@ -99,6 +101,8 @@ public struct CaptureHardwareSmokeEvidence:
         self.testedAt = testedAt
         self.blackstockVersion = blackstockVersion
         self.blackstockBuild = blackstockBuild
+        self.blackstockSourceCommitSHA =
+            blackstockSourceCommitSHA.lowercased()
         self.macOSVersion = macOSVersion
         self.hardwareModel = hardwareModel
         self.installedFromPackage = installedFromPackage
@@ -203,6 +207,9 @@ public struct CaptureHardwareSmokeEvidence:
             && appRestartPersistencePassed
             && !blackstockVersion.isEmpty
             && !blackstockBuild.isEmpty
+            && blackstockSourceCommitSHA.count == 40
+            && blackstockSourceCommitSHA
+                .allSatisfy({ $0.isHexDigit })
             && !macOSVersion.isEmpty
             && !hardwareModel.isEmpty
     }
@@ -251,6 +258,13 @@ public struct CaptureHardwareSmokeEvidenceStore:
                 .unsupportedFutureSchemaVersion(
                     version
                 )
+        }
+        guard version
+                == CaptureHardwareSmokeEvidence
+                    .currentSchemaVersion else {
+            // Legacy evidence has no cryptographic source
+            // provenance and must be re-recorded.
+            return nil
         }
 
         let decoder = JSONDecoder()
