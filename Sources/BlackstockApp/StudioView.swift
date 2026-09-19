@@ -142,7 +142,7 @@ struct StudioView: View {
         VStack(spacing: 18) {
             Spacer()
             Image(systemName: "film.stack")
-                .font(.system(size: 48))
+                .font(.largeTitle)
                 .foregroundStyle(.secondary)
             Text("Autorisiertes Produktionsvideo hinzufügen")
                 .font(.title2.bold())
