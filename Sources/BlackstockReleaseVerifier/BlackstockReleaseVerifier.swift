@@ -134,6 +134,12 @@ private struct BlackstockReleaseVerifierMain {
             publicKeyBase64: arguments.publicKeyBase64
         )
 
+        guard isProductionHTTPSURL(manifest.packageURL) else {
+            throw ReleaseVerifierError.invalidURL(
+                manifest.packageURL.absoluteString
+            )
+        }
+
         switch try UpdateManifestVerifier().availability(
             manifest: manifest,
             currentVersion: arguments.currentVersion,
@@ -487,6 +493,30 @@ private struct BlackstockReleaseVerifierMain {
                 http.statusCode
             )
         }
+        guard let finalURL = http.url,
+              isProductionHTTPSURL(finalURL) else {
+            throw ReleaseVerifierError.invalidURL(
+                http.url?.absoluteString ?? "UNBEKANNT"
+            )
+        }
+    }
+
+    private static func isProductionHTTPSURL(
+        _ url: URL
+    ) -> Bool {
+        guard url.scheme?.lowercased() == "https",
+              let host = url.host?.lowercased(),
+              !host.isEmpty,
+              url.user == nil,
+              url.password == nil,
+              url.fragment == nil else {
+            return false
+        }
+        return host != "localhost"
+            && !host.hasPrefix("127.")
+            && !host.hasSuffix(".invalid")
+            && !host.hasSuffix(".example")
+            && !host.hasSuffix(".test")
     }
 
     private static func run(
