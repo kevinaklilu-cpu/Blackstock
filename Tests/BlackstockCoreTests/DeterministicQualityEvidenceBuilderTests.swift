@@ -97,7 +97,12 @@ final class DeterministicQualityEvidenceBuilderTests: XCTestCase {
         let captionURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
             .appendingPathExtension("vtt")
-        try "WEBVTT\n".write(
+        try """
+        WEBVTT
+
+        00:00:00.000 --> 00:00:01.000
+        Hallo
+        """.write(
             to: captionURL,
             atomically: true,
             encoding: .utf8
@@ -119,6 +124,78 @@ final class DeterministicQualityEvidenceBuilderTests: XCTestCase {
             }
         )
     }
+
+    func testTechnicallyInvalidCaptionCreatesBlockingFinding() throws {
+        let projectID = UUID()
+        let asset = ProductionMediaAsset(
+            displayName: "video.mov",
+            sourceURL: URL(fileURLWithPath: "/tmp/video.mov"),
+            durationSeconds: 10,
+            authorization: .owned,
+            rightsEvidence: ["eigene Aufnahme"],
+            rightsAttestation: .init(
+                confirmedByUser: true,
+                attestedAt: Date()
+            ),
+            importedAt: Date()
+        )
+        let artifact = RenderArtifact(
+            projectID: projectID,
+            fileURL: URL(fileURLWithPath: "/tmp/video.mp4"),
+            sha256: "abc",
+            mimeType: "video/mp4",
+            validated: true,
+            createdAt: Date()
+        )
+        let transcript = LocalTranscript(
+            localeIdentifier: "de-DE",
+            text: "Hallo",
+            segments: [
+                .init(
+                    startSeconds: 0,
+                    durationSeconds: 1,
+                    text: "Hallo",
+                    confidence: 0.9
+                )
+            ],
+            onDevice: true,
+            createdAt: Date()
+        )
+        let captionURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("vtt")
+        try """
+        WEBVTT
+
+        00:00:00.000 --> 00:00:03.000
+        Erster Cue.
+
+        00:00:02.000 --> 00:00:04.000
+        Zweiter Cue.
+        """.write(
+            to: captionURL,
+            atomically: true,
+            encoding: .utf8
+        )
+        defer { try? FileManager.default.removeItem(at: captionURL) }
+
+        let review = DeterministicQualityEvidenceBuilder().build(
+            projectID: projectID,
+            asset: asset,
+            artifact: artifact,
+            transcript: transcript,
+            captionURL: captionURL
+        )
+
+        XCTAssertTrue(
+            review.findings(in: .captions).contains {
+                $0.severity == .blocker
+                    && $0.title == "Caption-Datei technisch blockiert"
+            }
+        )
+        XCTAssertFalse(review.blockingFindings.isEmpty)
+    }
+
     func testAudioMeasurementsBecomeEvidenceWithoutAutoPassingAudioGate() {
         let projectID = UUID()
         let asset = ProductionMediaAsset(
