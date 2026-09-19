@@ -40,6 +40,46 @@ public struct StudioWorkspaceSnapshot: Codable, Sendable, Equatable {
     }
 }
 
+public enum WorkspaceSnapshotSource: String, Codable, Sendable {
+    case primary = "PRIMARY"
+    case backup = "BACKUP"
+    case legacy = "LEGACY"
+}
+
+public struct WorkspaceSnapshotLoadResult: Sendable, Equatable {
+    public let snapshot: StudioWorkspaceSnapshot
+    public let source: WorkspaceSnapshotSource
+
+    public init(
+        snapshot: StudioWorkspaceSnapshot,
+        source: WorkspaceSnapshotSource
+    ) {
+        self.snapshot = snapshot
+        self.source = source
+    }
+
+    public var recoveredFromBackup: Bool {
+        source == .backup
+    }
+}
+
+private struct WorkspacePersistenceEnvelope: Codable {
+    static let currentSchemaVersion = 1
+
+    let schemaVersion: Int
+    let snapshot: StudioWorkspaceSnapshot
+    let writtenAt: Date
+
+    init(
+        snapshot: StudioWorkspaceSnapshot,
+        writtenAt: Date
+    ) {
+        self.schemaVersion = Self.currentSchemaVersion
+        self.snapshot = snapshot
+        self.writtenAt = writtenAt
+    }
+}
+
 public struct ProjectWorkspaceStore: Sendable {
     public let rootURL: URL
 
@@ -140,28 +180,87 @@ public struct ProjectWorkspaceStore: Sendable {
         let directory = try projectDirectory(
             projectID: snapshot.projectID
         )
-        let url = directory.appendingPathComponent(
+        let primaryURL = directory.appendingPathComponent(
             "studio-workspace.json"
         )
+        let backupURL = directory.appendingPathComponent(
+            "studio-workspace.backup.json"
+        )
+
+        if FileManager.default.fileExists(
+            atPath: primaryURL.path
+        ) {
+            if FileManager.default.fileExists(
+                atPath: backupURL.path
+            ) {
+                try FileManager.default.removeItem(
+                    at: backupURL
+                )
+            }
+            try FileManager.default.copyItem(
+                at: primaryURL,
+                to: backupURL
+            )
+        }
+
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.sortedKeys]
-        let data = try encoder.encode(snapshot)
-        try data.write(to: url, options: [.atomic])
+        let envelope = WorkspacePersistenceEnvelope(
+            snapshot: snapshot,
+            writtenAt: Date()
+        )
+        let data = try encoder.encode(envelope)
+        try data.write(
+            to: primaryURL,
+            options: [.atomic]
+        )
     }
 
     public func load(
         projectID: UUID
     ) throws -> StudioWorkspaceSnapshot? {
-        let url = rootURL
+        try loadResult(
+            projectID: projectID
+        )?.snapshot
+    }
+
+    public func loadResult(
+        projectID: UUID
+    ) throws -> WorkspaceSnapshotLoadResult? {
+        let directory = rootURL
             .appendingPathComponent(
                 projectID.uuidString,
                 isDirectory: true
             )
-            .appendingPathComponent(
-                "studio-workspace.json"
-            )
+        let primaryURL = directory.appendingPathComponent(
+            "studio-workspace.json"
+        )
+        let backupURL = directory.appendingPathComponent(
+            "studio-workspace.backup.json"
+        )
 
+        if let primary = try decodeSnapshot(
+            from: primaryURL
+        ) {
+            return primary
+        }
+
+        if let backup = try decodeSnapshot(
+            from: backupURL
+        ) {
+            return .init(
+                snapshot: backup.snapshot,
+                source: .backup
+            )
+        }
+
+        return nil
+    }
+
+    private func decodeSnapshot(
+        from url: URL
+    ) throws -> WorkspaceSnapshotLoadResult? {
         guard FileManager.default.fileExists(
             atPath: url.path
         ) else {
@@ -171,9 +270,30 @@ public struct ProjectWorkspaceStore: Sendable {
         let data = try Data(contentsOf: url)
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        return try decoder.decode(
+
+        if let envelope = try? decoder.decode(
+            WorkspacePersistenceEnvelope.self,
+            from: data
+        ) {
+            guard envelope.schemaVersion <= WorkspacePersistenceEnvelope.currentSchemaVersion else {
+                throw CocoaError(.fileReadCorruptFile)
+            }
+            return .init(
+                snapshot: envelope.snapshot,
+                source: .primary
+            )
+        }
+
+        if let legacy = try? decoder.decode(
             StudioWorkspaceSnapshot.self,
             from: data
-        )
+        ) {
+            return .init(
+                snapshot: legacy,
+                source: .legacy
+            )
+        }
+
+        return nil
     }
 }
