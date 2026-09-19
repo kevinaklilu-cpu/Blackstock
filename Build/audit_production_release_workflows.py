@@ -48,6 +48,7 @@ requirements = {
         "BLACKSTOCK_NOTARY_ISSUER",
         "BLACKSTOCK_NOTARY_EVIDENCE_PATH",
         "BLACKSTOCK_PRODUCTION_RELEASE",
+        "Build/validate_production_package_config.py",
         "Production release must not include the CI-only E2E helper.",
         "Production update manifest URL must use a real production host.",
         "Production release requires notarization credentials.",
