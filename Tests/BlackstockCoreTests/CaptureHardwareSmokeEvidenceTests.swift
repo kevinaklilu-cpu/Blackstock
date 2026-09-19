@@ -186,11 +186,19 @@ final class CaptureHardwareSmokeEvidenceTests:
         )
         XCTAssertEqual(
             object["schemaVersion"] as? Int,
-            2
+            3
         )
         XCTAssertEqual(
             object["blackstockSourceCommitSHA"] as? String,
             String(repeating: "1", count: 40)
+        )
+        XCTAssertEqual(
+            object["applicationTeamID"] as? String,
+            "ABC123TEAM"
+        )
+        XCTAssertEqual(
+            object["developerIDApplicationVerified"] as? Bool,
+            true
         )
         XCTAssertNotNil(object["camera"])
         XCTAssertNotNil(object["systemAudio"])
@@ -218,7 +226,9 @@ final class CaptureHardwareSmokeEvidenceTests:
                 String(repeating: "1", count: 40),
             macOSVersion: "26.6.2",
             hardwareModel: "MacBookProTest",
-            installedFromPackage: true
+            installedFromPackage: true,
+            applicationTeamID: "ABC123TEAM",
+            developerIDApplicationVerified: true
         )
     }
 }
