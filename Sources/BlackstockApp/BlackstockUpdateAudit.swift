@@ -1,5 +1,6 @@
 #if os(macOS)
 import Foundation
+import CryptoKit
 import BlackstockCore
 
 enum BlackstockUpdateAudit {
@@ -71,7 +72,10 @@ enum BlackstockUpdateAudit {
         now: Date = Date()
     ) {
         guard let installed =
-                installedVersion(bundle: bundle) else {
+                installedVersion(bundle: bundle),
+              let executableURL = bundle.executableURL,
+              let executableSHA256 =
+                sha256(of: executableURL) else {
             return
         }
 
@@ -84,6 +88,8 @@ enum BlackstockUpdateAudit {
                         installed.build,
                     installedSourceCommitSHA:
                         installed.sourceCommitSHA,
+                    installedExecutableSHA256:
+                        executableSHA256,
                     now: now
                 )
         } catch {
@@ -119,6 +125,34 @@ enum BlackstockUpdateAudit {
         InAppUpdateEvidenceStore(
             fileURL: try productionEvidenceURL()
         )
+    }
+
+    private static func sha256(
+        of url: URL
+    ) -> String? {
+        guard let handle =
+                try? FileHandle(forReadingFrom: url) else {
+            return nil
+        }
+        defer { try? handle.close() }
+
+        var hasher = SHA256()
+        do {
+            while true {
+                let data = try handle.read(
+                    upToCount: 1_048_576
+                ) ?? Data()
+                if data.isEmpty {
+                    break
+                }
+                hasher.update(data: data)
+            }
+        } catch {
+            return nil
+        }
+        return hasher.finalize().map {
+            String(format: "%02x", $0)
+        }.joined()
     }
 
     private static func installedVersion(
