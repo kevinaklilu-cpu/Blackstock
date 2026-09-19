@@ -46,37 +46,10 @@ if [[ "$PRODUCTION_RELEASE" == "1" ]]; then
       exit 1
     fi
   done
-  if [[ ! "$UPDATE_MANIFEST_URL" =~ ^https:// ]]; then
-    echo "Production update manifest URL must use HTTPS." >&2
-    exit 1
-  fi
-  case "$UPDATE_MANIFEST_URL" in
-    *localhost*|*127.0.0.1*|*.invalid/*|*.example/*|*.test/*)
-      echo "Production update manifest URL must use a real production host." >&2
-      exit 1
-      ;;
-  esac
-  if [[ ! "$UPDATE_INSTALLER_TEAM_ID" =~ ^[A-Za-z0-9]+$ ]]; then
-    echo "Production installer Team ID must be ASCII alphanumeric." >&2
-    exit 1
-  fi
-
-  if ! python3 - "$UPDATE_PUBLIC_KEY" <<'PY'
-import base64
-import binascii
-import sys
-
-try:
-    raw = base64.b64decode(sys.argv[1], validate=True)
-except (binascii.Error, ValueError):
-    raise SystemExit(1)
-if len(raw) != 32:
-    raise SystemExit(1)
-PY
-  then
-    echo "Production update public key must be a valid 32-byte Base64 Curve25519 key." >&2
-    exit 1
-  fi
+  python3 Build/validate_production_package_config.py \
+    --manifest-url "$UPDATE_MANIFEST_URL" \
+    --public-key-base64 "$UPDATE_PUBLIC_KEY" \
+    --installer-team-id "$UPDATE_INSTALLER_TEAM_ID"
 
   if [[ -z "$NOTARY_PROFILE" && ( -z "$NOTARY_KEY_PATH" || -z "$NOTARY_KEY_ID" || -z "$NOTARY_ISSUER" ) ]]; then
     echo "Production release requires notarization credentials." >&2
