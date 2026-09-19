@@ -235,13 +235,29 @@ final class DeterministicQualityEvidenceBuilderTests: XCTestCase {
                 inspectedAt: Date()
             )
         )
+        let loudness = AudioLoudnessAssessment.evaluate(
+            .init(
+                integratedLUFS: -16.2,
+                maximumMomentaryLUFS: -12.5,
+                maximumShortTermLUFS: -14.1,
+                truePeakDBTP: -0.8,
+                samplePeakDBFS: -1.0,
+                sampleRateHz: 48_000,
+                channelCount: 2,
+                analyzedFrameCount: 480_000,
+                absoluteGatedBlockCount: 97,
+                relativeGatedBlockCount: 91,
+                inspectedAt: Date()
+            )
+        )
 
         let review = DeterministicQualityEvidenceBuilder().build(
             projectID: projectID,
             asset: asset,
             artifact: artifact,
             audioTechnicalAssessment: technical,
-            audioSignalAssessment: signal
+            audioSignalAssessment: signal,
+            audioLoudnessAssessment: loudness
         )
 
         XCTAssertTrue(
@@ -254,14 +270,76 @@ final class DeterministicQualityEvidenceBuilderTests: XCTestCase {
                 $0.source == "Blackstock Local PCM Analyzer"
             }
         )
+        XCTAssertTrue(
+            review.evidence.contains {
+                $0.source == "Blackstock ITU-R BS.1770 Loudness Meter"
+            }
+        )
         XCTAssertTrue(review.coveredAreas.contains(.audio))
         XCTAssertTrue(
             review.findings(in: .audio).contains {
-                $0.title == "Audio des finalen Renders technisch analysiert"
+                $0.title == "Audio des finalen Renders professionell gemessen"
                     && $0.severity == .info
             }
         )
         XCTAssertTrue(review.blockingFindings.isEmpty)
+    }
+
+    func testPeakAndRMSWithoutProfessionalLoudnessRemainBlocked() {
+        let projectID = UUID()
+        let asset = ProductionMediaAsset(
+            displayName: "video.mov",
+            sourceURL: URL(fileURLWithPath: "/tmp/video.mov"),
+            durationSeconds: 10,
+            authorization: .owned,
+            rightsEvidence: ["eigene Aufnahme"],
+            rightsAttestation: .init(
+                confirmedByUser: true,
+                attestedAt: Date()
+            ),
+            importedAt: Date()
+        )
+        let artifact = RenderArtifact(
+            projectID: projectID,
+            fileURL: URL(fileURLWithPath: "/tmp/video.mp4"),
+            sha256: "abc",
+            mimeType: "video/mp4",
+            validated: true,
+            createdAt: Date()
+        )
+        let technical = AudioTechnicalAssessment.evaluate(
+            .init(
+                hasAudioTrack: true,
+                sampleRateHz: 48_000,
+                channelCount: 2,
+                inspectedAt: Date()
+            )
+        )
+        let signal = AudioSignalAssessment.evaluate(
+            .init(
+                peakDBFS: -1,
+                rmsDBFS: -18,
+                analyzedSampleCount: 10_000,
+                fullScaleSampleCount: 0,
+                inspectedAt: Date()
+            )
+        )
+
+        let review = DeterministicQualityEvidenceBuilder().build(
+            projectID: projectID,
+            asset: asset,
+            artifact: artifact,
+            audioTechnicalAssessment: technical,
+            audioSignalAssessment: signal
+        )
+
+        XCTAssertTrue(
+            review.findings(in: .audio).contains {
+                $0.title == "Professionelle Loudness-Messung fehlt"
+                    && $0.severity == .blocker
+            }
+        )
+        XCTAssertFalse(review.blockingFindings.isEmpty)
     }
 
     func testMissingAudioTrackCreatesBlockingAudioFinding() {
