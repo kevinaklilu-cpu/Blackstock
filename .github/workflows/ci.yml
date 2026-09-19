@@ -60,11 +60,13 @@ jobs:
       - name: Build development package
         env:
           BLACKSTOCK_GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.BLACKSTOCK_GOOGLE_OAUTH_CLIENT_ID }}
+          BLACKSTOCK_INCLUDE_E2E_SMOKE: "1"
         run: |
           chmod +x Build/package.sh
           Build/package.sh "$RUNNER_TEMP/dist"
           test -f "$RUNNER_TEMP/dist/Blackstock.pkg"
           pkgutil --payload-files "$RUNNER_TEMP/dist/Blackstock.pkg" | grep -q 'Applications/Blackstock.app'
+          pkgutil --payload-files "$RUNNER_TEMP/dist/Blackstock.pkg" | grep -q 'Applications/Blackstock.app/Contents/Helpers/BlackstockE2ESmoke'
       - name: Exercise signed update manifest tooling
         run: |
           set -euo pipefail
@@ -91,6 +93,7 @@ jobs:
           sudo rm -rf /Applications/Blackstock.app
           sudo installer -pkg "$RUNNER_TEMP/dist/Blackstock.pkg" -target /
           test -x /Applications/Blackstock.app/Contents/MacOS/Blackstock
+          test -x /Applications/Blackstock.app/Contents/Helpers/BlackstockE2ESmoke
           plutil -lint /Applications/Blackstock.app/Contents/Info.plist
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' /Applications/Blackstock.app/Contents/Info.plist)" = "de.blackstock.app"
           test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' /Applications/Blackstock.app/Contents/Info.plist)" = "13.0"
@@ -123,6 +126,35 @@ jobs:
           echo "Blackstock required a forced stop after smoke testing."
           cat "$LOG" || true
           exit 1
+
+      - name: Run installed creator-loop E2E
+        run: |
+          set -euo pipefail
+          E2E_BIN="/Applications/Blackstock.app/Contents/Helpers/BlackstockE2ESmoke"
+          RESULT="$RUNNER_TEMP/blackstock-clean-machine-e2e.json"
+          LOG="$RUNNER_TEMP/blackstock-clean-machine-e2e.log"
+
+          "$E2E_BIN" --output "$RESULT" | tee "$LOG"
+          grep -q 'BLACKSTOCK_E2E_PASS' "$LOG"
+          test -s "$RESULT"
+
+          python3 - "$RESULT" <<'PY'
+          import json, sys
+          data = json.load(open(sys.argv[1]))
+          assert data["generatedSource"] is True
+          assert data["rendered"] is True
+          assert data["renderValidated"] is True
+          assert data["audioTrackValidated"] is True
+          assert data["pcmSamplesAnalyzed"] > 0
+          assert isinstance(data["integratedLUFS"], (int, float))
+          assert isinstance(data["truePeakDBTP"], (int, float))
+          assert data["qualityReviewPassed"] is True
+          assert data["uploadVideoID"] == "e2e-video-123"
+          assert data["uploadJournalCommitted"] is True
+          assert data["analyticsViews"] == 1234
+          assert data["learningFactCount"] > 0
+          assert data["persistenceRoundTrip"] is True
+          PY
 
       - uses: actions/upload-artifact@v4
         with:
