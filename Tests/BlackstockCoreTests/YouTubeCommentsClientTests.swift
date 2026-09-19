@@ -141,6 +141,68 @@ final class YouTubeCommentsClientTests: XCTestCase {
         )
     }
 
+    func testCommentContextGuardRejectsUnexpectedChannelOrVideo() {
+        let page = YouTubeCommentThreadPage(
+            threads: [
+                YouTubeCommentThreadSnapshot(
+                    id: "thread",
+                    channelID: "channel-A",
+                    videoID: "video-A",
+                    topLevelComment: YouTubeCommentSnapshot(
+                        id: "comment",
+                        authorDisplayName: "Viewer",
+                        authorChannelID: nil,
+                        authorProfileImageURL: nil,
+                        textDisplay: "Hallo",
+                        likeCount: 0,
+                        publishedAt: nil,
+                        updatedAt: nil
+                    ),
+                    totalReplyCount: 0,
+                    canReply: nil,
+                    isPublic: true,
+                    retrievedAt: Date()
+                )
+            ],
+            nextPageToken: nil,
+            retrievedAt: Date()
+        )
+
+        XCTAssertNoThrow(
+            try YouTubeCommentContextGuard().validate(
+                page: page,
+                expectedVideoID: "video-A",
+                expectedChannelID: "channel-A"
+            )
+        )
+
+        XCTAssertThrowsError(
+            try YouTubeCommentContextGuard().validate(
+                page: page,
+                expectedVideoID: "video-B",
+                expectedChannelID: "channel-A"
+            )
+        ) {
+            XCTAssertEqual(
+                $0 as? YouTubeCommentContextError,
+                .unexpectedThreadContext
+            )
+        }
+
+        XCTAssertThrowsError(
+            try YouTubeCommentContextGuard().validate(
+                page: page,
+                expectedVideoID: "video-A",
+                expectedChannelID: "channel-B"
+            )
+        ) {
+            XCTAssertEqual(
+                $0 as? YouTubeCommentContextError,
+                .unexpectedThreadContext
+            )
+        }
+    }
+
     func testMissingVideoIDIsRejectedBeforeRequest() {
         XCTAssertThrowsError(
             try YouTubeCommentsClient(
