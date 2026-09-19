@@ -41,11 +41,12 @@ public struct DeterministicQualityEvidenceBuilder: Sendable {
             )
         )
 
+        let renderIsCurrent = artifact.hasCurrentTechnicalValidation
         let renderEvidence = QualityEvidence(
-            source: "Render Artifact",
-            observedFact: artifact.validated
-                ? "Lokaler Render wurde erzeugt und als nicht-leeres Artefakt validiert."
-                : "Render-Artefakt ist nicht validiert.",
+            source: "Blackstock Render Technical Validation",
+            observedFact: renderIsCurrent
+                ? "Lokaler Render besitzt die aktuelle technische Validierung für Datei, Dauer, Videotrack und erwartete Ausgabegeometrie."
+                : "Render-Artefakt besitzt keine aktuelle technische Validierung.",
             reference: artifact.id.uuidString,
             observedAt: reviewedAt
         )
@@ -53,14 +54,14 @@ public struct DeterministicQualityEvidenceBuilder: Sendable {
         findings.append(
             QualityFinding(
                 area: .renderIntegrity,
-                severity: artifact.validated ? .info : .blocker,
-                title: artifact.validated
-                    ? "Render-Artefakt vorhanden"
-                    : "Render-Artefakt ungültig",
+                severity: renderIsCurrent ? .info : .blocker,
+                title: renderIsCurrent
+                    ? "Render technisch validiert"
+                    : "Render technisch nicht validiert",
                 explanation: renderEvidence.observedFact,
-                recommendedAction: artifact.validated
+                recommendedAction: renderIsCurrent
                     ? nil
-                    : "Video erneut rendern.",
+                    : "Video mit der aktuellen Blackstock-Version erneut rendern.",
                 evidenceIDs: [renderEvidence.id]
             )
         )
