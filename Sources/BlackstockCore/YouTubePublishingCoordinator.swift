@@ -148,7 +148,7 @@ public struct YouTubePublishingCoordinator: Sendable {
                 createdAt: now,
                 updatedAt: now
             )
-        await journal.upsert(entry)
+        try await journal.upsert(entry)
 
         do {
             try await action()
@@ -156,12 +156,12 @@ public struct YouTubePublishingCoordinator: Sendable {
             entry.remoteResourceID = videoID
             entry.lastError = nil
             entry.updatedAt = Date()
-            await journal.upsert(entry)
+            try await journal.upsert(entry)
         } catch {
             entry.state = .failed
             entry.lastError = String(describing: error)
             entry.updatedAt = Date()
-            await journal.upsert(entry)
+            try await journal.upsert(entry)
             throw error
         }
     }
