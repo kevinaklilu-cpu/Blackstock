@@ -8,6 +8,7 @@ struct CaptureCapabilityPanel: View {
     @State private var snapshot = CaptureCapabilityProbe().inspect()
     @State private var requesting: CaptureKind?
     @StateObject private var cameraRecorder = CameraCaptureRecorder()
+    @StateObject private var screenRecorder = ScreenCaptureRecorder()
 
     var body: some View {
         GroupBox("Direkte Aufnahme") {
@@ -27,7 +28,7 @@ struct CaptureCapabilityPanel: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(kind.germanTitle)
                                 .font(.callout.weight(.semibold))
-                            Text(statusText(capability))
+                            Text(statusText(capability, kind: kind))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -39,6 +40,9 @@ struct CaptureCapabilityPanel: View {
                         } else if kind == .camera,
                                   capability?.isReady == true {
                             cameraRecordingButton
+                        } else if kind == .screen,
+                                  capability?.isReady == true {
+                            screenRecordingButton
                         } else {
                             Label(
                                 capability?.isReady == true
@@ -54,12 +58,10 @@ struct CaptureCapabilityPanel: View {
                 }
 
                 if let error = cameraRecorder.errorMessage {
-                    Label(
-                        error,
-                        systemImage: "exclamationmark.triangle"
-                    )
-                    .font(.caption)
-                    .foregroundStyle(.red)
+                    captureError(error)
+                }
+                if let error = screenRecorder.errorMessage {
+                    captureError(error)
                 }
 
                 Divider()
@@ -79,6 +81,12 @@ struct CaptureCapabilityPanel: View {
         ) { url in
             guard let url else { return }
             onRecordedMedia(url, .camera)
+        }
+        .onChange(
+            of: screenRecorder.completedRecordingURL
+        ) { url in
+            guard let url else { return }
+            onRecordedMedia(url, .screen)
         }
     }
 
@@ -108,7 +116,11 @@ struct CaptureCapabilityPanel: View {
                 )
             }
         }
-        .disabled(requesting != nil)
+        .disabled(
+            requesting != nil
+            || cameraRecorder.isRecording
+            || screenRecorder.isRecording
+        )
     }
 
     @ViewBuilder
@@ -141,24 +153,90 @@ struct CaptureCapabilityPanel: View {
                     )
                 }
             }
-            .disabled(cameraRecorder.isPreparing)
+            .disabled(
+                cameraRecorder.isPreparing
+                || screenRecorder.isPreparing
+                || screenRecorder.isRecording
+            )
         }
+    }
+
+    @ViewBuilder
+    private var screenRecordingButton: some View {
+        if screenRecorder.isRecording {
+            Button(role: .destructive) {
+                Task {
+                    await screenRecorder.stopRecording()
+                }
+            } label: {
+                Label(
+                    "Bildschirm stoppen",
+                    systemImage: "stop.circle.fill"
+                )
+            }
+        } else {
+            Button {
+                Task {
+                    await screenRecorder.startRecording()
+                }
+            } label: {
+                HStack {
+                    if screenRecorder.isPreparing {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                    Label(
+                        screenRecorder.isPreparing
+                            ? "Bildschirm wird vorbereitet …"
+                            : "Bildschirm aufnehmen",
+                        systemImage: "record.circle"
+                    )
+                }
+            }
+            .disabled(
+                !screenRecorder.isSupportedOnCurrentOS
+                || screenRecorder.isPreparing
+                || cameraRecorder.isPreparing
+                || cameraRecorder.isRecording
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func captureError(
+        _ message: String
+    ) -> some View {
+        Label(
+            message,
+            systemImage: "exclamationmark.triangle"
+        )
+        .font(.caption)
+        .foregroundStyle(.red)
     }
 
     private var captureProgressText: String {
         if cameraRecorder.isRecording {
-            return "Kameraaufnahme läuft lokal. Nach „Aufnahme stoppen“ wird die Datei erst nach deiner Rechtebestätigung in den Projekt-Arbeitsbereich übernommen."
+            return "Kameraaufnahme läuft lokal. Ein freigegebenes Mikrofon wird in dieselbe Movie-Aufnahme eingebettet. Nach dem Stoppen folgt die Rechtebestätigung."
+        }
+
+        if screenRecorder.isRecording {
+            return "Bildschirmaufnahme läuft lokal. ScreenCaptureKit zeichnet Systemaudio mit auf und schließt Blackstocks eigenen Prozess aus. Nach dem Stoppen folgt die Rechtebestätigung."
+        }
+
+        if !screenRecorder.isSupportedOnCurrentOS {
+            return "Kameraaufnahme ist implementiert. Die direkte Bildschirm-/Systemaudio-Dateiaufzeichnung benötigt in diesem Build macOS 15 oder neuer; die Berechtigungen werden trotzdem getrennt und ehrlich ausgewiesen."
         }
 
         if snapshot.allCanonicalCapturePathsReady {
-            return "Alle vier Capture-Berechtigungen sind verfügbar. Kameraaufnahme ist aktiv implementiert; Mikrofon-, Bildschirm- und Systemaudio-Aufzeichnung folgen auf derselben Grundlage."
+            return "Kamera inklusive optional freigegebenem Mikrofon sowie Bildschirm inklusive Systemaudio können lokal aufgezeichnet werden. Alle Ergebnisse durchlaufen vor der Projektübernahme die Rechtebestätigung."
         }
 
-        return "Kameraaufnahme ist verfügbar, sobald Kamera-Hardware und Berechtigung bereit sind. Datei-Import bleibt weiterhin verfügbar."
+        return "Direkte Aufnahme wird nur angeboten, wenn die jeweilige Hardware und macOS-Berechtigung bereit sind. Datei-Import bleibt weiterhin verfügbar."
     }
 
     private func statusText(
-        _ capability: CaptureCapability?
+        _ capability: CaptureCapability?,
+        kind: CaptureKind
     ) -> String {
         guard let capability else {
             return "Status nicht verfügbar"
@@ -167,7 +245,17 @@ struct CaptureCapabilityPanel: View {
         if let reason = capability.blockingReason {
             return reason
         }
-        return "Hardware vorhanden und von macOS autorisiert."
+
+        switch kind {
+        case .microphone:
+            return "Autorisiert. Wird bei Kameraaufnahme eingebettet, wenn verfügbar."
+        case .systemAudio:
+            return screenRecorder.isSupportedOnCurrentOS
+                ? "Autorisiert. Wird gemeinsam mit der Bildschirmaufnahme aufgezeichnet."
+                : "Autorisiert; direkte Dateiaufzeichnung benötigt in diesem Build macOS 15 oder neuer."
+        case .camera, .screen:
+            return "Hardware vorhanden und von macOS autorisiert."
+        }
     }
 
     private func icon(for kind: CaptureKind) -> String {
