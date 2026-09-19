@@ -103,11 +103,11 @@ public struct DeterministicQualityEvidenceBuilder: Sendable {
             } ?? "unbekannt"
             evidence.append(
                 QualityEvidence(
-                    source: "Blackstock Local Audio Technical Inspector",
+                    source: "Blackstock Final Render Audio Technical Inspector",
                     observedFact: snapshot.hasAudioTrack
-                        ? "Audiospur vorhanden; Sample-Rate \(sampleRate); Kanäle \(channels)."
-                        : "Keine Audiospur erkannt.",
-                    reference: asset.id.uuidString,
+                        ? "Finaler Render: Audiospur vorhanden; Sample-Rate \(sampleRate); Kanäle \(channels)."
+                        : "Finaler Render: Keine Audiospur erkannt.",
+                    reference: artifact.id.uuidString,
                     observedAt: snapshot.inspectedAt
                 )
             )
@@ -123,9 +123,9 @@ public struct DeterministicQualityEvidenceBuilder: Sendable {
             } ?? "nicht messbar"
             evidence.append(
                 QualityEvidence(
-                    source: "Blackstock Local PCM Analyzer",
-                    observedFact: "Peak \(peak); RMS \(rms); analysierte Samples \(snapshot.analyzedSampleCount); Full-Scale-Samples \(snapshot.fullScaleSampleCount).",
-                    reference: asset.id.uuidString,
+                    source: "Blackstock Final Render PCM Analyzer",
+                    observedFact: "Finaler Render: Peak \(peak); RMS \(rms); analysierte Samples \(snapshot.analyzedSampleCount); Full-Scale-Samples \(snapshot.fullScaleSampleCount).",
+                    reference: artifact.id.uuidString,
                     observedAt: snapshot.inspectedAt
                 )
             )
