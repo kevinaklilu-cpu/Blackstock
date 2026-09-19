@@ -72,6 +72,7 @@ requirements = {
         "spctl",
         "sourceCommitSHA",
         "installedAppSourceCommitSHA",
+        "installedAppExecutableSHA256",
         "BlackstockSourceCommitSHA",
     ],
     "Build/validate_production_release_evidence.py": [
@@ -80,6 +81,7 @@ requirements = {
         "notaryStatus",
         "gatekeeperInstallerAccepted",
         "gatekeeperApplicationAccepted",
+        "installedAppExecutableSHA256",
     ],
     "docs/PRODUCTION_RELEASE_EVIDENCE.md": [
         "Echter Updater-E2E",
