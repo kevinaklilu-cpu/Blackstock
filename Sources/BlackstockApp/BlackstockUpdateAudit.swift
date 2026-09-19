@@ -82,6 +82,8 @@ enum BlackstockUpdateAudit {
                         installed.version,
                     installedBuild:
                         installed.build,
+                    installedSourceCommitSHA:
+                        installed.sourceCommitSHA,
                     now: now
                 )
         } catch {
@@ -121,7 +123,11 @@ enum BlackstockUpdateAudit {
 
     private static func installedVersion(
         bundle: Bundle
-    ) -> (version: String, build: Int)? {
+    ) -> (
+        version: String,
+        build: Int,
+        sourceCommitSHA: String
+    )? {
         guard let version = bundle.object(
             forInfoDictionaryKey:
                 "CFBundleShortVersionString"
@@ -132,10 +138,21 @@ enum BlackstockUpdateAudit {
                 "CFBundleVersion"
         ) as? String,
         let build = Int(buildString),
-        build > 0 else {
+        build > 0,
+        let sourceCommitSHA = bundle.object(
+            forInfoDictionaryKey:
+                "BlackstockSourceCommitSHA"
+        ) as? String,
+        sourceCommitSHA.count == 40,
+        sourceCommitSHA.allSatisfy({ $0.isHexDigit })
+        else {
             return nil
         }
-        return (version, build)
+        return (
+            version,
+            build,
+            sourceCommitSHA.lowercased()
+        )
     }
 }
 #endif
