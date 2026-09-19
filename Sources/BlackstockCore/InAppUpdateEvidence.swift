@@ -100,6 +100,8 @@ public struct InAppUpdateEvidence:
                 == targetSourceCommitSHA,
               let observedInstalledExecutableSHA256,
               observedInstalledExecutableSHA256.count == 64,
+              observedInstalledExecutableSHA256
+                .allSatisfy({ $0.isHexDigit }),
               postUpdateLaunchVerifiedAt != nil else {
             return false
         }
@@ -217,7 +219,10 @@ public struct InAppUpdateEvidenceStore: Sendable {
               evidence.targetBuild
                 == installedBuild,
               evidence.targetSourceCommitSHA
-                == installedSourceCommitSHA.lowercased()
+                == installedSourceCommitSHA.lowercased(),
+              installedExecutableSHA256.count == 64,
+              installedExecutableSHA256
+                .allSatisfy({ $0.isHexDigit })
         else {
             return evidence
         }
