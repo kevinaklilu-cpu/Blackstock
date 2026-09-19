@@ -24,6 +24,9 @@ final class StudioState: ObservableObject {
     @Published var speechAuthorizationState: LocalSpeechAuthorizationState = .notDetermined
     @Published var audioTechnicalAssessment: AudioTechnicalAssessment?
     @Published var audioSignalAssessment: AudioSignalAssessment?
+    @Published var reframeAspectRatio: ReframeAspectRatio = .landscape16x9
+    @Published var reframeFocalX: Double = 0.5
+    @Published var reframeFocalY: Double = 0.5
 
     private var correlationID = UUID()
 
@@ -204,6 +207,44 @@ final class StudioState: ObservableObject {
         await refreshPreviewAfterHistoryChange()
     }
 
+    func applyReframe() async {
+        guard asset != nil else { return }
+
+        let before = graph.headID
+        let spec = ReframeSpec(
+            aspectRatio: reframeAspectRatio,
+            focalX: reframeFocalX,
+            focalY: reframeFocalY
+        )
+        let operation = EditOperation(
+            type: .reframe,
+            reframeSpec: spec,
+            createdAt: Date()
+        )
+        let revision = graph.apply(operation, actor: .user)
+        lastUndoneRevisionID = nil
+        renderArtifact = nil
+
+        ledger.append(.init(
+            timestamp: Date(),
+            actor: .user,
+            stage: .editing,
+            action: "reframe-applied",
+            summary: "Reframe auf \(spec.aspectRatio.rawValue) mit manuellem Fokuspunkt angewendet.",
+            beforeRevisionID: before,
+            afterRevisionID: revision.id,
+            reversible: true,
+            correlationID: correlationID
+        ))
+
+        do {
+            try await rebuildPreview()
+            errorMessage = nil
+        } catch {
+            errorMessage = "Reframe-Vorschau konnte nicht aktualisiert werden: \(error.localizedDescription)"
+        }
+    }
+
     func generateLocalCaptions(
         localeIdentifier: String
     ) async {
@@ -352,7 +393,57 @@ final class StudioState: ObservableObject {
         }
 
         try await composition.insertTimeRange(range, of: source, at: .zero)
-        player.replaceCurrentItem(with: AVPlayerItem(asset: composition))
+        let item = AVPlayerItem(asset: composition)
+
+        if let reframe = graph.currentOperations
+            .last(where: { $0.type == .reframe })?
+            .reframeSpec {
+            let sourceTracks = try await source.loadTracks(withMediaType: .video)
+            let compositionTracks = try await composition.loadTracks(withMediaType: .video)
+
+            if let sourceTrack = sourceTracks.first,
+               let compositionTrack = compositionTracks.first {
+                let naturalSize = try await sourceTrack.load(.naturalSize)
+                let preferredTransform = try await sourceTrack.load(.preferredTransform)
+                let renderSize = LocalRenderPreset.hd1080.renderSize(
+                    for: reframe.aspectRatio
+                )
+
+                if let plan = ReframeTransformPlan.make(
+                    naturalSize: naturalSize,
+                    preferredTransform: preferredTransform,
+                    spec: reframe,
+                    renderSize: renderSize
+                ) {
+                    let duration = try await composition.load(.duration)
+                    let instruction = AVMutableVideoCompositionInstruction()
+                    instruction.timeRange = CMTimeRange(
+                        start: .zero,
+                        duration: duration
+                    )
+
+                    let layer = AVMutableVideoCompositionLayerInstruction(
+                        assetTrack: compositionTrack
+                    )
+                    layer.setTransform(plan.transform, at: .zero)
+                    instruction.layerInstructions = [layer]
+
+                    let videoComposition = AVMutableVideoComposition()
+                    videoComposition.instructions = [instruction]
+                    videoComposition.renderSize = CGSize(
+                        width: plan.renderWidth,
+                        height: plan.renderHeight
+                    )
+                    videoComposition.frameDuration = CMTime(
+                        value: 1,
+                        timescale: 30
+                    )
+                    item.videoComposition = videoComposition
+                }
+            }
+        }
+
+        player.replaceCurrentItem(with: item)
         await player.seek(to: .zero)
     }
 
