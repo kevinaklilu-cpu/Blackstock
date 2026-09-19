@@ -1,6 +1,7 @@
 #if os(macOS)
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 import BlackstockCore
 
 @main
@@ -840,6 +841,9 @@ private struct ResearchAnalysisJourneyView: View {
 
 private struct SettingsView: View {
     @ObservedObject var session: BlackstockSession
+    @State private var showOAuthImporter = false
+    @State private var showOAuthConfigurationRemovalConfirmation = false
+    @State private var oauthConfigurationStatusMessage: String?
     @State private var showCredentialRemovalConfirmation = false
     @State private var credentialStatusMessage: String?
     @State private var isRevokingGoogleAccess = false
@@ -863,6 +867,39 @@ private struct SettingsView: View {
                     Text("Entwickler-Secrets und API-Key-Felder werden normalen Nutzern nicht angeboten.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+
+                    HStack(spacing: 10) {
+                        Button {
+                            showOAuthImporter = true
+                        } label: {
+                            Label(
+                                session.hasImportedOAuthConfiguration
+                                    ? "Desktop-OAuth-JSON ersetzen …"
+                                    : "Desktop-OAuth-JSON importieren …",
+                                systemImage: "doc.badge.plus"
+                            )
+                        }
+
+                        Button(
+                            "Importierte OAuth-Konfiguration entfernen",
+                            role: .destructive
+                        ) {
+                            showOAuthConfigurationRemovalConfirmation = true
+                        }
+                        .disabled(
+                            !session.hasImportedOAuthConfiguration
+                        )
+                    }
+
+                    Text("Blackstock übernimmt ausschließlich die Desktop-Client-ID. Ein Client Secret wird weder benötigt noch gespeichert. Wechselt die effektive Client-ID, werden vorhandene YouTube-Tokens und Scopes sofort aus dem macOS-Keychain entfernt und Google muss erneut autorisiert werden.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if let oauthConfigurationStatusMessage {
+                        Text(oauthConfigurationStatusMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
 
                     Divider()
 
@@ -1308,6 +1345,54 @@ private struct SettingsView: View {
             Spacer()
         }
         .padding(28)
+        .fileImporter(
+            isPresented: $showOAuthImporter,
+            allowedContentTypes: [.json],
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case .success(let urls):
+                guard let url = urls.first else {
+                    oauthConfigurationStatusMessage =
+                        "Es wurde keine OAuth-JSON ausgewählt."
+                    return
+                }
+                if session.importOAuthJSON(from: url) {
+                    oauthConfigurationStatusMessage =
+                        "Desktop-OAuth-Konfiguration wurde sicher übernommen."
+                } else {
+                    oauthConfigurationStatusMessage =
+                        session.errorMessage
+                        ?? "OAuth-Konfiguration konnte nicht übernommen werden."
+                }
+            case .failure(let error):
+                oauthConfigurationStatusMessage =
+                    "OAuth-JSON konnte nicht ausgewählt werden: \(error.localizedDescription)"
+            }
+        }
+        .confirmationDialog(
+            "Importierte OAuth-Konfiguration entfernen?",
+            isPresented:
+                $showOAuthConfigurationRemovalConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(
+                "OAuth-Konfiguration entfernen",
+                role: .destructive
+            ) {
+                if session.removeImportedOAuthConfiguration() {
+                    oauthConfigurationStatusMessage =
+                        "Importierte OAuth-Konfiguration wurde entfernt."
+                } else {
+                    oauthConfigurationStatusMessage =
+                        session.errorMessage
+                        ?? "OAuth-Konfiguration konnte nicht entfernt werden."
+                }
+            }
+            Button("Abbrechen", role: .cancel) {}
+        } message: {
+            Text("Wenn dadurch die effektive Google-Client-ID wechselt, entfernt Blackstock die daran gebundenen lokalen YouTube-Tokens und verlangt eine neue Autorisierung.")
+        }
     }
 
     private func captureEvidenceDetail(
