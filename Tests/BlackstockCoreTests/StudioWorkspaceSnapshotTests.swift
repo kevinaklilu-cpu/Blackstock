@@ -110,6 +110,129 @@ final class StudioWorkspaceSnapshotTests: XCTestCase {
     }
 
 
+
+    func testLegacyUnversionedWorkspaceLoadsAndIsMarkedForMigration() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let projectID = UUID()
+        let snapshot = StudioWorkspaceSnapshot(
+            projectID: projectID,
+            mediaAsset: nil,
+            editGraph: EditGraph(createdAt: Date(timeIntervalSince1970: 1)),
+            activityLedger: ActivityLedger(),
+            storyboard: StoryboardPlan(
+                projectID: projectID,
+                updatedAt: Date(timeIntervalSince1970: 2)
+            ),
+            trimStart: 0,
+            trimEnd: 10,
+            transcript: nil,
+            captionURL: nil,
+            renderArtifact: nil,
+            updatedAt: Date(timeIntervalSince1970: 3)
+        )
+        let store = ProjectWorkspaceStore(rootURL: root)
+        let directory = try store.projectDirectory(projectID: projectID)
+        let primaryURL = directory
+            .appendingPathComponent("studio-workspace.json")
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.sortedKeys]
+        try encoder.encode(snapshot).write(
+            to: primaryURL,
+            options: [.atomic]
+        )
+
+        let result = try store.loadWithRecovery(projectID: projectID)
+
+        XCTAssertEqual(result.snapshot, snapshot)
+        XCTAssertFalse(result.recoveredFromBackup)
+        XCTAssertEqual(
+            result.migratedFromSchemaVersion,
+            WorkspaceSchema.legacyUnversioned
+        )
+    }
+
+    func testSavingAfterLegacyLoadWritesCurrentSchemaEnvelope() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let projectID = UUID()
+        let snapshot = StudioWorkspaceSnapshot(
+            projectID: projectID,
+            mediaAsset: nil,
+            editGraph: EditGraph(createdAt: Date(timeIntervalSince1970: 1)),
+            activityLedger: ActivityLedger(),
+            storyboard: StoryboardPlan(
+                projectID: projectID,
+                updatedAt: Date(timeIntervalSince1970: 2)
+            ),
+            trimStart: 0,
+            trimEnd: 10,
+            transcript: nil,
+            captionURL: nil,
+            renderArtifact: nil,
+            updatedAt: Date(timeIntervalSince1970: 3)
+        )
+        let store = ProjectWorkspaceStore(rootURL: root)
+        let directory = try store.projectDirectory(projectID: projectID)
+        let primaryURL = directory
+            .appendingPathComponent("studio-workspace.json")
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(snapshot).write(
+            to: primaryURL,
+            options: [.atomic]
+        )
+
+        let loaded = try store.loadWithRecovery(projectID: projectID)
+        let migrated = try XCTUnwrap(loaded.snapshot)
+        try store.save(migrated)
+
+        let data = try Data(contentsOf: primaryURL)
+        let object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data)
+                as? [String: Any]
+        )
+        XCTAssertEqual(
+            object["schemaVersion"] as? Int,
+            WorkspaceSchema.current
+        )
+        XCTAssertNotNil(object["snapshot"])
+    }
+
+    func testFutureWorkspaceSchemaHardStopsWithoutBackup() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let projectID = UUID()
+        let store = ProjectWorkspaceStore(rootURL: root)
+        let directory = try store.projectDirectory(projectID: projectID)
+        let primaryURL = directory
+            .appendingPathComponent("studio-workspace.json")
+        let futureVersion = WorkspaceSchema.current + 1
+        try Data(
+            """
+            {"schemaVersion":\(futureVersion),"snapshot":{}}
+            """.utf8
+        ).write(to: primaryURL, options: [.atomic])
+
+        XCTAssertThrowsError(
+            try store.loadWithRecovery(projectID: projectID)
+        ) { error in
+            XCTAssertEqual(
+                error as? WorkspaceMigrationError,
+                .unsupportedFutureSchemaVersion(futureVersion)
+            )
+        }
+    }
+
     func testWorkspaceRecoversLastValidatedBackupAfterPrimaryCorruption() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -225,15 +348,16 @@ final class StudioWorkspaceSnapshotTests: XCTestCase {
 
         let backupURL = projectDirectory
             .appendingPathComponent("studio-workspace.backup.json")
-        let backupData = try Data(contentsOf: backupURL)
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        let backup = try decoder.decode(
-            StudioWorkspaceSnapshot.self,
-            from: backupData
-        )
+        let backupBefore = try Data(contentsOf: backupURL)
 
-        XCTAssertEqual(backup, first)
+        try Data("still-not-json".utf8).write(
+            to: primaryURL,
+            options: [.atomic]
+        )
+        try store.save(second)
+
+        let backupAfter = try Data(contentsOf: backupURL)
+        XCTAssertEqual(backupAfter, backupBefore)
     }
 
     func testPublishPreparationRoundTripsInProjectWorkspace() throws {
