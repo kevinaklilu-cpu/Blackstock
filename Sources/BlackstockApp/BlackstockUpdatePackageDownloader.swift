@@ -6,6 +6,7 @@ enum BlackstockUpdateDownloadError: Error, LocalizedError {
     case packageURLMustUseHTTPS
     case invalidHTTPStatus(Int)
     case temporaryFileMissing
+    case missingInstallerTeamID
 
     var errorDescription: String? {
         switch self {
@@ -15,6 +16,8 @@ enum BlackstockUpdateDownloadError: Error, LocalizedError {
             return "Der Update-Server antwortete beim Paketdownload mit HTTP \(status)."
         case .temporaryFileMissing:
             return "Das geladene Update-Paket ist nicht verfügbar."
+        case .missingInstallerTeamID:
+            return "Für das Update ist keine erwartete Developer-ID-Installer-Team-ID konfiguriert."
         }
     }
 }
@@ -22,10 +25,19 @@ enum BlackstockUpdateDownloadError: Error, LocalizedError {
 struct BlackstockUpdatePackageDownloader: Sendable {
     func downloadAndVerify(
         manifest: BlackstockUpdateManifest,
+        bundle: Bundle = .main,
         session: URLSession = .shared
     ) async throws -> URL {
         guard manifest.packageURL.scheme?.lowercased() == "https" else {
             throw BlackstockUpdateDownloadError.packageURLMustUseHTTPS
+        }
+        let expectedTeamID = (
+            bundle.object(
+                forInfoDictionaryKey: "BlackstockUpdateInstallerTeamID"
+            ) as? String ?? ""
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !expectedTeamID.isEmpty else {
+            throw BlackstockUpdateDownloadError.missingInstallerTeamID
         }
 
         var request = URLRequest(url: manifest.packageURL)
@@ -66,6 +78,10 @@ struct BlackstockUpdatePackageDownloader: Sendable {
             try UpdatePackageIntegrityVerifier().verify(
                 fileURL: destination,
                 expectedSHA256: manifest.sha256
+            )
+            try BlackstockInstallerPackageVerifier().verify(
+                fileURL: destination,
+                expectedTeamID: expectedTeamID
             )
             return destination
         } catch {

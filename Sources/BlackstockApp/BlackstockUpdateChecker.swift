@@ -13,6 +13,7 @@ enum BlackstockUpdateCheckError: Error, LocalizedError {
     case manifestURLMustUseHTTPS
     case invalidHTTPStatus(Int)
     case missingPublicKey
+    case missingInstallerTeamID
     case invalidCurrentBuild
 
     var errorDescription: String? {
@@ -25,6 +26,8 @@ enum BlackstockUpdateCheckError: Error, LocalizedError {
             return "Der Update-Server antwortete mit HTTP \(status)."
         case .missingPublicKey:
             return "Für Update-Prüfungen ist kein öffentlicher Signaturschlüssel konfiguriert."
+        case .missingInstallerTeamID:
+            return "Für Update-Prüfungen ist keine erwartete Developer-ID-Installer-Team-ID konfiguriert."
         case .invalidCurrentBuild:
             return "Die installierte Build-Nummer konnte nicht gelesen werden."
         }
@@ -46,8 +49,13 @@ struct BlackstockUpdateChecker: Sendable {
                 forInfoDictionaryKey: "BlackstockUpdatePublicKeyBase64"
             ) as? String ?? ""
         ).trimmingCharacters(in: .whitespacesAndNewlines)
+        let installerTeamID = (
+            bundle.object(
+                forInfoDictionaryKey: "BlackstockUpdateInstallerTeamID"
+            ) as? String ?? ""
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
 
-        if rawURL.isEmpty && publicKey.isEmpty {
+        if rawURL.isEmpty && publicKey.isEmpty && installerTeamID.isEmpty {
             return .notConfigured
         }
         guard let manifestURL = URL(string: rawURL) else {
@@ -58,6 +66,9 @@ struct BlackstockUpdateChecker: Sendable {
         }
         guard !publicKey.isEmpty else {
             throw BlackstockUpdateCheckError.missingPublicKey
+        }
+        guard !installerTeamID.isEmpty else {
+            throw BlackstockUpdateCheckError.missingInstallerTeamID
         }
 
         var request = URLRequest(url: manifestURL)
