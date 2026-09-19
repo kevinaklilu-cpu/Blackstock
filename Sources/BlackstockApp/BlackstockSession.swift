@@ -1407,6 +1407,13 @@ final class BlackstockSession: ObservableObject {
         UserDefaults.standard.removeObject(forKey: "blackstock.workspace.primaryTopic")
         UserDefaults.standard.removeObject(forKey: "blackstock.workspace.contentLanguage")
         primaryTopic = ""
+        topicDefinition = ""
+        contentPromise = ""
+        audienceHypothesis = ""
+        strategyPillars = ""
+        adjacentTopics = ""
+        excludedTopics = ""
+        strategicObjective = .balanced
         contentLanguage = "de"
         step = .welcome
         channels = []
