@@ -73,7 +73,7 @@ Blackstock erzeugt und aktualisiert die Hardware-Evidenz automatisch während de
 
 `~/Library/Application Support/Blackstock/Diagnostics/capture-hardware-smoke.json`
 
-Die Einstellungen zeigen für jeden der vier kanonischen Pfade den aktuellen technischen Nachweis und können die Datei im Finder öffnen. Ändern sich Build, Source-Commit, macOS-Version, Hardwaremodell, Installationspfad oder Developer-ID-Signatur, wird vorhandene Capture-Evidenz nicht weiterverwendet. Ein lokaler Entwicklungsstart zählt nicht als Installer-Nachweis; `installedFromPackage` wird nur für `/Applications/Blackstock.app` gesetzt. Zusätzlich liest Blackstock die tatsächliche Codesign-Identität der laufenden App aus: `developerIDApplicationVerified` wird nur gesetzt, wenn `codesign` eine `Developer ID Application`-Signatur mit exakt der im Produktionsbuild eingebetteten Apple-Team-ID meldet. Diese Team-ID wird als `applicationTeamID` gespeichert. Die Evidenz bindet außerdem `BlackstockSourceCommitSHA` aus dem installierten App-Bundle ein; ältere Evidence-Schemata ohne vollständige Produktions-App-Provenienz werden bewusst nicht hochgestuft, sondern müssen neu aufgenommen werden.
+Die Einstellungen zeigen für jeden der vier kanonischen Pfade den aktuellen technischen Nachweis und können die Datei im Finder öffnen. Ändern sich Build, Source-Commit, macOS-Version, Hardwaremodell, Installationspfad oder Developer-ID-Signatur, wird vorhandene Capture-Evidenz nicht weiterverwendet. Ein lokaler Entwicklungsstart oder bloßes Kopieren der App nach `/Applications` zählt nicht als Installer-Nachweis; `installedFromPackage` wird nur gesetzt, wenn `/Applications/Blackstock.app` läuft **und** der macOS-Package-Receipt `de.blackstock.app` existiert, zur laufenden Version passt sowie Installation auf `/` ausweist. Zusätzlich liest Blackstock die tatsächliche Codesign-Identität der laufenden App aus: `developerIDApplicationVerified` wird nur gesetzt, wenn `codesign` eine `Developer ID Application`-Signatur mit exakt der im Produktionsbuild eingebetteten Apple-Team-ID meldet. Diese Team-ID wird als `applicationTeamID` gespeichert. Die Evidenz bindet außerdem `BlackstockSourceCommitSHA` aus dem installierten App-Bundle ein; ältere Evidence-Schemata ohne vollständige Produktions-App-Provenienz werden bewusst nicht hochgestuft, sondern müssen neu aufgenommen werden.
 
 Nach dem vollständigen Test wird dieselbe Datei auf demselben Mac validiert:
 
@@ -86,7 +86,7 @@ Der Validator prüft zusätzlich, dass die projektgebundenen Capture-Dateien noc
 
 Pflichtfelder:
 
-- `schemaVersion`: aktuell `4`
+- `schemaVersion`: aktuell `5`
 - `testedAt`: ISO-8601
 - `blackstockVersion`
 - `blackstockBuild`
@@ -94,6 +94,9 @@ Pflichtfelder:
 - `macOSVersion`
 - `hardwareModel`
 - `installedFromPackage`: `true`
+- `installerReceiptPackageID`: exakt `de.blackstock.app`
+- `installerReceiptVersion`: exakt dieselbe Version wie `blackstockVersion`
+- `installerReceiptVerified`: `true`; Blackstock liest dafür den echten macOS-Package-Receipt über `pkgutil --pkg-info-plist`
 - `applicationTeamID`: tatsächliche Apple-Team-ID der laufenden Developer-ID-App
 - `developerIDApplicationVerified`: `true`
 - `applicationExecutableSHA256`: SHA-256 des tatsächlich laufenden Blackstock-Executables
