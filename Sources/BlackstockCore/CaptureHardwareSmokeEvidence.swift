@@ -78,6 +78,7 @@ public struct CaptureHardwareSmokeEvidence:
     public var deniedPermissionHardStopPassed: Bool
     public var temporaryCleanupPassed: Bool
     public var appRestartPersistencePassed: Bool
+    public var restartVerifiedLaunchID: UUID?
 
     public var deniedPermissionKinds: Set<CaptureKind>
     public var temporaryCleanupKinds: Set<CaptureKind>
@@ -104,6 +105,7 @@ public struct CaptureHardwareSmokeEvidence:
         deniedPermissionHardStopPassed = false
         temporaryCleanupPassed = false
         appRestartPersistencePassed = false
+        restartVerifiedLaunchID = nil
         deniedPermissionKinds = []
         temporaryCleanupKinds = []
     }
@@ -160,6 +162,7 @@ public struct CaptureHardwareSmokeEvidence:
                 && $0.persistedFilePath != nil
         }) else {
             appRestartPersistencePassed = false
+            restartVerifiedLaunchID = nil
             return
         }
 
@@ -175,6 +178,10 @@ public struct CaptureHardwareSmokeEvidence:
                     atPath: path
                 )
             }
+        restartVerifiedLaunchID =
+            appRestartPersistencePassed
+                ? currentLaunchID
+                : nil
     }
 
     public var allCanonicalPathsPass: Bool {
