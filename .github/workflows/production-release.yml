@@ -208,7 +208,7 @@ jobs:
           BLACKSTOCK_UPDATE_PRIVATE_KEY_BASE64: ${{ secrets.BLACKSTOCK_UPDATE_PRIVATE_KEY_BASE64 }}
         run: |
           set -euo pipefail
-          swift Build/generate_update_manifest.swift             --package "$RUNNER_TEMP/dist/Blackstock.pkg"             --package-url "${{ inputs.package_url }}"             --version "${{ inputs.version }}"             --build "${{ inputs.build }}"             --output "$RUNNER_TEMP/dist/update-manifest.json"
+          swift Build/generate_update_manifest.swift             --package "$RUNNER_TEMP/dist/Blackstock.pkg"             --package-url "${{ inputs.package_url }}"             --version "${{ inputs.version }}"             --build "${{ inputs.build }}"             --source-commit-sha "${{ github.sha }}"             --output "$RUNNER_TEMP/dist/update-manifest.json"
 
           test -s "$RUNNER_TEMP/dist/update-manifest.json"
 
@@ -239,6 +239,8 @@ jobs:
               raise SystemExit("manifest SHA-256 does not match package")
           if manifest["packageURL"] != "${{ inputs.package_url }}":
               raise SystemExit("manifest packageURL mismatch")
+          if manifest["sourceCommitSHA"] != source_commit_sha.lower():
+              raise SystemExit("manifest sourceCommitSHA mismatch")
 
           notary = json.loads(
               (root / "notary-response.json").read_text()
@@ -258,7 +260,7 @@ jobs:
               "installerTeamID": team_id,
               "notarySubmissionID": notary["id"],
               "notaryStatus": notary["status"],
-              "sourceCommitSHA": source_commit_sha,
+              "sourceCommitSHA": manifest["sourceCommitSHA"],
           }
           (root / "production-build-metadata.json").write_text(
               json.dumps(metadata, indent=2, sort_keys=True) + "\n"
