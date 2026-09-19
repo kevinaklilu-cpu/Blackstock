@@ -58,6 +58,56 @@ final class PublishPackageTests: XCTestCase {
         XCTAssertNoThrow(try review.validate())
     }
 
+    func testProductionStageCannotPublishDirectly() {
+        let projectID = UUID()
+        let project = BlackstockProject(
+            id: projectID,
+            title: "Video",
+            targetChannelID: "channel-A",
+            stage: .production,
+            strategyVersion: 1,
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+        let artifact = RenderArtifact(
+            projectID: projectID,
+            fileURL: URL(fileURLWithPath: "/tmp/video.mp4"),
+            sha256: "abc",
+            mimeType: "video/mp4",
+            validated: true,
+            createdAt: Date()
+        )
+        let package = PublishPackage(
+            projectID: projectID,
+            targetChannelID: "channel-A",
+            renderArtifactID: artifact.id,
+            metadata: .init(
+                title: "Video",
+                description: "",
+                privacyStatus: .privateVideo,
+                selfDeclaredMadeForKids: false
+            ),
+            thumbnail: nil,
+            captions: []
+        )
+        let review = PublishReviewContext(
+            project: project,
+            artifact: artifact,
+            package: package,
+            qualityReview: nil,
+            rightsValidated: true,
+            publicPublishingAllowed: false,
+            userConfirmed: true
+        )
+
+        XCTAssertThrowsError(try review.validate()) {
+            XCTAssertEqual(
+                $0 as? PublishPackageValidationError,
+                .projectStageNotReady
+            )
+        }
+    }
+
     func testPublicPublishRequiresProviderComplianceGate() {
         let setup = makeReview(
             privacy: .publicVideo,
