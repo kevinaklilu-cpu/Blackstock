@@ -15,7 +15,7 @@ final class GoogleOAuthAndYouTubeTests: XCTestCase {
         let pair = try PKCEPair.generate()
         let request = GoogleOAuthAuthorizationRequest(
             clientID: "abc.apps.googleusercontent.com",
-            redirectURI: URL(string: "http://127.0.0.1:54321/oauth2/callback")!,
+            redirectURI: URL(string: "http://127.0.0.1:54321")!,
             scopes: [.youtubeReadOnly],
             state: "state-123",
             pkce: pair
@@ -25,6 +25,10 @@ final class GoogleOAuthAndYouTubeTests: XCTestCase {
 
         XCTAssertEqual(components.host, "accounts.google.com")
         XCTAssertEqual(values["response_type"], "code")
+        XCTAssertEqual(
+            values["redirect_uri"],
+            "http://127.0.0.1:54321"
+        )
         XCTAssertEqual(values["code_challenge_method"], "S256")
         XCTAssertEqual(values["state"], "state-123")
         XCTAssertEqual(values["scope"], GoogleOAuthScope.youtubeReadOnly.rawValue)
