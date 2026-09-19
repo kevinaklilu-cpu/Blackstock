@@ -46,12 +46,24 @@ final class StudioState: ObservableObject {
             let store = try makeWorkspaceStore()
             workspaceStore = store
 
-            if let snapshot = try store.load(
+            let loadResult = try store.loadWithRecovery(
                 projectID: projectID
-            ) {
+            )
+            if let snapshot = loadResult.snapshot {
                 asset = snapshot.mediaAsset
                 graph = snapshot.editGraph
                 ledger = snapshot.activityLedger
+                if loadResult.recoveredFromBackup {
+                    ledger.append(.init(
+                        timestamp: Date(),
+                        actor: .blackstock,
+                        stage: .editing,
+                        action: "workspace-recovered-from-backup",
+                        summary: "Der primäre Projekt-Workspace war nicht lesbar. Blackstock hat den letzten validierten lokalen Backup-Stand geladen.",
+                        reversible: false,
+                        correlationID: correlationID
+                    ))
+                }
                 storyboard = snapshot.storyboard
                 trimStart = snapshot.trimStart
                 trimEnd = snapshot.trimEnd
@@ -101,6 +113,10 @@ final class StudioState: ObservableObject {
                     } else {
                         errorMessage = "Das gespeicherte Produktionsmedium fehlt im Projekt-Workspace."
                     }
+                }
+                if loadResult.recoveredFromBackup {
+                    persistWorkspaceIfPossible()
+                    errorMessage = "Projekt-Workspace wurde aus dem letzten validierten lokalen Backup wiederhergestellt."
                 }
                 return
             }
