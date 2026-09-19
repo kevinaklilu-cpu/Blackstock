@@ -2,7 +2,6 @@
 import AppKit
 import Foundation
 import SwiftUI
-import Network
 import BlackstockCore
 
 private enum PublishingSessionError: Error, LocalizedError {
@@ -353,7 +352,8 @@ final class BlackstockSession: ObservableObject {
             let accessToken = try await validatedPublishingAccessToken(
                 targetChannelID: project.targetChannelID
             )
-            let networkAvailable = await currentNetworkAvailable()
+            let networkAvailable = await LocalNetworkAvailabilityProbe()
+                .currentState() == .available
 
             let review = PublishReviewContext(
                 project: project,
@@ -498,25 +498,6 @@ final class BlackstockSession: ObservableObject {
         let journal = try ExternalActionJournal.persistent(at: url)
         cachedPublishingJournal = journal
         return journal
-    }
-
-    private func currentNetworkAvailable() async -> Bool {
-        await withCheckedContinuation { continuation in
-            let monitor = NWPathMonitor()
-            let queue = DispatchQueue(
-                label: "de.blackstock.network-preflight"
-            )
-            var resumed = false
-            monitor.pathUpdateHandler = { path in
-                guard !resumed else { return }
-                resumed = true
-                monitor.cancel()
-                continuation.resume(
-                    returning: path.status == .satisfied
-                )
-            }
-            monitor.start(queue: queue)
-        }
     }
 
     private func persistPublishedRecord(
