@@ -418,6 +418,8 @@ private struct OverviewView: View {
 
 private struct SettingsView: View {
     @ObservedObject var session: BlackstockSession
+    @State private var showCredentialRemovalConfirmation = false
+    @State private var credentialStatusMessage: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -425,14 +427,55 @@ private struct SettingsView: View {
                 .font(.largeTitle.bold())
 
             GroupBox("Google / YouTube") {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 10) {
                     Text("OAuth-Konfiguration: \(session.oauthConfigurationSource)")
                     Text("Entwickler-Secrets und API-Key-Felder werden normalen Nutzern nicht angeboten.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+
+                    Divider()
+
+                    Button(
+                        "Lokale YouTube-Anmeldung entfernen",
+                        role: .destructive
+                    ) {
+                        showCredentialRemovalConfirmation = true
+                    }
+
+                    Text("Entfernt lokal gespeicherte YouTube-Zugriffs-, Refresh- und Scope-Daten aus dem macOS-Keychain. Die OAuth-Client-Konfiguration und deine Projektdateien bleiben erhalten.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if let credentialStatusMessage {
+                        Text(credentialStatusMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical, 6)
+            }
+            .confirmationDialog(
+                "Lokale YouTube-Anmeldung entfernen?",
+                isPresented: $showCredentialRemovalConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button(
+                    "Anmeldedaten von diesem Mac entfernen",
+                    role: .destructive
+                ) {
+                    do {
+                        let removed = try session.removeLocalGoogleCredentials()
+                        credentialStatusMessage = removed > 0
+                            ? "\(removed) lokale Keychain-Einträge wurden entfernt."
+                            : "Es waren keine lokalen YouTube-Anmeldedaten gespeichert."
+                    } catch {
+                        credentialStatusMessage = "Anmeldedaten konnten nicht vollständig entfernt werden: \(error.localizedDescription)"
+                    }
+                }
+                Button("Abbrechen", role: .cancel) {}
+            } message: {
+                Text("Diese Aktion meldet Blackstock lokal ab. Sie widerruft keine Berechtigung im Google-Konto und löscht keine Projektdateien.")
             }
 
             Button("First Run erneut starten", role: .destructive) {
