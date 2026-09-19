@@ -68,6 +68,7 @@ Die reale Capture-Evidenz wird von Blackstock selbst erzeugt. Sie enthält für 
 - SHA-256 dieser Datei,
 - Aufnahme-Launch-ID,
 - Source-Commit-SHA des installierten Blackstock-Bundles,
+- gültiger macOS-Installer-Receipt `de.blackstock.app` für exakt dieselbe App-Version,
 - tatsächliche `Developer ID Application`-Team-ID der laufenden App,
 - SHA-256 des tatsächlich laufenden Blackstock-Executables,
 - Restart-Launch-ID,
