@@ -41,7 +41,9 @@ final class LoopbackOAuthServer: @unchecked Sendable {
                             self.finishReady(.failure(ServerError.noPort))
                             return
                         }
-                        let url = URL(string: "http://127.0.0.1:\(port.rawValue)/oauth2/callback")!
+                        let url = URL(
+                            string: "http://127.0.0.1:\(port.rawValue)"
+                        )!
                         self.finishReady(.success(url))
                     case .failed(let error):
                         self.terminalError = ServerError.failed(error)
@@ -107,7 +109,7 @@ final class LoopbackOAuthServer: @unchecked Sendable {
                   let url = URL(
                     string: "http://127.0.0.1:\(port.rawValue)\(target)"
                   ),
-                  url.path == "/oauth2/callback" else {
+                  url.path == "/" else {
                 self.reject(connection)
                 return
             }
