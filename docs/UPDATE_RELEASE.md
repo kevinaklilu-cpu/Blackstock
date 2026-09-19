@@ -1,0 +1,56 @@
+# Blackstock Update Release
+
+Blackstock akzeptiert Updates nur über ein HTTPS-Manifest, dessen Signatur mit dem im App-Bundle eingebetteten öffentlichen Update-Schlüssel verifiziert werden kann. Das referenzierte `.pkg` muss zusätzlich exakt dem im Manifest signierten SHA-256 entsprechen.
+
+## Produktionsschlüssel
+
+Der private Update-Signaturschlüssel darf nicht im Repository, im App-Bundle oder in Release-Artefakten gespeichert werden.
+
+Für die Manifest-Erzeugung wird er nur über folgende Umgebungsvariable bereitgestellt:
+
+`BLACKSTOCK_UPDATE_PRIVATE_KEY_BASE64`
+
+Der zugehörige öffentliche Schlüssel wird beim App-Build über:
+
+`BLACKSTOCK_UPDATE_PUBLIC_KEY_BASE64`
+
+in `BlackstockUpdatePublicKeyBase64` geschrieben.
+
+Die Manifest-URL wird über:
+
+`BLACKSTOCK_UPDATE_MANIFEST_URL`
+
+in `BlackstockUpdateManifestURL` geschrieben.
+
+## Manifest erzeugen
+
+Nach dem finalen, signierten und gegebenenfalls notarisierten Paket:
+
+```bash
+export BLACKSTOCK_UPDATE_PRIVATE_KEY_BASE64="…"
+
+swift Build/generate_update_manifest.swift \
+  --package dist/Blackstock.pkg \
+  --package-url "https://updates.example.com/Blackstock.pkg" \
+  --version "1.0.0" \
+  --build "100" \
+  --output dist/update-manifest.json
+```
+
+Das Tool:
+
+1. liest das lokale Paket,
+2. berechnet den SHA-256 selbst,
+3. erzeugt den gleichen Signatur-Payload wie `UpdateManifestVerifier`,
+4. signiert ihn mit Curve25519/Ed25519,
+5. schreibt das Manifest atomar.
+
+## Sicherheitsregeln
+
+- Manifest und Paket müssen per HTTPS ausgeliefert werden.
+- Der private Signaturschlüssel bleibt außerhalb von Git und App-Bundle.
+- Ein Paket wird in Blackstock erst nach gültiger Manifest-Signatur geladen.
+- Vor der Übergabe an den macOS-Installer wird der Paket-Hash erneut geprüft.
+- Blackstock installiert Updates nicht still; der System-Installer wird nur nach ausdrücklicher Nutzeraktion geöffnet.
+- Signing, Notarisierung und Gatekeeper bleiben `BLOCKED_EXTERNAL`, bis der reale Produktionspfad mit Apple-Zertifikaten erfolgreich ausgeführt wurde.
+- Der Updater bleibt `FAIL`, bis eine reale Update-Endpoint-/Manifest-Konfiguration und ein vollständiger Update-E2E gegen ein signiertes Release nachgewiesen sind.
