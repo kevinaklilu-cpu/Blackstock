@@ -6,11 +6,24 @@ public enum YouTubePrivacyStatus: String, Codable, Sendable {
     case publicVideo = "public"
 }
 
+public struct YouTubeMetadataLocalization: Codable, Sendable, Equatable {
+    public let title: String
+    public let description: String
+
+    public init(title: String, description: String) {
+        self.title = title
+        self.description = description
+    }
+}
+
 public struct YouTubeUploadMetadata: Codable, Sendable, Equatable {
     public let title: String
     public let description: String
     public let tags: [String]
     public let categoryID: String?
+    public let defaultLanguage: String?
+    public let defaultAudioLanguage: String?
+    public let localizations: [String: YouTubeMetadataLocalization]
     public let privacyStatus: YouTubePrivacyStatus
     public let selfDeclaredMadeForKids: Bool
 
@@ -19,6 +32,9 @@ public struct YouTubeUploadMetadata: Codable, Sendable, Equatable {
         description: String,
         tags: [String] = [],
         categoryID: String? = nil,
+        defaultLanguage: String? = nil,
+        defaultAudioLanguage: String? = nil,
+        localizations: [String: YouTubeMetadataLocalization] = [:],
         privacyStatus: YouTubePrivacyStatus = .privateVideo,
         selfDeclaredMadeForKids: Bool
     ) {
@@ -26,6 +42,9 @@ public struct YouTubeUploadMetadata: Codable, Sendable, Equatable {
         self.description = description
         self.tags = tags
         self.categoryID = categoryID
+        self.defaultLanguage = defaultLanguage
+        self.defaultAudioLanguage = defaultAudioLanguage
+        self.localizations = localizations
         self.privacyStatus = privacyStatus
         self.selfDeclaredMadeForKids = selfDeclaredMadeForKids
     }
@@ -182,7 +201,12 @@ public struct YouTubeResumableUploader: Sendable {
         )!
         components.queryItems = [
             .init(name: "uploadType", value: "resumable"),
-            .init(name: "part", value: "snippet,status")
+            .init(
+                name: "part",
+                value: metadata.localizations.isEmpty
+                    ? "snippet,status"
+                    : "snippet,status,localizations"
+            )
         ]
 
         var snippet: [String: Any] = [
@@ -193,14 +217,30 @@ public struct YouTubeResumableUploader: Sendable {
         if let categoryID = metadata.categoryID, !categoryID.isEmpty {
             snippet["categoryId"] = categoryID
         }
+        if let defaultLanguage = metadata.defaultLanguage,
+           !defaultLanguage.isEmpty {
+            snippet["defaultLanguage"] = defaultLanguage
+        }
+        if let defaultAudioLanguage = metadata.defaultAudioLanguage,
+           !defaultAudioLanguage.isEmpty {
+            snippet["defaultAudioLanguage"] = defaultAudioLanguage
+        }
 
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "snippet": snippet,
             "status": [
                 "privacyStatus": metadata.privacyStatus.rawValue,
                 "selfDeclaredMadeForKids": metadata.selfDeclaredMadeForKids
             ]
         ]
+        if !metadata.localizations.isEmpty {
+            body["localizations"] = metadata.localizations.mapValues {
+                [
+                    "title": $0.title,
+                    "description": $0.description
+                ]
+            }
+        }
 
         var request = URLRequest(url: components.url!)
         request.httpMethod = "POST"
