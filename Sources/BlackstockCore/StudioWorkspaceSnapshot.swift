@@ -40,6 +40,11 @@ public struct StudioWorkspaceSnapshot: Codable, Sendable, Equatable {
     }
 }
 
+public enum ProjectPackagingAssetKind: String, Codable, Sendable {
+    case thumbnail = "Thumbnails"
+    case caption = "Captions"
+}
+
 public struct ProjectWorkspaceStore: Sendable {
     public let rootURL: URL
 
@@ -104,6 +109,38 @@ public struct ProjectWorkspaceStore: Sendable {
         return directory
     }
 
+    public func packagingAssetDirectory(
+        projectID: UUID,
+        kind: ProjectPackagingAssetKind
+    ) throws -> URL {
+        let directory = try projectDirectory(
+            projectID: projectID
+        )
+        .appendingPathComponent(kind.rawValue, isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        return directory
+    }
+
+    public func importPackagingAsset(
+        sourceURL: URL,
+        projectID: UUID,
+        assetID: UUID,
+        kind: ProjectPackagingAssetKind
+    ) throws -> URL {
+        let directory = try packagingAssetDirectory(
+            projectID: projectID,
+            kind: kind
+        )
+        return try copyProjectFile(
+            sourceURL: sourceURL,
+            destinationDirectory: directory,
+            assetID: assetID
+        )
+    }
+
     public func importMedia(
         sourceURL: URL,
         projectID: UUID,
@@ -112,11 +149,23 @@ public struct ProjectWorkspaceStore: Sendable {
         let directory = try mediaDirectory(
             projectID: projectID
         )
+        return try copyProjectFile(
+            sourceURL: sourceURL,
+            destinationDirectory: directory,
+            assetID: assetID
+        )
+    }
+
+    private func copyProjectFile(
+        sourceURL: URL,
+        destinationDirectory: URL,
+        assetID: UUID
+    ) throws -> URL {
         let ext = sourceURL.pathExtension
         let filename = ext.isEmpty
             ? assetID.uuidString
             : "\(assetID.uuidString).\(ext)"
-        let destination = directory.appendingPathComponent(
+        let destination = destinationDirectory.appendingPathComponent(
             filename
         )
 

@@ -118,6 +118,40 @@ final class BlackstockSession: ObservableObject {
         }
     }
 
+    func importPackagingAsset(
+        from url: URL,
+        projectID: UUID,
+        kind: ProjectPackagingAssetKind
+    ) throws -> URL {
+        let hasSecurityScopedAccess = url.startAccessingSecurityScopedResource()
+        defer {
+            if hasSecurityScopedAccess {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        let base = try FileManager.default.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        let root = base
+            .appendingPathComponent("Blackstock", isDirectory: true)
+            .appendingPathComponent("Projects", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: root,
+            withIntermediateDirectories: true
+        )
+        return try ProjectWorkspaceStore(rootURL: root)
+            .importPackagingAsset(
+                sourceURL: url,
+                projectID: projectID,
+                assetID: UUID(),
+                kind: kind
+            )
+    }
+
     func connectGoogle() async {
         errorMessage = nil
         guard !effectiveClientID.isEmpty else {

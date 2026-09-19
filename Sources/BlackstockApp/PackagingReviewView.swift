@@ -235,9 +235,19 @@ struct PackagingReviewView: View {
         ) { result in
             if case .success(let urls) = result,
                let url = urls.first {
-                thumbnailURL = url
-                thumbnailAssessment = try? ThumbnailTechnicalInspector()
-                    .inspect(url: url)
+                do {
+                    let durableURL = try session.importPackagingAsset(
+                        from: url,
+                        projectID: project.id,
+                        kind: .thumbnail
+                    )
+                    thumbnailURL = durableURL
+                    thumbnailAssessment = try ThumbnailTechnicalInspector()
+                        .inspect(url: durableURL)
+                    session.errorMessage = nil
+                } catch {
+                    session.errorMessage = "Thumbnail konnte nicht sicher in den Projekt-Workspace übernommen werden: \(error.localizedDescription)"
+                }
             }
         }
         .confirmationDialog(
@@ -266,15 +276,25 @@ struct PackagingReviewView: View {
             allowsMultipleSelection: false
         ) { result in
             if case .success(let urls) = result, let url = urls.first {
-                let language = Locale.current.language.languageCode?.identifier ?? "de"
-                captionTracks = [
-                    PublishCaptionTrack(
-                        language: language,
-                        name: "Blackstock Captions",
-                        fileURL: url,
-                        mimeType: Self.captionMIMEType(for: url)
+                do {
+                    let durableURL = try session.importPackagingAsset(
+                        from: url,
+                        projectID: project.id,
+                        kind: .caption
                     )
-                ]
+                    let language = Locale.current.language.languageCode?.identifier ?? "de"
+                    captionTracks = [
+                        PublishCaptionTrack(
+                            language: language,
+                            name: "Blackstock Captions",
+                            fileURL: durableURL,
+                            mimeType: Self.captionMIMEType(for: durableURL)
+                        )
+                    ]
+                    session.errorMessage = nil
+                } catch {
+                    session.errorMessage = "Caption-Datei konnte nicht sicher in den Projekt-Workspace übernommen werden: \(error.localizedDescription)"
+                }
             }
         }
     }

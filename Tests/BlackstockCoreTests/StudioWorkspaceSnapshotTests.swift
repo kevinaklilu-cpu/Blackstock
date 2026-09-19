@@ -66,4 +66,47 @@ final class StudioWorkspaceSnapshotTests: XCTestCase {
         )
         XCTAssertNotEqual(destination, source)
     }
+    func testImportedPackagingAssetsAreCopiedIntoDurableProjectFolders() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let thumbnailSource = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("png")
+        let captionSource = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("vtt")
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            try? FileManager.default.removeItem(at: thumbnailSource)
+            try? FileManager.default.removeItem(at: captionSource)
+        }
+
+        try Data("image".utf8).write(to: thumbnailSource)
+        try Data("WEBVTT".utf8).write(to: captionSource)
+
+        let projectID = UUID()
+        let store = ProjectWorkspaceStore(rootURL: root)
+        let thumbnail = try store.importPackagingAsset(
+            sourceURL: thumbnailSource,
+            projectID: projectID,
+            assetID: UUID(),
+            kind: .thumbnail
+        )
+        let caption = try store.importPackagingAsset(
+            sourceURL: captionSource,
+            projectID: projectID,
+            assetID: UUID(),
+            kind: .caption
+        )
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: thumbnail.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: caption.path))
+        XCTAssertTrue(thumbnail.path.contains("Thumbnails"))
+        XCTAssertTrue(caption.path.contains("Captions"))
+        XCTAssertTrue(thumbnail.path.contains(projectID.uuidString))
+        XCTAssertTrue(caption.path.contains(projectID.uuidString))
+        XCTAssertNotEqual(thumbnail, thumbnailSource)
+        XCTAssertNotEqual(caption, captionSource)
+    }
+
 }
