@@ -59,6 +59,14 @@ final class StudioState: ObservableObject {
                 captionURL = snapshot.captionURL
                 renderArtifact = snapshot.renderArtifact
 
+                if let reframe = graph.currentOperations
+                    .last(where: { $0.type == .reframe })?
+                    .reframeSpec {
+                    reframeAspectRatio = reframe.aspectRatio
+                    reframeFocalX = reframe.focalX
+                    reframeFocalY = reframe.focalY
+                }
+
                 if let transcript {
                     transcriptStructure = TranscriptStructureAnalyzer()
                         .analyze(transcript: transcript)
@@ -73,6 +81,7 @@ final class StudioState: ObservableObject {
                     atPath: artifact.fileURL.path
                    ) {
                     renderArtifact = nil
+                    persistWorkspaceIfPossible()
                 }
 
                 if let asset {
@@ -142,6 +151,7 @@ final class StudioState: ObservableObject {
         )
         storyboard = plan
         persistStoryboard(plan)
+        persistWorkspaceIfPossible()
     }
 
     func updateStoryboardBeat(
@@ -161,6 +171,7 @@ final class StudioState: ObservableObject {
 
         storyboard = plan
         persistStoryboard(plan)
+        persistWorkspaceIfPossible()
     }
 
     func removeStoryboardBeat(id: UUID) {
@@ -168,6 +179,7 @@ final class StudioState: ObservableObject {
         guard plan.removeBeat(id: id, at: Date()) else { return }
         storyboard = plan
         persistStoryboard(plan)
+        persistWorkspaceIfPossible()
     }
 
     func moveStoryboardBeat(
@@ -182,10 +194,12 @@ final class StudioState: ObservableObject {
         ) else { return }
         storyboard = plan
         persistStoryboard(plan)
+        persistWorkspaceIfPossible()
     }
 
     func importMovie(
         url: URL,
+        projectID: UUID,
         authorization: ProductionMediaAuthorization,
         rightsEvidence: String,
         rightsConfirmed: Bool
@@ -204,13 +218,31 @@ final class StudioState: ObservableObject {
         defer { isLoading = false }
 
         do {
-            let avAsset = AVURLAsset(url: url)
+            activeProjectID = projectID
+            let store = try workspaceStore ?? makeWorkspaceStore()
+            workspaceStore = store
+
+            let assetID = UUID()
+            let didAccessSecurityScope = url.startAccessingSecurityScopedResource()
+            defer {
+                if didAccessSecurityScope {
+                    url.stopAccessingSecurityScopedResource()
+                }
+            }
+
+            let durableURL = try store.importMedia(
+                sourceURL: url,
+                projectID: projectID,
+                assetID: assetID
+            )
+            let avAsset = AVURLAsset(url: durableURL)
             let duration = try await avAsset.load(.duration)
             let seconds = max(CMTimeGetSeconds(duration), 0)
 
             let imported = ProductionMediaAsset(
+                id: assetID,
                 displayName: url.lastPathComponent,
-                sourceURL: url,
+                sourceURL: durableURL,
                 durationSeconds: seconds,
                 authorization: authorization,
                 rightsEvidence: [evidence],
@@ -258,24 +290,10 @@ final class StudioState: ObservableObject {
 
             try await rebuildPreview()
 
-            do {
-                audioTechnicalAssessment = try await LocalAudioTechnicalInspector()
-                    .inspect(url: imported.sourceURL)
-            } catch {
-                audioTechnicalAssessment = nil
-            }
-
-            if audioTechnicalAssessment?.snapshot.hasAudioTrack == true {
-                do {
-                    audioSignalAssessment = try await LocalAudioSignalAnalyzer()
-                        .analyze(url: imported.sourceURL)
-                } catch {
-                    audioSignalAssessment = nil
-                }
-            } else {
-                audioSignalAssessment = nil
-            }
-
+            await refreshAudioInspection(
+                for: imported.sourceURL
+            )
+            persistWorkspaceIfPossible()
             errorMessage = nil
         } catch {
             errorMessage = "Video konnte nicht geladen werden: \(error.localizedDescription)"
@@ -320,6 +338,7 @@ final class StudioState: ObservableObject {
 
         do {
             try await rebuildPreview()
+            persistWorkspaceIfPossible()
             errorMessage = nil
         } catch {
             errorMessage = "Vorschau konnte nicht aktualisiert werden: \(error.localizedDescription)"
@@ -350,6 +369,7 @@ final class StudioState: ObservableObject {
         ))
 
         await refreshPreviewAfterHistoryChange()
+        persistWorkspaceIfPossible()
     }
 
     func redo() async {
@@ -375,6 +395,7 @@ final class StudioState: ObservableObject {
         ))
 
         await refreshPreviewAfterHistoryChange()
+        persistWorkspaceIfPossible()
     }
 
     func suggestFocalPoint() async {
@@ -403,6 +424,7 @@ final class StudioState: ObservableObject {
                 reversible: false,
                 correlationID: correlationID
             ))
+            persistWorkspaceIfPossible()
             errorMessage = nil
         } catch LocalVisionFocalPointError.noRelevantObservation {
             focalPointProposal = nil
@@ -445,6 +467,7 @@ final class StudioState: ObservableObject {
 
         do {
             try await rebuildPreview()
+            persistWorkspaceIfPossible()
             errorMessage = nil
         } catch {
             errorMessage = "Reframe-Vorschau konnte nicht aktualisiert werden: \(error.localizedDescription)"
@@ -489,11 +512,13 @@ final class StudioState: ObservableObject {
                 localeIdentifier: localeIdentifier
             )
 
-            let directory = FileManager.default.temporaryDirectory
-                .appendingPathComponent("Blackstock-Captions", isDirectory: true)
-            try FileManager.default.createDirectory(
-                at: directory,
-                withIntermediateDirectories: true
+            guard let projectID = activeProjectID else {
+                throw CocoaError(.fileNoSuchFile)
+            }
+            let store = try workspaceStore ?? makeWorkspaceStore()
+            workspaceStore = store
+            let directory = try store.captionDirectory(
+                projectID: projectID
             )
             let outputURL = directory
                 .appendingPathComponent(asset.id.uuidString)
@@ -524,6 +549,7 @@ final class StudioState: ObservableObject {
                 reversible: false,
                 correlationID: correlationID
             ))
+            persistWorkspaceIfPossible()
             errorMessage = nil
         } catch {
             errorMessage = "Lokale Transkription fehlgeschlagen: \(error.localizedDescription)"
@@ -567,6 +593,7 @@ final class StudioState: ObservableObject {
                 reversible: false,
                 correlationID: correlationID
             ))
+            persistWorkspaceIfPossible()
             errorMessage = nil
         } catch {
             retentionAdvisory = nil
@@ -584,14 +611,13 @@ final class StudioState: ObservableObject {
         defer { isRendering = false }
 
         do {
-            let directory = FileManager.default.temporaryDirectory
-                .appendingPathComponent("Blackstock-Renders", isDirectory: true)
-            try FileManager.default.createDirectory(
-                at: directory,
-                withIntermediateDirectories: true
+            let store = try workspaceStore ?? makeWorkspaceStore()
+            workspaceStore = store
+            let directory = try store.renderDirectory(
+                projectID: projectID
             )
             let outputURL = directory
-                .appendingPathComponent(projectID.uuidString)
+                .appendingPathComponent("final")
                 .appendingPathExtension("mp4")
 
             let artifact = try await LocalVideoRenderer().render(
@@ -612,6 +638,7 @@ final class StudioState: ObservableObject {
                 reversible: false,
                 correlationID: correlationID
             ))
+            persistWorkspaceIfPossible()
             errorMessage = nil
         } catch {
             errorMessage = "Render fehlgeschlagen: \(error.localizedDescription)"
@@ -621,6 +648,7 @@ final class StudioState: ObservableObject {
     private func refreshPreviewAfterHistoryChange() async {
         do {
             try await rebuildPreview()
+            persistWorkspaceIfPossible()
             errorMessage = nil
         } catch {
             errorMessage = "Vorschau konnte nicht aktualisiert werden: \(error.localizedDescription)"
