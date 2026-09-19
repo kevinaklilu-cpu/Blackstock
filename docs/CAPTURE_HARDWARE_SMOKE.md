@@ -73,7 +73,7 @@ Blackstock erzeugt und aktualisiert die Hardware-Evidenz automatisch während de
 
 `~/Library/Application Support/Blackstock/Diagnostics/capture-hardware-smoke.json`
 
-Die Einstellungen zeigen für jeden der vier kanonischen Pfade den aktuellen technischen Nachweis und können die Datei im Finder öffnen. Ein lokaler Entwicklungsstart zählt nicht als Installer-Nachweis; `installedFromPackage` wird nur für `/Applications/Blackstock.app` gesetzt.
+Die Einstellungen zeigen für jeden der vier kanonischen Pfade den aktuellen technischen Nachweis und können die Datei im Finder öffnen. Ein lokaler Entwicklungsstart zählt nicht als Installer-Nachweis; `installedFromPackage` wird nur für `/Applications/Blackstock.app` gesetzt. Die Evidenz bindet außerdem `BlackstockSourceCommitSHA` aus dem installierten App-Bundle ein; ältere Schema-v1-Evidenz ohne Commit-Provenienz wird bewusst nicht hochgestuft, sondern muss neu aufgenommen werden.
 
 Nach dem vollständigen Test wird dieselbe Datei auf demselben Mac validiert:
 
@@ -86,10 +86,11 @@ Der Validator prüft zusätzlich, dass die projektgebundenen Capture-Dateien noc
 
 Pflichtfelder:
 
-- `schemaVersion`: aktuell `1`
+- `schemaVersion`: aktuell `2`
 - `testedAt`: ISO-8601
 - `blackstockVersion`
 - `blackstockBuild`
+- `blackstockSourceCommitSHA`: exakt 40 hexadezimale Git-SHA-Zeichen
 - `macOSVersion`
 - `hardwareModel`
 - `installedFromPackage`: `true`
