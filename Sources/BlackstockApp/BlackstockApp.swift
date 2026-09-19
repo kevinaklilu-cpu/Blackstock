@@ -1054,6 +1054,9 @@ private struct SettingsView: View {
                                         updateStatusMessage = "Das verifizierte Paket konnte nicht im macOS-Installer geöffnet werden."
                                         return
                                     }
+                                    BlackstockUpdateAudit.recordInstallerOpened(
+                                        manifest: manifest
+                                    )
                                     updateStatusMessage = "Das verifizierte Paket wurde an den macOS-Installer übergeben. Die Installation erfolgt erst nach deiner Bestätigung im System-Installer."
                                 } catch {
                                     try? FileManager.default.removeItem(
