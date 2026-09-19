@@ -83,6 +83,9 @@ struct BlackstockUpdatePackageDownloader: Sendable {
                 fileURL: destination,
                 expectedTeamID: expectedTeamID
             )
+            BlackstockUpdateAudit.recordVerifiedPackage(
+                manifest: manifest
+            )
             return destination
         } catch {
             try? FileManager.default.removeItem(at: temporaryURL)
