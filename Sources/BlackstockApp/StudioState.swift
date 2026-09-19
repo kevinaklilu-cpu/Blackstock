@@ -95,8 +95,10 @@ final class StudioState: ObservableObject {
                         atPath: asset.sourceURL.path
                     ) {
                         try await rebuildPreview()
+                        let audioInspectionURL = renderArtifact?.fileURL
+                            ?? asset.sourceURL
                         await refreshAudioInspection(
-                            for: asset.sourceURL
+                            for: audioInspectionURL
                         )
                     } else {
                         errorMessage = "Das gespeicherte Produktionsmedium fehlt im Projekt-Workspace."
@@ -720,6 +722,9 @@ final class StudioState: ObservableObject {
                 preset: renderPreset
             )
             renderArtifact = artifact
+            await refreshAudioInspection(
+                for: artifact.fileURL
+            )
             ledger.append(.init(
                 timestamp: Date(),
                 actor: .blackstock,
