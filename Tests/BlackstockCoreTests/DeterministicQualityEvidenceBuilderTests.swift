@@ -115,7 +115,7 @@ final class DeterministicQualityEvidenceBuilderTests: XCTestCase {
         XCTAssertTrue(review.coveredAreas.contains(.captions))
         XCTAssertTrue(
             review.findings(in: .captions).contains {
-                $0.title == "Captions lokal erzeugt"
+                $0.title == "Captions lokal erzeugt und technisch validiert"
             }
         )
     }
