@@ -58,6 +58,7 @@ struct StudioView: View {
             if let asset = state.asset,
                let artifact = state.renderArtifact {
                 PackagingReviewView(
+                    session: session,
                     project: project,
                     asset: asset,
                     artifact: artifact,
