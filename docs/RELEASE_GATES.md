@@ -15,11 +15,11 @@ Statuswerte: **PASS / FAIL / BLOCKED_EXTERNAL**.
 | Rights | FAIL |
 | Capture | FAIL |
 | Editing | FAIL |
-| Audio | FAIL |
-| Captions | FAIL |
-| Packaging | FAIL |
-| Video QC / 4K | FAIL |
-| Publishing | FAIL |
+| Audio | PASS |
+| Captions | PASS |
+| Packaging | PASS |
+| Video QC / 4K | PASS |
+| Publishing | PASS |
 | Wrong Channel E2E | PASS |
 | Upload Resume | PASS |
 | Analytics | PASS |
@@ -45,6 +45,16 @@ Hinweis: **Wrong Channel E2E = PASS** basiert auf den deterministischen Hard-Sto
 Hinweis: **Upload Resume = PASS** basiert auf dem deterministischen Resumable-Upload-End-to-End-Test: Eine vorhandene Remote-Session wird abgefragt, der von YouTube gemeldete Remote-Offset gewinnt gegenüber lokalem Zwischenstand, nur der verbleibende Byte-Range wird übertragen, jeder PUT ist authentifiziert und der Fortschritt wird persistent bis `remoteCommitted` mit Video-ID und finalem Offset fortgeschrieben.
 
 Hinweis: **Analytics = PASS** basiert auf den deterministischen YouTube-Analytics-Contract- und Kontexttests: Abrufe sind an ein veröffentlichtes Projekt, denselben Projekt-Datensatz, denselben Zielkanal und eine konkrete Video-ID gebunden; vor dem Abruf wird die aktuell autorisierte YouTube-Kanalidentität erneut validiert. Fehlende Provider-Zeilen bleiben fehlend statt als Nullwerte erfunden zu werden, und inkonsistente Responses führen zum Hard-Stop.
+
+Hinweis: **Audio = PASS** basiert auf Messungen des finalen gerenderten Edits, nicht des Rohmaterials: Blackstock prüft Audiospur, Sample-Rate und Kanalzahl und analysiert lokal PCM-Samples für Peak, RMS und Full-Scale-Samples. Fehlende Audiospur oder eine Analyse ohne Samples sind Blocker; mögliche Qualitätsprobleme bleiben als Warnungen und eine hörbare Prüfung auf Verständlichkeit, Störgeräusche und Pegelsprünge bleibt explizite Review-Evidenz. Peak/RMS werden nicht fälschlich als LUFS ausgegeben.
+
+Hinweis: **Captions = PASS** basiert auf der transkribierten editierten Timeline, nicht auf dem ungeänderten Quellmedium. WebVTT/SRT werden vor dem Review technisch validiert; ungültige UTF-8-Daten, fehlende/ungültige Timings, leere Cues, nicht-monotone Reihenfolge und Überlappungen blockieren die Veröffentlichung. Caption-Uploads laufen zusätzlich journaled/idempotent über den gebundenen YouTube-Publishing-Pfad.
+
+Hinweis: **Packaging = PASS** umfasst persistente Publish-Pakete und Review-Evidenz, bis zu drei Titel-/Thumbnail-Varianten ohne erfundenen Gewinner, YouTube-Metadatenlimits, dauerhaft in den Projekt-Workspace übernommene Assets, technische Thumbnail-Prüfung sowie erneute Caption-/Thumbnail-Validierung am Publish-Gate. Qualitative Bereiche werden nicht automatisch erfunden, sondern benötigen deterministische Evidenz oder eine konkrete Nutzer-Prüfnotiz.
+
+Hinweis: **Video QC / 4K = PASS** basiert auf dem realen lokalen AVFoundation-Render und technischer Nachprüfung der erzeugten Datei: Datei, Dauer, Videotrack und Geometrie müssen zum aktuellen Edit passen. Zusätzlich wird der tatsächlich gewählte Render-Preset gegen die echte Ausgabeauflösung geprüft; ein 1080p-Artefakt kann deshalb nicht mehr als erfolgreicher 4K-Render gelten. Die definierten 4K-Ausgaben sind 3840×2160, 2160×3840 bzw. 2160×2160 für Landscape, Portrait und Square.
+
+Hinweis: **Publishing = PASS** bezieht sich auf den sicheren kanonischen YouTube-Pfad: vollständiger Review-/Rights-/Render-/Packaging-Preflight, echte Netzwerkprüfung, unmittelbar erneute Verifikation genau eines autorisierten Projekt-Zielkanals, finaler ausdrücklicher Nutzer-Confirm, resumable/idempotenter Upload und journaled Thumbnail-/Caption-Aktionen. Public/Unlisted bleibt zusätzlich hinter dem separat auditierten Build-Flag gesperrt; ohne dieses Flag ist nur der freigegebene private Publish-Pfad zulässig.
 
 Hinweis: **Accessibility = PASS** basiert auf expliziter VoiceOver-Semantik für die kritischen First-Run-, Studio- und Veröffentlichungsprüfungs-Kontrollen, inklusive dynamischer Accessibility-Werte für Trim-/Reframe-Regler sowie Beschriftungen für icon-only Aktionen und Controls mit ausgeblendeten sichtbaren Labels. Die Canonical-CI führt zusätzlich `Build/audit_accessibility.py` aus und blockiert Regressionen bei diesen Semantik-Verträgen.
 
