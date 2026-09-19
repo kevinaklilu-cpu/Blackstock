@@ -160,18 +160,22 @@ if package_script.count(entitlement_flag) < 2:
         "Developer ID and ad-hoc app signing paths"
     )
 
-developer_id_contract = """codesign --force --options runtime --timestamp \\
-    --entitlements "$ROOT/Build/Blackstock.entitlements" \\
-    --sign "$APP_SIGN_IDENTITY" "$APP""""
+developer_id_contract = "\n".join([
+    "  codesign --force --options runtime --timestamp \\",
+    '    --entitlements "$ROOT/Build/Blackstock.entitlements" \\',
+    '    --sign "$APP_SIGN_IDENTITY" "$APP"',
+])
 if developer_id_contract not in package_script:
     errors.append(
         "Build/package.sh: Developer ID Application signing path must "
         "include Hardened Runtime and capture entitlements"
     )
 
-adhoc_contract = """codesign --force --deep --options runtime \\
-    --entitlements "$ROOT/Build/Blackstock.entitlements" \\
-    --sign - "$APP""""
+adhoc_contract = "\n".join([
+    "  codesign --force --deep --options runtime \\",
+    '    --entitlements "$ROOT/Build/Blackstock.entitlements" \\',
+    '    --sign - "$APP"',
+])
 if adhoc_contract not in package_script:
     errors.append(
         "Build/package.sh: ad-hoc CI signing path must include Hardened "
