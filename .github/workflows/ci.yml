@@ -41,6 +41,26 @@ jobs:
           Build/package.sh "$RUNNER_TEMP/dist"
           test -f "$RUNNER_TEMP/dist/Blackstock.pkg"
           pkgutil --payload-files "$RUNNER_TEMP/dist/Blackstock.pkg" | grep -q 'Applications/Blackstock.app'
+      - name: Exercise signed update manifest tooling
+        run: |
+          set -euo pipefail
+          KEY="$(swift -e 'import CryptoKit; import Foundation; print(Curve25519.Signing.PrivateKey().rawRepresentation.base64EncodedString())')"
+          export BLACKSTOCK_UPDATE_PRIVATE_KEY_BASE64="$KEY"
+          swift Build/generate_update_manifest.swift \
+            --package "$RUNNER_TEMP/dist/Blackstock.pkg" \
+            --package-url "https://updates.blackstock.invalid/Blackstock.pkg" \
+            --version "0.1.0" \
+            --build "1" \
+            --output "$RUNNER_TEMP/dist/update-manifest.json"
+
+          test -s "$RUNNER_TEMP/dist/update-manifest.json"
+          EXPECTED_SHA="$(shasum -a 256 "$RUNNER_TEMP/dist/Blackstock.pkg" | awk '{print $1}')"
+          ACTUAL_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sha256"])' "$RUNNER_TEMP/dist/update-manifest.json")"
+          test "$EXPECTED_SHA" = "$ACTUAL_SHA"
+          test "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$RUNNER_TEMP/dist/update-manifest.json")" = "0.1.0"
+          test "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["build"])' "$RUNNER_TEMP/dist/update-manifest.json")" = "1"
+          test -n "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["signature"])' "$RUNNER_TEMP/dist/update-manifest.json")"
+
       - name: Install package on clean runner
         run: |
           set -euo pipefail
