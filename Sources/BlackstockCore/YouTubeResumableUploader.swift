@@ -62,7 +62,7 @@ public struct YouTubeResumableUploader: Sendable {
         authorizedUploadChannelID: String,
         metadata: YouTubeUploadMetadata,
         rightsValidated: Bool,
-        quotaAvailable: Bool,
+        quotaState: PublicationQuotaState,
         networkAvailable: Bool,
         journal: ExternalActionJournal,
         session: URLSession = .shared,
@@ -75,7 +75,7 @@ public struct YouTubeResumableUploader: Sendable {
             renderValidated: artifact.validated,
             rightsValidated: rightsValidated,
             authorizationAvailable: !accessToken.isEmpty,
-            quotaAvailable: quotaAvailable,
+            quotaState: quotaState,
             networkAvailable: networkAvailable
         ).validate()
 
