@@ -85,6 +85,23 @@ Vor dem Import der Apple-Zertifikate führt **Blackstock Production Release** au
 
 Die Canonical-CI prüft mit `Build/audit_production_release_workflows.py`, dass diese Trennung, die Secret-Bindung und der Ausschluss des CI-only E2E-Helpers aus Produktionspaketen erhalten bleiben.
 
+### Produktionskonfiguration vor dem Build
+
+Wenn `BLACKSTOCK_PRODUCTION_RELEASE=1` gesetzt ist, bricht `Build/package.sh` bereits **vor** der Kompilierung ab, wenn die Produktionskonfiguration nicht fail-closed gültig ist. `Build/validate_production_package_config.py` verlangt:
+
+- eine absolute HTTPS-Manifest-URL auf einem realen Host, ohne eingebettete Zugangsdaten oder Fragment,
+- einen Base64-kodierten 32-Byte-Update-Public-Key,
+- eine ASCII-alphanumerische Apple-Installer-Team-ID.
+
+Zusätzlich muss der Produktionsmodus Developer-ID-App-/Installer-Identitäten und vollständige Notarisierungsdaten besitzen; der CI-only E2E-Helper ist verboten.
+
+Die Developer-ID-Application-Signatur verwendet Hardened Runtime plus `Build/Blackstock.entitlements`. Die vollständige Produktions-Evidenz verlangt deshalb zusätzlich:
+
+- `cameraEntitlementVerified = true`
+- `audioInputEntitlementVerified = true`
+
+Damit wird verifiziert, dass die installierte Produktions-App die Resource-Access-Entitlements `com.apple.security.device.camera` und `com.apple.security.device.audio-input` tatsächlich in ihrer Codesign-Signatur trägt.
+
 ## 2. Produktionspaket erzeugen
 
 Beispiel:
