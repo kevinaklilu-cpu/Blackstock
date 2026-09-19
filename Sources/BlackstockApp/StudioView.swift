@@ -531,7 +531,7 @@ struct StudioView: View {
                 Divider()
 
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Captions")
+                    Text("Untertitel")
                         .font(.headline)
 
                     Button {
@@ -548,7 +548,7 @@ struct StudioView: View {
                             Label(
                                 state.isTranscribing
                                     ? "Transkription läuft …"
-                                    : "On-Device-Captions erstellen",
+                                    : "Lokale Untertitel erstellen",
                                 systemImage: "captions.bubble"
                             )
                         }
@@ -963,9 +963,9 @@ struct StudioView: View {
         case .storyboard:
             return "Lege die Beats und ihre Funktion fest. Danach wird die Bearbeitung freigeschaltet."
         case .editing:
-            return "Trim, Reframe, Captions, Audio-Prüfung und Render sind jetzt verfügbar."
+            return "Schnitt, Neuausrichtung, Untertitel, Audio-Prüfung und Rendering sind jetzt verfügbar."
         case .packaging:
-            return "Bearbeitung ist eingefroren; Metadaten, Thumbnail, Captions und Prüfung folgen."
+            return "Bearbeitung ist eingefroren; Metadaten, Vorschaubild, Untertitel und Prüfung folgen."
         case .review:
             return "Alle Freigabeprüfungen müssen belegt sein, bevor die Veröffentlichung starten darf."
         case .publishing:
