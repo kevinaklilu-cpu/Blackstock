@@ -402,6 +402,24 @@ jobs:
             exit 1
           fi
 
+      - name: Update signing key-pair audit
+        run: |
+          set -euo pipefail
+          PRIVATE="$(swift -e 'import CryptoKit; import Foundation; print(Curve25519.Signing.PrivateKey().rawRepresentation.base64EncodedString())')"
+          PUBLIC="$(BLACKSTOCK_UPDATE_PRIVATE_KEY_BASE64="$PRIVATE" swift -e 'import CryptoKit; import Foundation; let raw = Data(base64Encoded: ProcessInfo.processInfo.environment["BLACKSTOCK_UPDATE_PRIVATE_KEY_BASE64"]!)!; let key = try! Curve25519.Signing.PrivateKey(rawRepresentation: raw); print(key.publicKey.rawRepresentation.base64EncodedString())')"
+
+          BLACKSTOCK_UPDATE_PRIVATE_KEY_BASE64="$PRIVATE" \
+          BLACKSTOCK_UPDATE_PUBLIC_KEY_BASE64="$PUBLIC" \
+            swift Build/verify_update_key_pair.swift
+
+          OTHER_PRIVATE="$(swift -e 'import CryptoKit; import Foundation; print(Curve25519.Signing.PrivateKey().rawRepresentation.base64EncodedString())')"
+          if BLACKSTOCK_UPDATE_PRIVATE_KEY_BASE64="$OTHER_PRIVATE" \
+             BLACKSTOCK_UPDATE_PUBLIC_KEY_BASE64="$PUBLIC" \
+             swift Build/verify_update_key_pair.swift; then
+            echo "Mismatched update signing keys were unexpectedly accepted." >&2
+            exit 1
+          fi
+
       - name: Production release workflow audit
         run: python3 Build/audit_production_release_workflows.py
       - name: Production package fail-closed audit
