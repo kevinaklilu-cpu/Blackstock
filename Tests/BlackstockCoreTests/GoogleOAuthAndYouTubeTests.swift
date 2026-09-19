@@ -46,6 +46,70 @@ final class GoogleOAuthAndYouTubeTests: XCTestCase {
         }
     }
 
+    func testOAuthJSONRejectsMissingAndInvalidClientIDs() throws {
+        let missing = Data(#"""
+        {"installed":{"client_id":"   ","redirect_uris":["http://localhost"]}}
+        """#.utf8)
+        XCTAssertThrowsError(
+            try OAuthClientConfiguration.parseGoogleDesktopJSON(
+                missing
+            )
+        ) {
+            XCTAssertEqual(
+                $0 as? OAuthClientConfigurationError,
+                .missingClientID
+            )
+        }
+
+        let invalid = Data(#"""
+        {"installed":{"client_id":"not-a-google-client","redirect_uris":["http://localhost"]}}
+        """#.utf8)
+        XCTAssertThrowsError(
+            try OAuthClientConfiguration.parseGoogleDesktopJSON(
+                invalid
+            )
+        ) {
+            XCTAssertEqual(
+                $0 as? OAuthClientConfigurationError,
+                .invalidClientID
+            )
+        }
+    }
+
+    func testOAuthJSONDoesNotExposeOrPersistClientSecret() throws {
+        let data = Data(#"""
+        {
+          "installed": {
+            "client_id": "abc.apps.googleusercontent.com",
+            "client_secret": "must-not-be-retained",
+            "project_id": "project-123",
+            "redirect_uris": ["http://localhost"]
+          }
+        }
+        """#.utf8)
+
+        let config =
+            try OAuthClientConfiguration
+                .parseGoogleDesktopJSON(data)
+
+        XCTAssertEqual(
+            config.clientID,
+            "abc.apps.googleusercontent.com"
+        )
+        XCTAssertEqual(config.projectID, "project-123")
+        XCTAssertEqual(
+            config.redirectURIs,
+            ["http://localhost"]
+        )
+
+        let reflected = String(
+            reflecting: config
+        )
+        XCTAssertFalse(
+            reflected.contains("must-not-be-retained")
+        )
+    }
+
     func testImportedOAuthClientIDOverridesBundledConfiguration() {
         XCTAssertEqual(
             OAuthClientConfiguration.preferredClientID(
