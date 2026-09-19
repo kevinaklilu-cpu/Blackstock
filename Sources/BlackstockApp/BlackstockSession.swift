@@ -9,6 +9,7 @@ private enum PublishingSessionError: Error, LocalizedError {
     case missingToken
     case browserOpenFailed
     case providerRejected(String)
+    case oauthClientChanged
 
     var errorDescription: String? {
         switch self {
@@ -20,6 +21,8 @@ private enum PublishingSessionError: Error, LocalizedError {
             return "Der Systembrowser konnte nicht geöffnet werden."
         case .providerRejected(let message):
             return "Google hat die Autorisierung abgelehnt: \(message)"
+        case .oauthClientChanged:
+            return "Die aktive Google-OAuth-Konfiguration hat sich seit der Kanal-Autorisierung geändert. Autorisiere den Kanal erneut."
         }
     }
 }
@@ -54,11 +57,14 @@ final class BlackstockSession: ObservableObject {
     @Published var isAuthorizingAnalytics = false
     @Published var isCollectingAnalytics = false
     @Published private(set) var latestGrowthLearning: GrowthLearningRecord?
+    @Published private(set) var importedOAuthClientID: String
 
     private var tokenSet: GoogleOAuthTokenSet?
     private var cachedPublishingJournal: ExternalActionJournal?
 
     init() {
+        importedOAuthClientID = BlackstockKeychain.read("google.oauth.importedClientID")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         onboardingComplete = UserDefaults.standard.bool(forKey: "blackstock.firstRun.complete")
         activeProject = Self.loadStoredProject()
         activeOpportunitySource = Self.loadStoredSource()
@@ -72,16 +78,27 @@ final class BlackstockSession: ObservableObject {
     }
 
     var oauthConfigurationSource: String {
-        if !bundledClientID.isEmpty { return "Blackstock-Konfiguration" }
         if !importedClientID.isEmpty { return "Eigene OAuth-JSON" }
+        if !bundledClientID.isEmpty { return "Blackstock-Konfiguration" }
         return "Nicht konfiguriert"
     }
 
     func importOAuthJSON(from url: URL) {
+        let hasSecurityScopedAccess = url.startAccessingSecurityScopedResource()
+        defer {
+            if hasSecurityScopedAccess {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
         do {
-            let data = try Data(contentsOf: url)
+            let data = try Data(contentsOf: url, options: .mappedIfSafe)
             let config = try OAuthClientConfiguration.parseGoogleDesktopJSON(data)
             try BlackstockKeychain.write(config.clientID, account: "google.oauth.importedClientID")
+            importedOAuthClientID = config.clientID
+            tokenSet = nil
+            publishingAuthorizedChannelID = nil
+            analyticsAuthorizedChannelID = nil
             errorMessage = nil
         } catch {
             errorMessage = "OAuth-JSON konnte nicht übernommen werden: \(describe(error))"
@@ -90,7 +107,11 @@ final class BlackstockSession: ObservableObject {
 
     func removeImportedOAuthConfiguration() {
         do {
-            try BlackstockKeychain.write("", account: "google.oauth.importedClientID")
+            try BlackstockKeychain.delete("google.oauth.importedClientID")
+            importedOAuthClientID = ""
+            tokenSet = nil
+            publishingAuthorizedChannelID = nil
+            analyticsAuthorizedChannelID = nil
             errorMessage = nil
         } catch {
             errorMessage = "OAuth-Konfiguration konnte nicht entfernt werden: \(describe(error))"
@@ -175,6 +196,10 @@ final class BlackstockSession: ObservableObject {
                 if let scope = tokenSet.scope {
                     try BlackstockKeychain.write(scope, account: "youtube.\(id).scopes")
                 }
+                try BlackstockKeychain.write(
+                    effectiveClientID,
+                    account: "youtube.\(id).oauthClientID"
+                )
             }
             step = .topic
             errorMessage = nil
@@ -291,6 +316,10 @@ final class BlackstockSession: ObservableObject {
             try BlackstockKeychain.write(
                 grantedScopeString,
                 account: "youtube.\(project.targetChannelID).scopes"
+            )
+            try BlackstockKeychain.write(
+                effectiveClientID,
+                account: "youtube.\(project.targetChannelID).oauthClientID"
             )
 
             tokenSet = tokens
@@ -504,6 +533,10 @@ final class BlackstockSession: ObservableObject {
                 grantedScopeString,
                 account: "youtube.\(project.targetChannelID).scopes"
             )
+            try BlackstockKeychain.write(
+                effectiveClientID,
+                account: "youtube.\(project.targetChannelID).oauthClientID"
+            )
 
             tokenSet = tokens
             analyticsAuthorizedChannelID = project.targetChannelID
@@ -605,6 +638,7 @@ final class BlackstockSession: ObservableObject {
         guard plan.state == .alreadyAuthorized else {
             throw PublishingSessionError.missingScopes
         }
+        try validateStoredOAuthClient(for: targetChannelID)
 
         let refreshToken = BlackstockKeychain.read(
             "youtube.\(targetChannelID).refreshToken"
@@ -643,6 +677,7 @@ final class BlackstockSession: ObservableObject {
         guard plan.state == .alreadyAuthorized else {
             throw PublishingSessionError.missingScopes
         }
+        try validateStoredOAuthClient(for: targetChannelID)
 
         let refreshToken = BlackstockKeychain.read(
             "youtube.\(targetChannelID).refreshToken"
@@ -1080,12 +1115,26 @@ final class BlackstockSession: ObservableObject {
     }
 
     private var importedClientID: String {
-        BlackstockKeychain.read("google.oauth.importedClientID")
+        importedOAuthClientID
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private var effectiveClientID: String {
-        bundledClientID.isEmpty ? importedClientID : bundledClientID
+        OAuthClientConfiguration.preferredClientID(
+            bundled: bundledClientID,
+            imported: importedClientID
+        )
+    }
+
+    private func validateStoredOAuthClient(for channelID: String) throws {
+        let storedClientID = BlackstockKeychain.read(
+            "youtube.\(channelID).oauthClientID"
+        )
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard storedClientID.isEmpty || storedClientID == effectiveClientID else {
+            throw PublishingSessionError.oauthClientChanged
+        }
     }
 
     private func persist(strategy: ChannelStrategy) throws {

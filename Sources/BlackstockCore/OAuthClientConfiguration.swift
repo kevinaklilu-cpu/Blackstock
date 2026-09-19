@@ -15,6 +15,12 @@ public struct OAuthClientConfiguration: Sendable, Equatable {
         guard id.hasSuffix(".apps.googleusercontent.com") else { throw OAuthClientConfigurationError.invalidClientID }
         return OAuthClientConfiguration(clientID: id, projectID: installed.projectID, redirectURIs: installed.redirectURIs ?? [])
     }
+
+    public static func preferredClientID(bundled: String, imported: String) -> String {
+        let importedValue = imported.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !importedValue.isEmpty { return importedValue }
+        return bundled.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 }
 
 private struct Envelope: Decodable { let installed: Installed? }

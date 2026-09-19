@@ -46,6 +46,23 @@ final class GoogleOAuthAndYouTubeTests: XCTestCase {
         }
     }
 
+    func testImportedOAuthClientIDOverridesBundledConfiguration() {
+        XCTAssertEqual(
+            OAuthClientConfiguration.preferredClientID(
+                bundled: "bundled.apps.googleusercontent.com",
+                imported: " imported.apps.googleusercontent.com "
+            ),
+            "imported.apps.googleusercontent.com"
+        )
+        XCTAssertEqual(
+            OAuthClientConfiguration.preferredClientID(
+                bundled: " bundled.apps.googleusercontent.com ",
+                imported: "  "
+            ),
+            "bundled.apps.googleusercontent.com"
+        )
+    }
+
     func testActionBrokerStillRequiresConfirmationForRemoteHighImpact() {
         XCTAssertFalse(
             ActionAuthorization(

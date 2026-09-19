@@ -35,6 +35,18 @@ enum BlackstockKeychain {
         guard status == errSecSuccess else { throw KeychainError.status(status) }
     }
 
+    static func delete(_ account: String) throws {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account
+        ]
+        let status = SecItemDelete(query as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw KeychainError.status(status)
+        }
+    }
+
     enum KeychainError: Error { case status(OSStatus) }
 }
 #endif
