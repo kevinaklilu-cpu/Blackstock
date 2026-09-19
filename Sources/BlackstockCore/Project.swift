@@ -35,6 +35,11 @@ public struct BlackstockProject: Codable, Sendable, Equatable, Identifiable {
     }
 }
 
+public enum RenderRequestedQuality: String, Codable, Sendable, Equatable {
+    case upTo1080p = "UP_TO_1080P"
+    case upTo4K = "UP_TO_4K"
+}
+
 public struct RenderArtifact: Codable, Sendable, Equatable, Identifiable {
     public static let currentValidationVersion = "render-technical-v1"
 
@@ -45,6 +50,8 @@ public struct RenderArtifact: Codable, Sendable, Equatable, Identifiable {
     public let mimeType: String
     public let validated: Bool
     public let validationVersion: String?
+    public let requestedQuality: RenderRequestedQuality?
+    public let technicalSnapshot: RenderTechnicalSnapshot?
     public let createdAt: Date
 
     public init(
@@ -55,6 +62,8 @@ public struct RenderArtifact: Codable, Sendable, Equatable, Identifiable {
         mimeType: String,
         validated: Bool,
         validationVersion: String? = RenderArtifact.currentValidationVersion,
+        requestedQuality: RenderRequestedQuality? = nil,
+        technicalSnapshot: RenderTechnicalSnapshot? = nil,
         createdAt: Date
     ) {
         self.id = id
@@ -64,6 +73,8 @@ public struct RenderArtifact: Codable, Sendable, Equatable, Identifiable {
         self.mimeType = mimeType
         self.validated = validated
         self.validationVersion = validationVersion
+        self.requestedQuality = requestedQuality
+        self.technicalSnapshot = technicalSnapshot
         self.createdAt = createdAt
     }
 

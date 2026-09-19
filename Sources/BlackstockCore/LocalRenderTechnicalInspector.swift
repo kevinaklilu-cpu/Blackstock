@@ -3,7 +3,7 @@ import Foundation
 @preconcurrency import AVFoundation
 import CoreGraphics
 
-public struct RenderTechnicalSnapshot: Sendable, Equatable {
+public struct RenderTechnicalSnapshot: Codable, Sendable, Equatable {
     public let fileSizeBytes: Int64
     public let durationSeconds: Double
     public let videoTrackCount: Int
@@ -25,6 +25,22 @@ public struct RenderTechnicalSnapshot: Sendable, Equatable {
         self.width = width
         self.height = height
         self.inspectedAt = inspectedAt
+    }
+
+    public var longEdgePixels: Int {
+        max(width, height)
+    }
+
+    public var shortEdgePixels: Int {
+        min(width, height)
+    }
+
+    public var meetsFullHDOrGreater: Bool {
+        longEdgePixels >= 1_920 && shortEdgePixels >= 1_080
+    }
+
+    public var meetsUHD4KOrGreater: Bool {
+        longEdgePixels >= 3_840 && shortEdgePixels >= 2_160
     }
 }
 

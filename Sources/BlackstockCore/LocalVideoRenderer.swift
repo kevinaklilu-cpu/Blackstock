@@ -7,6 +7,13 @@ public enum LocalRenderPreset: String, Codable, Sendable, CaseIterable, Hashable
     case hd1080
     case uhd4K
 
+    public var requestedQuality: RenderRequestedQuality {
+        switch self {
+        case .hd1080: return .upTo1080p
+        case .uhd4K: return .upTo4K
+        }
+    }
+
     var avPresetName: String {
         switch self {
         case .hd1080: return AVAssetExportPreset1920x1080
@@ -210,6 +217,8 @@ public actor LocalVideoRenderer {
             sha256: sha256,
             mimeType: "video/mp4",
             validated: true,
+            requestedQuality: preset.requestedQuality,
+            technicalSnapshot: technicalAssessment.snapshot,
             createdAt: Date()
         )
     }
