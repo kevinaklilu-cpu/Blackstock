@@ -398,6 +398,8 @@ jobs:
             exit 1
           fi
 
+      - name: Production release workflow audit
+        run: python3 Build/audit_production_release_workflows.py
       - name: Swift tests
         run: swift test
       - name: Release build
