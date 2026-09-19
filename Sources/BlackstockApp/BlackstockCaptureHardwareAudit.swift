@@ -186,7 +186,12 @@ enum BlackstockCaptureHardwareAudit {
         let osVersion = ProcessInfo.processInfo
             .operatingSystemVersionString
         let model = hardwareModel()
-        let installed = installedFromPackage()
+        let receipt = installerReceiptMetadata(
+            expectedVersion: metadata.version
+        )
+        let installed = installedFromPackage(
+            receiptVerified: receipt.verified
+        )
         let executableSHA256 =
             Bundle.main.executableURL
                 .flatMap { sha256(of: $0) } ?? ""
@@ -205,6 +210,12 @@ enum BlackstockCaptureHardwareAudit {
            existing.hardwareModel == model,
            existing.installedFromPackage
                 == installed,
+           existing.installerReceiptPackageID
+                == receipt.packageID,
+           existing.installerReceiptVersion
+                == receipt.version,
+           existing.installerReceiptVerified
+                == receipt.verified,
            existing.applicationTeamID
                 == signing.teamID,
            existing.developerIDApplicationVerified
@@ -225,6 +236,12 @@ enum BlackstockCaptureHardwareAudit {
             macOSVersion: osVersion,
             hardwareModel: model,
             installedFromPackage: installed,
+            installerReceiptPackageID:
+                receipt.packageID,
+            installerReceiptVersion:
+                receipt.version,
+            installerReceiptVerified:
+                receipt.verified,
             applicationTeamID: signing.teamID,
             developerIDApplicationVerified:
                 signing.verified,
@@ -397,11 +414,75 @@ enum BlackstockCaptureHardwareAudit {
         }
     }
 
-    private static func installedFromPackage()
-        -> Bool {
-        Bundle.main.bundleURL
-            .standardizedFileURL.path
-            == "/Applications/Blackstock.app"
+    private static func installerReceiptMetadata(
+        expectedVersion: String
+    ) -> (
+        packageID: String,
+        version: String,
+        verified: Bool
+    ) {
+        let expectedPackageID = "de.blackstock.app"
+        let process = Process()
+        process.executableURL = URL(
+            fileURLWithPath: "/usr/sbin/pkgutil"
+        )
+        process.arguments = [
+            "--pkg-info-plist",
+            expectedPackageID
+        ]
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+            guard process.terminationStatus == 0 else {
+                return ("", "", false)
+            }
+            let data = pipe.fileHandleForReading
+                .readDataToEndOfFile()
+            guard let plist =
+                    try PropertyListSerialization
+                        .propertyList(
+                            from: data,
+                            options: [],
+                            format: nil
+                        ) as? [String: Any],
+                  let packageID =
+                    plist["pkgid"] as? String,
+                  let version =
+                    plist["pkg-version"] as? String else {
+                return ("", "", false)
+            }
+
+            let volume =
+                plist["volume"] as? String
+            let installLocation =
+                plist["install-location"] as? String
+            let verified =
+                packageID == expectedPackageID
+                && version == expectedVersion
+                && volume == "/"
+                && installLocation == "/"
+            return (
+                packageID,
+                version,
+                verified
+            )
+        } catch {
+            return ("", "", false)
+        }
+    }
+
+    private static func installedFromPackage(
+        receiptVerified: Bool
+    ) -> Bool {
+        receiptVerified
+            && Bundle.main.bundleURL
+                .standardizedFileURL.path
+                == "/Applications/Blackstock.app"
     }
 
     private static func hardwareModel() -> String {
