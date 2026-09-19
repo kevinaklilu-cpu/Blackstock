@@ -661,7 +661,7 @@ private struct ResearchAnalysisJourneyView: View {
     var body: some View {
         GroupBox(
             project.stage == .research
-                ? "Recherche-Evidence"
+                ? "Recherchebelege"
                 : "Analyse & Produktionsentscheidung"
         ) {
             VStack(alignment: .leading, spacing: 12) {
@@ -726,10 +726,10 @@ private struct ResearchAnalysisJourneyView: View {
                 .frame(minHeight: 90)
                 .overlay(
                     RoundedRectangle(cornerRadius: 6)
-                        .stroke(.separator)
+                        .stroke(Color.secondary.opacity(0.25))
                 )
 
-            Text("Provider-Fakten werden nicht überschrieben. Deine Einordnung wird separat als Creator-Evidence gespeichert.")
+            Text("Provider-Fakten werden nicht überschrieben. Deine eigene Einordnung wird separat gespeichert.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -747,7 +747,7 @@ private struct ResearchAnalysisJourneyView: View {
             .buttonStyle(.borderedProminent)
         } else {
             Label(
-                "Gebundene Recherche-Evidence fehlt. Das Projekt kann nicht fortgesetzt werden.",
+                "Gebundene Recherchebelege fehlen. Das Projekt kann nicht fortgesetzt werden.",
                 systemImage: "exclamationmark.triangle"
             )
             .foregroundStyle(.red)
@@ -815,7 +815,7 @@ private struct ResearchAnalysisJourneyView: View {
             .buttonStyle(.borderedProminent)
         } else {
             Label(
-                "Vollständige Recherche-Evidence fehlt. Analyse ist gesperrt.",
+                "Vollständige Recherchebelege fehlen. Analyse ist gesperrt.",
                 systemImage: "lock.fill"
             )
         }
