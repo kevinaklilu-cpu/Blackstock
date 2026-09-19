@@ -47,6 +47,7 @@ required = [
     "installedAppVersion",
     "installedAppBuild",
     "installedAppSourceCommitSHA",
+    "installedAppExecutableSHA256",
     "cameraEntitlementVerified",
     "audioInputEntitlementVerified",
     "developerIDApplicationVerified",
@@ -58,7 +59,7 @@ for key in required:
     if key not in data:
         fail(f"missing field: {key}")
 
-if data["schemaVersion"] != 2:
+if data["schemaVersion"] != 3:
     fail("unsupported schemaVersion")
 
 try:
@@ -125,6 +126,12 @@ for label, value in [
         fail(f"{label} must be a 40-character hexadecimal Git commit SHA")
 if installed_source_commit != source_commit:
     fail("installedAppSourceCommitSHA must equal sourceCommitSHA")
+
+installed_executable_sha256 = str(
+    data["installedAppExecutableSHA256"]
+).strip().lower()
+if not re.fullmatch(r"[0-9a-f]{64}", installed_executable_sha256):
+    fail("installedAppExecutableSHA256 must be a 64-character hexadecimal SHA-256")
 
 team = str(data["installerTeamID"]).strip()
 if not re.fullmatch(r"[A-Za-z0-9]+", team):
