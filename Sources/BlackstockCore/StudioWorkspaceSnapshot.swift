@@ -45,6 +45,19 @@ public enum ProjectPackagingAssetKind: String, Codable, Sendable {
     case caption = "Captions"
 }
 
+public struct WorkspaceLoadResult: Sendable, Equatable {
+    public let snapshot: StudioWorkspaceSnapshot?
+    public let recoveredFromBackup: Bool
+
+    public init(
+        snapshot: StudioWorkspaceSnapshot?,
+        recoveredFromBackup: Bool
+    ) {
+        self.snapshot = snapshot
+        self.recoveredFromBackup = recoveredFromBackup
+    }
+}
+
 public struct ProjectWorkspaceStore: Sendable {
     public let rootURL: URL
 
@@ -236,40 +249,104 @@ public struct ProjectWorkspaceStore: Sendable {
         let directory = try projectDirectory(
             projectID: snapshot.projectID
         )
-        let url = directory.appendingPathComponent(
+        let primaryURL = directory.appendingPathComponent(
             "studio-workspace.json"
+        )
+        let backupURL = directory.appendingPathComponent(
+            "studio-workspace.backup.json"
         )
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.sortedKeys]
+
+        if FileManager.default.fileExists(atPath: primaryURL.path),
+           let primaryData = try? Data(contentsOf: primaryURL),
+           let primarySnapshot = try? decodeWorkspaceSnapshot(
+                primaryData,
+                expectedProjectID: snapshot.projectID
+           ) {
+            let backupData = try encoder.encode(primarySnapshot)
+            try backupData.write(to: backupURL, options: [.atomic])
+        }
+
         let data = try encoder.encode(snapshot)
-        try data.write(to: url, options: [.atomic])
+        try data.write(to: primaryURL, options: [.atomic])
     }
 
     public func load(
         projectID: UUID
     ) throws -> StudioWorkspaceSnapshot? {
-        let url = rootURL
-            .appendingPathComponent(
-                projectID.uuidString,
-                isDirectory: true
-            )
-            .appendingPathComponent(
-                "studio-workspace.json"
-            )
+        try loadWithRecovery(projectID: projectID).snapshot
+    }
 
-        guard FileManager.default.fileExists(
-            atPath: url.path
-        ) else {
-            return nil
+    public func loadWithRecovery(
+        projectID: UUID
+    ) throws -> WorkspaceLoadResult {
+        let directory = rootURL.appendingPathComponent(
+            projectID.uuidString,
+            isDirectory: true
+        )
+        let primaryURL = directory.appendingPathComponent(
+            "studio-workspace.json"
+        )
+        let backupURL = directory.appendingPathComponent(
+            "studio-workspace.backup.json"
+        )
+
+        let primaryExists = FileManager.default.fileExists(
+            atPath: primaryURL.path
+        )
+        let backupExists = FileManager.default.fileExists(
+            atPath: backupURL.path
+        )
+
+        guard primaryExists || backupExists else {
+            return WorkspaceLoadResult(
+                snapshot: nil,
+                recoveredFromBackup: false
+            )
         }
 
-        let data = try Data(contentsOf: url)
+        if primaryExists {
+            do {
+                let data = try Data(contentsOf: primaryURL)
+                let snapshot = try decodeWorkspaceSnapshot(
+                    data,
+                    expectedProjectID: projectID
+                )
+                return WorkspaceLoadResult(
+                    snapshot: snapshot,
+                    recoveredFromBackup: false
+                )
+            } catch {
+                guard backupExists else { throw error }
+            }
+        }
+
+        let backupData = try Data(contentsOf: backupURL)
+        let recovered = try decodeWorkspaceSnapshot(
+            backupData,
+            expectedProjectID: projectID
+        )
+        return WorkspaceLoadResult(
+            snapshot: recovered,
+            recoveredFromBackup: true
+        )
+    }
+
+    private func decodeWorkspaceSnapshot(
+        _ data: Data,
+        expectedProjectID: UUID
+    ) throws -> StudioWorkspaceSnapshot {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        return try decoder.decode(
+        let snapshot = try decoder.decode(
             StudioWorkspaceSnapshot.self,
             from: data
         )
+        guard snapshot.projectID == expectedProjectID else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        return snapshot
     }
 }
