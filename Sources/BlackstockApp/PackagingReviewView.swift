@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 import BlackstockCore
 
 struct PackagingReviewView: View {
+    @ObservedObject var session: BlackstockSession
     let project: BlackstockProject
     let asset: ProductionMediaAsset
     let artifact: RenderArtifact
@@ -22,6 +23,7 @@ struct PackagingReviewView: View {
     @State private var showThumbnailImporter = false
     @State private var showCaptionImporter = false
     @State private var manualChecks: Set<CreatorQualityArea> = []
+    @State private var persistedReview: CreatorQualityReview?
     @State private var manualNotes: [CreatorQualityArea: String] = [:]
 
     private let requiredQualityAreas: Set<CreatorQualityArea> = [
@@ -35,20 +37,55 @@ struct PackagingReviewView: View {
     ]
 
     init(
+        session: BlackstockSession,
         project: BlackstockProject,
         asset: ProductionMediaAsset,
         artifact: RenderArtifact,
         transcript: LocalTranscript?,
         generatedCaptionURL: URL?
     ) {
+        self.session = session
         self.project = project
         self.asset = asset
         self.artifact = artifact
         self.transcript = transcript
         self.generatedCaptionURL = generatedCaptionURL
-        _title = State(initialValue: project.title)
+        let saved = session.loadPublishPreparation(
+            projectID: project.id
+        )
+        _title = State(
+            initialValue: saved?.package.metadata.title
+                ?? project.title
+        )
+        _description = State(
+            initialValue: saved?.package.metadata.description
+                ?? ""
+        )
+        _tags = State(
+            initialValue: saved?.package.metadata.tags
+                .joined(separator: ", ")
+                ?? ""
+        )
+        _privacyStatus = State(
+            initialValue: saved?.package.metadata.privacyStatus
+                ?? .privateVideo
+        )
+        _madeForKids = State(
+            initialValue: saved?.package.metadata
+                .selfDeclaredMadeForKids
+                ?? false
+        )
+        _thumbnailURL = State(
+            initialValue: saved?.package.thumbnail?.fileURL
+        )
+        _captionTracks = State(
+            initialValue: saved?.package.captions ?? []
+        )
+        _persistedReview = State(
+            initialValue: saved?.qualityReview
+        )
 
-        if let generatedCaptionURL {
+        if saved == nil, let generatedCaptionURL {
             let language = transcript?.localeIdentifier ?? "de-DE"
             _captionTracks = State(
                 initialValue: [
@@ -86,10 +123,23 @@ struct PackagingReviewView: View {
     }
 
     private var qualityReview: CreatorQualityReview {
-        QualityReviewComposer().compose(
+        if let persistedReview {
+            return persistedReview
+        }
+        return QualityReviewComposer().compose(
             automatic: automaticQualityReview,
             manualAttestations: manualAttestations
         )
+    }
+
+    private var currentStage: BlackstockStage {
+        session.activeProject?.stage ?? project.stage
+    }
+
+    private var reviewFrozen: Bool {
+        currentStage == .review
+        || currentStage == .publishing
+        || currentStage == .published
     }
 
     private var missingAreas: [CreatorQualityArea] {
@@ -218,14 +268,17 @@ struct PackagingReviewView: View {
 
                 Picker("Sichtbarkeit", selection: $privacyStatus) {
                     Text("Privat").tag(YouTubePrivacyStatus.privateVideo)
-                    Text("Nicht gelistet").tag(YouTubePrivacyStatus.unlisted)
-                    Text("Öffentlich").tag(YouTubePrivacyStatus.publicVideo)
+                    if session.publicPublishingAllowed {
+                        Text("Nicht gelistet").tag(YouTubePrivacyStatus.unlisted)
+                        Text("Öffentlich").tag(YouTubePrivacyStatus.publicVideo)
+                    }
                 }
                 .pickerStyle(.segmented)
 
                 Toggle("Für Kinder erstellt", isOn: $madeForKids)
             }
             .padding(.vertical, 6)
+            .disabled(reviewFrozen)
         }
     }
 
@@ -263,6 +316,7 @@ struct PackagingReviewView: View {
                 }
             }
             .padding(.vertical, 6)
+            .disabled(reviewFrozen)
         }
     }
 
@@ -320,6 +374,7 @@ struct PackagingReviewView: View {
                     )
                     .toggleStyle(.switch)
                     .labelsHidden()
+                    .disabled(reviewFrozen)
                 }
             }
 
@@ -452,22 +507,97 @@ struct PackagingReviewView: View {
                     }
                 }
 
-                Button("Publishing vorbereiten") {
-                    _ = draftPackage
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(
-                    !missingAreas.isEmpty
-                    || draftPackage.metadata.title.isEmpty
-                )
+                if currentStage == .packaging {
+                    Button("Review abschließen") {
+                        do {
+                            let review = qualityReview
+                            try session.savePublishPreparation(
+                                package: draftPackage,
+                                qualityReview: review
+                            )
+                            persistedReview = review
+                            _ = session.advanceActiveProject(
+                                to: .review
+                            )
+                        } catch {
+                            session.errorMessage = "Review konnte nicht gespeichert werden: \(error.localizedDescription)"
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(
+                        !missingAreas.isEmpty
+                        || draftPackage.metadata.title.isEmpty
+                    )
 
-                Text("Noch keine Remote-Aktion. Der Button bleibt gesperrt, solange Release-Gates fehlen.")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    Text("Der Review-Snapshot wird vor dem Statuswechsel gespeichert. Noch keine Remote-Aktion.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                } else if currentStage == .review
+                            || currentStage == .publishing
+                            || currentStage == .published {
+                    publishingAuthorizationPanel
+                }
             }
             .padding(20)
         }
         .background(Color.primary.opacity(0.02))
+    }
+
+    @ViewBuilder
+    private var publishingAuthorizationPanel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(
+                "Review gespeichert",
+                systemImage: "checkmark.seal.fill"
+            )
+            .foregroundStyle(.green)
+
+            if session.publishingAuthorizedChannelID
+                == project.targetChannelID {
+                Label(
+                    "Publishing-Berechtigung für diesen Zielkanal verifiziert",
+                    systemImage: "person.crop.circle.badge.checkmark"
+                )
+                .font(.caption)
+
+                Text("Der echte Upload bleibt bis zur finalen Remote-Bestätigung getrennt. Public/Unlisted ist nur nach extern verifiziertem YouTube-Compliance-Gate verfügbar.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            } else {
+                Button {
+                    Task {
+                        await session.authorizePublishing()
+                    }
+                } label: {
+                    HStack {
+                        if session.isAuthorizingPublishing {
+                            ProgressView().controlSize(.small)
+                        }
+                        Label(
+                            session.isAuthorizingPublishing
+                                ? "Google-Autorisierung läuft …"
+                                : "Publishing-Berechtigung aktivieren",
+                            systemImage: "key"
+                        )
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(session.isAuthorizingPublishing)
+
+                if let plan = session.publishingScopePlan(),
+                   plan.state == .reauthorizationRequired {
+                    Text("Blackstock fordert gezielt die fehlenden YouTube-Upload-/Packaging-Berechtigungen an und prüft danach den Projekt-Zielkanal erneut.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if let error = session.errorMessage {
+                Label(error, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+        }
     }
 
     private func qualityRow(
