@@ -13,6 +13,8 @@ public enum CaptionTechnicalBlocker: String, Sendable, Equatable, CaseIterable {
     case noTimedCues
     case invalidCueTiming
     case emptyCueText
+    case nonMonotonicCueOrder
+    case overlappingCues
 }
 
 public struct CaptionTechnicalSnapshot: Sendable, Equatable {
@@ -150,6 +152,17 @@ public struct CaptionTechnicalInspector: Sendable {
 
         if cues.isEmpty {
             blockers.append(.noTimedCues)
+        } else {
+            for index in cues.indices.dropFirst() {
+                let previous = cues[index - 1]
+                let current = cues[index]
+                if current.start < previous.start {
+                    blockers.append(.nonMonotonicCueOrder)
+                }
+                if current.start < previous.end {
+                    blockers.append(.overlappingCues)
+                }
+            }
         }
 
         return assessment(

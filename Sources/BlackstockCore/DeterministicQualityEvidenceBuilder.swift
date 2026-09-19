@@ -74,9 +74,19 @@ public struct DeterministicQualityEvidenceBuilder: Sendable {
             let averageConfidence = transcript.segments
                 .map { Double($0.confidence) }
                 .reduce(0, +) / Double(transcript.segments.count)
+
+            let technicalAssessment = try? CaptionTechnicalInspector()
+                .inspect(url: captionURL, now: reviewedAt)
+            let blockers = technicalAssessment?.blockers ?? [.unsupportedFormat]
+            let isTechnicallyValid = technicalAssessment?.uploadCompatible == true
+            let blockerText = blockers.map(\.rawValue).joined(separator: ", ")
+            let technicalText = isTechnicallyValid
+                ? "Caption-Datei technisch valide; Cue-Reihenfolge und Timing ohne technische Blocker."
+                : "Caption-Datei technisch nicht valide; Blocker: \(blockerText)."
+
             let captionEvidence = QualityEvidence(
-                source: "Blackstock Local Speech",
-                observedFact: "On-Device-Transkript mit \(transcript.segments.count) Segmenten und WebVTT-Datei vorhanden; mittlere Segment-Confidence \(String(format: "%.2f", averageConfidence)).",
+                source: "Blackstock Caption Technical Validation",
+                observedFact: "On-Device-Transkript mit \(transcript.segments.count) Segmenten; mittlere Segment-Confidence \(String(format: "%.2f", averageConfidence)). \(technicalText)",
                 reference: captionURL.lastPathComponent,
                 observedAt: reviewedAt
             )
@@ -84,12 +94,18 @@ public struct DeterministicQualityEvidenceBuilder: Sendable {
             findings.append(
                 QualityFinding(
                     area: .captions,
-                    severity: averageConfidence < 0.70 ? .warning : .info,
-                    title: "Captions lokal erzeugt",
+                    severity: isTechnicallyValid
+                        ? (averageConfidence < 0.70 ? .warning : .info)
+                        : .blocker,
+                    title: isTechnicallyValid
+                        ? "Captions lokal erzeugt und technisch validiert"
+                        : "Caption-Datei technisch blockiert",
                     explanation: captionEvidence.observedFact,
-                    recommendedAction: averageConfidence < 0.70
-                        ? "Caption-Text vor Veröffentlichung manuell gegen das Video prüfen."
-                        : "Captions im Review stichprobenartig prüfen.",
+                    recommendedAction: !isTechnicallyValid
+                        ? "Caption-Datei neu erzeugen oder Cue-Timing korrigieren."
+                        : (averageConfidence < 0.70
+                            ? "Caption-Text vor Veröffentlichung manuell gegen das Video prüfen."
+                            : "Captions im Review stichprobenartig prüfen."),
                     evidenceIDs: [captionEvidence.id]
                 )
             )
