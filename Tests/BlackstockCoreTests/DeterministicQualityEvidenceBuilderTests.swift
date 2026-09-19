@@ -180,4 +180,51 @@ final class DeterministicQualityEvidenceBuilderTests: XCTestCase {
         XCTAssertFalse(review.coveredAreas.contains(.audio))
     }
 
+    func testThumbnailFactsBecomeEvidenceWithoutAutoPassingPackaging() {
+        let projectID = UUID()
+        let asset = ProductionMediaAsset(
+            displayName: "video.mov",
+            sourceURL: URL(fileURLWithPath: "/tmp/video.mov"),
+            durationSeconds: 10,
+            authorization: .owned,
+            rightsEvidence: ["eigene Aufnahme"],
+            rightsAttestation: .init(
+                confirmedByUser: true,
+                attestedAt: Date()
+            ),
+            importedAt: Date()
+        )
+        let artifact = RenderArtifact(
+            projectID: projectID,
+            fileURL: URL(fileURLWithPath: "/tmp/video.mp4"),
+            sha256: "abc",
+            mimeType: "video/mp4",
+            validated: true,
+            createdAt: Date()
+        )
+        let thumbnail = ThumbnailTechnicalAssessment.evaluate(
+            .init(
+                width: 3840,
+                height: 2160,
+                fileSizeBytes: 1_000_000,
+                mimeType: "image/jpeg",
+                inspectedAt: Date()
+            )
+        )
+
+        let review = DeterministicQualityEvidenceBuilder().build(
+            projectID: projectID,
+            asset: asset,
+            artifact: artifact,
+            thumbnailAssessment: thumbnail
+        )
+
+        XCTAssertTrue(
+            review.evidence.contains {
+                $0.source == "Blackstock Thumbnail Technical Inspector"
+            }
+        )
+        XCTAssertFalse(review.coveredAreas.contains(.packaging))
+    }
+
 }
