@@ -983,7 +983,7 @@ struct PackagingReviewView: View {
                         Label(
                             session.isAuthorizingPublishing
                                 ? "Google-Autorisierung läuft …"
-                                : "Publishing-Berechtigung aktivieren",
+                                : "Veröffentlichungsberechtigung aktivieren",
                             systemImage: "key"
                         )
                     }
