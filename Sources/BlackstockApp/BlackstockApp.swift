@@ -116,7 +116,7 @@ private struct CommandPaletteView: View {
             .init(
                 id: "overview",
                 title: "Übersicht öffnen",
-                subtitle: "Zum aktuellen Blackstock-Workspace",
+                subtitle: "Zum aktuellen Blackstock-Arbeitsbereich",
                 systemImage: "rectangle.grid.2x2",
                 destination: "Übersicht",
                 isDestructive: false
@@ -147,8 +147,8 @@ private struct CommandPaletteView: View {
             ),
             .init(
                 id: "restart-first-run",
-                title: "First Run erneut starten",
-                subtitle: "Workspace-Auswahl und Einrichtung erneut durchlaufen",
+                title: "Ersteinrichtung erneut starten",
+                subtitle: "Arbeitsbereich-Auswahl und Einrichtung erneut durchlaufen",
                 systemImage: "arrow.counterclockwise",
                 destination: nil,
                 isDestructive: true
@@ -229,7 +229,7 @@ private struct OverviewView: View {
         VStack(alignment: .leading, spacing: 18) {
             Text("Blackstock")
                 .font(.largeTitle.bold())
-            Text("Creator Intelligence, Research, Production, Publishing & Growth OS")
+            Text("Creator-System für Recherche, Produktion, Veröffentlichung und Wachstum")
                 .font(.title3)
                 .foregroundStyle(.secondary)
 
@@ -267,7 +267,7 @@ private struct OverviewView: View {
         project: BlackstockProject,
         record: PublishedVideoRecord
     ) -> some View {
-        GroupBox("Publishing → Analytics → Lernen") {
+        GroupBox("Veröffentlichung → Analytics → Lernen") {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
@@ -407,7 +407,7 @@ private struct OverviewView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("YouTube-Kommentare")
                                 .font(.headline)
-                            Text("Read-only · Top-Level-Threads")
+                            Text("Nur lesen · Hauptkommentare")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -510,7 +510,7 @@ private struct OverviewView: View {
 
                             if page.threads.count > 8
                                 || page.nextPageToken != nil {
-                                Text("Weitere Kommentare sind bei YouTube vorhanden; diese Ansicht zeigt bewusst nur einen begrenzten read-only Ausschnitt.")
+                                Text("Weitere Kommentare sind bei YouTube vorhanden; diese Ansicht zeigt bewusst nur einen begrenzten Ausschnitt.")
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                             }
@@ -616,7 +616,7 @@ private struct SettingsView: View {
 
             GroupBox("Datenschutz & lokale Daten") {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Blackstock speichert Projekt-, Growth- und Workspace-Daten lokal im Benutzerprofil. Google-/YouTube-Zugangsdaten liegen im macOS-Keychain.")
+                    Text("Blackstock speichert Projekt-, Wachstums- und Arbeitsbereichsdaten lokal im Benutzerprofil. Google-/YouTube-Zugangsdaten liegen im macOS-Keychain.")
 
                     Button(
                         "Alle lokalen Blackstock-Daten löschen",
@@ -661,7 +661,7 @@ private struct SettingsView: View {
                 Text("Diese Aktion ist lokal endgültig. Sie löscht keine bereits veröffentlichten YouTube-Videos und widerruft keine Berechtigungen direkt im Google-Konto.")
             }
 
-            Button("First Run erneut starten", role: .destructive) {
+            Button("Ersteinrichtung erneut starten", role: .destructive) {
                 session.resetFirstRun()
             }
 
