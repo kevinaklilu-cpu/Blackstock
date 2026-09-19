@@ -8,6 +8,7 @@ struct CaptureCapabilityPanel: View {
     @State private var snapshot = CaptureCapabilityProbe().inspect()
     @State private var requesting: CaptureKind?
     @StateObject private var cameraRecorder = CameraCaptureRecorder()
+    @StateObject private var microphoneRecorder = MicrophoneCaptureRecorder()
     @StateObject private var screenRecorder = ScreenCaptureRecorder()
 
     var body: some View {
@@ -40,6 +41,9 @@ struct CaptureCapabilityPanel: View {
                         } else if kind == .camera,
                                   capability?.isReady == true {
                             cameraRecordingButton
+                        } else if kind == .microphone,
+                                  capability?.isReady == true {
+                            microphoneRecordingButton
                         } else if kind == .screen,
                                   capability?.isReady == true {
                             screenRecordingButton
@@ -58,6 +62,9 @@ struct CaptureCapabilityPanel: View {
                 }
 
                 if let error = cameraRecorder.errorMessage {
+                    captureError(error)
+                }
+                if let error = microphoneRecorder.errorMessage {
                     captureError(error)
                 }
                 if let error = screenRecorder.errorMessage {
@@ -81,6 +88,12 @@ struct CaptureCapabilityPanel: View {
         ) { url in
             guard let url else { return }
             onRecordedMedia(url, .camera)
+        }
+        .onChange(
+            of: microphoneRecorder.completedRecordingURL
+        ) { url in
+            guard let url else { return }
+            onRecordedMedia(url, .microphone)
         }
         .onChange(
             of: screenRecorder.completedRecordingURL
@@ -119,6 +132,7 @@ struct CaptureCapabilityPanel: View {
         .disabled(
             requesting != nil
             || cameraRecorder.isRecording
+            || microphoneRecorder.isRecording
             || screenRecorder.isRecording
         )
     }
@@ -155,6 +169,48 @@ struct CaptureCapabilityPanel: View {
             }
             .disabled(
                 cameraRecorder.isPreparing
+                || microphoneRecorder.isPreparing
+                || microphoneRecorder.isRecording
+                || screenRecorder.isPreparing
+                || screenRecorder.isRecording
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var microphoneRecordingButton: some View {
+        if microphoneRecorder.isRecording {
+            Button(role: .destructive) {
+                microphoneRecorder.stopRecording()
+            } label: {
+                Label(
+                    "Mikrofon stoppen",
+                    systemImage: "stop.circle.fill"
+                )
+            }
+        } else {
+            Button {
+                Task {
+                    await microphoneRecorder.startRecording()
+                }
+            } label: {
+                HStack {
+                    if microphoneRecorder.isPreparing {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                    Label(
+                        microphoneRecorder.isPreparing
+                            ? "Mikrofon wird vorbereitet …"
+                            : "Mikrofon aufnehmen",
+                        systemImage: "record.circle"
+                    )
+                }
+            }
+            .disabled(
+                microphoneRecorder.isPreparing
+                || cameraRecorder.isPreparing
+                || cameraRecorder.isRecording
                 || screenRecorder.isPreparing
                 || screenRecorder.isRecording
             )
@@ -198,6 +254,8 @@ struct CaptureCapabilityPanel: View {
                 || screenRecorder.isPreparing
                 || cameraRecorder.isPreparing
                 || cameraRecorder.isRecording
+                || microphoneRecorder.isPreparing
+                || microphoneRecorder.isRecording
             )
         }
     }
@@ -219,16 +277,20 @@ struct CaptureCapabilityPanel: View {
             return "Kameraaufnahme läuft lokal. Ein freigegebenes Mikrofon wird in dieselbe Movie-Aufnahme eingebettet. Nach dem Stoppen folgt die Rechtebestätigung."
         }
 
+        if microphoneRecorder.isRecording {
+            return "Mikrofonaufnahme läuft lokal als zusätzliche Audioquelle. Nach dem Stoppen folgt die Rechtebestätigung; der Hauptvideo-Slot wird nicht überschrieben."
+        }
+
         if screenRecorder.isRecording {
             return "Bildschirmaufnahme läuft lokal. ScreenCaptureKit zeichnet Systemaudio mit auf und schließt Blackstocks eigenen Prozess aus. Nach dem Stoppen folgt die Rechtebestätigung."
         }
 
         if !screenRecorder.isSupportedOnCurrentOS {
-            return "Kameraaufnahme ist implementiert. Die direkte Bildschirm-/Systemaudio-Dateiaufzeichnung benötigt in diesem Build macOS 15 oder neuer; die Berechtigungen werden trotzdem getrennt und ehrlich ausgewiesen."
+            return "Kamera- und Mikrofonaufnahme sind implementiert. Die direkte Bildschirm-/Systemaudio-Dateiaufzeichnung benötigt in diesem Build macOS 15 oder neuer; die Berechtigungen werden trotzdem getrennt und ehrlich ausgewiesen."
         }
 
         if snapshot.allCanonicalCapturePathsReady {
-            return "Kamera inklusive optional freigegebenem Mikrofon sowie Bildschirm inklusive Systemaudio können lokal aufgezeichnet werden. Alle Ergebnisse durchlaufen vor der Projektübernahme die Rechtebestätigung."
+            return "Kamera, eigenständiges Mikrofon sowie Bildschirm inklusive Systemaudio können lokal aufgezeichnet werden. Alle Ergebnisse durchlaufen vor der Projektübernahme die Rechtebestätigung."
         }
 
         return "Direkte Aufnahme wird nur angeboten, wenn die jeweilige Hardware und macOS-Berechtigung bereit sind. Datei-Import bleibt weiterhin verfügbar."
@@ -248,7 +310,7 @@ struct CaptureCapabilityPanel: View {
 
         switch kind {
         case .microphone:
-            return "Autorisiert. Wird bei Kameraaufnahme eingebettet, wenn verfügbar."
+            return "Autorisiert. Eigenständige Audioaufnahme ist verfügbar; bei Kameraaufnahme kann das Mikrofon zusätzlich eingebettet werden."
         case .systemAudio:
             return screenRecorder.isSupportedOnCurrentOS
                 ? "Autorisiert. Wird gemeinsam mit der Bildschirmaufnahme aufgezeichnet."
