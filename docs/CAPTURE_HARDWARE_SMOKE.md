@@ -86,7 +86,7 @@ Der Validator prüft zusätzlich, dass die projektgebundenen Capture-Dateien noc
 
 Pflichtfelder:
 
-- `schemaVersion`: aktuell `3`
+- `schemaVersion`: aktuell `4`
 - `testedAt`: ISO-8601
 - `blackstockVersion`
 - `blackstockBuild`
@@ -96,6 +96,7 @@ Pflichtfelder:
 - `installedFromPackage`: `true`
 - `applicationTeamID`: tatsächliche Apple-Team-ID der laufenden Developer-ID-App
 - `developerIDApplicationVerified`: `true`
+- `applicationExecutableSHA256`: SHA-256 des tatsächlich laufenden Blackstock-Executables
 - `camera`, `microphone`, `screen`, `systemAudio`
   - `permissionGranted`
   - `recordingCreated`
