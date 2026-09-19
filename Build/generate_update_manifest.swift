@@ -8,6 +8,7 @@ enum ManifestToolError: Error, CustomStringConvertible {
     case invalidBuild
     case invalidPackageURL
     case packageURLMustUseHTTPS
+    case invalidSourceCommitSHA
     case packageMissing
     case missingPrivateKey
     case invalidPrivateKey
@@ -23,6 +24,8 @@ enum ManifestToolError: Error, CustomStringConvertible {
             return "Paket-URL ist ungültig."
         case .packageURLMustUseHTTPS:
             return "Paket-URL muss HTTPS verwenden."
+        case .invalidSourceCommitSHA:
+            return "Source-Commit-SHA muss aus genau 40 Hex-Zeichen bestehen."
         case .packageMissing:
             return "Das angegebene .pkg existiert nicht."
         case .missingPrivateKey:
@@ -40,6 +43,7 @@ struct Manifest: Codable {
     let build: Int
     let packageURL: URL
     let sha256: String
+    let sourceCommitSHA: String
     let publishedAt: Date
     let signature: String
 
@@ -51,6 +55,7 @@ struct Manifest: Codable {
                 String(build),
                 packageURL.absoluteString,
                 sha256.lowercased(),
+                sourceCommitSHA.lowercased(),
                 timestamp
             ]
             .joined(separator: "\n")
@@ -63,6 +68,7 @@ struct Manifest: Codable {
         case build
         case packageURL
         case sha256
+        case sourceCommitSHA
         case publishedAt
         case signature
     }
@@ -95,6 +101,10 @@ do {
     let rawPackageURL = try value(after: "--package-url", in: arguments)
     let version = try value(after: "--version", in: arguments)
     let rawBuild = try value(after: "--build", in: arguments)
+    let rawSourceCommitSHA = try value(
+        after: "--source-commit-sha",
+        in: arguments
+    )
     let outputPath = try value(after: "--output", in: arguments)
 
     guard let build = Int(rawBuild), build > 0 else {
@@ -106,6 +116,11 @@ do {
     guard packageURL.scheme?.lowercased() == "https" else {
         throw ManifestToolError.packageURLMustUseHTTPS
     }
+    guard rawSourceCommitSHA.count == 40,
+          rawSourceCommitSHA.allSatisfy({ $0.isHexDigit }) else {
+        throw ManifestToolError.invalidSourceCommitSHA
+    }
+    let sourceCommitSHA = rawSourceCommitSHA.lowercased()
 
     let packageFileURL = URL(fileURLWithPath: packagePath)
     guard FileManager.default.fileExists(atPath: packageFileURL.path) else {
@@ -137,6 +152,7 @@ do {
         build: build,
         packageURL: packageURL,
         sha256: digest,
+        sourceCommitSHA: sourceCommitSHA,
         publishedAt: publishedAt,
         signature: ""
     )
@@ -146,6 +162,7 @@ do {
         build: build,
         packageURL: packageURL,
         sha256: digest,
+        sourceCommitSHA: sourceCommitSHA,
         publishedAt: publishedAt,
         signature: signature.base64EncodedString()
     )
