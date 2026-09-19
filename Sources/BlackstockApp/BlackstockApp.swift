@@ -7,6 +7,10 @@ struct BlackstockApp: App {
     @StateObject private var session = BlackstockSession()
     @State private var commandPaletteRequest = 0
 
+    init() {
+        BlackstockInstalledSmokeTest.runIfRequested()
+    }
+
     var body: some Scene {
         WindowGroup {
             Group {

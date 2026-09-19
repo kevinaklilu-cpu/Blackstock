@@ -51,6 +51,9 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' /Applications/Blackstock.app/Contents/Info.plist)" = "de.blackstock.app"
           test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' /Applications/Blackstock.app/Contents/Info.plist)" = "13.0"
           codesign --verify --deep --strict --verbose=2 /Applications/Blackstock.app
+          smoke_output="$(/Applications/Blackstock.app/Contents/MacOS/Blackstock --blackstock-installed-smoke-test)"
+          printf '%s\n' "$smoke_output"
+          grep -q 'BLACKSTOCK_SMOKE_PASS' <<<"$smoke_output"
       - uses: actions/upload-artifact@v4
         with:
           name: Blackstock-development-pkg
