@@ -30,6 +30,7 @@ struct PackagingReviewView: View {
     @State private var manualNotes: [CreatorQualityArea: String] = [:]
     @State private var useStoryboardChapters = false
     @State private var thumbnailAssessment: ThumbnailTechnicalAssessment?
+    @State private var packagingVariants: PackagingVariantSet
 
     private let requiredQualityAreas: Set<CreatorQualityArea> = [
         .packaging,
@@ -98,6 +99,10 @@ struct PackagingReviewView: View {
         )
         _persistedReview = State(
             initialValue: saved?.qualityReview
+        )
+        _packagingVariants = State(
+            initialValue: saved?.packagingVariants
+                ?? PackagingVariantSet()
         )
 
         if saved == nil, let generatedCaptionURL {
@@ -210,6 +215,7 @@ struct PackagingReviewView: View {
                     metadataSection
                     chaptersSection
                     packagingAssetsSection
+                    packagingVariantsSection
                     manualReviewSection
                     targetSection
                 }
@@ -522,6 +528,77 @@ struct PackagingReviewView: View {
         }
     }
 
+    private var packagingVariantsSection: some View {
+        GroupBox("Packaging-Varianten") {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Bis zu drei Titel-/Thumbnail-Kombinationen vorbereiten. Blackstock markiert keinen Gewinner ohne echte YouTube-Testdaten.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                ForEach(packagingVariants.variants) { variant in
+                    HStack(spacing: 10) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(variant.title)
+                                .font(.callout.weight(.semibold))
+                                .lineLimit(1)
+                            Text(
+                                variant.thumbnailURL?.lastPathComponent
+                                    ?? "Kein Thumbnail"
+                            )
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button(role: .destructive) {
+                            try? packagingVariants.remove(id: variant.id)
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(reviewFrozen)
+                    }
+                    .padding(8)
+                    .background(
+                        Color.primary.opacity(0.035),
+                        in: RoundedRectangle(cornerRadius: 8)
+                    )
+                }
+
+                Button {
+                    do {
+                        _ = try packagingVariants.add(
+                            title: title,
+                            thumbnailURL: thumbnailURL,
+                            note: "Packaging-Kandidat",
+                            at: Date()
+                        )
+                    } catch {
+                        session.errorMessage = "Variante konnte nicht hinzugefügt werden: \(error.localizedDescription)"
+                    }
+                } label: {
+                    Label(
+                        "Aktuellen Titel/Thumbnail als Variante sichern",
+                        systemImage: "plus"
+                    )
+                }
+                .buttonStyle(.bordered)
+                .disabled(
+                    reviewFrozen
+                    || packagingVariants.variants.count >= 3
+                    || title.trimmingCharacters(
+                        in: .whitespacesAndNewlines
+                    ).isEmpty
+                    || (thumbnailAssessment?.uploadCompatible == false)
+                )
+
+                Text("\(packagingVariants.variants.count) von 3 Varianten")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 6)
+        }
+    }
+
     private var manualReviewSection: some View {
         GroupBox("Qualitative Review") {
             VStack(alignment: .leading, spacing: 14) {
@@ -758,7 +835,8 @@ struct PackagingReviewView: View {
                             let review = qualityReview
                             try session.savePublishPreparation(
                                 package: draftPackage,
-                                qualityReview: review
+                                qualityReview: review,
+                                packagingVariants: packagingVariants
                             )
                             persistedReview = review
                             _ = session.advanceActiveProject(
