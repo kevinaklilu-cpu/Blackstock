@@ -183,6 +183,8 @@ enum BlackstockCaptureHardwareAudit {
         store: CaptureHardwareSmokeEvidenceStore
     ) throws -> CaptureHardwareSmokeEvidence {
         let metadata = currentMetadata()
+        let osVersion = ProcessInfo.processInfo
+            .operatingSystemVersionString
         let model = hardwareModel()
         let installed = installedFromPackage()
         let signing = applicationSigningMetadata(
@@ -196,6 +198,7 @@ enum BlackstockCaptureHardwareAudit {
                 == metadata.build,
            existing.blackstockSourceCommitSHA
                 == metadata.sourceCommitSHA,
+           existing.macOSVersion == osVersion,
            existing.hardwareModel == model,
            existing.installedFromPackage
                 == installed,
@@ -214,9 +217,7 @@ enum BlackstockCaptureHardwareAudit {
                 metadata.build,
             blackstockSourceCommitSHA:
                 metadata.sourceCommitSHA,
-            macOSVersion:
-                ProcessInfo.processInfo
-                    .operatingSystemVersionString,
+            macOSVersion: osVersion,
             hardwareModel: model,
             installedFromPackage: installed,
             applicationTeamID: signing.teamID,
