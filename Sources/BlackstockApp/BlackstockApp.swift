@@ -812,13 +812,16 @@ private struct SettingsView: View {
                                     }
                                     updateStatusMessage = "Das verifizierte Paket wurde an den macOS-Installer übergeben. Die Installation erfolgt erst nach deiner Bestätigung im System-Installer."
                                 } catch {
+                                    try? FileManager.default.removeItem(
+                                        at: verifiedUpdatePackageURL
+                                    )
                                     self.verifiedUpdatePackageURL = nil
-                                    updateStatusMessage = "Das Paket hat die erneute Integritätsprüfung vor der Installation nicht bestanden und wurde nicht geöffnet."
+                                    updateStatusMessage = "Das Paket hat die erneute Integritätsprüfung vor der Installation nicht bestanden, wurde gelöscht und nicht geöffnet."
                                 }
                             } label: {
                                 Label(
                                     "Verifiziertes Paket im macOS-Installer öffnen",
-                                    systemImage: "shippingbox.and.arrow.backward"
+                                    systemImage: "shippingbox"
                                 )
                             }
                         }
