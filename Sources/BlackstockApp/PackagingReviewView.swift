@@ -10,6 +10,8 @@ struct PackagingReviewView: View {
     let artifact: RenderArtifact
     let transcript: LocalTranscript?
     let generatedCaptionURL: URL?
+    let audioTechnicalAssessment: AudioTechnicalAssessment?
+    let audioSignalAssessment: AudioSignalAssessment?
 
     @Environment(\.dismiss) private var dismiss
 
@@ -42,7 +44,9 @@ struct PackagingReviewView: View {
         asset: ProductionMediaAsset,
         artifact: RenderArtifact,
         transcript: LocalTranscript?,
-        generatedCaptionURL: URL?
+        generatedCaptionURL: URL?,
+        audioTechnicalAssessment: AudioTechnicalAssessment?,
+        audioSignalAssessment: AudioSignalAssessment?
     ) {
         self.session = session
         self.project = project
@@ -50,6 +54,8 @@ struct PackagingReviewView: View {
         self.artifact = artifact
         self.transcript = transcript
         self.generatedCaptionURL = generatedCaptionURL
+        self.audioTechnicalAssessment = audioTechnicalAssessment
+        self.audioSignalAssessment = audioSignalAssessment
         let saved = session.loadPublishPreparation(
             projectID: project.id
         )
@@ -106,7 +112,9 @@ struct PackagingReviewView: View {
             asset: asset,
             artifact: artifact,
             transcript: transcript,
-            captionURL: generatedCaptionURL
+            captionURL: generatedCaptionURL,
+            audioTechnicalAssessment: audioTechnicalAssessment,
+            audioSignalAssessment: audioSignalAssessment
         )
     }
 
@@ -378,6 +386,10 @@ struct PackagingReviewView: View {
                 }
             }
 
+            if area == .audio {
+                audioFacts
+            }
+
             if !automaticallyCovered && manualChecks.contains(area) {
                 TextField(
                     "Kurze Beobachtung festhalten …",
@@ -392,6 +404,45 @@ struct PackagingReviewView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var audioFacts: some View {
+        if let technical = audioTechnicalAssessment {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Automatische Messwerte")
+                    .font(.caption.weight(.semibold))
+                if technical.snapshot.hasAudioTrack {
+                    if let sampleRate = technical.snapshot.sampleRateHz {
+                        Text("Sample-Rate: \(Int(sampleRate.rounded())) Hz")
+                    }
+                    if let channels = technical.snapshot.channelCount {
+                        Text("Kanäle: \(channels)")
+                    }
+                } else {
+                    Text("Keine Audiospur erkannt.")
+                }
+
+                if let signal = audioSignalAssessment {
+                    if let peak = signal.snapshot.peakDBFS {
+                        Text("Peak: \(String(format: "%.2f", peak)) dBFS")
+                    }
+                    if let rms = signal.snapshot.rmsDBFS {
+                        Text("RMS: \(String(format: "%.2f", rms)) dBFS")
+                    }
+                    Text("Full-Scale-Samples: \(signal.snapshot.fullScaleSampleCount)")
+                }
+
+                Text("Diese Messwerte sind Evidenz, ersetzen aber nicht die hörbare Prüfung auf Verständlichkeit und Störgeräusche.")
+                    .foregroundStyle(.secondary)
+            }
+            .font(.caption)
+            .padding(8)
+            .background(
+                Color.primary.opacity(0.035),
+                in: RoundedRectangle(cornerRadius: 8)
+            )
         }
     }
 
