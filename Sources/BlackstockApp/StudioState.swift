@@ -678,7 +678,7 @@ final class StudioState: ObservableObject {
                 actor: .blackstock,
                 stage: .editing,
                 action: "local-captions-generated",
-                summary: "On-Device-Transkript und WebVTT-Captions wurden lokal erzeugt.",
+                summary: "Lokales Transkript und WebVTT-Untertitel wurden lokal erzeugt.",
                 relatedSourceIDs: [asset.id.uuidString],
                 reversible: false,
                 correlationID: correlationID
