@@ -44,16 +44,16 @@ public extension BlackstockStage {
                 stage: self,
                 title: "Recherche",
                 purpose: "Quellen und relevante Provider-Daten nachvollziehbar prüfen.",
-                nextAction: "Research-Evidence vervollständigen.",
-                recommendedSurface: .none
+                nextAction: "Recherchefrage und eigene Notizen auf Basis der Provider-Fakten vervollständigen.",
+                recommendedSurface: .overview
             )
         case .analysis:
             return .init(
                 stage: self,
                 title: "Analyse",
                 purpose: "Belegte Erkenntnisse in eine Produktionsentscheidung überführen.",
-                nextAction: "Produktionsentscheidung auf reale Evidence stützen.",
-                recommendedSurface: .none
+                nextAction: "Entscheidung, Begründung und offene Unsicherheit festhalten.",
+                recommendedSurface: .overview
             )
         case .production:
             return .init(
