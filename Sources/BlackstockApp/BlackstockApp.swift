@@ -1081,26 +1081,32 @@ private struct SettingsView: View {
                         if let manifest = availableUpdateManifest {
                             Button {
                                 do {
-                                    try UpdatePackageIntegrityVerifier().verify(
-                                        fileURL: verifiedUpdatePackageURL,
-                                        expectedSHA256: manifest.sha256
-                                    )
+                                    try BlackstockUpdateInstallationPreflight()
+                                        .verify(
+                                            fileURL:
+                                                verifiedUpdatePackageURL,
+                                            manifest: manifest
+                                        )
+                                    BlackstockUpdateAudit
+                                        .recordVerifiedPackage(
+                                            manifest: manifest
+                                        )
                                     guard NSWorkspace.shared.open(
                                         verifiedUpdatePackageURL
                                     ) else {
-                                        updateStatusMessage = "Das verifizierte Paket konnte nicht im macOS-Installer geöffnet werden."
+                                        updateStatusMessage = "Das erneut verifizierte Paket konnte nicht im macOS-Installer geöffnet werden."
                                         return
                                     }
                                     BlackstockUpdateAudit.recordInstallerOpened(
                                         manifest: manifest
                                     )
-                                    updateStatusMessage = "Das verifizierte Paket wurde an den macOS-Installer übergeben. Die Installation erfolgt erst nach deiner Bestätigung im System-Installer."
+                                    updateStatusMessage = "SHA-256 und Developer-ID-Installer-Team wurden unmittelbar vor der Übergabe erneut verifiziert. Das Paket wurde an den macOS-Installer übergeben; die Installation erfolgt erst nach deiner Bestätigung im System-Installer."
                                 } catch {
                                     try? FileManager.default.removeItem(
                                         at: verifiedUpdatePackageURL
                                     )
                                     self.verifiedUpdatePackageURL = nil
-                                    updateStatusMessage = "Das Paket hat die erneute Integritätsprüfung vor der Installation nicht bestanden, wurde gelöscht und nicht geöffnet."
+                                    updateStatusMessage = "Das Paket hat den erneuten Installations-Preflight für SHA-256 und Developer-ID-Installer-Team nicht bestanden, wurde gelöscht und nicht geöffnet."
                                 }
                             } label: {
                                 Label(
