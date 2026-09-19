@@ -13,6 +13,10 @@ PUBLIC_PUBLISHING_APPROVED="${BLACKSTOCK_YOUTUBE_PUBLIC_PUBLISHING_APPROVED:-0}"
 APP_SIGN_IDENTITY="${BLACKSTOCK_CODESIGN_IDENTITY:-}"
 INSTALLER_SIGN_IDENTITY="${BLACKSTOCK_INSTALLER_IDENTITY:-}"
 NOTARY_PROFILE="${BLACKSTOCK_NOTARY_KEYCHAIN_PROFILE:-}"
+NOTARY_KEY_PATH="${BLACKSTOCK_NOTARY_KEY_PATH:-}"
+NOTARY_KEY_ID="${BLACKSTOCK_NOTARY_KEY_ID:-}"
+NOTARY_ISSUER="${BLACKSTOCK_NOTARY_ISSUER:-}"
+NOTARY_EVIDENCE_PATH="${BLACKSTOCK_NOTARY_EVIDENCE_PATH:-}"
 UPDATE_MANIFEST_URL="${BLACKSTOCK_UPDATE_MANIFEST_URL:-}"
 UPDATE_PUBLIC_KEY="${BLACKSTOCK_UPDATE_PUBLIC_KEY_BASE64:-}"
 UPDATE_INSTALLER_TEAM_ID="${BLACKSTOCK_UPDATE_INSTALLER_TEAM_ID:-}"
@@ -94,15 +98,57 @@ else
   productbuild --package "$COMPONENT" "$OUT/Blackstock.pkg"
 fi
 
+NOTARY_AUTH=()
 if [[ -n "$NOTARY_PROFILE" ]]; then
+  NOTARY_AUTH=(
+    --keychain-profile "$NOTARY_PROFILE"
+  )
+elif [[ -n "$NOTARY_KEY_PATH" || -n "$NOTARY_KEY_ID" || -n "$NOTARY_ISSUER" ]]; then
+  if [[ -z "$NOTARY_KEY_PATH" || -z "$NOTARY_KEY_ID" || -z "$NOTARY_ISSUER" ]]; then
+    echo "API-key notarization requires BLACKSTOCK_NOTARY_KEY_PATH, BLACKSTOCK_NOTARY_KEY_ID and BLACKSTOCK_NOTARY_ISSUER together." >&2
+    exit 1
+  fi
+  NOTARY_AUTH=(
+    --key "$NOTARY_KEY_PATH"
+    --key-id "$NOTARY_KEY_ID"
+    --issuer "$NOTARY_ISSUER"
+  )
+fi
+
+if (( ${#NOTARY_AUTH[@]} > 0 )); then
   if [[ -z "$APP_SIGN_IDENTITY" || -z "$INSTALLER_SIGN_IDENTITY" ]]; then
     echo "Notarization requires BLACKSTOCK_CODESIGN_IDENTITY and BLACKSTOCK_INSTALLER_IDENTITY." >&2
     exit 1
   fi
 
+  if [[ -n "$NOTARY_EVIDENCE_PATH" ]]; then
+    NOTARY_RESPONSE="$NOTARY_EVIDENCE_PATH"
+    mkdir -p "$(dirname "$NOTARY_RESPONSE")"
+  else
+    NOTARY_RESPONSE="$WORK/notary-response.json"
+  fi
+
   xcrun notarytool submit "$OUT/Blackstock.pkg" \
-    --keychain-profile "$NOTARY_PROFILE" \
-    --wait
+    "${NOTARY_AUTH[@]}" \
+    --wait \
+    --output-format json > "$NOTARY_RESPONSE"
+
+  python3 - "$NOTARY_RESPONSE" <<'PY'
+import json
+import sys
+path = sys.argv[1]
+data = json.load(open(path))
+status = str(data.get("status", ""))
+submission_id = str(data.get("id", ""))
+if status.casefold() != "accepted":
+    raise SystemExit(
+        f"Notarization status is not Accepted: {status or 'missing'}"
+    )
+if not submission_id:
+    raise SystemExit("Notarization response has no submission id")
+print(f"Notarization accepted: {submission_id}")
+PY
+
   xcrun stapler staple "$OUT/Blackstock.pkg"
   xcrun stapler validate "$OUT/Blackstock.pkg"
   spctl --assess --type install --verbose=2 "$OUT/Blackstock.pkg"
