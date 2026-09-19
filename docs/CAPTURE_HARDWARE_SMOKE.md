@@ -107,7 +107,7 @@ Pflichtfelder:
 - `deniedPermissionKinds`: alle vier kanonischen Capture-Arten
 - `temporaryCleanupKinds`: alle vier kanonischen Capture-Arten
 
-Jeder Pfad enthält zusätzlich die projektgebundene `projectID`, die `recordedLaunchID` und den `persistedFilePath`. Diese Felder werden von Blackstock selbst geschrieben; die persistierte Datei muss beim finalen Validatorlauf noch vorhanden sein.
+Jeder Pfad enthält zusätzlich die projektgebundene `projectID`, die `recordedLaunchID`, den `persistedFilePath` und `persistedFileSHA256`. Diese Felder werden von Blackstock selbst geschrieben. Die persistierte Datei muss beim finalen Validatorlauf noch vorhanden sein und ihr SHA-256 muss weiterhin exakt dem bei der technischen Capture-Prüfung erfassten Fingerabdruck entsprechen.
 
 Jeder Pflichtpfad muss PASS sein. Ein fehlendes Feld, Dauer <= 0, fehlende reale Spur oder fehlende Projektbindung führt zum FAIL.
 
