@@ -34,7 +34,11 @@ public enum PackagingVariantSetError: Error, Sendable, Equatable {
 public struct PackagingVariantSet: Codable, Sendable, Equatable {
     public private(set) var variants: [PackagingVariant]
 
-    public init(variants: [PackagingVariant] = []) throws {
+    public init() {
+        self.variants = []
+    }
+
+    public init(variants: [PackagingVariant]) throws {
         guard variants.count <= 3 else {
             throw PackagingVariantSetError.maximumThreeVariants
         }
