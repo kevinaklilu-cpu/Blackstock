@@ -407,7 +407,7 @@ private struct OverviewView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("YouTube-Kommentare")
                                 .font(.headline)
-                            Text("Read-only · Top-Level-Threads")
+                            Text("Nur lesen · Hauptkommentare")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -521,7 +521,7 @@ private struct OverviewView: View {
                                     date: .abbreviated,
                                     time: .shortened
                                 )
-                                + " · YouTube Data API · Sortierung: Neueste. "
+                                + " · YouTube-Daten-API · Sortierung: Neueste. "
                                 + "Die Antwortzahl stammt von YouTube; Antworten selbst werden hier noch nicht vollständig geladen."
                             )
                             .font(.caption2)
