@@ -23,6 +23,8 @@ jobs:
           set -euo pipefail
           grep -q '23c51e7d90ca653c92b04b19a7b65615fdf420f581caa16024725c4935bde827' docs/CANONICAL_SOURCE.md
           grep -q 'NOCH NICHT MARKTREIF' README.md
+      - name: Accessibility semantic audit
+        run: python3 Build/audit_accessibility.py
       - name: Swift tests
         run: swift test
       - name: Release build
