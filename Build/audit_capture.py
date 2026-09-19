@@ -97,7 +97,8 @@ requirements = {
         "blackstockSourceCommitSHA",
         "applicationTeamID",
         "developerIDApplicationVerified",
-        "currentSchemaVersion = 3",
+        "applicationExecutableSHA256",
+        "currentSchemaVersion = 4",
     ],
     "Tests/BlackstockCoreTests/CaptureHardwareSmokeEvidenceTests.swift": [
         "testCompleteEvidenceRequiresAllFourPathsAndExternalChecks",
@@ -149,6 +150,7 @@ requirements = {
         "40-character hexadecimal Git commit SHA",
         "applicationTeamID",
         "developerIDApplicationVerified",
+        "applicationExecutableSHA256",
     ],
 }
 
