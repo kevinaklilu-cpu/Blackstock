@@ -42,13 +42,28 @@ public struct DeterministicQualityEvidenceBuilder: Sendable {
         )
 
         let renderIsCurrent = artifact.hasCurrentTechnicalValidation
+        let renderObservedFact: String
+        if renderIsCurrent, let snapshot = artifact.technicalSnapshot {
+            let requested = switch artifact.requestedQuality {
+            case .upTo1080p?: "bis 1080p"
+            case .upTo4K?: "bis 4K"
+            case nil: "nicht historisiert"
+            }
+            let uhdState = snapshot.meetsUHD4KOrGreater
+                ? "UHD-4K-Geometrie erreicht"
+                : "UHD-4K-Geometrie nicht erreicht"
+            renderObservedFact = "Lokaler Render technisch validiert; tatsächliche Ausgabe \(snapshot.width)×\(snapshot.height) px; Dauer \(String(format: "%.2f", snapshot.durationSeconds)) s; angeforderte Qualitätsobergrenze \(requested); \(uhdState)."
+        } else if renderIsCurrent {
+            renderObservedFact = "Lokaler Render besitzt die aktuelle technische Validierung; für dieses ältere Artefakt ist noch kein persistierter Geometrie-Snapshot vorhanden."
+        } else {
+            renderObservedFact = "Render-Artefakt besitzt keine aktuelle technische Validierung."
+        }
+
         let renderEvidence = QualityEvidence(
             source: "Blackstock Render Technical Validation",
-            observedFact: renderIsCurrent
-                ? "Lokaler Render besitzt die aktuelle technische Validierung für Datei, Dauer, Videotrack und erwartete Ausgabegeometrie."
-                : "Render-Artefakt besitzt keine aktuelle technische Validierung.",
+            observedFact: renderObservedFact,
             reference: artifact.id.uuidString,
-            observedAt: reviewedAt
+            observedAt: artifact.technicalSnapshot?.inspectedAt ?? reviewedAt
         )
         evidence.append(renderEvidence)
         findings.append(
