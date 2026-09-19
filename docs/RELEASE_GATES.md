@@ -23,7 +23,7 @@ Statuswerte: **PASS / FAIL / BLOCKED_EXTERNAL**.
 | Wrong Channel E2E | FAIL |
 | Upload Resume | FAIL |
 | Analytics | FAIL |
-| Comments | FAIL |
+| Comments | PASS |
 | Security | FAIL |
 | Privacy | FAIL |
 | Accessibility | FAIL |
@@ -37,5 +37,7 @@ Statuswerte: **PASS / FAIL / BLOCKED_EXTERNAL**.
 | Clean-Machine E2E | FAIL |
 
 Hinweis: **Installer = PASS** basiert auf der Canonical-CI: Das erzeugte `.pkg` wird auf einem frischen macOS-Runner installiert, Bundle-Metadaten und Codesign werden geprüft und die installierte App wird gestartet. **Clean-Machine E2E** bleibt FAIL, weil dieser Smoke-Test noch keinen vollständigen Nutzerpfad bis Veröffentlichung und Lernen abdeckt.
+
+Hinweis: **Comments = PASS** bezieht sich auf den implementierten read-only Pfad für veröffentlichte Videos: GET-only YouTube-CommentThreads, Plaintext, Pagination, spezifische Providerfehler, erneute Zielkanal-Identitätsprüfung und Video-/Kanal-Kontext-Hard-Stop. Schreib-, Antwort- oder Moderationsaktionen sind daraus ausdrücklich nicht abgeleitet.
 
 **STATUS: NOCH NICHT MARKTREIF**
