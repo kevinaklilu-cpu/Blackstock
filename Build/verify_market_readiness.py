@@ -109,6 +109,12 @@ def normalize_version(value, label):
         fail(f"{label} must be a numeric dotted version")
     return value
 
+def normalize_source_commit(value, label):
+    value = str(value).strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", value):
+        fail(f"{label} must be a 40-character hexadecimal Git commit SHA")
+    return value
+
 def main():
     args = parse_args()
     statuses = release_gate_statuses()
@@ -218,6 +224,35 @@ def main():
             "production release and updater evidence refer to different "
             "package SHA-256 values"
         )
+
+    release_source_commit = normalize_source_commit(
+        release.get("sourceCommitSHA"),
+        "release.sourceCommitSHA",
+    )
+    installed_source_commit = normalize_source_commit(
+        release.get("installedAppSourceCommitSHA"),
+        "release.installedAppSourceCommitSHA",
+    )
+    updater_target_source_commit = normalize_source_commit(
+        updater.get("targetSourceCommitSHA"),
+        "updater.targetSourceCommitSHA",
+    )
+    updater_observed_source_commit = normalize_source_commit(
+        updater.get("observedInstalledSourceCommitSHA"),
+        "updater.observedInstalledSourceCommitSHA",
+    )
+    source_commits = {
+        release_source_commit,
+        installed_source_commit,
+        updater_target_source_commit,
+        updater_observed_source_commit,
+    }
+    if len(source_commits) != 1:
+        fail(
+            "production release and updater evidence do not refer to "
+            "the same exact source commit"
+        )
+
     if release.get("installedAppPath") != "/Applications/Blackstock.app":
         fail(
             "production release evidence must verify "
@@ -225,7 +260,7 @@ def main():
         )
 
     report = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "ready": True,
         "verifiedAt": datetime.now(timezone.utc).isoformat().replace(
             "+00:00",
@@ -237,6 +272,7 @@ def main():
         "manifestURL": release.get("manifestURL"),
         "packageURL": release.get("packageURL"),
         "packageSHA256": release.get("packageSHA256"),
+        "sourceCommitSHA": release_source_commit,
         "captureEvidence": str(capture_path),
         "productionReleaseEvidence": str(release_path),
         "inAppUpdateEvidence": str(updater_path),
