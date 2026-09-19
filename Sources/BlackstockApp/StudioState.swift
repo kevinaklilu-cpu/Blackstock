@@ -34,6 +34,7 @@ final class StudioState: ObservableObject {
     @Published var retentionAdvisorAvailability: LocalRetentionAdvisorAvailability?
     @Published var isAnalyzingRetention = false
     @Published var storyboard: StoryboardPlan?
+    @Published var supplementalCaptures: [SupplementalCaptureAsset] = []
 
     private var correlationID = UUID()
     private var activeProjectID: UUID?
@@ -81,6 +82,7 @@ final class StudioState: ObservableObject {
                 transcript = snapshot.transcript
                 captionURL = snapshot.captionURL
                 renderArtifact = snapshot.renderArtifact
+                supplementalCaptures = snapshot.supplementalCaptures ?? []
 
                 if let reframe = graph.currentOperations
                     .last(where: { $0.type == .reframe })?
@@ -137,6 +139,7 @@ final class StudioState: ObservableObject {
                 return
             }
 
+            supplementalCaptures = []
             loadStoryboard(projectID: projectID)
             persistWorkspaceIfPossible()
         } catch {
@@ -335,6 +338,103 @@ final class StudioState: ObservableObject {
             errorMessage = nil
         } catch {
             errorMessage = "Video konnte nicht geladen werden: \(error.localizedDescription)"
+        }
+    }
+
+    func importSupplementalCapture(
+        url: URL,
+        kind: CaptureKind,
+        projectID: UUID,
+        rightsBasis: String,
+        rightsEvidence: String,
+        rightsConfirmed: Bool
+    ) async -> Bool {
+        let basis = rightsBasis.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        let evidence = rightsEvidence.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+
+        guard !basis.isEmpty, !evidence.isEmpty else {
+            errorMessage =
+                "Hinterlege Nutzungsgrundlage und nachvollziehbaren Rechte-Nachweis."
+            return false
+        }
+        guard rightsConfirmed else {
+            errorMessage =
+                "Bestätige zuerst die nötigen Nutzungs- und Veröffentlichungsrechte."
+            return false
+        }
+
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            activeProjectID = projectID
+            let store = try workspaceStore ?? makeWorkspaceStore()
+            workspaceStore = store
+
+            let captureID = UUID()
+            let durableURL = try store.importSupplementalCapture(
+                sourceURL: url,
+                projectID: projectID,
+                assetID: captureID
+            )
+
+            let mimeType: String
+            switch kind {
+            case .microphone:
+                mimeType = "audio/mp4"
+            case .camera:
+                mimeType = "video/quicktime"
+            case .screen, .systemAudio:
+                mimeType = "video/mp4"
+            }
+
+            let capture = SupplementalCaptureAsset(
+                id: captureID,
+                projectID: projectID,
+                kind: kind,
+                fileURL: durableURL,
+                mimeType: mimeType,
+                rightsBasis: basis,
+                rightsEvidence: evidence,
+                rightsConfirmed: rightsConfirmed,
+                createdAt: Date()
+            )
+
+            guard capture.mayBeUsedInProduction else {
+                try? FileManager.default.removeItem(at: durableURL)
+                errorMessage =
+                    "Die Aufnahme besitzt keine ausreichende Rechtefreigabe."
+                return false
+            }
+
+            supplementalCaptures.removeAll {
+                $0.id == capture.id
+            }
+            supplementalCaptures.append(capture)
+
+            ledger.append(.init(
+                timestamp: Date(),
+                actor: .user,
+                stage: .production,
+                action: "supplemental-capture-imported",
+                summary: "„\(kind.germanTitle)“ wurde als zusätzliche lokale Aufnahme mit Rechtebestätigung im Projekt gespeichert.",
+                relatedSourceIDs: [capture.id.uuidString],
+                reversible: false,
+                correlationID: correlationID
+            ))
+
+            persistWorkspaceIfPossible()
+            errorMessage = nil
+            return true
+        } catch {
+            errorMessage =
+                "Zusätzliche Aufnahme konnte nicht gespeichert werden: "
+                + error.localizedDescription
+            return false
         }
     }
 
@@ -917,6 +1017,7 @@ final class StudioState: ObservableObject {
                 transcript: transcript,
                 captionURL: captionURL,
                 renderArtifact: renderArtifact,
+                supplementalCaptures: supplementalCaptures,
                 updatedAt: Date()
             )
             try store.save(snapshot)
