@@ -429,7 +429,9 @@ final class BlackstockSession: ObservableObject {
             let networkAvailable = await LocalNetworkAvailabilityProbe()
                 .currentState() == .available
             guard networkAvailable else {
-                errorMessage = "Upload gestoppt: Keine Netzwerkverbindung. Das Projekt bleibt im Review-Status."
+                errorMessage = project.stage == .review
+                    ? "Upload gestoppt: Keine Netzwerkverbindung. Das Projekt bleibt im Review-Status."
+                    : "Upload pausiert: Keine Netzwerkverbindung. Der bestehende Publishing-/Resume-Zustand bleibt erhalten."
                 return
             }
 
