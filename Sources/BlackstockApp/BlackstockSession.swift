@@ -807,9 +807,14 @@ final class BlackstockSession: ObservableObject {
     ) -> PublishPreparationSnapshot? {
         do {
             let store = try projectWorkspaceStore()
-            if let snapshot = try store.loadPublishPreparation(
-                projectID: projectID
-            ) {
+            let loadResult = try store
+                .loadPublishPreparationWithMigration(
+                    projectID: projectID
+                )
+            if let snapshot = loadResult.snapshot {
+                if loadResult.migratedFromSchemaVersion != nil {
+                    try store.savePublishPreparation(snapshot)
+                }
                 return snapshot
             }
 
