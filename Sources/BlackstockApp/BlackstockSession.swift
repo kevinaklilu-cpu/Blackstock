@@ -535,6 +535,30 @@ final class BlackstockSession: ObservableObject {
         onboardingComplete = true
     }
 
+    @discardableResult
+    func advanceActiveProject(
+        to destination: BlackstockStage
+    ) -> Bool {
+        guard var project = activeProject else {
+            errorMessage = "Kein aktives Projekt vorhanden."
+            return false
+        }
+        guard project.advance(to: destination, at: Date()) else {
+            errorMessage = "Projekt kann nicht direkt von \(project.stage.rawValue) nach \(destination.rawValue) wechseln."
+            return false
+        }
+
+        do {
+            try Self.store(project: project)
+            activeProject = project
+            errorMessage = nil
+            return true
+        } catch {
+            errorMessage = "Projektstatus konnte nicht gespeichert werden: \(describe(error))"
+            return false
+        }
+    }
+
     func resetFirstRun() {
         UserDefaults.standard.set(false, forKey: "blackstock.firstRun.complete")
         onboardingComplete = false
