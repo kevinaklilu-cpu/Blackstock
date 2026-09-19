@@ -11,6 +11,7 @@ public struct DeterministicQualityEvidenceBuilder: Sendable {
         captionURL: URL? = nil,
         audioTechnicalAssessment: AudioTechnicalAssessment? = nil,
         audioSignalAssessment: AudioSignalAssessment? = nil,
+        thumbnailAssessment: ThumbnailTechnicalAssessment? = nil,
         reviewedAt: Date = Date()
     ) -> CreatorQualityReview {
         var evidence: [QualityEvidence] = []
@@ -124,6 +125,37 @@ public struct DeterministicQualityEvidenceBuilder: Sendable {
                     source: "Blackstock Local PCM Analyzer",
                     observedFact: "Peak \(peak); RMS \(rms); analysierte Samples \(snapshot.analyzedSampleCount); Full-Scale-Samples \(snapshot.fullScaleSampleCount).",
                     reference: asset.id.uuidString,
+                    observedAt: snapshot.inspectedAt
+                )
+            )
+        }
+
+        if let thumbnailAssessment {
+            let snapshot = thumbnailAssessment.snapshot
+            let ratio = snapshot.aspectRatio.map {
+                String(format: "%.3f", $0)
+            } ?? "unbekannt"
+            let blockerText = thumbnailAssessment.uploadBlockers
+                .map(\.rawValue)
+                .joined(separator: ", ")
+            let hintText = thumbnailAssessment.bestPracticeFindings
+                .map(\.rawValue)
+                .joined(separator: ", ")
+            let statement = [
+                "Thumbnail \(snapshot.width)×\(snapshot.height)",
+                "MIME \(snapshot.mimeType)",
+                "Dateigröße \(snapshot.fileSizeBytes) Byte",
+                "Seitenverhältnis \(ratio)",
+                blockerText.isEmpty ? "keine Upload-Blocker" : "Upload-Blocker: \(blockerText)",
+                hintText.isEmpty ? "keine Format-Hinweise" : "Hinweise: \(hintText)"
+            ]
+            .joined(separator: "; ")
+
+            evidence.append(
+                QualityEvidence(
+                    source: "Blackstock Thumbnail Technical Inspector",
+                    observedFact: statement,
+                    reference: nil,
                     observedAt: snapshot.inspectedAt
                 )
             )
