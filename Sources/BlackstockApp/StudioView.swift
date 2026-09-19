@@ -167,6 +167,11 @@ struct StudioView: View {
             }
             .frame(maxWidth: 620)
 
+            if !state.supplementalCaptures.isEmpty {
+                supplementalCapturesSection
+                    .frame(maxWidth: 620)
+            }
+
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -343,6 +348,11 @@ struct StudioView: View {
                     Text(stageExplanation(currentStage))
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+
+                if !state.supplementalCaptures.isEmpty {
+                    Divider()
+                    supplementalCapturesSection
                 }
 
                 Divider()
@@ -707,30 +717,54 @@ struct StudioView: View {
                     pendingCaptureKind = nil
                 }
                 Spacer()
-                Button("Importieren") {
+                Button(
+                    pendingCaptureKind == .microphone
+                        ? "Im Projekt speichern"
+                        : "Importieren"
+                ) {
                     guard let url = pendingURL else { return }
-                    let wasDirectCapture = pendingCaptureKind != nil
+                    let captureKind = pendingCaptureKind
                     showRightsSheet = false
+
                     Task {
-                        await state.importMovie(
-                            url: url,
-                            projectID: project.id,
-                            authorization: rightsSelection,
-                            rightsEvidence: rightsEvidence,
-                            rightsConfirmed: rightsConfirmed
-                        )
-                        if state.asset != nil {
-                            if wasDirectCapture {
+                        if captureKind == .microphone {
+                            let saved = await state.importSupplementalCapture(
+                                url: url,
+                                kind: .microphone,
+                                projectID: project.id,
+                                rightsBasis: rightsBasisLabel(
+                                    rightsSelection
+                                ),
+                                rightsEvidence: rightsEvidence,
+                                rightsConfirmed: rightsConfirmed
+                            )
+                            if saved {
                                 try? FileManager.default.removeItem(
                                     at: url
                                 )
                             }
-                            if currentStage == .production {
-                                _ = session.advanceActiveProject(
-                                    to: .preview
-                                )
+                        } else {
+                            await state.importMovie(
+                                url: url,
+                                projectID: project.id,
+                                authorization: rightsSelection,
+                                rightsEvidence: rightsEvidence,
+                                rightsConfirmed: rightsConfirmed
+                            )
+                            if state.asset != nil {
+                                if captureKind != nil {
+                                    try? FileManager.default.removeItem(
+                                        at: url
+                                    )
+                                }
+                                if currentStage == .production {
+                                    _ = session.advanceActiveProject(
+                                        to: .preview
+                                    )
+                                }
                             }
                         }
+
                         pendingURL = nil
                         pendingCaptureKind = nil
                     }
@@ -744,6 +778,66 @@ struct StudioView: View {
         }
         .padding(24)
         .frame(width: 520)
+    }
+
+    @ViewBuilder
+    private var supplementalCapturesSection: some View {
+        GroupBox("Zusätzliche Aufnahmen") {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(state.supplementalCaptures) { capture in
+                    HStack(spacing: 8) {
+                        Image(
+                            systemName: capture.kind == .microphone
+                                ? "mic.fill"
+                                : "waveform"
+                        )
+                        .accessibilityHidden(true)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(capture.kind.germanTitle)
+                                .font(.caption.weight(.semibold))
+                            Text(capture.fileURL.lastPathComponent)
+                                .font(.caption2.monospaced())
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                            Text(capture.rightsEvidence)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        }
+                        Spacer()
+                        Label(
+                            "Rechte bestätigt",
+                            systemImage: "checkmark.shield"
+                        )
+                        .font(.caption2)
+                    }
+                }
+
+                Text("Zusätzliche Audioaufnahmen bleiben getrennt vom Hauptvideo und können später gezielt in den Audiomix übernommen werden.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 4)
+        }
+    }
+
+    private func rightsBasisLabel(
+        _ authorization: ProductionMediaAuthorization
+    ) -> String {
+        switch authorization {
+        case .owned:
+            return "Eigenes Material"
+        case .licensed:
+            return "Lizenziert"
+        case .explicitlyAuthorized:
+            return "Explizit autorisiert"
+        case .unknown:
+            return "Unbekannt"
+        case .prohibited:
+            return "Nicht zulässig"
+        }
     }
 
     private func metricPill(
