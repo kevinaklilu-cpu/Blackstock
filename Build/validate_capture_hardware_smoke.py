@@ -81,6 +81,7 @@ def validate_capture(name, require_video=False, require_samples=False):
         "projectID",
         "recordedLaunchID",
         "persistedFilePath",
+        "persistedFileSHA256",
     ]:
         if key not in item:
             fail(f"{name}.{key} is required")
@@ -103,6 +104,18 @@ def validate_capture(name, require_video=False, require_samples=False):
         fail(f"{name}.persistedFilePath must be absolute")
     if not persisted_path.is_file():
         fail(f"{name}.persistedFilePath must still exist")
+
+    expected_sha = str(item["persistedFileSHA256"]).lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", expected_sha):
+        fail(f"{name}.persistedFileSHA256 must be a SHA-256")
+
+    hasher = hashlib.sha256()
+    with persisted_path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    actual_sha = hasher.hexdigest()
+    if actual_sha != expected_sha:
+        fail(f"{name}.persistedFileSHA256 does not match persisted file")
 
     try:
         duration = float(item["durationSeconds"])
