@@ -121,8 +121,18 @@ final class StudioState: ObservableObject {
                         atPath: asset.sourceURL.path
                     ) {
                         try await rebuildPreview()
+
+                        let audioQCURL: URL
+                        if let artifact = renderArtifact,
+                           FileManager.default.fileExists(
+                                atPath: artifact.fileURL.path
+                           ) {
+                            audioQCURL = artifact.fileURL
+                        } else {
+                            audioQCURL = asset.sourceURL
+                        }
                         await refreshAudioInspection(
-                            for: asset.sourceURL
+                            for: audioQCURL
                         )
                     } else {
                         errorMessage = "Das gespeicherte Produktionsmedium fehlt im Projekt-Arbeitsbereich."
