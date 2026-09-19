@@ -38,8 +38,14 @@ requirements = {
         "--notary-key",
         "--notary-key-id",
         "--notary-issuer",
+        "preinstall-release-evidence.json",
+        "manifestSignatureVerified",
+        "packageHashVerified",
+        "packageURL",
+        "packageSHA256",
         "curl",
         "--proto '=https'",
+        "--proto-redir '=https'",
         "sudo installer",
         "Launch verified production app",
         "actions/upload-artifact@v4",
@@ -72,6 +78,8 @@ requirements = {
         "missingCaptureEntitlements",
         "com.apple.security.device.camera",
         "com.apple.security.device.audio-input",
+        "isProductionHTTPSURL(manifest.packageURL)",
+        "isProductionHTTPSURL(finalURL)",
     ],
     "Build/validate_production_release_evidence.py": [
         "installedAppVersion",
@@ -113,6 +121,14 @@ verify = (ROOT / ".github/workflows/verify-published-release.yml").read_text(
 if "pull_request:" in verify or "push:" in verify:
     errors.append(
         "published release verification must remain explicit workflow_dispatch only"
+    )
+if "production-manifest.json" in verify:
+    errors.append(
+        "published release verification must not re-fetch an unbound manifest after cryptographic verification"
+    )
+if 'MANIFEST_URL: ${{ inputs.manifest_url }}' in verify and "Download cryptographically bound package" in verify:
+    errors.append(
+        "clean-install package download must use verified evidence, not a second manifest fetch"
     )
 
 if errors:
