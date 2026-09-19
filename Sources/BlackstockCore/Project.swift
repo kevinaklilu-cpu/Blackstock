@@ -36,12 +36,15 @@ public struct BlackstockProject: Codable, Sendable, Equatable, Identifiable {
 }
 
 public struct RenderArtifact: Codable, Sendable, Equatable, Identifiable {
+    public static let currentValidationVersion = "render-technical-v1"
+
     public let id: UUID
     public let projectID: UUID
     public let fileURL: URL
     public let sha256: String
     public let mimeType: String
     public let validated: Bool
+    public let validationVersion: String?
     public let createdAt: Date
 
     public init(
@@ -51,6 +54,7 @@ public struct RenderArtifact: Codable, Sendable, Equatable, Identifiable {
         sha256: String,
         mimeType: String,
         validated: Bool,
+        validationVersion: String? = RenderArtifact.currentValidationVersion,
         createdAt: Date
     ) {
         self.id = id
@@ -59,6 +63,12 @@ public struct RenderArtifact: Codable, Sendable, Equatable, Identifiable {
         self.sha256 = sha256
         self.mimeType = mimeType
         self.validated = validated
+        self.validationVersion = validationVersion
         self.createdAt = createdAt
+    }
+
+    public var hasCurrentTechnicalValidation: Bool {
+        validated
+            && validationVersion == Self.currentValidationVersion
     }
 }

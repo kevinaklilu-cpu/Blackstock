@@ -76,12 +76,18 @@ final class StudioState: ObservableObject {
                         )
                 }
 
-                if let artifact = renderArtifact,
-                   !FileManager.default.fileExists(
-                    atPath: artifact.fileURL.path
-                   ) {
-                    renderArtifact = nil
-                    persistWorkspaceIfPossible()
+                if let artifact = renderArtifact {
+                    let fileExists = FileManager.default.fileExists(
+                        atPath: artifact.fileURL.path
+                    )
+                    if !fileExists
+                        || !artifact.hasCurrentTechnicalValidation {
+                        renderArtifact = nil
+                        persistWorkspaceIfPossible()
+                        if fileExists {
+                            errorMessage = "Der gespeicherte Render stammt aus einer älteren Validierungslogik und muss vor Packaging neu gerendert werden."
+                        }
+                    }
                 }
 
                 if let asset {

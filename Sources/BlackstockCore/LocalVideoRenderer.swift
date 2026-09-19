@@ -25,6 +25,7 @@ public enum LocalRenderError: Error, Sendable, Equatable {
     case reframePlanUnavailable
     case exportFailed(String)
     case missingOutput
+    case technicalValidationFailed([RenderTechnicalBlocker])
 }
 
 private final class ExportSessionBox: @unchecked Sendable {
@@ -181,6 +182,24 @@ public actor LocalVideoRenderer {
             throw LocalRenderError.missingOutput
         }
 
+        let activeReframe = graph.currentOperations
+            .last(where: { $0.type == .reframe })?
+            .reframeSpec
+        let expectedRenderSize = activeReframe.map {
+            preset.renderSize(for: $0.aspectRatio)
+        }
+        let technicalAssessment = try await LocalRenderTechnicalInspector()
+            .inspect(
+                url: outputURL,
+                expectedDurationSeconds: timeline.outputDurationSeconds,
+                expectedRenderSize: expectedRenderSize
+            )
+        guard technicalAssessment.validated else {
+            throw LocalRenderError.technicalValidationFailed(
+                technicalAssessment.blockers
+            )
+        }
+
         let data = try Data(contentsOf: outputURL)
         let digest = SHA256.hash(data: data)
         let sha256 = digest.map { String(format: "%02x", $0) }.joined()
@@ -190,7 +209,7 @@ public actor LocalVideoRenderer {
             fileURL: outputURL,
             sha256: sha256,
             mimeType: "video/mp4",
-            validated: !data.isEmpty,
+            validated: true,
             createdAt: Date()
         )
     }
