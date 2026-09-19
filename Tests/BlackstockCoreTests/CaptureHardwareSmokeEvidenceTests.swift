@@ -67,11 +67,16 @@ final class CaptureHardwareSmokeEvidenceTests:
         evidence.recordTemporaryCleanup(
             for: Set(CaptureKind.allCases)
         )
+        let restartLaunch = UUID()
         evidence.reconcileRestartPersistence(
-            currentLaunchID: UUID()
+            currentLaunchID: restartLaunch
         )
 
         XCTAssertTrue(evidence.allCanonicalPathsPass)
+        XCTAssertEqual(
+            evidence.restartVerifiedLaunchID,
+            restartLaunch
+        )
         XCTAssertTrue(evidence.isComplete)
     }
 
@@ -120,12 +125,20 @@ final class CaptureHardwareSmokeEvidenceTests:
         XCTAssertFalse(
             evidence.appRestartPersistencePassed
         )
+        XCTAssertNil(
+            evidence.restartVerifiedLaunchID
+        )
 
+        let restartLaunch = UUID()
         evidence.reconcileRestartPersistence(
-            currentLaunchID: UUID()
+            currentLaunchID: restartLaunch
         )
         XCTAssertTrue(
             evidence.appRestartPersistencePassed
+        )
+        XCTAssertEqual(
+            evidence.restartVerifiedLaunchID,
+            restartLaunch
         )
     }
 
