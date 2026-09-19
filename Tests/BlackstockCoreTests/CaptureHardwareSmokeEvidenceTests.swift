@@ -9,6 +9,16 @@ final class CaptureHardwareSmokeEvidenceTests:
         var evidence = makeEvidence()
         let projectID = UUID()
         let previousLaunch = UUID()
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(
+            at: root,
+            withIntermediateDirectories: true
+        )
+        let cameraFile = try persistedFile(root, "camera.mov")
+        let microphoneFile = try persistedFile(root, "microphone.m4a")
+        let screenFile = try persistedFile(root, "screen.mp4")
 
         evidence.camera = .init(
             permissionGranted: true,
@@ -17,7 +27,8 @@ final class CaptureHardwareSmokeEvidenceTests:
             persistedToProject: true,
             videoTrackPresent: true,
             projectID: projectID,
-            recordedLaunchID: previousLaunch
+            recordedLaunchID: previousLaunch,
+            persistedFilePath: cameraFile.path
         )
         evidence.microphone = .init(
             permissionGranted: true,
@@ -26,7 +37,8 @@ final class CaptureHardwareSmokeEvidenceTests:
             persistedToProject: true,
             decodedSamples: 24_000,
             projectID: projectID,
-            recordedLaunchID: previousLaunch
+            recordedLaunchID: previousLaunch,
+            persistedFilePath: microphoneFile.path
         )
         evidence.screen = .init(
             permissionGranted: true,
@@ -35,7 +47,8 @@ final class CaptureHardwareSmokeEvidenceTests:
             persistedToProject: true,
             videoTrackPresent: true,
             projectID: projectID,
-            recordedLaunchID: previousLaunch
+            recordedLaunchID: previousLaunch,
+            persistedFilePath: screenFile.path
         )
         evidence.systemAudio = .init(
             permissionGranted: true,
@@ -44,7 +57,8 @@ final class CaptureHardwareSmokeEvidenceTests:
             persistedToProject: true,
             decodedSamples: 48_000,
             projectID: projectID,
-            recordedLaunchID: previousLaunch
+            recordedLaunchID: previousLaunch,
+            persistedFilePath: screenFile.path
         )
 
         evidence.recordDeniedHardStop(
@@ -66,8 +80,19 @@ final class CaptureHardwareSmokeEvidenceTests:
         var evidence = makeEvidence()
         let launchID = UUID()
         let projectID = UUID()
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(
+            at: root,
+            withIntermediateDirectories: true
+        )
 
         for kind in CaptureKind.allCases {
+            let file = try persistedFile(
+                root,
+                "\(kind.rawValue).dat"
+            )
             evidence[kind] = .init(
                 permissionGranted: true,
                 recordingCreated: true,
@@ -84,7 +109,8 @@ final class CaptureHardwareSmokeEvidenceTests:
                         ? true
                         : nil,
                 projectID: projectID,
-                recordedLaunchID: launchID
+                recordedLaunchID: launchID,
+                persistedFilePath: file.path
             )
         }
 
@@ -146,6 +172,15 @@ final class CaptureHardwareSmokeEvidenceTests:
         )
         XCTAssertNotNil(object["camera"])
         XCTAssertNotNil(object["systemAudio"])
+    }
+
+    private func persistedFile(
+        _ root: URL,
+        _ name: String
+    ) throws -> URL {
+        let url = root.appendingPathComponent(name)
+        try Data([0x01]).write(to: url)
+        return url
     }
 
     private func makeEvidence()
