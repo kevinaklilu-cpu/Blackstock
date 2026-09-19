@@ -33,8 +33,96 @@ final class StudioState: ObservableObject {
     @Published var retentionAdvisory: LocalRetentionAdvisory?
     @Published var retentionAdvisorAvailability: LocalRetentionAdvisorAvailability?
     @Published var isAnalyzingRetention = false
+    @Published var storyboard: StoryboardPlan?
 
     private var correlationID = UUID()
+
+    func loadStoryboard(projectID: UUID) {
+        let key = "blackstock.storyboard.\(projectID.uuidString)"
+        if let data = UserDefaults.standard.data(forKey: key) {
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            if let stored = try? decoder.decode(
+                StoryboardPlan.self,
+                from: data
+            ) {
+                storyboard = stored
+                return
+            }
+        }
+
+        storyboard = StoryboardPlan(
+            projectID: projectID,
+            updatedAt: Date()
+        )
+    }
+
+    func addStoryboardBeat(
+        projectID: UUID
+    ) {
+        if storyboard?.projectID != projectID {
+            loadStoryboard(projectID: projectID)
+        }
+        guard var plan = storyboard else { return }
+
+        let range: EditTimeRange?
+        if trimEnd > trimStart {
+            range = .init(
+                startSeconds: trimStart,
+                durationSeconds: trimEnd - trimStart
+            )
+        } else {
+            range = nil
+        }
+
+        _ = plan.addBeat(
+            title: "Beat \(plan.beats.count + 1)",
+            timeRange: range,
+            at: Date()
+        )
+        storyboard = plan
+        persistStoryboard(plan)
+    }
+
+    func updateStoryboardBeat(
+        id: UUID,
+        title: String? = nil,
+        purpose: String? = nil,
+        visualDirection: String? = nil
+    ) {
+        guard var plan = storyboard else { return }
+        guard plan.updateBeat(
+            id: id,
+            title: title,
+            purpose: purpose,
+            visualDirection: visualDirection,
+            at: Date()
+        ) else { return }
+
+        storyboard = plan
+        persistStoryboard(plan)
+    }
+
+    func removeStoryboardBeat(id: UUID) {
+        guard var plan = storyboard else { return }
+        guard plan.removeBeat(id: id, at: Date()) else { return }
+        storyboard = plan
+        persistStoryboard(plan)
+    }
+
+    func moveStoryboardBeat(
+        from sourceIndex: Int,
+        to destinationIndex: Int
+    ) {
+        guard var plan = storyboard else { return }
+        guard plan.moveBeat(
+            from: sourceIndex,
+            to: destinationIndex,
+            at: Date()
+        ) else { return }
+        storyboard = plan
+        persistStoryboard(plan)
+    }
 
     func importMovie(
         url: URL,
@@ -555,6 +643,18 @@ final class StudioState: ObservableObject {
 
         player.replaceCurrentItem(with: item)
         await player.seek(to: .zero)
+    }
+
+    private func persistStoryboard(
+        _ plan: StoryboardPlan
+    ) {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        guard let data = try? encoder.encode(plan) else { return }
+        UserDefaults.standard.set(
+            data,
+            forKey: "blackstock.storyboard.\(plan.projectID.uuidString)"
+        )
     }
 
     private func format(_ seconds: Double) -> String {
