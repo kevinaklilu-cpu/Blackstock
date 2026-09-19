@@ -181,6 +181,7 @@ jobs:
           BLACKSTOCK_UPDATE_PUBLIC_KEY_BASE64: ${{ secrets.BLACKSTOCK_UPDATE_PUBLIC_KEY_BASE64 }}
           BLACKSTOCK_UPDATE_INSTALLER_TEAM_ID: ${{ secrets.BLACKSTOCK_APPLE_TEAM_ID }}
           BLACKSTOCK_INCLUDE_E2E_SMOKE: "0"
+          BLACKSTOCK_PRODUCTION_RELEASE: "1"
         run: |
           set -euo pipefail
           chmod +x Build/package.sh
