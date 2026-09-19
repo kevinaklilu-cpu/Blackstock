@@ -1,4 +1,5 @@
 #if os(macOS)
+import AppKit
 import SwiftUI
 import BlackstockCore
 
@@ -635,6 +636,9 @@ private struct SettingsView: View {
     @State private var showLocalDataRemovalConfirmation = false
     @State private var localDataStatusMessage: String?
     @State private var isCheckingForUpdates = false
+    @State private var isDownloadingUpdatePackage = false
+    @State private var availableUpdateManifest: BlackstockUpdateManifest?
+    @State private var verifiedUpdatePackageURL: URL?
     @State private var updateStatusMessage: String?
 
     var body: some View {
@@ -704,11 +708,17 @@ private struct SettingsView: View {
                             do {
                                 switch try await BlackstockUpdateChecker().check() {
                                 case .notConfigured:
+                                    availableUpdateManifest = nil
+                                    verifiedUpdatePackageURL = nil
                                     updateStatusMessage = "Update-Prüfung ist in diesem Build noch nicht konfiguriert."
                                 case .upToDate:
+                                    availableUpdateManifest = nil
+                                    verifiedUpdatePackageURL = nil
                                     updateStatusMessage = "Blackstock ist auf dem aktuellen Stand."
-                                case .updateAvailable(let version, let build, _):
-                                    updateStatusMessage = "Update verfügbar: Version \(version), Build \(build). Automatische Installation bleibt deaktiviert, bis die Release-Infrastruktur vollständig freigegeben ist."
+                                case .updateAvailable(let manifest):
+                                    availableUpdateManifest = manifest
+                                    verifiedUpdatePackageURL = nil
+                                    updateStatusMessage = "Update verfügbar: Version \(manifest.version), Build \(manifest.build). Das Paket wird erst nach ausdrücklicher Aktion geladen und gegen den signierten SHA-256 geprüft."
                                 }
                             } catch {
                                 if let localized = error as? LocalizedError,
@@ -732,9 +742,46 @@ private struct SettingsView: View {
                             )
                         }
                     }
-                    .disabled(isCheckingForUpdates)
+                    .disabled(isCheckingForUpdates || isDownloadingUpdatePackage)
 
-                    Text("Blackstock akzeptiert nur HTTPS-Manifeste mit gültiger Ed25519-Signatur. Dieser Build prüft nur die Verfügbarkeit; Download und Installation erfolgen nicht automatisch.")
+                    if let manifest = availableUpdateManifest {
+                        Button {
+                            Task {
+                                isDownloadingUpdatePackage = true
+                                defer { isDownloadingUpdatePackage = false }
+
+                                do {
+                                    let url = try await BlackstockUpdatePackageDownloader()
+                                        .downloadAndVerify(manifest: manifest)
+                                    verifiedUpdatePackageURL = url
+                                    updateStatusMessage = "Update-Paket wurde geladen und per SHA-256 verifiziert. Es wird nicht automatisch installiert."
+                                } catch {
+                                    verifiedUpdatePackageURL = nil
+                                    if let localized = error as? LocalizedError,
+                                       let description = localized.errorDescription {
+                                        updateStatusMessage = "Update-Paket wurde verworfen: \(description)"
+                                    } else {
+                                        updateStatusMessage = "Update-Paket wurde verworfen: \(error.localizedDescription)"
+                                    }
+                                }
+                            }
+                        } label: {
+                            HStack {
+                                if isDownloadingUpdatePackage {
+                                    ProgressView().controlSize(.small)
+                                }
+                                Label(
+                                    isDownloadingUpdatePackage
+                                        ? "Update-Paket wird geprüft …"
+                                        : "Update-Paket laden und prüfen",
+                                    systemImage: "checkmark.shield"
+                                )
+                            }
+                        }
+                        .disabled(isCheckingForUpdates || isDownloadingUpdatePackage)
+                    }
+
+                    Text("Blackstock akzeptiert nur HTTPS-Manifeste mit gültiger Ed25519-Signatur. Ein geladenes Paket muss zusätzlich exakt dem signierten SHA-256 entsprechen. Installation erfolgt nicht automatisch.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
@@ -742,6 +789,42 @@ private struct SettingsView: View {
                         Text(updateStatusMessage)
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                    }
+
+                    if let verifiedUpdatePackageURL {
+                        Text("Verifiziertes Paket: \(verifiedUpdatePackageURL.path)")
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+
+                        if let manifest = availableUpdateManifest {
+                            Button {
+                                do {
+                                    try UpdatePackageIntegrityVerifier().verify(
+                                        fileURL: verifiedUpdatePackageURL,
+                                        expectedSHA256: manifest.sha256
+                                    )
+                                    guard NSWorkspace.shared.open(
+                                        verifiedUpdatePackageURL
+                                    ) else {
+                                        updateStatusMessage = "Das verifizierte Paket konnte nicht im macOS-Installer geöffnet werden."
+                                        return
+                                    }
+                                    updateStatusMessage = "Das verifizierte Paket wurde an den macOS-Installer übergeben. Die Installation erfolgt erst nach deiner Bestätigung im System-Installer."
+                                } catch {
+                                    try? FileManager.default.removeItem(
+                                        at: verifiedUpdatePackageURL
+                                    )
+                                    self.verifiedUpdatePackageURL = nil
+                                    updateStatusMessage = "Das Paket hat die erneute Integritätsprüfung vor der Installation nicht bestanden, wurde gelöscht und nicht geöffnet."
+                                }
+                            } label: {
+                                Label(
+                                    "Verifiziertes Paket im macOS-Installer öffnen",
+                                    systemImage: "shippingbox"
+                                )
+                            }
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
