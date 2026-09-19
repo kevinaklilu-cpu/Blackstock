@@ -325,6 +325,52 @@ struct StudioView: View {
                 Divider()
 
                 VStack(alignment: .leading, spacing: 10) {
+                    Text("Technische Audioprüfung")
+                        .font(.headline)
+
+                    if let assessment = state.audioTechnicalAssessment {
+                        if !assessment.snapshot.hasAudioTrack {
+                            Label("Keine Audiospur erkannt", systemImage: "speaker.slash")
+                                .foregroundStyle(.red)
+                        } else {
+                            if let sampleRate = assessment.snapshot.sampleRateHz {
+                                Label(
+                                    "Sample-Rate: \(Int(sampleRate.rounded())) Hz",
+                                    systemImage: "waveform"
+                                )
+                            }
+                            if let channels = assessment.snapshot.channelCount {
+                                Label(
+                                    "Kanäle: \(channels)",
+                                    systemImage: "speaker.wave.2"
+                                )
+                            }
+
+                            if assessment.findings.isEmpty {
+                                Text("Keine Auffälligkeit in der technischen Basisprüfung.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                ForEach(assessment.findings, id: \.self) { finding in
+                                    Label(audioFindingText(finding), systemImage: "exclamationmark.triangle")
+                                        .font(.caption)
+                                }
+                            }
+                        }
+
+                        Text("Diese Prüfung bewertet nur Audiospur, Sample-Rate und Kanalzahl. Loudness, Clipping und Sprachverständlichkeit bleiben separate Gates.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Noch keine technische Audioprüfung verfügbar.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 10) {
                     Text("Captions")
                         .font(.headline)
 
@@ -442,6 +488,19 @@ struct StudioView: View {
         }
         .padding(24)
         .frame(width: 520)
+    }
+
+    private func audioFindingText(
+        _ finding: AudioTechnicalFinding
+    ) -> String {
+        switch finding {
+        case .noAudioTrack:
+            return "Keine Audiospur vorhanden."
+        case .lowSampleRate:
+            return "Die Sample-Rate liegt unter 44,1 kHz."
+        case .monoAudio:
+            return "Das Material ist mono. Das ist nicht automatisch falsch, sollte aber bewusst geprüft werden."
+        }
     }
 
     private var speechLocaleIdentifier: String {
