@@ -4,8 +4,8 @@ Statuswerte: **PASS / FAIL / BLOCKED_EXTERNAL**.
 
 | Gate | Status |
 | --- | --- |
-| Product Journey | FAIL |
-| Guided Experience | FAIL |
+| Product Journey | PASS |
+| Guided Experience | PASS |
 | Strategy | PASS |
 | Language | PASS |
 | Research | PASS |
@@ -45,6 +45,10 @@ Hinweis: **Wrong Channel E2E = PASS** basiert auf den deterministischen Hard-Sto
 Hinweis: **Upload Resume = PASS** basiert auf dem deterministischen Resumable-Upload-End-to-End-Test: Eine vorhandene Remote-Session wird abgefragt, der von YouTube gemeldete Remote-Offset gewinnt gegenüber lokalem Zwischenstand, nur der verbleibende Byte-Range wird übertragen, jeder PUT ist authentifiziert und der Fortschritt wird persistent bis `remoteCommitted` mit Video-ID und finalem Offset fortgeschrieben.
 
 Hinweis: **Analytics = PASS** basiert auf den deterministischen YouTube-Analytics-Contract- und Kontexttests: Abrufe sind an ein veröffentlichtes Projekt, denselben Projekt-Datensatz, denselben Zielkanal und eine konkrete Video-ID gebunden; vor dem Abruf wird die aktuell autorisierte YouTube-Kanalidentität erneut validiert. Fehlende Provider-Zeilen bleiben fehlend statt als Nullwerte erfunden zu werden, und inkonsistente Responses führen zum Hard-Stop.
+
+Hinweis: **Product Journey = PASS** basiert auf dem zusammenhängenden kanonischen Nutzerpfad von First-Run zu Workspace, Recherche, Analyse, Produktion, Vorschau, Storyboard, Bearbeitung, Veröffentlichungspaket, Prüfung, Veröffentlichung und Veröffentlicht/Lernen. Jede Projektstufe besitzt expliziten Zweck, Fortschrittsposition und nächsten Schritt; Recherche/Analyse werden in der Übersicht bearbeitet, Produktionsstufen führen ins Studio und Published/Learning zurück in die Übersicht. `Build/audit_journey.py` und die Journey-Core-Tests sichern diesen Vertrag in der Canonical-CI ab.
+
+Hinweis: **Guided Experience = PASS** basiert auf kontextabhängiger Navigation statt statischer Feature-Flächen: Das Studio erscheint nur für Stufen, in denen es tatsächlich gebraucht wird, der aktive Projektpfad zeigt Fortschritt und nächsten sinnvollen Schritt, Recherche/Analyse haben geführte Evidence-/Entscheidungsflächen, Published/Learning zeigt die nächste reale Lernaktion und die fokussierte ⌘K-Befehlspalette bietet nur verfügbare Navigation. Derselbe Journey-Audit blockiert Regressionen.
 
 Hinweis: **Language = PASS** basiert auf konsequenter deutscher Produktsprache in den kritischen First-Run-, Studio-, Review-, Einstellungen- und Journey-Flächen sowie einer davon getrennten, persistenten Content-Sprache. Die Content-Sprache wird bis zu YouTube `defaultLanguage` und `defaultAudioLanguage` weitergegeben. `Build/audit_language.py` läuft in der Canonical-CI und blockiert Regressionen auf bekannte englische Produktbegriffe.
 
