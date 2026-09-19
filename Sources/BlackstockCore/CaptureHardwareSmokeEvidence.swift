@@ -64,7 +64,7 @@ public struct CaptureHardwareSmokeEvidence:
     Codable,
     Sendable,
     Equatable {
-    public static let currentSchemaVersion = 2
+    public static let currentSchemaVersion = 3
 
     public var schemaVersion: Int
     public var testedAt: Date
@@ -74,6 +74,8 @@ public struct CaptureHardwareSmokeEvidence:
     public var macOSVersion: String
     public var hardwareModel: String
     public var installedFromPackage: Bool
+    public var applicationTeamID: String
+    public var developerIDApplicationVerified: Bool
 
     public var camera: CaptureHardwarePathEvidence
     public var microphone: CaptureHardwarePathEvidence
@@ -95,7 +97,9 @@ public struct CaptureHardwareSmokeEvidence:
         blackstockSourceCommitSHA: String,
         macOSVersion: String,
         hardwareModel: String,
-        installedFromPackage: Bool
+        installedFromPackage: Bool,
+        applicationTeamID: String,
+        developerIDApplicationVerified: Bool
     ) {
         schemaVersion = Self.currentSchemaVersion
         self.testedAt = testedAt
@@ -106,6 +110,9 @@ public struct CaptureHardwareSmokeEvidence:
         self.macOSVersion = macOSVersion
         self.hardwareModel = hardwareModel
         self.installedFromPackage = installedFromPackage
+        self.applicationTeamID = applicationTeamID
+        self.developerIDApplicationVerified =
+            developerIDApplicationVerified
         camera = .init()
         microphone = .init()
         screen = .init()
@@ -201,6 +208,8 @@ public struct CaptureHardwareSmokeEvidence:
 
     public var isComplete: Bool {
         installedFromPackage
+            && developerIDApplicationVerified
+            && !applicationTeamID.isEmpty
             && allCanonicalPathsPass
             && deniedPermissionHardStopPassed
             && temporaryCleanupPassed
@@ -262,8 +271,8 @@ public struct CaptureHardwareSmokeEvidenceStore:
         guard version
                 == CaptureHardwareSmokeEvidence
                     .currentSchemaVersion else {
-            // Legacy evidence has no cryptographic source
-            // provenance and must be re-recorded.
+            // Legacy evidence lacks the complete production-app
+            // provenance contract and must be re-recorded.
             return nil
         }
 
