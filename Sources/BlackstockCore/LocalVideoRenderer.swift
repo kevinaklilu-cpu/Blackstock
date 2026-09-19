@@ -80,7 +80,7 @@ public actor LocalVideoRenderer {
             .last(where: { $0.type == .reframe })?
             .reframeSpec {
             let sourceTracks = try await source.loadTracks(withMediaType: .video)
-            let compositionTracks = try await composition.loadTracks(withMediaType: .video)
+            let compositionTracks = composition.tracks(withMediaType: .video)
             guard let sourceTrack = sourceTracks.first,
                   let compositionTrack = compositionTracks.first else {
                 throw LocalRenderError.missingVideoTrack
@@ -99,7 +99,7 @@ public actor LocalVideoRenderer {
                 throw LocalRenderError.reframePlanUnavailable
             }
 
-            let duration = try await composition.load(.duration)
+            let duration = composition.duration
             let instruction = AVMutableVideoCompositionInstruction()
             instruction.timeRange = CMTimeRange(start: .zero, duration: duration)
 
