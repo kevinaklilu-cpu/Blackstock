@@ -276,11 +276,14 @@ final class BlackstockSession: ObservableObject {
                 let identities = try await YouTubeAuthorizedClient(
                     accessToken: accessToken
                 ).myChannels()
-                guard identities.contains(where: {
-                    $0.id == project.targetChannelID
-                }) else {
+                do {
+                    try PublishingChannelIdentityGuard().validate(
+                        targetChannelID: project.targetChannelID,
+                        identities: identities
+                    )
+                } catch {
                     publishingAuthorizedChannelID = nil
-                    errorMessage = "Die aktuelle Google-Autorisierung gehört nicht zum Projekt-Zielkanal."
+                    errorMessage = "Publishing bleibt gesperrt: \(error.localizedDescription)"
                     return
                 }
                 publishingAuthorizedChannelID = project.targetChannelID
@@ -316,11 +319,14 @@ final class BlackstockSession: ObservableObject {
             let identities = try await YouTubeAuthorizedClient(
                 accessToken: tokens.accessToken
             ).myChannels()
-            guard identities.contains(where: {
-                $0.id == project.targetChannelID
-            }) else {
+            do {
+                try PublishingChannelIdentityGuard().validate(
+                    targetChannelID: project.targetChannelID,
+                    identities: identities
+                )
+            } catch {
                 publishingAuthorizedChannelID = nil
-                errorMessage = "Die neu autorisierte Google-Sitzung enthält nicht den Projekt-Zielkanal. Publishing bleibt gesperrt."
+                errorMessage = "Publishing bleibt gesperrt: \(error.localizedDescription)"
                 return
             }
 
@@ -406,6 +412,20 @@ final class BlackstockSession: ObservableObject {
             let accessToken = try await validatedPublishingAccessToken(
                 targetChannelID: project.targetChannelID
             )
+            let finalIdentities = try await YouTubeAuthorizedClient(
+                accessToken: accessToken
+            ).myChannels()
+            do {
+                try PublishingChannelIdentityGuard().validate(
+                    targetChannelID: project.targetChannelID,
+                    identities: finalIdentities
+                )
+            } catch {
+                publishingAuthorizedChannelID = nil
+                errorMessage = "Upload gestoppt: \(error.localizedDescription)"
+                return
+            }
+
             let networkAvailable = await LocalNetworkAvailabilityProbe()
                 .currentState() == .available
 
