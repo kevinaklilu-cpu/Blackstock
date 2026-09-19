@@ -415,11 +415,14 @@ final class BlackstockSession: ObservableObject {
             let finalIdentities = try await YouTubeAuthorizedClient(
                 accessToken: accessToken
             ).myChannels()
+            let finalAuthorizedIdentity: YouTubeChannelIdentity
             do {
-                try PublishingChannelIdentityGuard().validate(
-                    targetChannelID: project.targetChannelID,
-                    identities: finalIdentities
-                )
+                finalAuthorizedIdentity = try PublishingChannelIdentityGuard()
+                    .validate(
+                        targetChannelID: project.targetChannelID,
+                        identities: finalIdentities
+                    )
+                publishingAuthorizedChannelID = finalAuthorizedIdentity.id
             } catch {
                 publishingAuthorizedChannelID = nil
                 errorMessage = "Upload gestoppt: \(error.localizedDescription)"
@@ -473,7 +476,7 @@ final class BlackstockSession: ObservableObject {
             .publish(
                 review: review,
                 workspaceChannelID: workspaceChannelID,
-                authorizedUploadChannelID: authorizedChannelID,
+                authorizedUploadChannelID: finalAuthorizedIdentity.id,
                 quotaState: .unknown,
                 networkAvailable: networkAvailable,
                 experimentID: nil,
