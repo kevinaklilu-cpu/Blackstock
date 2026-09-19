@@ -187,6 +187,9 @@ enum BlackstockCaptureHardwareAudit {
             .operatingSystemVersionString
         let model = hardwareModel()
         let installed = installedFromPackage()
+        let executableSHA256 =
+            Bundle.main.executableURL
+                .flatMap { sha256(of: $0) } ?? ""
         let signing = applicationSigningMetadata(
             expectedTeamID: metadata.expectedTeamID
         )
@@ -205,7 +208,9 @@ enum BlackstockCaptureHardwareAudit {
            existing.applicationTeamID
                 == signing.teamID,
            existing.developerIDApplicationVerified
-                == signing.verified {
+                == signing.verified,
+           existing.applicationExecutableSHA256
+                == executableSHA256 {
             return existing
         }
 
@@ -222,7 +227,9 @@ enum BlackstockCaptureHardwareAudit {
             installedFromPackage: installed,
             applicationTeamID: signing.teamID,
             developerIDApplicationVerified:
-                signing.verified
+                signing.verified,
+            applicationExecutableSHA256:
+                executableSHA256
         )
     }
 
