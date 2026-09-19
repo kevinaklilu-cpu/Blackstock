@@ -68,6 +68,11 @@ CONTRACTS = {
         "kSecAttrAccessibleWhenUnlockedThisDeviceOnly",
         'private static let service = "de.blackstock.app"',
     ],
+    "docs/THREAT_MODEL.md": [
+        "Root-Pfad `/`",
+        "http://127.0.0.1:<dynamischer Port>",
+        "persistiert kein `client_secret`",
+    ],
 }
 
 TEST_CONTRACTS = {
