@@ -938,7 +938,7 @@ private struct SettingsView: View {
                         showLocalDataRemovalConfirmation = true
                     }
 
-                    Text("Löscht lokale Projekte, Renders, Captions, Thumbnails, Growth-Daten, Blackstock-Einstellungen, gespeicherte Google-/YouTube-Anmeldedaten und eine importierte OAuth-Client-Konfiguration von diesem Mac.")
+                    Text("Löscht lokale Projekte, Renderings, Untertitel, Vorschaubilder, Wachstumsdaten, Blackstock-Einstellungen, gespeicherte Google-/YouTube-Anmeldedaten und eine importierte OAuth-Client-Konfiguration von diesem Mac.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
