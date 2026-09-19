@@ -19,9 +19,9 @@ public struct InstallerPackageSignatureValidator: Sendable {
             in: .whitespacesAndNewlines
         )
         guard !teamID.isEmpty,
-              teamID.allSatisfy({
+              teamID.unicodeScalars.allSatisfy({
                   $0.isASCII
-                  && ($0.isLetter || $0.isNumber)
+                  && CharacterSet.alphanumerics.contains($0)
               }) else {
             throw InstallerPackageSignatureValidationError
                 .invalidExpectedTeamID
