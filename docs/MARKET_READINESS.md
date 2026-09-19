@@ -50,6 +50,7 @@ Der Verifier verlangt deshalb:
 - identische Produktions-Manifest-URL,
 - identische Paket-URL,
 - identischen SHA-256 des Release-Pakets,
+- identischen signierten Git-Source-Commit-SHA zwischen Produktionsrelease, installierter App und In-App-Updater-Evidenz,
 - identische erwartete Apple-Installer-Team-ID,
 - Produktions-App unter `/Applications/Blackstock.app`.
 
@@ -94,13 +95,13 @@ Blackstock selbst protokolliert den tatsächlichen App-Pfad:
 3. verifiziertes Paket,
 4. verifiziertes Installer-Team,
 5. Übergabe an den macOS-Installer,
-6. anschließend gestartete exakte Zielversion und Ziel-Build.
+6. anschließend gestartete exakte Zielversion, Ziel-Build und der im Manifest signierte Source-Commit.
 
 ## CI-Regel
 
 Die Canonical-CI testet ausschließlich den **Vertrag des Verifiers** mit synthetischen Fixtures. Diese Fixtures sind niemals Produktionsnachweis und dürfen die fünf externen Gates nicht auf PASS setzen.
 
-Der CI-Negativtest verwendet absichtlich widersprüchliche Paket-Hashes zwischen Release- und Updater-Evidenz. Der Market-Readiness-Verifier muss diesen Fall ablehnen.
+Die CI-Negativtests verwenden absichtlich widersprüchliche Paket-Hashes **und separat einen abweichenden beobachteten Source-Commit** zwischen Release- und Updater-Evidenz. Der Market-Readiness-Verifier muss beide Fälle ablehnen.
 
 ## Statusregel
 
