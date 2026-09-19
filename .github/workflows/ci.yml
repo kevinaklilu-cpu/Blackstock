@@ -400,6 +400,23 @@ jobs:
 
       - name: Production release workflow audit
         run: python3 Build/audit_production_release_workflows.py
+      - name: Production package fail-closed audit
+        run: |
+          set -euo pipefail
+
+          if BLACKSTOCK_PRODUCTION_RELEASE=1 \
+            BLACKSTOCK_INCLUDE_E2E_SMOKE=1 \
+            bash Build/package.sh "$RUNNER_TEMP/forbidden-production-e2e"; then
+            echo "Production package unexpectedly allowed the CI-only E2E helper." >&2
+            exit 1
+          fi
+
+          if BLACKSTOCK_PRODUCTION_RELEASE=1 \
+            BLACKSTOCK_INCLUDE_E2E_SMOKE=0 \
+            bash Build/package.sh "$RUNNER_TEMP/incomplete-production"; then
+            echo "Production package unexpectedly accepted missing release configuration." >&2
+            exit 1
+          fi
       - name: Swift tests
         run: swift test
       - name: Release build
