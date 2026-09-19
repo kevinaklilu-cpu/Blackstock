@@ -60,7 +60,7 @@ jobs:
 
           cat > "$EVIDENCE" <<JSON
           {
-            "schemaVersion": 4,
+            "schemaVersion": 5,
             "testedAt": "2026-09-19T20:00:00Z",
             "blackstockVersion": "1.0.0",
             "blackstockBuild": "100",
@@ -68,6 +68,9 @@ jobs:
             "macOSVersion": "macOS 26.6.2",
             "hardwareModel": "MacBookProTest",
             "installedFromPackage": true,
+            "installerReceiptPackageID": "de.blackstock.app",
+            "installerReceiptVersion": "1.0.0",
+            "installerReceiptVerified": true,
             "applicationTeamID": "ABC123TEAM",
             "developerIDApplicationVerified": true,
             "applicationExecutableSHA256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
@@ -273,7 +276,7 @@ jobs:
           source_commit = "1" * 40
 
           capture = {
-              "schemaVersion": 4,
+              "schemaVersion": 5,
               "testedAt": "2026-09-19T20:00:00Z",
               "blackstockVersion": "1.0.0",
               "blackstockBuild": "100",
@@ -281,6 +284,9 @@ jobs:
               "macOSVersion": "macOS 26.6.2",
               "hardwareModel": "MacBookProTest",
               "installedFromPackage": True,
+              "installerReceiptPackageID": "de.blackstock.app",
+              "installerReceiptVersion": "1.0.0",
+              "installerReceiptVerified": True,
               "applicationTeamID": "ABC123TEAM",
               "developerIDApplicationVerified": True,
               "applicationExecutableSHA256": executable_hash,
@@ -626,6 +632,24 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' /Applications/Blackstock.app/Contents/Info.plist)" = "de.blackstock.app"
           test "$(/usr/libexec/PlistBuddy -c 'Print :BlackstockSourceCommitSHA' /Applications/Blackstock.app/Contents/Info.plist)" = "${GITHUB_SHA}"
           test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' /Applications/Blackstock.app/Contents/Info.plist)" = "13.0"
+
+          RECEIPT="$RUNNER_TEMP/blackstock-installer-receipt.plist"
+          pkgutil --pkg-info-plist de.blackstock.app > "$RECEIPT"
+          python3 - "$RECEIPT" /Applications/Blackstock.app/Contents/Info.plist <<'PY'
+          import plistlib
+          import sys
+
+          with open(sys.argv[1], "rb") as handle:
+              receipt = plistlib.load(handle)
+          with open(sys.argv[2], "rb") as handle:
+              info = plistlib.load(handle)
+
+          assert receipt["pkgid"] == "de.blackstock.app"
+          assert receipt["pkg-version"] == info["CFBundleShortVersionString"]
+          assert receipt["volume"] == "/"
+          assert receipt["install-location"] == "/"
+          PY
+
           codesign --verify --deep --strict --verbose=2 /Applications/Blackstock.app
           codesign --display --verbose=4 /Applications/Blackstock.app 2>&1 \
             | grep -qi 'runtime'
