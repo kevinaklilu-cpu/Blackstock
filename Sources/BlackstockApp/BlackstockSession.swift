@@ -109,6 +109,10 @@ final class BlackstockSession: ObservableObject {
         return "Nicht konfiguriert"
     }
 
+    var hasImportedOAuthConfiguration: Bool {
+        !importedClientID.isEmpty
+    }
+
     @discardableResult
     func importOAuthJSON(from url: URL) -> Bool {
         let hasSecurityScopedAccess = url.startAccessingSecurityScopedResource()
