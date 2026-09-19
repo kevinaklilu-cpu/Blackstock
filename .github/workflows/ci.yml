@@ -57,22 +57,8 @@ jobs:
           APP_BIN="/Applications/Blackstock.app/Contents/MacOS/Blackstock"
           LOG="$RUNNER_TEMP/blackstock-launch.log"
 
-          open -na /Applications/Blackstock.app --stdout "$LOG" --stderr "$LOG"
-
-          pid=""
-          for _ in {1..20}; do
-            pid="$(pgrep -f "$APP_BIN" | head -n 1 || true)"
-            if [[ -n "$pid" ]]; then
-              break
-            fi
-            sleep 0.5
-          done
-
-          if [[ -z "$pid" ]]; then
-            echo "Blackstock did not stay alive after launch."
-            cat "$LOG" || true
-            exit 1
-          fi
+          "$APP_BIN" >"$LOG" 2>&1 &
+          pid=$!
 
           sleep 3
           if ! kill -0 "$pid" 2>/dev/null; then
@@ -91,6 +77,7 @@ jobs:
 
           kill -KILL "$pid" 2>/dev/null || true
           echo "Blackstock required a forced stop after smoke testing."
+          cat "$LOG" || true
           exit 1
 
       - uses: actions/upload-artifact@v4
