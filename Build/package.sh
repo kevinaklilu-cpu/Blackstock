@@ -9,6 +9,13 @@ VERSION="${BLACKSTOCK_VERSION:-0.1.0}"
 BUILD_NUMBER="${BLACKSTOCK_BUILD:-1}"
 BUNDLE_ID="de.blackstock.app"
 OAUTH_CLIENT_ID="${BLACKSTOCK_GOOGLE_OAUTH_CLIENT_ID:-}"
+PUBLIC_PUBLISHING_APPROVED="${BLACKSTOCK_YOUTUBE_PUBLIC_PUBLISHING_APPROVED:-0}"
+
+if [[ "$PUBLIC_PUBLISHING_APPROVED" == "1" ]]; then
+  PUBLIC_PUBLISHING_PLIST="<true/>"
+else
+  PUBLIC_PUBLISHING_PLIST="<false/>"
+fi
 
 rm -rf "$OUT"
 mkdir -p "$OUT"
@@ -39,6 +46,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <key>NSHighResolutionCapable</key><true/>
 <key>NSSpeechRecognitionUsageDescription</key><string>Blackstock transkribiert autorisierte Produktionsmedien lokal auf diesem Mac, wenn On-Device-Spracherkennung verfügbar ist.</string>
 <key>BlackstockGoogleOAuthClientID</key><string>${OAUTH_CLIENT_ID}</string>
+<key>BlackstockYouTubePublicPublishingApproved</key>${PUBLIC_PUBLISHING_PLIST}
 </dict></plist>
 PLIST
 
