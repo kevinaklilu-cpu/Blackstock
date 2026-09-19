@@ -65,12 +65,18 @@ private struct WorkspaceShell: View {
                         contentLanguage: session.contentLanguage
                     )
                 } else {
-                    OverviewView(session: session)
+                    OverviewView(
+                        session: session,
+                        onOpenStudio: { selection = "Studio" }
+                    )
                 }
             case "Einstellungen":
                 SettingsView(session: session)
             default:
-                OverviewView(session: session)
+                OverviewView(
+                    session: session,
+                    onOpenStudio: { selection = "Studio" }
+                )
             }
         }
         .onChange(of: commandPaletteRequest) { _ in
@@ -224,6 +230,7 @@ private struct CommandPaletteView: View {
 
 private struct OverviewView: View {
     @ObservedObject var session: BlackstockSession
+    let onOpenStudio: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -245,6 +252,77 @@ private struct OverviewView: View {
 
             Text("Der First-Run nutzt reale Google-/YouTube-Autorisierung. Weitere Produktflächen bleiben unsichtbar, bis ihre Capability-Gates bestehen.")
                 .foregroundStyle(.secondary)
+
+            if let project = session.activeProject {
+                let guidance = project.stage.journeyGuidance
+
+                GroupBox("Aktiver Projektpfad") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(alignment: .firstTextBaseline) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(project.title)
+                                    .font(.headline)
+                                Text(guidance.title)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Text(
+                                "Schritt \(project.stage.canonicalProgressPosition) von \(BlackstockStage.canonicalProgressCount)"
+                            )
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                        }
+
+                        ProgressView(
+                            value: Double(
+                                project.stage.canonicalProgressPosition
+                            ),
+                            total: Double(
+                                BlackstockStage.canonicalProgressCount
+                            )
+                        )
+                        .accessibilityLabel("Fortschritt im kanonischen Blackstock-Projektpfad")
+                        .accessibilityValue(
+                            "Schritt \(project.stage.canonicalProgressPosition) von \(BlackstockStage.canonicalProgressCount)"
+                        )
+
+                        Text(guidance.purpose)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+
+                        Divider()
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Nächster sinnvoller Schritt")
+                                .font(.caption.weight(.semibold))
+                            Text(guidance.nextAction)
+                                .font(.callout)
+                        }
+
+                        if guidance.recommendedSurface == .studio {
+                            Button {
+                                onOpenStudio()
+                            } label: {
+                                Label(
+                                    "Im Studio fortfahren",
+                                    systemImage: "arrow.right.circle.fill"
+                                )
+                            }
+                            .buttonStyle(.borderedProminent)
+                        } else if guidance.recommendedSurface == .overview {
+                            Label(
+                                "Du bist bereits im passenden Published/Learning-Bereich.",
+                                systemImage: "checkmark.circle"
+                            )
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 6)
+                }
+            }
 
             if let project = session.activeProject,
                project.stage == .published,
