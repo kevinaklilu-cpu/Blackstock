@@ -36,6 +36,66 @@ final class StudioState: ObservableObject {
     @Published var storyboard: StoryboardPlan?
 
     private var correlationID = UUID()
+    private var activeProjectID: UUID?
+    private var workspaceStore: ProjectWorkspaceStore?
+
+    func loadWorkspace(projectID: UUID) async {
+        activeProjectID = projectID
+
+        do {
+            let store = try makeWorkspaceStore()
+            workspaceStore = store
+
+            if let snapshot = try store.load(
+                projectID: projectID
+            ) {
+                asset = snapshot.mediaAsset
+                graph = snapshot.editGraph
+                ledger = snapshot.activityLedger
+                storyboard = snapshot.storyboard
+                trimStart = snapshot.trimStart
+                trimEnd = snapshot.trimEnd
+                transcript = snapshot.transcript
+                captionURL = snapshot.captionURL
+                renderArtifact = snapshot.renderArtifact
+
+                if let transcript {
+                    transcriptStructure = TranscriptStructureAnalyzer()
+                        .analyze(transcript: transcript)
+                    retentionAdvisorAvailability = LocalRetentionAdvisor()
+                        .availability(
+                            localeIdentifier: transcript.localeIdentifier
+                        )
+                }
+
+                if let artifact = renderArtifact,
+                   !FileManager.default.fileExists(
+                    atPath: artifact.fileURL.path
+                   ) {
+                    renderArtifact = nil
+                }
+
+                if let asset {
+                    if FileManager.default.fileExists(
+                        atPath: asset.sourceURL.path
+                    ) {
+                        try await rebuildPreview()
+                        await refreshAudioInspection(
+                            for: asset.sourceURL
+                        )
+                    } else {
+                        errorMessage = "Das gespeicherte Produktionsmedium fehlt im Projekt-Workspace."
+                    }
+                }
+                return
+            }
+
+            loadStoryboard(projectID: projectID)
+            persistWorkspaceIfPossible()
+        } catch {
+            errorMessage = "Projekt-Workspace konnte nicht geladen werden: \(error.localizedDescription)"
+        }
+    }
 
     func loadStoryboard(projectID: UUID) {
         let key = "blackstock.storyboard.\(projectID.uuidString)"
@@ -643,6 +703,73 @@ final class StudioState: ObservableObject {
 
         player.replaceCurrentItem(with: item)
         await player.seek(to: .zero)
+    }
+
+    private func makeWorkspaceStore() throws -> ProjectWorkspaceStore {
+        let base = try FileManager.default.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        let root = base
+            .appendingPathComponent("Blackstock", isDirectory: true)
+            .appendingPathComponent("Projects", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: root,
+            withIntermediateDirectories: true
+        )
+        return ProjectWorkspaceStore(rootURL: root)
+    }
+
+    private func persistWorkspaceIfPossible() {
+        guard let projectID = activeProjectID,
+              let storyboard else {
+            return
+        }
+
+        do {
+            let store = try workspaceStore ?? makeWorkspaceStore()
+            workspaceStore = store
+            let snapshot = StudioWorkspaceSnapshot(
+                projectID: projectID,
+                mediaAsset: asset,
+                editGraph: graph,
+                activityLedger: ledger,
+                storyboard: storyboard,
+                trimStart: trimStart,
+                trimEnd: trimEnd,
+                transcript: transcript,
+                captionURL: captionURL,
+                renderArtifact: renderArtifact,
+                updatedAt: Date()
+            )
+            try store.save(snapshot)
+        } catch {
+            errorMessage = "Autosave des Projekt-Workspace fehlgeschlagen: \(error.localizedDescription)"
+        }
+    }
+
+    private func refreshAudioInspection(
+        for url: URL
+    ) async {
+        do {
+            audioTechnicalAssessment = try await LocalAudioTechnicalInspector()
+                .inspect(url: url)
+        } catch {
+            audioTechnicalAssessment = nil
+        }
+
+        if audioTechnicalAssessment?.snapshot.hasAudioTrack == true {
+            do {
+                audioSignalAssessment = try await LocalAudioSignalAnalyzer()
+                    .analyze(url: url)
+            } catch {
+                audioSignalAssessment = nil
+            }
+        } else {
+            audioSignalAssessment = nil
+        }
     }
 
     private func persistStoryboard(
