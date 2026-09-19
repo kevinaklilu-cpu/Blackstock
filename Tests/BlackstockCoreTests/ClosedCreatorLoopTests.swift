@@ -19,6 +19,41 @@ final class ClosedCreatorLoopTests: XCTestCase {
         }
     }
 
+    func testUnknownQuotaDoesNotPretendAvailabilityButAllowsProviderAttempt() {
+        let context = PublicationPreflightContext(
+            projectTargetChannelID: "channel-A",
+            workspaceChannelID: "channel-A",
+            authorizedUploadChannelID: "channel-A",
+            renderValidated: true,
+            rightsValidated: true,
+            authorizationAvailable: true,
+            quotaState: .unknown,
+            networkAvailable: true
+        )
+
+        XCTAssertNoThrow(try context.validate())
+    }
+
+    func testKnownUnavailableQuotaHardStops() {
+        let context = PublicationPreflightContext(
+            projectTargetChannelID: "channel-A",
+            workspaceChannelID: "channel-A",
+            authorizedUploadChannelID: "channel-A",
+            renderValidated: true,
+            rightsValidated: true,
+            authorizationAvailable: true,
+            quotaState: .unavailable,
+            networkAvailable: true
+        )
+
+        XCTAssertThrowsError(try context.validate()) {
+            XCTAssertEqual(
+                $0 as? PublicationPreflightError,
+                .quotaUnavailable
+            )
+        }
+    }
+
     func testResumableUploadRangeParsing() {
         XCTAssertEqual(
             YouTubeResumableUploader.nextOffset(fromRangeHeader: "bytes=0-1048575"),
