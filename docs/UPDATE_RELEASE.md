@@ -50,7 +50,7 @@ Das Tool:
 - Manifest und Paket müssen per HTTPS ausgeliefert werden.
 - Der private Signaturschlüssel bleibt außerhalb von Git und App-Bundle.
 - Ein Paket wird in Blackstock erst nach gültiger Manifest-Signatur geladen.
-- Vor der Übergabe an den macOS-Installer wird der Paket-Hash erneut geprüft.
+- Vor der Übergabe an den macOS-Installer werden Paket-Hash **und** Developer-ID-Installer-Team unmittelbar erneut geprüft; erst nach diesem Installations-Preflight wird der System-Installer geöffnet.
 - Blackstock installiert Updates nicht still; der System-Installer wird nur nach ausdrücklicher Nutzeraktion geöffnet.
 - Signing, Notarisierung und Gatekeeper bleiben `BLOCKED_EXTERNAL`, bis der reale Produktionspfad mit Apple-Zertifikaten erfolgreich ausgeführt wurde.
 - Der Updater bleibt `FAIL`, bis eine reale Update-Endpoint-/Manifest-Konfiguration und ein vollständiger Update-E2E gegen ein signiertes Release nachgewiesen sind.
