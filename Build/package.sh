@@ -21,11 +21,45 @@ UPDATE_MANIFEST_URL="${BLACKSTOCK_UPDATE_MANIFEST_URL:-}"
 UPDATE_PUBLIC_KEY="${BLACKSTOCK_UPDATE_PUBLIC_KEY_BASE64:-}"
 UPDATE_INSTALLER_TEAM_ID="${BLACKSTOCK_UPDATE_INSTALLER_TEAM_ID:-}"
 INCLUDE_E2E_SMOKE="${BLACKSTOCK_INCLUDE_E2E_SMOKE:-0}"
+PRODUCTION_RELEASE="${BLACKSTOCK_PRODUCTION_RELEASE:-0}"
 
 if [[ "$PUBLIC_PUBLISHING_APPROVED" == "1" ]]; then
   PUBLIC_PUBLISHING_PLIST="<true/>"
 else
   PUBLIC_PUBLISHING_PLIST="<false/>"
+fi
+
+if [[ "$PRODUCTION_RELEASE" == "1" ]]; then
+  if [[ "$INCLUDE_E2E_SMOKE" == "1" ]]; then
+    echo "Production release must not include the CI-only E2E helper." >&2
+    exit 1
+  fi
+  for name in \
+    APP_SIGN_IDENTITY \
+    INSTALLER_SIGN_IDENTITY \
+    UPDATE_MANIFEST_URL \
+    UPDATE_PUBLIC_KEY \
+    UPDATE_INSTALLER_TEAM_ID
+  do
+    if [[ -z "${!name}" ]]; then
+      echo "Production release requires $name." >&2
+      exit 1
+    fi
+  done
+  if [[ ! "$UPDATE_MANIFEST_URL" =~ ^https:// ]]; then
+    echo "Production update manifest URL must use HTTPS." >&2
+    exit 1
+  fi
+  case "$UPDATE_MANIFEST_URL" in
+    *localhost*|*127.0.0.1*|*.invalid/*|*.example/*|*.test/*)
+      echo "Production update manifest URL must use a real production host." >&2
+      exit 1
+      ;;
+  esac
+  if [[ -z "$NOTARY_PROFILE" && ( -z "$NOTARY_KEY_PATH" || -z "$NOTARY_KEY_ID" || -z "$NOTARY_ISSUER" ) ]]; then
+    echo "Production release requires notarization credentials." >&2
+    exit 1
+  fi
 fi
 
 rm -rf "$OUT"
