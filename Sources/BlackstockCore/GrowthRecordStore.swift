@@ -8,7 +8,7 @@ public enum GrowthRecordStoreError: Error, Sendable, Equatable {
 
 public enum GrowthRecordStoreSchema {
     public static let legacyUnversioned = 1
-    public static let current = 2
+    public static let current = 3
 }
 
 private struct GrowthStoreEnvelope<Value: Codable & Sendable>: Codable, Sendable {
@@ -117,7 +117,10 @@ public struct GrowthRecordStore: Sendable {
         to url: URL
     ) throws {
         let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+        encoder.dateEncodingStrategy = .custom { date, encoder in
+            var container = encoder.singleValueContainer()
+            try container.encode(date.timeIntervalSince1970)
+        }
         encoder.outputFormatting = [.sortedKeys]
         let envelope = GrowthStoreEnvelope(
             schemaVersion: GrowthRecordStoreSchema.current,
@@ -142,7 +145,33 @@ public struct GrowthRecordStore: Sendable {
 
         let data = try Data(contentsOf: url)
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            if let seconds = try? container.decode(Double.self) {
+                return Date(timeIntervalSince1970: seconds)
+            }
+            if let value = try? container.decode(String.self) {
+                let fractional = ISO8601DateFormatter()
+                fractional.formatOptions = [
+                    .withInternetDateTime,
+                    .withFractionalSeconds
+                ]
+                if let date = fractional.date(from: value) {
+                    return date
+                }
+
+                let legacy = ISO8601DateFormatter()
+                legacy.formatOptions = [.withInternetDateTime]
+                if let date = legacy.date(from: value) {
+                    return date
+                }
+            }
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription:
+                    "Expected Unix timestamp or ISO-8601 date."
+            )
+        }
         let object = try JSONSerialization.jsonObject(with: data)
         guard let dictionary = object as? [String: Any] else {
             throw CocoaError(.fileReadCorruptFile)
