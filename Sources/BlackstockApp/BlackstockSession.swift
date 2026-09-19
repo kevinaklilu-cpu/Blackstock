@@ -333,6 +333,40 @@ final class BlackstockSession: ObservableObject {
         return accessToken
     }
 
+    func savePublishPreparation(
+        package: PublishPackage,
+        qualityReview: CreatorQualityReview
+    ) throws {
+        let snapshot = PublishPreparationSnapshot(
+            package: package,
+            qualityReview: qualityReview,
+            savedAt: Date()
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(snapshot)
+        UserDefaults.standard.set(
+            data,
+            forKey: "blackstock.publish-preparation.\(package.projectID.uuidString)"
+        )
+    }
+
+    func loadPublishPreparation(
+        projectID: UUID
+    ) -> PublishPreparationSnapshot? {
+        guard let data = UserDefaults.standard.data(
+            forKey: "blackstock.publish-preparation.\(projectID.uuidString)"
+        ) else {
+            return nil
+        }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try? decoder.decode(
+            PublishPreparationSnapshot.self,
+            from: data
+        )
+    }
+
     func publishingJournal() throws -> ExternalActionJournal {
         if let cachedPublishingJournal {
             return cachedPublishingJournal
