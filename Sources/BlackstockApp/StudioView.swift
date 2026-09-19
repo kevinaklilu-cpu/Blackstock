@@ -575,7 +575,7 @@ struct StudioView: View {
                     Divider()
 
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("Retention & Struktur")
+                        Text("Zuschauerbindung & Struktur")
                             .font(.headline)
 
                         ForEach(structure.factualSummary, id: \.self) { fact in
@@ -930,7 +930,7 @@ struct StudioView: View {
         case .editing: return "Video bearbeiten"
         case .packaging: return "Veröffentlichungspaket vorbereiten"
         case .review: return "Release prüfen"
-        case .publishing: return "Publishing läuft"
+        case .publishing: return "Veröffentlichung läuft"
         case .published: return "Veröffentlicht"
         case .discovery: return "Discovery"
         case .research: return "Research"
@@ -967,9 +967,9 @@ struct StudioView: View {
         case .packaging:
             return "Bearbeitung ist eingefroren; Metadaten, Thumbnail, Captions und Prüfung folgen."
         case .review:
-            return "Alle Release-Gates müssen belegt sein, bevor Publishing starten darf."
+            return "Alle Freigabeprüfungen müssen belegt sein, bevor die Veröffentlichung starten darf."
         case .publishing:
-            return "Remote-Aktionen werden journaled und auf den Zielkanal begrenzt."
+            return "Externe Aktionen werden protokolliert und auf den Zielkanal begrenzt."
         case .published:
             return "Die YouTube-Video-ID ist gespeichert; Analytics kann zurückgeführt werden."
         case .discovery, .research, .analysis:
@@ -982,7 +982,7 @@ struct StudioView: View {
     ) -> String {
         switch availability {
         case .available:
-            return "Lokale Retention-Hinweise sind verfügbar."
+            return "Lokale Hinweise zur Zuschauerbindung sind verfügbar."
         case .unsupportedOS:
             return "Lokale Foundation-Models-Hinweise benötigen eine unterstützte macOS-Version."
         case .frameworkUnavailable:
