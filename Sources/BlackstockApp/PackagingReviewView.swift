@@ -699,6 +699,8 @@ struct PackagingReviewView: View {
                     )
                     .toggleStyle(.switch)
                     .labelsHidden()
+                    .accessibilityLabel("\(areaTitle(area)) geprüft")
+                    .accessibilityHint(areaQuestion(area))
                     .disabled(reviewFrozen)
                 }
             }
