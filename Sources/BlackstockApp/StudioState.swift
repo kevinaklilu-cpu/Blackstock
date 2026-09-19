@@ -64,6 +64,17 @@ final class StudioState: ObservableObject {
                         correlationID: correlationID
                     ))
                 }
+                if let sourceVersion = loadResult.migratedFromSchemaVersion {
+                    ledger.append(.init(
+                        timestamp: Date(),
+                        actor: .blackstock,
+                        stage: .editing,
+                        action: "workspace-schema-migrated",
+                        summary: "Projekt-Workspace wurde lokal von Schema v\(sourceVersion) auf v\(WorkspaceSchema.current) migriert.",
+                        reversible: false,
+                        correlationID: correlationID
+                    ))
+                }
                 storyboard = snapshot.storyboard
                 trimStart = snapshot.trimStart
                 trimEnd = snapshot.trimEnd
@@ -114,9 +125,14 @@ final class StudioState: ObservableObject {
                         errorMessage = "Das gespeicherte Produktionsmedium fehlt im Projekt-Workspace."
                     }
                 }
-                if loadResult.recoveredFromBackup {
+                if loadResult.recoveredFromBackup
+                    || loadResult.migratedFromSchemaVersion != nil {
                     persistWorkspaceIfPossible()
+                }
+                if loadResult.recoveredFromBackup {
                     errorMessage = "Projekt-Workspace wurde aus dem letzten validierten lokalen Backup wiederhergestellt."
+                } else if let sourceVersion = loadResult.migratedFromSchemaVersion {
+                    errorMessage = "Projekt-Workspace wurde sicher von Schema v\(sourceVersion) auf v\(WorkspaceSchema.current) migriert."
                 }
                 return
             }
