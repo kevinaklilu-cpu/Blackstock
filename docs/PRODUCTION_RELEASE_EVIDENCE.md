@@ -37,7 +37,7 @@ Blackstock enthält zwei bewusst getrennte manuelle Workflows:
    - läuft erst **nach** Veröffentlichung von Manifest und Paket unter den realen HTTPS-URLs,
    - verifiziert Manifest-Signatur, Paket-Hash, Installer-Team und Notarisierungsstatus,
    - installiert das verifizierte Paket auf einem frischen macOS-Runner,
-   - verifiziert Developer ID Application, Gatekeeper sowie exakte Manifest-Version, -Build **und Source-Commit** der installierten App,
+   - verifiziert Developer ID Application, Gatekeeper sowie exakte Manifest-Version, -Build, **Source-Commit und Executable-SHA-256** der installierten App,
    - startet die installierte Produktions-App,
    - erzeugt `release-evidence.json`.
 
@@ -174,6 +174,7 @@ Er prüft:
 - optional: installierte App besteht `codesign --deep --strict`.
 - optional: installierte App weist Developer ID Application und erwartete Team-ID aus.
 - optional: `BlackstockSourceCommitSHA` der installierten App entspricht exakt dem signierten Manifest-Commit.
+- optional: der SHA-256 des installierten Blackstock-Executables wird als `installedAppExecutableSHA256` in der Release-Evidenz gebunden.
 - optional: Gatekeeper akzeptiert die installierte App.
 - optional: `notarytool info` meldet für die konkrete Submission `Accepted`.
 
@@ -210,6 +211,7 @@ Zusätzlich muss auf einem sauberen Mac der tatsächliche Blackstock-App-Pfad ge
 10. Blackstock neu starten;
 11. Bundle-Version und Build müssen exakt der Manifest-Zielversion entsprechen;
 12. `BlackstockSourceCommitSHA` des gestarteten Bundles muss exakt dem signierten Manifest-Source-Commit entsprechen.
+13. Der SHA-256 des nach dem Update tatsächlich gestarteten Blackstock-Executables wird als `observedInstalledExecutableSHA256` gespeichert und muss im finalen Market-Readiness-Verifier exakt dem veröffentlichten Release und dem Capture-Smoke entsprechen.
 
 Blackstock protokolliert diesen Pfad selbst lokal unter:
 
