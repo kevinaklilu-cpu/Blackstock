@@ -47,7 +47,8 @@ private struct WorkspaceShell: View {
             List(selection: $selection) {
                 Label("Übersicht", systemImage: "rectangle.grid.2x2")
                     .tag("Übersicht")
-                if session.activeProject != nil {
+                if session.activeProject?.stage.journeyGuidance
+                    .recommendedSurface == .studio {
                     Label("Studio", systemImage: "film.stack")
                         .tag("Studio")
                 }
@@ -86,7 +87,8 @@ private struct WorkspaceShell: View {
         .sheet(isPresented: $showCommandPalette) {
             CommandPaletteView(
                 currentSelection: selection,
-                hasActiveProject: session.activeProject != nil,
+                hasActiveProject: session.activeProject?.stage
+                    .journeyGuidance.recommendedSurface == .studio,
                 onNavigate: { destination in
                     selection = destination
                     showCommandPalette = false
@@ -319,7 +321,9 @@ private struct OverviewView: View {
                             .buttonStyle(.borderedProminent)
                         } else if guidance.recommendedSurface == .overview {
                             Label(
-                                "Du bist bereits im passenden Bereich Veröffentlicht / Lernen.",
+                                project.stage == .published
+                                    ? "Du bist bereits im passenden Bereich Veröffentlicht / Lernen."
+                                    : "Der nächste Schritt wird direkt hier in der Übersicht bearbeitet.",
                                 systemImage: "checkmark.circle"
                             )
                             .font(.caption)
@@ -329,6 +333,15 @@ private struct OverviewView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, 6)
                 }
+            }
+
+            if let project = session.activeProject,
+               project.stage == .research
+                || project.stage == .analysis {
+                ResearchAnalysisJourneyView(
+                    session: session,
+                    project: project
+                )
             }
 
             if let project = session.activeProject,
@@ -633,6 +646,196 @@ private struct OverviewView: View {
         }
     }
 
+}
+
+private struct ResearchAnalysisJourneyView: View {
+    @ObservedObject var session: BlackstockSession
+    let project: BlackstockProject
+
+    @State private var researchQuestion = ""
+    @State private var creatorNotes = ""
+    @State private var decision: ProductionDecision = .pursue
+    @State private var rationale = ""
+    @State private var riskOrUnknown = ""
+
+    var body: some View {
+        GroupBox(
+            project.stage == .research
+                ? "Recherche-Evidence"
+                : "Analyse & Produktionsentscheidung"
+        ) {
+            VStack(alignment: .leading, spacing: 12) {
+                if project.stage == .research {
+                    researchContent
+                } else {
+                    analysisContent
+                }
+
+                if let error = session.errorMessage {
+                    Label(
+                        error,
+                        systemImage: "exclamationmark.triangle"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 6)
+        }
+        .task(id: project.updatedAt) {
+            loadPersistedEvidence()
+        }
+    }
+
+    @ViewBuilder
+    private var researchContent: some View {
+        if let record = session.loadResearchEvidence(
+            projectID: project.id
+        ) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Eingefrorene Provider-Fakten")
+                    .font(.headline)
+                ForEach(
+                    Array(record.providerFacts.enumerated()),
+                    id: \.offset
+                ) { _, fact in
+                    Label(fact, systemImage: "checkmark.circle")
+                        .font(.caption)
+                        .textSelection(.enabled)
+                }
+                Text(
+                    "Quelle: \(record.source.pageURL.absoluteString)"
+                )
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+            }
+
+            Divider()
+
+            TextField(
+                "Recherchefrage",
+                text: $researchQuestion
+            )
+            .textFieldStyle(.roundedBorder)
+
+            Text("Eigene Notizen und Einordnung")
+                .font(.caption.weight(.semibold))
+            TextEditor(text: $creatorNotes)
+                .frame(minHeight: 90)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(.separator)
+                )
+
+            Text("Provider-Fakten werden nicht überschrieben. Deine Einordnung wird separat als Creator-Evidence gespeichert.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Button {
+                _ = session.completeResearch(
+                    question: researchQuestion,
+                    creatorNotes: creatorNotes
+                )
+            } label: {
+                Label(
+                    "Recherche abschließen und analysieren",
+                    systemImage: "arrow.right.circle.fill"
+                )
+            }
+            .buttonStyle(.borderedProminent)
+        } else {
+            Label(
+                "Gebundene Recherche-Evidence fehlt. Das Projekt kann nicht fortgesetzt werden.",
+                systemImage: "exclamationmark.triangle"
+            )
+            .foregroundStyle(.red)
+        }
+    }
+
+    @ViewBuilder
+    private var analysisContent: some View {
+        if let research = session.loadResearchEvidence(
+            projectID: project.id
+        ), research.isComplete {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Belegte Recherche")
+                    .font(.headline)
+                Text(research.researchQuestion)
+                    .font(.callout.weight(.semibold))
+                Text(research.creatorNotes)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Divider()
+
+            Picker(
+                "Produktionsentscheidung",
+                selection: $decision
+            ) {
+                Text("Weiterverfolgen").tag(ProductionDecision.pursue)
+                Text("Verwerfen").tag(ProductionDecision.reject)
+            }
+            .pickerStyle(.segmented)
+
+            TextField(
+                "Begründung der Entscheidung",
+                text: $rationale
+            )
+            .textFieldStyle(.roundedBorder)
+
+            TextField(
+                "Offenes Risiko oder unbekannter Punkt",
+                text: $riskOrUnknown
+            )
+            .textFieldStyle(.roundedBorder)
+
+            Text("Blackstock verlangt ausdrücklich mindestens eine verbleibende Unsicherheit statt eine Sicherheit vorzutäuschen.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Button {
+                _ = session.completeAnalysis(
+                    decision: decision,
+                    rationale: rationale,
+                    riskOrUnknown: riskOrUnknown
+                )
+            } label: {
+                Label(
+                    decision == .pursue
+                        ? "Entscheidung speichern und Produktion freigeben"
+                        : "Verwerfen und Entscheidung speichern",
+                    systemImage: decision == .pursue
+                        ? "checkmark.circle.fill"
+                        : "xmark.circle"
+                )
+            }
+            .buttonStyle(.borderedProminent)
+        } else {
+            Label(
+                "Vollständige Recherche-Evidence fehlt. Analyse ist gesperrt.",
+                systemImage: "lock.fill"
+            )
+        }
+    }
+
+    private func loadPersistedEvidence() {
+        if let research = session.loadResearchEvidence(
+            projectID: project.id
+        ) {
+            researchQuestion = research.researchQuestion
+            creatorNotes = research.creatorNotes
+        }
+        if let analysis = session.loadAnalysisDecision(
+            projectID: project.id
+        ) {
+            decision = analysis.decision
+            rationale = analysis.rationale
+            riskOrUnknown = analysis.riskOrUnknown
+        }
+    }
 }
 
 private struct SettingsView: View {
