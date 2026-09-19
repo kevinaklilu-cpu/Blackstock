@@ -14,7 +14,8 @@ CONTRACTS = {
     ],
     "Sources/BlackstockApp/LoopbackOAuthServer.swift": [
         'host: "127.0.0.1"',
-        '"/oauth2/callback"',
+        '"http://127.0.0.1:\\(port.rawValue)"',
+        'url.path == "/"',
         'fields[0] == "GET"',
     ],
     "Sources/BlackstockApp/BlackstockKeychain.swift": [
