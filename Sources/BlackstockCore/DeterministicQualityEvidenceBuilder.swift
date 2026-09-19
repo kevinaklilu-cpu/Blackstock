@@ -9,6 +9,8 @@ public struct DeterministicQualityEvidenceBuilder: Sendable {
         artifact: RenderArtifact,
         transcript: LocalTranscript? = nil,
         captionURL: URL? = nil,
+        audioTechnicalAssessment: AudioTechnicalAssessment? = nil,
+        audioSignalAssessment: AudioSignalAssessment? = nil,
         reviewedAt: Date = Date()
     ) -> CreatorQualityReview {
         var evidence: [QualityEvidence] = []
@@ -87,6 +89,42 @@ public struct DeterministicQualityEvidenceBuilder: Sendable {
                         ? "Caption-Text vor Veröffentlichung manuell gegen das Video prüfen."
                         : "Captions im Review stichprobenartig prüfen.",
                     evidenceIDs: [captionEvidence.id]
+                )
+            )
+        }
+
+        if let audioTechnicalAssessment {
+            let snapshot = audioTechnicalAssessment.snapshot
+            let channels = snapshot.channelCount.map(String.init) ?? "unbekannt"
+            let sampleRate = snapshot.sampleRateHz.map {
+                String(Int($0.rounded())) + " Hz"
+            } ?? "unbekannt"
+            evidence.append(
+                QualityEvidence(
+                    source: "Blackstock Local Audio Technical Inspector",
+                    observedFact: snapshot.hasAudioTrack
+                        ? "Audiospur vorhanden; Sample-Rate \(sampleRate); Kanäle \(channels)."
+                        : "Keine Audiospur erkannt.",
+                    reference: asset.id.uuidString,
+                    observedAt: snapshot.inspectedAt
+                )
+            )
+        }
+
+        if let audioSignalAssessment {
+            let snapshot = audioSignalAssessment.snapshot
+            let peak = snapshot.peakDBFS.map {
+                String(format: "%.2f dBFS", $0)
+            } ?? "nicht messbar"
+            let rms = snapshot.rmsDBFS.map {
+                String(format: "%.2f dBFS", $0)
+            } ?? "nicht messbar"
+            evidence.append(
+                QualityEvidence(
+                    source: "Blackstock Local PCM Analyzer",
+                    observedFact: "Peak \(peak); RMS \(rms); analysierte Samples \(snapshot.analyzedSampleCount); Full-Scale-Samples \(snapshot.fullScaleSampleCount).",
+                    reference: asset.id.uuidString,
+                    observedAt: snapshot.inspectedAt
                 )
             )
         }
