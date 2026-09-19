@@ -335,11 +335,13 @@ final class BlackstockSession: ObservableObject {
 
     func savePublishPreparation(
         package: PublishPackage,
-        qualityReview: CreatorQualityReview
+        qualityReview: CreatorQualityReview,
+        packagingVariants: PackagingVariantSet? = nil
     ) throws {
         let snapshot = PublishPreparationSnapshot(
             package: package,
             qualityReview: qualityReview,
+            packagingVariants: packagingVariants,
             savedAt: Date()
         )
         let encoder = JSONEncoder()
