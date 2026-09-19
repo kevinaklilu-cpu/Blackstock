@@ -331,6 +331,8 @@ final class StudioState: ObservableObject {
         transcriptStructure = nil
         retentionAdvisory = nil
         retentionAdvisorAvailability = nil
+        audioTechnicalAssessment = nil
+        audioSignalAssessment = nil
 
         ledger.append(.init(
             timestamp: Date(),
@@ -399,6 +401,8 @@ final class StudioState: ObservableObject {
         transcriptStructure = nil
         retentionAdvisory = nil
         retentionAdvisorAvailability = nil
+        audioTechnicalAssessment = nil
+        audioSignalAssessment = nil
 
         ledger.append(.init(
             timestamp: Date(),
@@ -431,6 +435,8 @@ final class StudioState: ObservableObject {
         transcriptStructure = nil
         retentionAdvisory = nil
         retentionAdvisorAvailability = nil
+        audioTechnicalAssessment = nil
+        audioSignalAssessment = nil
 
         ledger.append(.init(
             timestamp: Date(),
@@ -458,6 +464,8 @@ final class StudioState: ObservableObject {
         transcriptStructure = nil
         retentionAdvisory = nil
         retentionAdvisorAvailability = nil
+        audioTechnicalAssessment = nil
+        audioSignalAssessment = nil
 
         ledger.append(.init(
             timestamp: Date(),
