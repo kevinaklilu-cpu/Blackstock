@@ -85,6 +85,69 @@ final class RenderTechnicalValidationTests: XCTestCase {
         XCTAssertTrue(assessment.blockers.contains(.invalidDimensions))
     }
 
+
+    func testMeasuredGeometryClassifiesUHDWithoutAssumingOrientation() {
+        let landscape = RenderTechnicalSnapshot(
+            fileSizeBytes: 1,
+            durationSeconds: 1,
+            videoTrackCount: 1,
+            width: 3840,
+            height: 2160,
+            inspectedAt: Date()
+        )
+        let portrait = RenderTechnicalSnapshot(
+            fileSizeBytes: 1,
+            durationSeconds: 1,
+            videoTrackCount: 1,
+            width: 2160,
+            height: 3840,
+            inspectedAt: Date()
+        )
+        let ultrawideButNotUHD = RenderTechnicalSnapshot(
+            fileSizeBytes: 1,
+            durationSeconds: 1,
+            videoTrackCount: 1,
+            width: 3840,
+            height: 1600,
+            inspectedAt: Date()
+        )
+
+        XCTAssertTrue(landscape.meetsUHD4KOrGreater)
+        XCTAssertTrue(portrait.meetsUHD4KOrGreater)
+        XCTAssertFalse(ultrawideButNotUHD.meetsUHD4KOrGreater)
+    }
+
+    func testRenderArtifactPersistsMeasuredGeometryAndRequestedCeiling() throws {
+        let snapshot = RenderTechnicalSnapshot(
+            fileSizeBytes: 5_000_000,
+            durationSeconds: 30,
+            videoTrackCount: 1,
+            width: 3840,
+            height: 2160,
+            inspectedAt: Date(timeIntervalSince1970: 10)
+        )
+        let artifact = RenderArtifact(
+            projectID: UUID(),
+            fileURL: URL(fileURLWithPath: "/tmp/final.mp4"),
+            sha256: "abc",
+            mimeType: "video/mp4",
+            validated: true,
+            requestedQuality: .upTo4K,
+            technicalSnapshot: snapshot,
+            createdAt: Date(timeIntervalSince1970: 11)
+        )
+
+        let data = try JSONEncoder().encode(artifact)
+        let decoded = try JSONDecoder().decode(
+            RenderArtifact.self,
+            from: data
+        )
+
+        XCTAssertEqual(decoded.requestedQuality, .upTo4K)
+        XCTAssertEqual(decoded.technicalSnapshot, snapshot)
+        XCTAssertTrue(decoded.technicalSnapshot?.meetsUHD4KOrGreater == true)
+    }
+
     func testLegacyArtifactWithoutValidationVersionIsNotCurrent() throws {
         struct LegacyArtifact: Codable {
             let id: UUID
