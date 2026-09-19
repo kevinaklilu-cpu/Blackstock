@@ -24,7 +24,7 @@ try:
 except Exception as error:
     fail(f"invalid JSON: {error}")
 
-if envelope.get("schemaVersion") != 1:
+if envelope.get("schemaVersion") != 2:
     fail("unsupported schemaVersion")
 
 value = envelope.get("value")
@@ -40,6 +40,7 @@ required = [
     "startedAt",
     "targetVersion",
     "targetBuild",
+    "targetSourceCommitSHA",
     "packageURL",
     "packageSHA256",
     "manifestVerifiedAt",
@@ -48,6 +49,7 @@ required = [
     "installerOpenedAt",
     "observedInstalledVersion",
     "observedInstalledBuild",
+    "observedInstalledSourceCommitSHA",
     "postUpdateLaunchVerifiedAt",
 ]
 for key in required:
@@ -107,6 +109,17 @@ sha = str(value["packageSHA256"]).lower()
 if not re.fullmatch(r"[0-9a-f]{64}", sha):
     fail("packageSHA256 must be a 64-character hexadecimal SHA-256")
 
+target_source_commit = str(value["targetSourceCommitSHA"]).lower()
+observed_source_commit = str(value["observedInstalledSourceCommitSHA"]).lower()
+for label, commit in [
+    ("targetSourceCommitSHA", target_source_commit),
+    ("observedInstalledSourceCommitSHA", observed_source_commit),
+]:
+    if not re.fullmatch(r"[0-9a-f]{40}", commit):
+        fail(f"{label} must be a 40-character hexadecimal Git commit SHA")
+if observed_source_commit != target_source_commit:
+    fail("observed installed source commit must equal target source commit")
+
 time_keys = [
     "startedAt",
     "manifestVerifiedAt",
@@ -128,5 +141,5 @@ if any(later < earlier for earlier, later in zip(times, times[1:])):
 print(
     "In-app update evidence is valid: an older Blackstock build accepted a "
     "production HTTPS manifest, verified the referenced package, handed it "
-    "to the system installer, and the exact target build later launched."
+    "to the system installer, and the exact target build/source commit later launched."
 )
