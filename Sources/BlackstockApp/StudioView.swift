@@ -163,6 +163,7 @@ struct StudioView: View {
         HSplitView {
             VStack(spacing: 12) {
                 VideoPlayer(player: state.player)
+                    .accessibilityLabel("Video-Vorschau des aktuellen Schnitts")
                     .frame(minWidth: 620, minHeight: 360)
                     .background(.black)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
@@ -262,6 +263,8 @@ struct StudioView: View {
                         ),
                         in: 0...max(asset.durationSeconds, 0.01)
                     )
+                    .accessibilityLabel("Trim-Start")
+                    .accessibilityValue(timeLabel(state.trimStart))
                     .disabled(!editingEnabled)
                     Slider(
                         value: Binding(
@@ -270,6 +273,8 @@ struct StudioView: View {
                         ),
                         in: 0...max(asset.durationSeconds, 0.01)
                     )
+                    .accessibilityLabel("Trim-Ende")
+                    .accessibilityValue(timeLabel(state.trimEnd))
                     .disabled(!editingEnabled)
                 }
                 .padding(.horizontal, 10)
@@ -353,6 +358,10 @@ struct StudioView: View {
                                 .foregroundStyle(.secondary)
                         }
                         Slider(value: $state.reframeFocalX, in: 0...1)
+                            .accessibilityLabel("Fokus horizontal")
+                            .accessibilityValue(
+                                String(format: "%.0f Prozent", state.reframeFocalX * 100)
+                            )
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
@@ -364,6 +373,10 @@ struct StudioView: View {
                                 .foregroundStyle(.secondary)
                         }
                         Slider(value: $state.reframeFocalY, in: 0...1)
+                            .accessibilityLabel("Fokus vertikal")
+                            .accessibilityValue(
+                                String(format: "%.0f Prozent", state.reframeFocalY * 100)
+                            )
                     }
 
                     HStack {
@@ -838,6 +851,7 @@ struct StudioView: View {
                                     } label: {
                                         Image(systemName: "arrow.up")
                                     }
+                                    .accessibilityLabel("Beat nach oben verschieben")
                                     .disabled(index == 0)
 
                                     Button {
@@ -851,6 +865,7 @@ struct StudioView: View {
                                     } label: {
                                         Image(systemName: "arrow.down")
                                     }
+                                    .accessibilityLabel("Beat nach unten verschieben")
                                     .disabled(index == plan.beats.count - 1)
 
                                     Spacer()
@@ -862,6 +877,7 @@ struct StudioView: View {
                                     } label: {
                                         Image(systemName: "trash")
                                     }
+                                    .accessibilityLabel("Beat löschen")
                                 }
                                 .buttonStyle(.borderless)
                             }
