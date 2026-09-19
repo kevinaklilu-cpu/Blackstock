@@ -159,6 +159,115 @@ final class InAppUpdateEvidenceTests:
         }
     }
 
+    func testInstallerOpenRequiresVerifiedPackage()
+        throws {
+        let root = FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(
+                UUID().uuidString,
+                isDirectory: true
+            )
+        defer {
+            try? FileManager.default
+                .removeItem(at: root)
+        }
+
+        let store = InAppUpdateEvidenceStore(
+            fileURL: root.appendingPathComponent(
+                "update-evidence.json"
+            )
+        )
+        let manifest = makeManifest(
+            version: "1.0.0",
+            build: 100
+        )
+
+        _ = try store.begin(
+            currentVersion: "0.9.0",
+            currentBuild: 90,
+            manifestURL: URL(
+                string:
+                    "https://updates.blackstock.app/update-manifest.json"
+            )!,
+            expectedInstallerTeamID: "ABC123TEAM"
+        )
+        _ = try store.recordManifestVerified(
+            manifest
+        )
+
+        XCTAssertThrowsError(
+            try store.recordInstallerOpened(
+                manifest
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? InAppUpdateEvidenceError,
+                .packageNotVerified
+            )
+        }
+
+        let reloaded = try store.load()
+        XCTAssertNil(reloaded?.installerOpenedAt)
+    }
+
+    func testInstallerOpenRejectsDifferentManifest()
+        throws {
+        let root = FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(
+                UUID().uuidString,
+                isDirectory: true
+            )
+        defer {
+            try? FileManager.default
+                .removeItem(at: root)
+        }
+
+        let store = InAppUpdateEvidenceStore(
+            fileURL: root.appendingPathComponent(
+                "update-evidence.json"
+            )
+        )
+        let manifest = makeManifest(
+            version: "1.0.0",
+            build: 100
+        )
+        let other = makeManifest(
+            version: "1.0.1",
+            build: 101
+        )
+
+        _ = try store.begin(
+            currentVersion: "0.9.0",
+            currentBuild: 90,
+            manifestURL: URL(
+                string:
+                    "https://updates.blackstock.app/update-manifest.json"
+            )!,
+            expectedInstallerTeamID: "ABC123TEAM"
+        )
+        _ = try store.recordManifestVerified(
+            manifest
+        )
+        _ = try store.recordPackageVerified(
+            manifest
+        )
+
+        XCTAssertThrowsError(
+            try store.recordInstallerOpened(
+                other
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? InAppUpdateEvidenceError,
+                .manifestMismatch
+            )
+        }
+
+        let reloaded = try store.load()
+        XCTAssertNil(reloaded?.installerOpenedAt)
+    }
+
     private func makeManifest(
         version: String,
         build: Int
