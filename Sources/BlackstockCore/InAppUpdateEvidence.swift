@@ -13,7 +13,7 @@ public enum InAppUpdateEvidenceError:
 }
 
 public enum InAppUpdateEvidenceSchema {
-    public static let current = 2
+    public static let current = 3
 }
 
 public struct InAppUpdateEvidence:
@@ -39,6 +39,7 @@ public struct InAppUpdateEvidence:
     public var observedInstalledVersion: String?
     public var observedInstalledBuild: Int?
     public var observedInstalledSourceCommitSHA: String?
+    public var observedInstalledExecutableSHA256: String?
     public var postUpdateLaunchVerifiedAt: Date?
 
     public init(
@@ -68,6 +69,7 @@ public struct InAppUpdateEvidence:
         observedInstalledVersion = nil
         observedInstalledBuild = nil
         observedInstalledSourceCommitSHA = nil
+        observedInstalledExecutableSHA256 = nil
         postUpdateLaunchVerifiedAt = nil
     }
 
@@ -96,6 +98,8 @@ public struct InAppUpdateEvidence:
               observedInstalledBuild == targetBuild,
               observedInstalledSourceCommitSHA
                 == targetSourceCommitSHA,
+              let observedInstalledExecutableSHA256,
+              observedInstalledExecutableSHA256.count == 64,
               postUpdateLaunchVerifiedAt != nil else {
             return false
         }
@@ -199,6 +203,7 @@ public struct InAppUpdateEvidenceStore: Sendable {
         installedVersion: String,
         installedBuild: Int,
         installedSourceCommitSHA: String,
+        installedExecutableSHA256: String,
         now: Date = Date()
     ) throws -> InAppUpdateEvidence? {
         guard var evidence = try load() else {
@@ -223,6 +228,8 @@ public struct InAppUpdateEvidenceStore: Sendable {
             installedBuild
         evidence.observedInstalledSourceCommitSHA =
             installedSourceCommitSHA.lowercased()
+        evidence.observedInstalledExecutableSHA256 =
+            installedExecutableSHA256.lowercased()
         evidence.postUpdateLaunchVerifiedAt = now
         try save(evidence)
         return evidence
