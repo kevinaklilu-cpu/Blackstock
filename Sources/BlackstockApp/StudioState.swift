@@ -24,6 +24,7 @@ final class StudioState: ObservableObject {
     @Published var speechAuthorizationState: LocalSpeechAuthorizationState = .notDetermined
     @Published var audioTechnicalAssessment: AudioTechnicalAssessment?
     @Published var audioSignalAssessment: AudioSignalAssessment?
+    @Published var audioLoudnessAssessment: AudioLoudnessAssessment?
     @Published var reframeAspectRatio: ReframeAspectRatio = .landscape16x9
     @Published var reframeFocalX: Double = 0.5
     @Published var reframeFocalY: Double = 0.5
@@ -313,6 +314,7 @@ final class StudioState: ObservableObject {
             retentionAdvisorAvailability = nil
             audioTechnicalAssessment = nil
             audioSignalAssessment = nil
+        audioLoudnessAssessment = nil
             focalPointProposal = nil
             reframeAspectRatio = .landscape16x9
             reframeFocalX = 0.5
@@ -460,6 +462,7 @@ final class StudioState: ObservableObject {
         captionURL = nil
         audioTechnicalAssessment = nil
         audioSignalAssessment = nil
+        audioLoudnessAssessment = nil
         transcriptStructure = nil
         retentionAdvisory = nil
         retentionAdvisorAvailability = nil
@@ -530,6 +533,7 @@ final class StudioState: ObservableObject {
         captionURL = nil
         audioTechnicalAssessment = nil
         audioSignalAssessment = nil
+        audioLoudnessAssessment = nil
         transcriptStructure = nil
         retentionAdvisory = nil
         retentionAdvisorAvailability = nil
@@ -564,6 +568,7 @@ final class StudioState: ObservableObject {
         captionURL = nil
         audioTechnicalAssessment = nil
         audioSignalAssessment = nil
+        audioLoudnessAssessment = nil
         transcriptStructure = nil
         retentionAdvisory = nil
         retentionAdvisorAvailability = nil
@@ -593,6 +598,7 @@ final class StudioState: ObservableObject {
         captionURL = nil
         audioTechnicalAssessment = nil
         audioSignalAssessment = nil
+        audioLoudnessAssessment = nil
         transcriptStructure = nil
         retentionAdvisory = nil
         retentionAdvisorAvailability = nil
@@ -668,6 +674,7 @@ final class StudioState: ObservableObject {
         renderArtifact = nil
         audioTechnicalAssessment = nil
         audioSignalAssessment = nil
+        audioLoudnessAssessment = nil
 
         ledger.append(.init(
             timestamp: Date(),
@@ -1043,8 +1050,16 @@ final class StudioState: ObservableObject {
             } catch {
                 audioSignalAssessment = nil
             }
+
+            do {
+                audioLoudnessAssessment = try await LocalLoudnessAnalyzer()
+                    .analyze(url: url)
+            } catch {
+                audioLoudnessAssessment = nil
+            }
         } else {
             audioSignalAssessment = nil
+            audioLoudnessAssessment = nil
         }
     }
 
