@@ -45,6 +45,66 @@ jobs:
         run: python3 Build/audit_journey.py
       - name: Capture foundation audit
         run: python3 Build/audit_capture.py
+      - name: Capture hardware evidence validator audit
+        run: |
+          set -euo pipefail
+          EVIDENCE="$RUNNER_TEMP/capture-hardware-smoke.json"
+          cat > "$EVIDENCE" <<'JSON'
+          {
+            "schemaVersion": 1,
+            "testedAt": "2026-09-19T20:00:00Z",
+            "blackstockVersion": "1.0.0",
+            "blackstockBuild": "100",
+            "macOSVersion": "macOS 26.6.2",
+            "hardwareModel": "MacBookProTest",
+            "installedFromPackage": true,
+            "camera": {
+              "permissionGranted": true,
+              "recordingCreated": true,
+              "durationSeconds": 5.2,
+              "persistedToProject": true,
+              "videoTrackPresent": true
+            },
+            "microphone": {
+              "permissionGranted": true,
+              "recordingCreated": true,
+              "durationSeconds": 5.1,
+              "persistedToProject": true,
+              "decodedSamples": 24000
+            },
+            "screen": {
+              "permissionGranted": true,
+              "recordingCreated": true,
+              "durationSeconds": 5.4,
+              "persistedToProject": true,
+              "videoTrackPresent": true
+            },
+            "systemAudio": {
+              "permissionGranted": true,
+              "recordingCreated": true,
+              "durationSeconds": 5.4,
+              "persistedToProject": true,
+              "decodedSamples": 48000
+            },
+            "deniedPermissionHardStopPassed": true,
+            "temporaryCleanupPassed": true,
+            "appRestartPersistencePassed": true
+          }
+          JSON
+          python3 Build/validate_capture_hardware_smoke.py "$EVIDENCE"
+
+          python3 - "$EVIDENCE" <<'PY'
+          import json, sys
+          path = sys.argv[1]
+          data = json.load(open(path))
+          data["systemAudio"]["decodedSamples"] = 0
+          json.dump(data, open(path, "w"))
+          PY
+          if python3 Build/validate_capture_hardware_smoke.py "$EVIDENCE"; then
+            echo "Invalid capture hardware evidence was unexpectedly accepted." >&2
+            exit 1
+          fi
+
       - name: Professional audio audit
         run: python3 Build/audit_audio.py
       - name: Clean-machine E2E contract audit
