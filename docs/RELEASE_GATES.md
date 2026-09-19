@@ -29,11 +29,13 @@ Statuswerte: **PASS / FAIL / BLOCKED_EXTERNAL**.
 | Accessibility | FAIL |
 | Recovery | FAIL |
 | Migration | FAIL |
-| Installer | FAIL |
+| Installer | PASS |
 | Signing | BLOCKED_EXTERNAL |
 | Notarization | BLOCKED_EXTERNAL |
 | Gatekeeper | BLOCKED_EXTERNAL |
 | Updater | FAIL |
 | Clean-Machine E2E | FAIL |
+
+Hinweis: **Installer = PASS** basiert auf der Canonical-CI: Das erzeugte `.pkg` wird auf einem frischen macOS-Runner installiert, Bundle-Metadaten und Codesign werden geprüft und die installierte App wird gestartet. **Clean-Machine E2E** bleibt FAIL, weil dieser Smoke-Test noch keinen vollständigen Nutzerpfad bis Veröffentlichung und Lernen abdeckt.
 
 **STATUS: NOCH NICHT MARKTREIF**
