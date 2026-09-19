@@ -575,8 +575,26 @@ final class StudioState: ObservableObject {
         }
 
         do {
+            let timeline = EditTimelineResolver().resolve(
+                sourceDurationSeconds: asset.durationSeconds,
+                operations: graph.currentOperations
+            )
+            guard timeline.hasContent else {
+                errorMessage = "Der aktuelle Schnitt enthält keinen transkribierbaren Inhalt."
+                return
+            }
+
+            let editedAudioURL = try await EditedTimelineAudioMaterializer()
+                .materialize(
+                    sourceURL: asset.sourceURL,
+                    sourceRanges: timeline.sourceRanges
+                )
+            defer {
+                try? FileManager.default.removeItem(at: editedAudioURL)
+            }
+
             let localTranscript = try await transcriber.transcribeVideo(
-                url: asset.sourceURL,
+                url: editedAudioURL,
                 localeIdentifier: localeIdentifier
             )
 
