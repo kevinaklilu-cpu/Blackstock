@@ -50,6 +50,10 @@ final class BlackstockSession: ObservableObject {
     @Published var isAuthorizingPublishing = false
     @Published var isPublishing = false
     @Published private(set) var lastPublishingResult: YouTubePublishingResult?
+    @Published private(set) var analyticsAuthorizedChannelID: String?
+    @Published var isAuthorizingAnalytics = false
+    @Published var isCollectingAnalytics = false
+    @Published private(set) var latestGrowthLearning: GrowthLearningRecord?
 
     private var tokenSet: GoogleOAuthTokenSet?
     private var cachedPublishingJournal: ExternalActionJournal?
@@ -405,6 +409,224 @@ final class BlackstockSession: ObservableObject {
         }
     }
 
+    func analyticsScopePlan() -> GoogleOAuthScopePlan? {
+        guard let channelID = workspaceChannelID else { return nil }
+        let storedScopes = BlackstockKeychain.read(
+            "youtube.\(channelID).scopes"
+        )
+        return GoogleOAuthScopePlanner().plan(
+            capabilities: [.discoveryReadOnly, .analytics],
+            tokenScopeString: storedScopes
+        )
+    }
+
+    func authorizeAnalytics() async {
+        guard let project = activeProject else {
+            errorMessage = "Kein aktives Projekt für Analytics vorhanden."
+            return
+        }
+        guard !effectiveClientID.isEmpty else {
+            errorMessage = "Keine Google-OAuth-Konfiguration verfügbar."
+            return
+        }
+
+        isAuthorizingAnalytics = true
+        defer { isAuthorizingAnalytics = false }
+        errorMessage = nil
+
+        do {
+            let currentPlan = analyticsScopePlan()
+            if currentPlan?.state == .alreadyAuthorized {
+                let accessToken = try await validatedAnalyticsAccessToken(
+                    targetChannelID: project.targetChannelID
+                )
+                let identities = try await YouTubeAuthorizedClient(
+                    accessToken: accessToken
+                ).myChannels()
+                guard identities.contains(where: {
+                    $0.id == project.targetChannelID
+                }) else {
+                    analyticsAuthorizedChannelID = nil
+                    errorMessage = "Die Analytics-Autorisierung gehört nicht zum Projekt-Zielkanal."
+                    return
+                }
+                analyticsAuthorizedChannelID = project.targetChannelID
+                return
+            }
+
+            let requestedScopes = currentPlan?.scopesForAuthorization
+                ?? Set([
+                    GoogleOAuthScope.youtubeReadOnly,
+                    .analyticsReadOnly
+                ])
+
+            let tokens = try await performOAuthAuthorization(
+                scopes: requestedScopes
+            )
+
+            guard let grantedScopeString = tokens.scope else {
+                analyticsAuthorizedChannelID = nil
+                errorMessage = "Google hat keine verifizierbare Scope-Liste zurückgegeben. Analytics bleibt gesperrt."
+                return
+            }
+
+            let granted = GoogleOAuthScopePlanner.parseGrantedScopes(
+                grantedScopeString
+            )
+            guard requestedScopes.isSubset(of: granted) else {
+                analyticsAuthorizedChannelID = nil
+                errorMessage = "Nicht alle für Analytics benötigten Google-Berechtigungen wurden gewährt."
+                return
+            }
+
+            let identities = try await YouTubeAuthorizedClient(
+                accessToken: tokens.accessToken
+            ).myChannels()
+            guard identities.contains(where: {
+                $0.id == project.targetChannelID
+            }) else {
+                analyticsAuthorizedChannelID = nil
+                errorMessage = "Die Analytics-Sitzung enthält nicht den Projekt-Zielkanal."
+                return
+            }
+
+            try BlackstockKeychain.write(
+                tokens.accessToken,
+                account: "youtube.\(project.targetChannelID).accessToken"
+            )
+            if let refresh = tokens.refreshToken, !refresh.isEmpty {
+                try BlackstockKeychain.write(
+                    refresh,
+                    account: "youtube.\(project.targetChannelID).refreshToken"
+                )
+            }
+            try BlackstockKeychain.write(
+                grantedScopeString,
+                account: "youtube.\(project.targetChannelID).scopes"
+            )
+
+            tokenSet = tokens
+            analyticsAuthorizedChannelID = project.targetChannelID
+        } catch {
+            analyticsAuthorizedChannelID = nil
+            errorMessage = "Analytics-Autorisierung fehlgeschlagen: \(describe(error))"
+        }
+    }
+
+    func collectDueGrowthObservations(
+        now: Date = Date()
+    ) async {
+        guard let project = activeProject,
+              project.stage == .published else {
+            errorMessage = "Analytics-Learning ist erst nach erfolgreichem Publishing verfügbar."
+            return
+        }
+        guard var record = loadPublishedRecord(
+            projectID: project.id
+        ) else {
+            errorMessage = "Kein PublishedVideoRecord für dieses Projekt vorhanden."
+            return
+        }
+
+        isCollectingAnalytics = true
+        defer { isCollectingAnalytics = false }
+        errorMessage = nil
+
+        do {
+            let accessToken = try await validatedAnalyticsAccessToken(
+                targetChannelID: project.targetChannelID
+            )
+            let due = GrowthObservationPlanner().duePlans(
+                for: record,
+                now: now
+            )
+
+            if due.isEmpty {
+                latestGrowthLearning = GrowthLearningEngine()
+                    .summarize(record)
+                return
+            }
+
+            var delayedWindows: [GrowthObservationWindow] = []
+
+            for plan in due {
+                do {
+                    let snapshot = try await YouTubeAnalyticsClient(
+                        accessToken: accessToken,
+                        channelID: project.targetChannelID
+                    )
+                    .snapshot(
+                        startDate: plan.requestedStartDate,
+                        endDate: plan.requestedEndDate,
+                        videoID: record.youtubeVideoID,
+                        now: now
+                    )
+
+                    record.observations.append(
+                        GrowthObservation(
+                            window: plan.window,
+                            analytics: snapshot,
+                            collectedAt: now
+                        )
+                    )
+                } catch YouTubeAnalyticsAPIError.missingRow {
+                    delayedWindows.append(plan.window)
+                }
+            }
+
+            try persistPublishedRecord(record)
+            latestGrowthLearning = GrowthLearningEngine()
+                .summarize(record)
+            if let latestGrowthLearning {
+                try persistGrowthLearning(latestGrowthLearning)
+            }
+
+            if !delayedWindows.isEmpty {
+                errorMessage = "YouTube Analytics hat für \(delayedWindows.map(\.rawValue).joined(separator: ", ")) noch keine vollständigen Daten geliefert. Blackstock speichert dafür keine Nullwerte und versucht es später erneut."
+            }
+        } catch {
+            errorMessage = "Analytics konnten nicht aktualisiert werden: \(describe(error))"
+        }
+    }
+
+    func validatedAnalyticsAccessToken(
+        targetChannelID: String
+    ) async throws -> String {
+        let storedScopes = BlackstockKeychain.read(
+            "youtube.\(targetChannelID).scopes"
+        )
+        let plan = GoogleOAuthScopePlanner().plan(
+            capabilities: [.discoveryReadOnly, .analytics],
+            tokenScopeString: storedScopes
+        )
+        guard plan.state == .alreadyAuthorized else {
+            throw PublishingSessionError.missingScopes
+        }
+
+        let refreshToken = BlackstockKeychain.read(
+            "youtube.\(targetChannelID).refreshToken"
+        )
+        if !refreshToken.isEmpty {
+            let refreshed = try await GoogleOAuthTokenRefresher().refresh(
+                refreshToken: refreshToken,
+                clientID: effectiveClientID
+            )
+            try BlackstockKeychain.write(
+                refreshed.accessToken,
+                account: "youtube.\(targetChannelID).accessToken"
+            )
+            return refreshed.accessToken
+        }
+
+        let accessToken = BlackstockKeychain.read(
+            "youtube.\(targetChannelID).accessToken"
+        )
+        guard !accessToken.isEmpty else {
+            throw PublishingSessionError.missingToken
+        }
+        return accessToken
+    }
+
     func validatedPublishingAccessToken(
         targetChannelID: String
     ) async throws -> String {
@@ -498,6 +720,18 @@ final class BlackstockSession: ObservableObject {
         let journal = try ExternalActionJournal.persistent(at: url)
         cachedPublishingJournal = journal
         return journal
+    }
+
+    private func persistGrowthLearning(
+        _ learning: GrowthLearningRecord
+    ) throws {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(learning)
+        UserDefaults.standard.set(
+            data,
+            forKey: "blackstock.growth-learning.\(learning.publishedVideoID.uuidString)"
+        )
     }
 
     private func persistPublishedRecord(
