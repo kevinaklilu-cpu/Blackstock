@@ -22,6 +22,7 @@ final class StudioState: ObservableObject {
     @Published var transcript: LocalTranscript?
     @Published var captionURL: URL?
     @Published var speechAuthorizationState: LocalSpeechAuthorizationState = .notDetermined
+    @Published var audioTechnicalAssessment: AudioTechnicalAssessment?
 
     private var correlationID = UUID()
 
@@ -76,6 +77,7 @@ final class StudioState: ObservableObject {
             renderArtifact = nil
             transcript = nil
             captionURL = nil
+            audioTechnicalAssessment = nil
 
             ledger.append(.init(
                 timestamp: Date(),
@@ -89,6 +91,14 @@ final class StudioState: ObservableObject {
             ))
 
             try await rebuildPreview()
+
+            do {
+                audioTechnicalAssessment = try await LocalAudioTechnicalInspector()
+                    .inspect(url: imported.sourceURL)
+            } catch {
+                audioTechnicalAssessment = nil
+            }
+
             errorMessage = nil
         } catch {
             errorMessage = "Video konnte nicht geladen werden: \(error.localizedDescription)"
