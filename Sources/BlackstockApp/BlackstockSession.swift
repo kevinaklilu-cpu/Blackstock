@@ -2,6 +2,7 @@
 import AppKit
 import Foundation
 import SwiftUI
+import Network
 import BlackstockCore
 
 private enum PublishingSessionError: Error, LocalizedError {
@@ -48,6 +49,8 @@ final class BlackstockSession: ObservableObject {
     @Published private(set) var activeOpportunitySource: MediaSourceReference?
     @Published private(set) var publishingAuthorizedChannelID: String?
     @Published var isAuthorizingPublishing = false
+    @Published var isPublishing = false
+    @Published private(set) var lastPublishingResult: YouTubePublishingResult?
 
     private var tokenSet: GoogleOAuthTokenSet?
     private var cachedPublishingJournal: ExternalActionJournal?
@@ -295,6 +298,113 @@ final class BlackstockSession: ObservableObject {
         }
     }
 
+    func publishPreparedReview(
+        artifact: RenderArtifact,
+        asset: ProductionMediaAsset,
+        userConfirmed: Bool
+    ) async {
+        guard userConfirmed else {
+            errorMessage = "Bestätige den finalen Remote-Upload ausdrücklich."
+            return
+        }
+        guard var project = activeProject else {
+            errorMessage = "Kein aktives Projekt vorhanden."
+            return
+        }
+        guard let authorizedChannelID = publishingAuthorizedChannelID,
+              authorizedChannelID == project.targetChannelID else {
+            errorMessage = "Publishing ist für den Projekt-Zielkanal noch nicht verifiziert."
+            return
+        }
+        guard let workspaceChannelID,
+              workspaceChannelID == project.targetChannelID else {
+            errorMessage = "Workspace- und Projekt-Zielkanal stimmen nicht überein."
+            return
+        }
+        guard let preparation = loadPublishPreparation(
+            projectID: project.id
+        ) else {
+            errorMessage = "Kein eingefrorener Publish-Review vorhanden."
+            return
+        }
+
+        isPublishing = true
+        defer { isPublishing = false }
+        errorMessage = nil
+
+        do {
+            if project.stage == .review {
+                guard project.advance(
+                    to: .publishing,
+                    at: Date()
+                ) else {
+                    errorMessage = "Projekt konnte nicht in den Publishing-Status wechseln."
+                    return
+                }
+                try Self.store(project: project)
+                activeProject = project
+            }
+
+            guard project.stage == .publishing else {
+                errorMessage = "Projekt ist nicht im Publishing-Status."
+                return
+            }
+
+            let accessToken = try await validatedPublishingAccessToken(
+                targetChannelID: project.targetChannelID
+            )
+            let networkAvailable = await currentNetworkAvailable()
+
+            let review = PublishReviewContext(
+                project: project,
+                artifact: artifact,
+                package: preparation.package,
+                qualityReview: preparation.qualityReview,
+                rightsValidated: asset.mayEnterProduction,
+                publicPublishingAllowed: publicPublishingAllowed,
+                userConfirmed: true
+            )
+
+            let result = try await YouTubePublishingCoordinator(
+                uploadClient: .init(
+                    accessToken: accessToken
+                ),
+                packagingClient: .init(
+                    accessToken: accessToken
+                )
+            )
+            .publish(
+                review: review,
+                workspaceChannelID: workspaceChannelID,
+                authorizedUploadChannelID: authorizedChannelID,
+                quotaState: .unknown,
+                networkAvailable: networkAvailable,
+                experimentID: nil,
+                journal: try publishingJournal()
+            )
+
+            try persistPublishedRecord(
+                result.publishedRecord
+            )
+
+            guard project.advance(
+                to: .published,
+                at: Date()
+            ) else {
+                errorMessage = "Upload war erfolgreich, aber der lokale Projektstatus konnte nicht auf PUBLISHED gesetzt werden."
+                lastPublishingResult = result
+                return
+            }
+
+            try Self.store(project: project)
+            activeProject = project
+            lastPublishingResult = result
+            errorMessage = nil
+        } catch {
+            errorMessage = "Publishing fehlgeschlagen oder wurde unterbrochen: \(describe(error)). Der Journal-/Resume-Zustand bleibt erhalten."
+        }
+    }
+
     func validatedPublishingAccessToken(
         targetChannelID: String
     ) async throws -> String {
@@ -388,6 +498,53 @@ final class BlackstockSession: ObservableObject {
         let journal = try ExternalActionJournal.persistent(at: url)
         cachedPublishingJournal = journal
         return journal
+    }
+
+    private func currentNetworkAvailable() async -> Bool {
+        await withCheckedContinuation { continuation in
+            let monitor = NWPathMonitor()
+            let queue = DispatchQueue(
+                label: "de.blackstock.network-preflight"
+            )
+            var resumed = false
+            monitor.pathUpdateHandler = { path in
+                guard !resumed else { return }
+                resumed = true
+                monitor.cancel()
+                continuation.resume(
+                    returning: path.status == .satisfied
+                )
+            }
+            monitor.start(queue: queue)
+        }
+    }
+
+    private func persistPublishedRecord(
+        _ record: PublishedVideoRecord
+    ) throws {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(record)
+        UserDefaults.standard.set(
+            data,
+            forKey: "blackstock.published-record.\(record.projectID.uuidString)"
+        )
+    }
+
+    func loadPublishedRecord(
+        projectID: UUID
+    ) -> PublishedVideoRecord? {
+        guard let data = UserDefaults.standard.data(
+            forKey: "blackstock.published-record.\(projectID.uuidString)"
+        ) else {
+            return nil
+        }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try? decoder.decode(
+            PublishedVideoRecord.self,
+            from: data
+        )
     }
 
     private func performOAuthAuthorization(
