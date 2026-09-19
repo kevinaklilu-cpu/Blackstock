@@ -34,6 +34,7 @@ required_root = [
     "installedFromPackage",
     "applicationTeamID",
     "developerIDApplicationVerified",
+    "applicationExecutableSHA256",
     "camera",
     "microphone",
     "screen",
@@ -49,7 +50,7 @@ for key in required_root:
     if key not in data:
         fail(f"missing field: {key}")
 
-if data["schemaVersion"] != 3:
+if data["schemaVersion"] != 4:
     fail("unsupported schemaVersion")
 
 try:
@@ -71,6 +72,12 @@ if not re.fullmatch(r"[0-9a-f]{40}", source_commit):
 application_team_id = str(data["applicationTeamID"]).strip()
 if not re.fullmatch(r"[A-Za-z0-9]+", application_team_id):
     fail("applicationTeamID must be non-empty ASCII alphanumeric")
+
+application_executable_sha256 = str(
+    data["applicationExecutableSHA256"]
+).strip().lower()
+if not re.fullmatch(r"[0-9a-f]{64}", application_executable_sha256):
+    fail("applicationExecutableSHA256 must be a 64-character hexadecimal SHA-256")
 
 for key in [
     "installedFromPackage",
