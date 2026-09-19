@@ -34,17 +34,24 @@ final class ProjectJourneyGuidanceTests: XCTestCase {
         )
     }
 
-    func testEarlyStagesDoNotInventUnavailableNavigation() {
-        let earlyStages: [BlackstockStage] = [
-            .discovery,
-            .research,
-            .analysis
-        ]
+    func testDiscoveryDoesNotInventUnavailableProjectNavigation() {
+        XCTAssertEqual(
+            BlackstockStage.discovery.journeyGuidance
+                .recommendedSurface,
+            .none
+        )
+    }
 
-        XCTAssertTrue(
-            earlyStages.allSatisfy {
-                $0.journeyGuidance.recommendedSurface == .none
-            }
+    func testResearchAndAnalysisUseOverviewEvidenceSurface() {
+        XCTAssertEqual(
+            BlackstockStage.research.journeyGuidance
+                .recommendedSurface,
+            .overview
+        )
+        XCTAssertEqual(
+            BlackstockStage.analysis.journeyGuidance
+                .recommendedSurface,
+            .overview
         )
     }
 
