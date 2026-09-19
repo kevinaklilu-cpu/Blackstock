@@ -187,14 +187,61 @@ struct FirstRunView: View {
     }
 
     private var topic: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            TextField("z. B. KI für Selbstständige", text: $session.primaryTopic)
-                .accessibilityLabel("Strategischer Kanal-Schwerpunkt")
-                .textFieldStyle(.roundedBorder)
-                .font(.title3)
-            Text("Das ist der strategische Kern für künftige Research- und Opportunity-Abfragen, nicht nur ein einzelnes Suchkeyword.")
+        VStack(alignment: .leading, spacing: 12) {
+            TextField(
+                "Kanal-Schwerpunkt, z. B. KI für Selbstständige",
+                text: $session.primaryTopic
+            )
+            .accessibilityLabel("Strategischer Kanal-Schwerpunkt")
+            .textFieldStyle(.roundedBorder)
+            .font(.title3)
+
+            TextField(
+                "Content-Versprechen, z. B. praktische KI ohne Hype",
+                text: $session.strategyContentPromise
+            )
+            .textFieldStyle(.roundedBorder)
+
+            TextField(
+                "Zielgruppen-Hypothese, z. B. Solo-Selbstständige mit wenig Zeit",
+                text: $session.strategyAudienceHypothesis
+            )
+            .textFieldStyle(.roundedBorder)
+
+            TextField(
+                "Inhaltliche Säulen, durch Komma getrennt",
+                text: $session.strategyPillarsText
+            )
+            .textFieldStyle(.roundedBorder)
+
+            TextField(
+                "Angrenzende Themen (optional)",
+                text: $session.strategyAdjacentTopicsText
+            )
+            .textFieldStyle(.roundedBorder)
+
+            TextField(
+                "Ausgeschlossene Themen (optional)",
+                text: $session.strategyExcludedTopicsText
+            )
+            .textFieldStyle(.roundedBorder)
+
+            Picker(
+                "Hauptziel",
+                selection: $session.strategyObjective
+            ) {
+                Text("Ausgewogen").tag(StrategicObjective.balanced)
+                Text("Reichweite").tag(StrategicObjective.reach)
+                Text("Wiedergabezeit").tag(StrategicObjective.watchTime)
+                Text("Abonnenten").tag(StrategicObjective.subscribers)
+                Text("Umsatz").tag(StrategicObjective.revenue)
+            }
+            .pickerStyle(.menu)
+
+            Text("Die Strategie wird versioniert gespeichert. Blackstock erfindet keine Zielgruppe, Säulen oder Ausschlüsse für dich.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
             HStack {
                 Spacer()
                 Button("Weiter") { session.continueFromTopic() }
