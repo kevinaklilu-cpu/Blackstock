@@ -73,7 +73,7 @@ Blackstock erzeugt und aktualisiert die Hardware-Evidenz automatisch während de
 
 `~/Library/Application Support/Blackstock/Diagnostics/capture-hardware-smoke.json`
 
-Die Einstellungen zeigen für jeden der vier kanonischen Pfade den aktuellen technischen Nachweis und können die Datei im Finder öffnen. Ein lokaler Entwicklungsstart zählt nicht als Installer-Nachweis; `installedFromPackage` wird nur für `/Applications/Blackstock.app` gesetzt. Die Evidenz bindet außerdem `BlackstockSourceCommitSHA` aus dem installierten App-Bundle ein; ältere Schema-v1-Evidenz ohne Commit-Provenienz wird bewusst nicht hochgestuft, sondern muss neu aufgenommen werden.
+Die Einstellungen zeigen für jeden der vier kanonischen Pfade den aktuellen technischen Nachweis und können die Datei im Finder öffnen. Ein lokaler Entwicklungsstart zählt nicht als Installer-Nachweis; `installedFromPackage` wird nur für `/Applications/Blackstock.app` gesetzt. Zusätzlich liest Blackstock die tatsächliche Codesign-Identität der laufenden App aus: `developerIDApplicationVerified` wird nur gesetzt, wenn `codesign` eine `Developer ID Application`-Signatur mit exakt der im Produktionsbuild eingebetteten Apple-Team-ID meldet. Diese Team-ID wird als `applicationTeamID` gespeichert. Die Evidenz bindet außerdem `BlackstockSourceCommitSHA` aus dem installierten App-Bundle ein; ältere Evidence-Schemata ohne vollständige Produktions-App-Provenienz werden bewusst nicht hochgestuft, sondern müssen neu aufgenommen werden.
 
 Nach dem vollständigen Test wird dieselbe Datei auf demselben Mac validiert:
 
@@ -82,11 +82,11 @@ python3 Build/validate_capture_hardware_smoke.py \
   "$HOME/Library/Application Support/Blackstock/Diagnostics/capture-hardware-smoke.json"
 ```
 
-Der Validator prüft zusätzlich, dass die projektgebundenen Capture-Dateien noch existieren, Screen und Systemaudio aus derselben ScreenCaptureKit-Datei stammen und der Restart-Nachweis aus einer anderen App-Launch-ID als die Aufnahmen stammt.
+Der Validator prüft zusätzlich, dass die projektgebundenen Capture-Dateien noch existieren, Screen und Systemaudio aus derselben ScreenCaptureKit-Datei stammen, der Restart-Nachweis aus einer anderen App-Launch-ID als die Aufnahmen stammt und die Evidence eine bestätigte Developer-ID-Application-Team-ID enthält. Der finale Market-Readiness-Verifier verlangt anschließend dieselbe Apple-Team-ID in Capture-, Produktionsrelease- und Updater-Evidenz.
 
 Pflichtfelder:
 
-- `schemaVersion`: aktuell `2`
+- `schemaVersion`: aktuell `3`
 - `testedAt`: ISO-8601
 - `blackstockVersion`
 - `blackstockBuild`
@@ -94,6 +94,8 @@ Pflichtfelder:
 - `macOSVersion`
 - `hardwareModel`
 - `installedFromPackage`: `true`
+- `applicationTeamID`: tatsächliche Apple-Team-ID der laufenden Developer-ID-App
+- `developerIDApplicationVerified`: `true`
 - `camera`, `microphone`, `screen`, `systemAudio`
   - `permissionGranted`
   - `recordingCreated`
