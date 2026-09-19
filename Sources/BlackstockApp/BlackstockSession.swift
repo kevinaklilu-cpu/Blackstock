@@ -4,6 +4,26 @@ import Foundation
 import SwiftUI
 import BlackstockCore
 
+private enum PublishingSessionError: Error, LocalizedError {
+    case missingScopes
+    case missingToken
+    case browserOpenFailed
+    case providerRejected(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .missingScopes:
+            return "Die benötigten Google-Berechtigungen fehlen."
+        case .missingToken:
+            return "Kein gültiges Google-Zugriffstoken ist gespeichert."
+        case .browserOpenFailed:
+            return "Der Systembrowser konnte nicht geöffnet werden."
+        case .providerRejected(let message):
+            return "Google hat die Autorisierung abgelehnt: \(message)"
+        }
+    }
+}
+
 @MainActor
 final class BlackstockSession: ObservableObject {
     enum FirstRunStep: Int, CaseIterable {
@@ -26,8 +46,11 @@ final class BlackstockSession: ObservableObject {
     @Published private(set) var onboardingComplete: Bool
     @Published private(set) var activeProject: BlackstockProject?
     @Published private(set) var activeOpportunitySource: MediaSourceReference?
+    @Published private(set) var publishingAuthorizedChannelID: String?
+    @Published var isAuthorizingPublishing = false
 
     private var tokenSet: GoogleOAuthTokenSet?
+    private var cachedPublishingJournal: ExternalActionJournal?
 
     init() {
         onboardingComplete = UserDefaults.standard.bool(forKey: "blackstock.firstRun.complete")
@@ -152,6 +175,237 @@ final class BlackstockSession: ObservableObject {
         } catch {
             errorMessage = "Die autorisierte Sitzung konnte nicht sicher gespeichert werden: \(describe(error))"
         }
+    }
+
+    var workspaceChannelID: String? {
+        activeProject?.targetChannelID
+            ?? UserDefaults.standard.string(
+                forKey: "blackstock.workspace.channelID"
+            )
+    }
+
+    var publicPublishingAllowed: Bool {
+        Bundle.main.object(
+            forInfoDictionaryKey: "BlackstockYouTubePublicPublishingApproved"
+        ) as? Bool ?? false
+    }
+
+    func publishingScopePlan() -> GoogleOAuthScopePlan? {
+        guard let channelID = workspaceChannelID else { return nil }
+        let storedScopes = BlackstockKeychain.read(
+            "youtube.\(channelID).scopes"
+        )
+        return GoogleOAuthScopePlanner().plan(
+            capabilities: [.discoveryReadOnly, .upload, .packaging],
+            tokenScopeString: storedScopes
+        )
+    }
+
+    func authorizePublishing() async {
+        guard let project = activeProject else {
+            errorMessage = "Kein aktives Projekt für Publishing vorhanden."
+            return
+        }
+        guard !effectiveClientID.isEmpty else {
+            errorMessage = "Keine Google-OAuth-Konfiguration verfügbar."
+            return
+        }
+
+        isAuthorizingPublishing = true
+        defer { isAuthorizingPublishing = false }
+        errorMessage = nil
+
+        do {
+            let currentPlan = publishingScopePlan()
+            if currentPlan?.state == .alreadyAuthorized {
+                let accessToken = try await validatedPublishingAccessToken(
+                    targetChannelID: project.targetChannelID
+                )
+                let identities = try await YouTubeAuthorizedClient(
+                    accessToken: accessToken
+                ).myChannels()
+                guard identities.contains(where: {
+                    $0.id == project.targetChannelID
+                }) else {
+                    publishingAuthorizedChannelID = nil
+                    errorMessage = "Die aktuelle Google-Autorisierung gehört nicht zum Projekt-Zielkanal."
+                    return
+                }
+                publishingAuthorizedChannelID = project.targetChannelID
+                return
+            }
+
+            let requestedScopes = currentPlan?.scopesForAuthorization
+                ?? Set([
+                    GoogleOAuthScope.youtubeReadOnly,
+                    .youtubeUpload,
+                    .youtubeForceSSL
+                ])
+
+            let tokens = try await performOAuthAuthorization(
+                scopes: requestedScopes
+            )
+
+            guard let grantedScopeString = tokens.scope else {
+                publishingAuthorizedChannelID = nil
+                errorMessage = "Google hat keine verifizierbare Scope-Liste zurückgegeben. Blackstock aktiviert Publishing nicht."
+                return
+            }
+
+            let granted = GoogleOAuthScopePlanner.parseGrantedScopes(
+                grantedScopeString
+            )
+            guard requestedScopes.isSubset(of: granted) else {
+                publishingAuthorizedChannelID = nil
+                errorMessage = "Nicht alle für Publishing benötigten Google-Berechtigungen wurden gewährt."
+                return
+            }
+
+            let identities = try await YouTubeAuthorizedClient(
+                accessToken: tokens.accessToken
+            ).myChannels()
+            guard identities.contains(where: {
+                $0.id == project.targetChannelID
+            }) else {
+                publishingAuthorizedChannelID = nil
+                errorMessage = "Die neu autorisierte Google-Sitzung enthält nicht den Projekt-Zielkanal. Publishing bleibt gesperrt."
+                return
+            }
+
+            try BlackstockKeychain.write(
+                tokens.accessToken,
+                account: "youtube.\(project.targetChannelID).accessToken"
+            )
+            if let refresh = tokens.refreshToken, !refresh.isEmpty {
+                try BlackstockKeychain.write(
+                    refresh,
+                    account: "youtube.\(project.targetChannelID).refreshToken"
+                )
+            }
+            try BlackstockKeychain.write(
+                grantedScopeString,
+                account: "youtube.\(project.targetChannelID).scopes"
+            )
+
+            tokenSet = tokens
+            publishingAuthorizedChannelID = project.targetChannelID
+        } catch {
+            publishingAuthorizedChannelID = nil
+            errorMessage = "Publishing-Autorisierung fehlgeschlagen: \(describe(error))"
+        }
+    }
+
+    func validatedPublishingAccessToken(
+        targetChannelID: String
+    ) async throws -> String {
+        let storedScopes = BlackstockKeychain.read(
+            "youtube.\(targetChannelID).scopes"
+        )
+        let plan = GoogleOAuthScopePlanner().plan(
+            capabilities: [.discoveryReadOnly, .upload, .packaging],
+            tokenScopeString: storedScopes
+        )
+        guard plan.state == .alreadyAuthorized else {
+            throw PublishingSessionError.missingScopes
+        }
+
+        let refreshToken = BlackstockKeychain.read(
+            "youtube.\(targetChannelID).refreshToken"
+        )
+        if !refreshToken.isEmpty {
+            let refreshed = try await GoogleOAuthTokenRefresher().refresh(
+                refreshToken: refreshToken,
+                clientID: effectiveClientID
+            )
+            try BlackstockKeychain.write(
+                refreshed.accessToken,
+                account: "youtube.\(targetChannelID).accessToken"
+            )
+            return refreshed.accessToken
+        }
+
+        let accessToken = BlackstockKeychain.read(
+            "youtube.\(targetChannelID).accessToken"
+        )
+        guard !accessToken.isEmpty else {
+            throw PublishingSessionError.missingToken
+        }
+        return accessToken
+    }
+
+    func publishingJournal() throws -> ExternalActionJournal {
+        if let cachedPublishingJournal {
+            return cachedPublishingJournal
+        }
+
+        let base = try FileManager.default.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        let url = base
+            .appendingPathComponent("Blackstock", isDirectory: true)
+            .appendingPathComponent(
+                "external-action-journal.json"
+            )
+        let journal = try ExternalActionJournal.persistent(at: url)
+        cachedPublishingJournal = journal
+        return journal
+    }
+
+    private func performOAuthAuthorization(
+        scopes: Set<GoogleOAuthScope>
+    ) async throws -> GoogleOAuthTokenSet {
+        let server = try LoopbackOAuthServer()
+        let redirectURI = try await server.start()
+        let pkce = try PKCEPair.generate()
+        let state = try PKCEPair.generate().verifier
+        let request = GoogleOAuthAuthorizationRequest(
+            clientID: effectiveClientID,
+            redirectURI: redirectURI,
+            scopes: scopes,
+            state: state,
+            pkce: pkce
+        )
+
+        guard NSWorkspace.shared.open(request.authorizationURL) else {
+            server.cancel()
+            throw PublishingSessionError.browserOpenFailed
+        }
+
+        let callbackURL = try await server.waitForCallback()
+        guard let components = URLComponents(
+            url: callbackURL,
+            resolvingAgainstBaseURL: false
+        ) else {
+            throw GoogleOAuthError.invalidAuthorizationResponse
+        }
+        let items = components.queryItems ?? []
+        if let providerError = items.first(where: {
+            $0.name == "error"
+        })?.value {
+            throw PublishingSessionError.providerRejected(
+                providerError
+            )
+        }
+        guard items.first(where: {
+            $0.name == "state"
+        })?.value == state else {
+            throw GoogleOAuthError.stateMismatch
+        }
+        guard let code = items.first(where: {
+            $0.name == "code"
+        })?.value, !code.isEmpty else {
+            throw GoogleOAuthError.invalidAuthorizationResponse
+        }
+
+        return try await GoogleOAuthTokenExchange().exchange(
+            code: code,
+            clientID: effectiveClientID,
+            redirectURI: redirectURI,
+            verifier: pkce.verifier
+        )
     }
 
     func continueFromTopic() {
