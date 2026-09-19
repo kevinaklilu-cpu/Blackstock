@@ -1,4 +1,5 @@
 #if os(macOS)
+import AppKit
 import SwiftUI
 import BlackstockCore
 
@@ -795,6 +796,32 @@ private struct SettingsView: View {
                             .font(.caption.monospaced())
                             .foregroundStyle(.secondary)
                             .textSelection(.enabled)
+
+                        if let manifest = availableUpdateManifest {
+                            Button {
+                                do {
+                                    try UpdatePackageIntegrityVerifier().verify(
+                                        fileURL: verifiedUpdatePackageURL,
+                                        expectedSHA256: manifest.sha256
+                                    )
+                                    guard NSWorkspace.shared.open(
+                                        verifiedUpdatePackageURL
+                                    ) else {
+                                        updateStatusMessage = "Das verifizierte Paket konnte nicht im macOS-Installer geöffnet werden."
+                                        return
+                                    }
+                                    updateStatusMessage = "Das verifizierte Paket wurde an den macOS-Installer übergeben. Die Installation erfolgt erst nach deiner Bestätigung im System-Installer."
+                                } catch {
+                                    self.verifiedUpdatePackageURL = nil
+                                    updateStatusMessage = "Das Paket hat die erneute Integritätsprüfung vor der Installation nicht bestanden und wurde nicht geöffnet."
+                                }
+                            } label: {
+                                Label(
+                                    "Verifiziertes Paket im macOS-Installer öffnen",
+                                    systemImage: "shippingbox.and.arrow.backward"
+                                )
+                            }
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
