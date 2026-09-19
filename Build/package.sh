@@ -57,7 +57,9 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <key>CFBundleVersion</key><string>${BUILD_NUMBER}</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>NSHighResolutionCapable</key><true/>
-<key>NSCameraUsageDescription</key><string>Blackstock verwendet die Kamera nur nach deiner Freigabe, um autorisierte Produktionsaufnahmen direkt in dein lokales Projekt aufzunehmen.</string>\n<key>NSMicrophoneUsageDescription</key><string>Blackstock verwendet das Mikrofon nur nach deiner Freigabe, um autorisierte Produktionsaufnahmen direkt in dein lokales Projekt aufzunehmen.</string>\n<key>NSSpeechRecognitionUsageDescription</key><string>Blackstock transkribiert autorisierte Produktionsmedien lokal auf diesem Mac, wenn On-Device-Spracherkennung verfügbar ist.</string>
+<key>NSCameraUsageDescription</key><string>Blackstock verwendet die Kamera nur nach deiner Freigabe, um autorisierte Produktionsaufnahmen direkt in dein lokales Projekt aufzunehmen.</string>
+<key>NSMicrophoneUsageDescription</key><string>Blackstock verwendet das Mikrofon nur nach deiner Freigabe, um autorisierte Produktionsaufnahmen direkt in dein lokales Projekt aufzunehmen.</string>
+<key>NSSpeechRecognitionUsageDescription</key><string>Blackstock transkribiert autorisierte Produktionsmedien lokal auf diesem Mac, wenn On-Device-Spracherkennung verfügbar ist.</string>
 <key>BlackstockGoogleOAuthClientID</key><string>${OAUTH_CLIENT_ID}</string>
 <key>BlackstockYouTubePublicPublishingApproved</key>${PUBLIC_PUBLISHING_PLIST}
 <key>BlackstockUpdateManifestURL</key><string>${UPDATE_MANIFEST_URL}</string>
