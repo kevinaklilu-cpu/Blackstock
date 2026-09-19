@@ -29,14 +29,15 @@ Blackstock enthält zwei bewusst getrennte manuelle Workflows:
    - signiert App und Installer,
    - notarisiert mit App-Store-Connect-API-Key,
    - prüft `Accepted`, Stapling und Gatekeeper,
-   - erzeugt das signierte Update-Manifest,
+   - erzeugt das signierte Update-Manifest mit gebundenem `github.sha`,
+   - bindet denselben Source-Commit in App-Bundle und Produktionsmetadaten,
    - lädt das Release-Bundle als GitHub-Artefakt hoch.
 
 2. **Blackstock Verify Published Release** (`.github/workflows/verify-published-release.yml`)
    - läuft erst **nach** Veröffentlichung von Manifest und Paket unter den realen HTTPS-URLs,
    - verifiziert Manifest-Signatur, Paket-Hash, Installer-Team und Notarisierungsstatus,
    - installiert das verifizierte Paket auf einem frischen macOS-Runner,
-   - verifiziert Developer ID Application, Gatekeeper sowie exakte Manifest-Version und -Build der installierten App,
+   - verifiziert Developer ID Application, Gatekeeper sowie exakte Manifest-Version, -Build **und Source-Commit** der installierten App,
    - startet die installierte Produktions-App,
    - erzeugt `release-evidence.json`.
 
@@ -109,6 +110,7 @@ Beispiel:
 ```bash
 export BLACKSTOCK_VERSION="1.0.0"
 export BLACKSTOCK_BUILD="100"
+export BLACKSTOCK_SOURCE_COMMIT_SHA="$(git rev-parse HEAD)"
 export BLACKSTOCK_CODESIGN_IDENTITY="Developer ID Application: …"
 export BLACKSTOCK_INSTALLER_IDENTITY="Developer ID Installer: …"
 export BLACKSTOCK_NOTARY_KEYCHAIN_PROFILE="blackstock-notary"
@@ -133,6 +135,7 @@ swift Build/generate_update_manifest.swift \
   --package-url "https://updates.example.com/Blackstock.pkg" \
   --version "1.0.0" \
   --build "100" \
+  --source-commit-sha "$BLACKSTOCK_SOURCE_COMMIT_SHA" \
   --output dist/update-manifest.json
 ```
 
@@ -164,11 +167,13 @@ Er prüft:
 - Manifest beschreibt gegenüber der Ausgangsversion tatsächlich ein Update.
 - Paket wird von der im Manifest angegebenen HTTPS-URL geladen.
 - Paket-SHA-256 entspricht exakt dem signierten Manifest.
+- Der Source-Commit-SHA ist Teil des signierten Manifest-Payloads.
 - Paket ist ein Developer-ID-Installer des erwarteten Apple-Teams.
 - Stapled Notarization Ticket ist gültig.
 - Gatekeeper akzeptiert das Installer-Paket.
 - optional: installierte App besteht `codesign --deep --strict`.
 - optional: installierte App weist Developer ID Application und erwartete Team-ID aus.
+- optional: `BlackstockSourceCommitSHA` der installierten App entspricht exakt dem signierten Manifest-Commit.
 - optional: Gatekeeper akzeptiert die installierte App.
 - optional: `notarytool info` meldet für die konkrete Submission `Accepted`.
 
@@ -203,13 +208,14 @@ Zusätzlich muss auf einem sauberen Mac der tatsächliche Blackstock-App-Pfad ge
 8. erst nach Nutzeraktion darf der macOS-Installer geöffnet werden;
 9. Installation im System-Installer abschließen;
 10. Blackstock neu starten;
-11. Bundle-Version und Build müssen exakt der Manifest-Zielversion entsprechen.
+11. Bundle-Version und Build müssen exakt der Manifest-Zielversion entsprechen;
+12. `BlackstockSourceCommitSHA` des gestarteten Bundles muss exakt dem signierten Manifest-Source-Commit entsprechen.
 
 Blackstock protokolliert diesen Pfad selbst lokal unter:
 
 `~/Library/Application Support/Blackstock/Update/update-evidence.json`
 
-Die Evidenz wird erst vollständig, wenn derselbe ältere Build ein gültiges Manifest akzeptiert hat, das Paket Hash- und Installer-Team-Prüfung bestanden hat, der macOS-Installer tatsächlich geöffnet wurde und anschließend exakt der Manifest-Ziel-Build gestartet ist.
+Die Evidenz wird erst vollständig, wenn derselbe ältere Build ein gültiges Manifest akzeptiert hat, das Paket Hash- und Installer-Team-Prüfung bestanden hat, der macOS-Installer tatsächlich geöffnet wurde und anschließend exakt der Manifest-Ziel-Build **aus dem im Manifest signierten Source-Commit** gestartet ist.
 
 Nach dem erfolgreichen Test:
 
