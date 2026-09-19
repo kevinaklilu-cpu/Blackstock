@@ -84,6 +84,7 @@ final class BlackstockSession: ObservableObject {
     private var cachedPublishingJournal: ExternalActionJournal?
 
     init() {
+        BlackstockUpdateAudit.reconcilePostUpdateLaunch()
         _ = try? PrivacyRetentionEnforcer().purgeExpiredUpdatePackages(
             in: FileManager.default.temporaryDirectory
         )
