@@ -212,12 +212,23 @@ def main():
             "production release and in-app updater evidence use "
             "different package URLs"
         )
-    if release.get("installerTeamID") != updater.get(
-        "expectedInstallerTeamID"
-    ):
+    release_team_id = str(
+        release.get("installerTeamID", "")
+    ).strip()
+    capture_team_id = str(
+        capture.get("applicationTeamID", "")
+    ).strip()
+    updater_team_id = str(
+        updater.get("expectedInstallerTeamID", "")
+    ).strip()
+    if len({
+        release_team_id,
+        capture_team_id,
+        updater_team_id,
+    }) != 1:
         fail(
-            "production release and updater evidence use different "
-            "Apple installer team IDs"
+            "capture, production release and updater evidence use "
+            "different Apple team IDs"
         )
     if release.get("packageSHA256") != updater.get("packageSHA256"):
         fail(
@@ -273,7 +284,7 @@ def main():
         ),
         "version": release_version,
         "build": release_build,
-        "installerTeamID": release.get("installerTeamID"),
+        "installerTeamID": release_team_id,
         "manifestURL": release.get("manifestURL"),
         "packageURL": release.get("packageURL"),
         "packageSHA256": release.get("packageSHA256"),
