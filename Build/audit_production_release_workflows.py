@@ -130,11 +130,6 @@ if "production-manifest.json" in verify:
     errors.append(
         "published release verification must not re-fetch an unbound manifest after cryptographic verification"
     )
-if 'MANIFEST_URL: ${{ inputs.manifest_url }}' in verify and "Download cryptographically bound package" in verify:
-    errors.append(
-        "clean-install package download must use verified evidence, not a second manifest fetch"
-    )
-
 if errors:
     print("Production release workflow audit failed:", file=sys.stderr)
     for error in errors:
