@@ -18,7 +18,12 @@ final class LoopbackOAuthServer: @unchecked Sendable {
     private var terminalError: Error?
 
     init() throws {
-        listener = try NWListener(using: .tcp, on: .any)
+        let parameters = NWParameters.tcp
+        parameters.requiredLocalEndpoint = .hostPort(
+            host: "127.0.0.1",
+            port: .any
+        )
+        listener = try NWListener(using: parameters)
     }
 
     func start() async throws -> URL {
@@ -78,29 +83,32 @@ final class LoopbackOAuthServer: @unchecked Sendable {
         connection.start(queue: queue)
         connection.receive(minimumIncompleteLength: 1, maximumLength: 32_768) { [weak self] data, _, _, error in
             guard let self else { return }
-            if let error {
-                self.finishCallback(.failure(error))
+            if error != nil {
                 connection.cancel()
                 return
             }
-            guard let data, let request = String(data: data, encoding: .utf8),
-                  let firstLine = request.components(separatedBy: "\r\n").first else {
-                self.finishCallback(.failure(ServerError.invalidRequest))
-                connection.cancel()
+            guard let data,
+                  let request = String(data: data, encoding: .utf8),
+                  let firstLine = request.components(
+                    separatedBy: "\r\n"
+                  ).first else {
+                self.reject(connection)
                 return
             }
 
             let fields = firstLine.split(separator: " ")
-            guard fields.count >= 2 else {
-                self.finishCallback(.failure(ServerError.invalidRequest))
-                connection.cancel()
+            guard fields.count >= 2,
+                  fields[0] == "GET" else {
+                self.reject(connection)
                 return
             }
             let target = String(fields[1])
             guard let port = self.listener.port,
-                  let url = URL(string: "http://127.0.0.1:\(port.rawValue)\(target)") else {
-                self.finishCallback(.failure(ServerError.invalidRequest))
-                connection.cancel()
+                  let url = URL(
+                    string: "http://127.0.0.1:\(port.rawValue)\(target)"
+                  ),
+                  url.path == "/oauth2/callback" else {
+                self.reject(connection)
                 return
             }
 
@@ -124,6 +132,21 @@ final class LoopbackOAuthServer: @unchecked Sendable {
             self.finishCallback(.success(url))
             self.listener.cancel()
         }
+    }
+
+    private func reject(_ connection: NWConnection) {
+        let response = """
+        HTTP/1.1 404 Not Found\r
+        Content-Length: 0\r
+        Connection: close\r
+        \r
+        """
+        connection.send(
+            content: Data(response.utf8),
+            completion: .contentProcessed { _ in
+                connection.cancel()
+            }
+        )
     }
 
     private func finishReady(_ result: Result<URL, Error>) {
