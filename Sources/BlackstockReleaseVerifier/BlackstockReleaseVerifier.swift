@@ -10,6 +10,7 @@ private enum ReleaseVerifierError: Error, LocalizedError {
     case commandFailed(String, Int32, String)
     case appIdentityMismatch
     case installedAppVersionMismatch
+    case missingCaptureEntitlements
     case incompleteNotaryArguments
     case notarizationNotAccepted(String)
 
@@ -31,6 +32,8 @@ private enum ReleaseVerifierError: Error, LocalizedError {
             return "Die installierte App ist nicht mit der erwarteten Developer-ID-Application-Team-ID signiert."
         case .installedAppVersionMismatch:
             return "Die installierte App entspricht nicht exakt Manifest-Version und -Build."
+        case .missingCaptureEntitlements:
+            return "Der installierten Produktions-App fehlen die Hardened-Runtime-Entitlements für Kamera oder Audioeingang."
         case .incompleteNotaryArguments:
             return "Notary-Submission-ID benötigt entweder ein Keychain-Profil oder vollständig konfigurierte API-Key-Zugangsdaten."
         case .notarizationNotAccepted(let status):
@@ -64,6 +67,8 @@ private struct ReleaseVerificationEvidence: Codable {
     let installedAppPath: String?
     let installedAppVersion: String?
     let installedAppBuild: Int?
+    let cameraEntitlementVerified: Bool?
+    let audioInputEntitlementVerified: Bool?
     let developerIDApplicationVerified: Bool?
     let gatekeeperApplicationAccepted: Bool?
     let notarySubmissionID: String?
@@ -194,6 +199,8 @@ private struct BlackstockReleaseVerifierMain {
         var applicationGatekeeperAccepted: Bool?
         var installedAppVersion: String?
         var installedAppBuild: Int?
+        var cameraEntitlementVerified: Bool?
+        var audioInputEntitlementVerified: Bool?
         if let appURL = arguments.installedAppURL {
             _ = try requireSuccessful(
                 run(
@@ -255,6 +262,41 @@ private struct BlackstockReleaseVerifierMain {
             installedAppVersion = appVersion
             installedAppBuild = appBuild
 
+            let entitlements = try requireSuccessful(
+                run(
+                    "/usr/bin/codesign",
+                    [
+                        "--display",
+                        "--entitlements", ":-",
+                        appURL.path
+                    ]
+                ),
+                command: "codesign --display --entitlements"
+            )
+            let hasCameraEntitlement =
+                entitlements.output.contains(
+                    "com.apple.security.device.camera"
+                )
+                && entitlementIsTrue(
+                    "com.apple.security.device.camera",
+                    in: entitlements.output
+                )
+            let hasAudioInputEntitlement =
+                entitlements.output.contains(
+                    "com.apple.security.device.audio-input"
+                )
+                && entitlementIsTrue(
+                    "com.apple.security.device.audio-input",
+                    in: entitlements.output
+                )
+            guard hasCameraEntitlement,
+                  hasAudioInputEntitlement else {
+                throw ReleaseVerifierError
+                    .missingCaptureEntitlements
+            }
+            cameraEntitlementVerified = true
+            audioInputEntitlementVerified = true
+
             _ = try requireSuccessful(
                 run(
                     "/usr/sbin/spctl",
@@ -294,6 +336,10 @@ private struct BlackstockReleaseVerifierMain {
             installedAppPath: arguments.installedAppURL?.path,
             installedAppVersion: installedAppVersion,
             installedAppBuild: installedAppBuild,
+            cameraEntitlementVerified:
+                cameraEntitlementVerified,
+            audioInputEntitlementVerified:
+                audioInputEntitlementVerified,
             developerIDApplicationVerified: applicationVerified,
             gatekeeperApplicationAccepted:
                 applicationGatekeeperAccepted,
@@ -377,6 +423,31 @@ private struct BlackstockReleaseVerifierMain {
             )
         }
         return status
+    }
+
+    private static func entitlementIsTrue(
+        _ key: String,
+        in output: String
+    ) -> Bool {
+        let escaped = NSRegularExpression
+            .escapedPattern(for: key)
+        let pattern =
+            "<key>\\s*\(escaped)\\s*</key>\\s*<true\\s*/>"
+        guard let expression = try? NSRegularExpression(
+            pattern: pattern,
+            options: [.caseInsensitive]
+        ) else {
+            return false
+        }
+        let range = NSRange(
+            output.startIndex..<output.endIndex,
+            in: output
+        )
+        return expression.firstMatch(
+            in: output,
+            options: [],
+            range: range
+        ) != nil
     }
 
     private static func requireHTTPSResponse(
