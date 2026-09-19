@@ -30,7 +30,7 @@ enum BlackstockKeychain {
         SecItemDelete(lookup as CFDictionary)
         var insert = lookup
         insert[kSecValueData as String] = data
-        insert[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        insert[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         let status = SecItemAdd(insert as CFDictionary, nil)
         guard status == errSecSuccess else { throw KeychainError.status(status) }
     }
