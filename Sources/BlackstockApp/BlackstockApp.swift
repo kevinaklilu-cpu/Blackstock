@@ -1078,6 +1078,127 @@ private struct SettingsView: View {
                 .padding(.vertical, 6)
             }
 
+            GroupBox("Capture-Hardware-Evidenz") {
+                VStack(alignment: .leading, spacing: 10) {
+                    if let evidence =
+                        BlackstockCaptureHardwareAudit.loadEvidence() {
+                        HStack {
+                            Label(
+                                evidence.isComplete
+                                    ? "Hardware-Nachweis vollständig"
+                                    : "Hardware-Nachweis noch unvollständig",
+                                systemImage: evidence.isComplete
+                                    ? "checkmark.seal.fill"
+                                    : "externaldrive.badge.exclamationmark"
+                            )
+                            .font(.callout.weight(.semibold))
+                            Spacer()
+                            Text(
+                                "\(CaptureKind.allCases.filter { evidence[$0].satisfies(kind: $0) }.count)/4 Pfade"
+                            )
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                        }
+
+                        ForEach(CaptureKind.allCases, id: \.self) { kind in
+                            let path = evidence[kind]
+                            HStack {
+                                Image(
+                                    systemName:
+                                        path.satisfies(kind: kind)
+                                        ? "checkmark.circle.fill"
+                                        : "circle"
+                                )
+                                .accessibilityHidden(true)
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(kind.germanTitle)
+                                        .font(.caption.weight(.semibold))
+                                    Text(
+                                        captureEvidenceDetail(
+                                            path,
+                                            kind: kind
+                                        )
+                                    )
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                            }
+                        }
+
+                        Divider()
+
+                        Label(
+                            evidence.deniedPermissionHardStopPassed
+                                ? "Verweigerte Berechtigungen: Hard-Stop belegt"
+                                : "Verweigerte Berechtigungen noch nicht vollständig getestet",
+                            systemImage:
+                                evidence.deniedPermissionHardStopPassed
+                                ? "hand.raised.fill"
+                                : "hand.raised"
+                        )
+                        .font(.caption)
+
+                        Label(
+                            evidence.temporaryCleanupPassed
+                                ? "Temporäre Capture-Dateien: Cleanup belegt"
+                                : "Temporärer Cleanup noch nicht für alle Pfade belegt",
+                            systemImage:
+                                evidence.temporaryCleanupPassed
+                                ? "trash.slash.fill"
+                                : "trash"
+                        )
+                        .font(.caption)
+
+                        Label(
+                            evidence.appRestartPersistencePassed
+                                ? "Projektpersistenz nach App-Neustart belegt"
+                                : "App-Neustart-Persistenz noch nicht belegt",
+                            systemImage:
+                                evidence.appRestartPersistencePassed
+                                ? "arrow.clockwise.circle.fill"
+                                : "arrow.clockwise.circle"
+                        )
+                        .font(.caption)
+
+                        if let url =
+                            BlackstockCaptureHardwareAudit.evidenceURL() {
+                            Text(url.path)
+                                .font(.caption2.monospaced())
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+
+                            Button {
+                                NSWorkspace.shared
+                                    .activateFileViewerSelecting(
+                                        [url]
+                                    )
+                            } label: {
+                                Label(
+                                    "Evidenzdatei im Finder zeigen",
+                                    systemImage: "folder"
+                                )
+                            }
+                        }
+
+                        Text(
+                            evidence.isComplete
+                                ? "Die App-Evidenz erfüllt intern alle Capture-Hardware-Bedingungen. Das Release-Gate wird erst nach externer Validierung dieser Datei auf PASS gesetzt."
+                                : "Für Capture = PASS müssen alle vier realen Pfade mindestens fünf Sekunden technisch valide aufgezeichnet, projektgebunden, bereinigt und nach einem App-Neustart nachweisbar sein."
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    } else {
+                        Text("Noch keine Capture-Hardware-Evidenz vorhanden. Sie entsteht automatisch durch reale Aufnahmen und Berechtigungs-Hard-Stops in einem installierten Blackstock-Build.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 6)
+            }
+
             GroupBox("Datenschutz & lokale Daten") {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Blackstock speichert Projekt-, Wachstums- und Arbeitsbereichsdaten lokal im Benutzerprofil. Google-/YouTube-Zugangsdaten liegen im macOS-Keychain.")
@@ -1187,6 +1308,40 @@ private struct SettingsView: View {
             Spacer()
         }
         .padding(28)
+    }
+
+    private func captureEvidenceDetail(
+        _ evidence: CaptureHardwarePathEvidence,
+        kind: CaptureKind
+    ) -> String {
+        guard evidence.recordingCreated else {
+            return "Noch keine technisch vermessene Aufnahme."
+        }
+
+        var parts = [
+            String(
+                format: "%.1f s",
+                evidence.durationSeconds
+            )
+        ]
+        if kind == .camera || kind == .screen {
+            parts.append(
+                evidence.videoTrackPresent == true
+                    ? "Videospur erkannt"
+                    : "Videospur fehlt"
+            )
+        }
+        if kind == .microphone || kind == .systemAudio {
+            parts.append(
+                "\(evidence.decodedSamples ?? 0) dekodierte Samples"
+            )
+        }
+        parts.append(
+            evidence.persistedToProject
+                ? "im Projekt gespeichert"
+                : "nicht projektgebunden"
+        )
+        return parts.joined(separator: " · ")
     }
 }
 #else
