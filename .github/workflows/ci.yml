@@ -49,7 +49,14 @@ jobs:
         run: |
           set -euo pipefail
           EVIDENCE="$RUNNER_TEMP/capture-hardware-smoke.json"
-          cat > "$EVIDENCE" <<'JSON'
+          CAMERA="$RUNNER_TEMP/camera.mov"
+          MICROPHONE="$RUNNER_TEMP/microphone.m4a"
+          SCREEN="$RUNNER_TEMP/screen.mp4"
+          printf x > "$CAMERA"
+          printf x > "$MICROPHONE"
+          printf x > "$SCREEN"
+
+          cat > "$EVIDENCE" <<JSON
           {
             "schemaVersion": 1,
             "testedAt": "2026-09-19T20:00:00Z",
@@ -63,32 +70,57 @@ jobs:
               "recordingCreated": true,
               "durationSeconds": 5.2,
               "persistedToProject": true,
-              "videoTrackPresent": true
+              "videoTrackPresent": true,
+              "projectID": "00000000-0000-0000-0000-000000000101",
+              "recordedLaunchID": "00000000-0000-0000-0000-000000000201",
+              "persistedFilePath": "$CAMERA"
             },
             "microphone": {
               "permissionGranted": true,
               "recordingCreated": true,
               "durationSeconds": 5.1,
               "persistedToProject": true,
-              "decodedSamples": 24000
+              "decodedSamples": 24000,
+              "projectID": "00000000-0000-0000-0000-000000000102",
+              "recordedLaunchID": "00000000-0000-0000-0000-000000000202",
+              "persistedFilePath": "$MICROPHONE"
             },
             "screen": {
               "permissionGranted": true,
               "recordingCreated": true,
               "durationSeconds": 5.4,
               "persistedToProject": true,
-              "videoTrackPresent": true
+              "videoTrackPresent": true,
+              "projectID": "00000000-0000-0000-0000-000000000103",
+              "recordedLaunchID": "00000000-0000-0000-0000-000000000203",
+              "persistedFilePath": "$SCREEN"
             },
             "systemAudio": {
               "permissionGranted": true,
               "recordingCreated": true,
               "durationSeconds": 5.4,
               "persistedToProject": true,
-              "decodedSamples": 48000
+              "decodedSamples": 48000,
+              "projectID": "00000000-0000-0000-0000-000000000103",
+              "recordedLaunchID": "00000000-0000-0000-0000-000000000203",
+              "persistedFilePath": "$SCREEN"
             },
             "deniedPermissionHardStopPassed": true,
             "temporaryCleanupPassed": true,
-            "appRestartPersistencePassed": true
+            "appRestartPersistencePassed": true,
+            "restartVerifiedLaunchID": "00000000-0000-0000-0000-000000000301",
+            "deniedPermissionKinds": [
+              "camera",
+              "microphone",
+              "screen",
+              "systemAudio"
+            ],
+            "temporaryCleanupKinds": [
+              "camera",
+              "microphone",
+              "screen",
+              "systemAudio"
+            ]
           }
           JSON
           python3 Build/validate_capture_hardware_smoke.py "$EVIDENCE"
