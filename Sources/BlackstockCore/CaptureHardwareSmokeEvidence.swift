@@ -12,6 +12,7 @@ public struct CaptureHardwarePathEvidence:
     public var videoTrackPresent: Bool?
     public var projectID: UUID?
     public var recordedLaunchID: UUID?
+    public var persistedFilePath: String?
 
     public init(
         permissionGranted: Bool = false,
@@ -21,7 +22,8 @@ public struct CaptureHardwarePathEvidence:
         decodedSamples: Int64? = nil,
         videoTrackPresent: Bool? = nil,
         projectID: UUID? = nil,
-        recordedLaunchID: UUID? = nil
+        recordedLaunchID: UUID? = nil,
+        persistedFilePath: String? = nil
     ) {
         self.permissionGranted = permissionGranted
         self.recordingCreated = recordingCreated
@@ -31,6 +33,7 @@ public struct CaptureHardwarePathEvidence:
         self.videoTrackPresent = videoTrackPresent
         self.projectID = projectID
         self.recordedLaunchID = recordedLaunchID
+        self.persistedFilePath = persistedFilePath
     }
 
     public func satisfies(
@@ -154,6 +157,7 @@ public struct CaptureHardwareSmokeEvidence:
             $0.persistedToProject
                 && $0.projectID != nil
                 && $0.recordedLaunchID != nil
+                && $0.persistedFilePath != nil
         }) else {
             appRestartPersistencePassed = false
             return
@@ -161,8 +165,15 @@ public struct CaptureHardwareSmokeEvidence:
 
         appRestartPersistencePassed =
             paths.allSatisfy {
-                $0.recordedLaunchID
-                    != currentLaunchID
+                guard $0.recordedLaunchID
+                        != currentLaunchID,
+                      let path =
+                        $0.persistedFilePath else {
+                    return false
+                }
+                return FileManager.default.fileExists(
+                    atPath: path
+                )
             }
     }
 
