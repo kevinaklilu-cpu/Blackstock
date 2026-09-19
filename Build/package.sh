@@ -16,6 +16,7 @@ NOTARY_PROFILE="${BLACKSTOCK_NOTARY_KEYCHAIN_PROFILE:-}"
 UPDATE_MANIFEST_URL="${BLACKSTOCK_UPDATE_MANIFEST_URL:-}"
 UPDATE_PUBLIC_KEY="${BLACKSTOCK_UPDATE_PUBLIC_KEY_BASE64:-}"
 UPDATE_INSTALLER_TEAM_ID="${BLACKSTOCK_UPDATE_INSTALLER_TEAM_ID:-}"
+INCLUDE_E2E_SMOKE="${BLACKSTOCK_INCLUDE_E2E_SMOKE:-0}"
 
 if [[ "$PUBLIC_PUBLISHING_APPROVED" == "1" ]]; then
   PUBLIC_PUBLISHING_PLIST="<true/>"
@@ -36,6 +37,12 @@ APP="$WORK/Blackstock.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_DIR/Blackstock" "$APP/Contents/MacOS/Blackstock"
 chmod +x "$APP/Contents/MacOS/Blackstock"
+
+if [[ "$INCLUDE_E2E_SMOKE" == "1" ]]; then
+  mkdir -p "$APP/Contents/Helpers"
+  cp "$BIN_DIR/BlackstockE2ESmoke" "$APP/Contents/Helpers/BlackstockE2ESmoke"
+  chmod +x "$APP/Contents/Helpers/BlackstockE2ESmoke"
+fi
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -60,8 +67,14 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 PLIST
 
 if [[ -n "$APP_SIGN_IDENTITY" ]]; then
+  if [[ "$INCLUDE_E2E_SMOKE" == "1" ]]; then
+    codesign --force --options runtime --timestamp --sign "$APP_SIGN_IDENTITY" "$APP/Contents/Helpers/BlackstockE2ESmoke"
+  fi
   codesign --force --options runtime --timestamp --sign "$APP_SIGN_IDENTITY" "$APP"
 else
+  if [[ "$INCLUDE_E2E_SMOKE" == "1" ]]; then
+    codesign --force --sign - "$APP/Contents/Helpers/BlackstockE2ESmoke"
+  fi
   codesign --force --deep --sign - "$APP"
 fi
 codesign --verify --deep --strict "$APP"
