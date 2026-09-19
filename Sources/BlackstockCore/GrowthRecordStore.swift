@@ -2,6 +2,18 @@ import Foundation
 
 public enum GrowthRecordStoreError: Error, Sendable, Equatable {
     case invalidRoot
+    case invalidSchemaVersion(Int)
+    case unsupportedFutureSchemaVersion(Int)
+}
+
+public enum GrowthRecordStoreSchema {
+    public static let legacyUnversioned = 1
+    public static let current = 2
+}
+
+private struct GrowthStoreEnvelope<Value: Codable & Sendable>: Codable, Sendable {
+    let schemaVersion: Int
+    let value: Value
 }
 
 public struct GrowthRecordStore: Sendable {
@@ -20,7 +32,7 @@ public struct GrowthRecordStore: Sendable {
         let url = directory.appendingPathComponent(
             "published-video.json"
         )
-        try Self.write(record, to: url)
+        try Self.writeVersioned(record, to: url)
     }
 
     public func loadRecord(
@@ -34,10 +46,19 @@ public struct GrowthRecordStore: Sendable {
             .appendingPathComponent(
                 "published-video.json"
             )
-        return try Self.read(
+        guard let decoded: (PublishedVideoRecord, Int) = try Self.readVersioned(
             PublishedVideoRecord.self,
             from: url
-        )
+        ) else {
+            return nil
+        }
+        guard decoded.0.projectID == projectID else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        if decoded.1 < GrowthRecordStoreSchema.current {
+            try Self.writeVersioned(decoded.0, to: url)
+        }
+        return decoded.0
     }
 
     public func save(
@@ -50,7 +71,7 @@ public struct GrowthRecordStore: Sendable {
         let url = directory.appendingPathComponent(
             "growth-learning.json"
         )
-        try Self.write(learning, to: url)
+        try Self.writeVersioned(learning, to: url)
     }
 
     public func loadLearning(
@@ -64,10 +85,16 @@ public struct GrowthRecordStore: Sendable {
             .appendingPathComponent(
                 "growth-learning.json"
             )
-        return try Self.read(
+        guard let decoded: (GrowthLearningRecord, Int) = try Self.readVersioned(
             GrowthLearningRecord.self,
             from: url
-        )
+        ) else {
+            return nil
+        }
+        if decoded.1 < GrowthRecordStoreSchema.current {
+            try Self.writeVersioned(decoded.0, to: url)
+        }
+        return decoded.0
     }
 
     public func projectDirectory(
@@ -85,35 +112,63 @@ public struct GrowthRecordStore: Sendable {
         return directory
     }
 
-    private static func write<T: Encodable>(
+    private static func writeVersioned<T: Codable & Sendable>(
         _ value: T,
         to url: URL
     ) throws {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.sortedKeys]
-        let data = try encoder.encode(value)
+        let envelope = GrowthStoreEnvelope(
+            schemaVersion: GrowthRecordStoreSchema.current,
+            value: value
+        )
+        let data = try encoder.encode(envelope)
         try data.write(
             to: url,
             options: [.atomic]
         )
     }
 
-    private static func read<T: Decodable>(
+    private static func readVersioned<T: Codable & Sendable>(
         _ type: T.Type,
         from url: URL
-    ) throws -> T? {
+    ) throws -> (T, Int)? {
         guard FileManager.default.fileExists(
             atPath: url.path
         ) else {
             return nil
         }
+
         let data = try Data(contentsOf: url)
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        return try decoder.decode(
-            type,
-            from: data
+        let object = try JSONSerialization.jsonObject(with: data)
+        guard let dictionary = object as? [String: Any] else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+
+        if let rawVersion = dictionary["schemaVersion"] {
+            guard let version = rawVersion as? Int,
+                  version > 0 else {
+                throw GrowthRecordStoreError.invalidSchemaVersion(
+                    (rawVersion as? Int) ?? 0
+                )
+            }
+            guard version <= GrowthRecordStoreSchema.current else {
+                throw GrowthRecordStoreError
+                    .unsupportedFutureSchemaVersion(version)
+            }
+            let envelope = try decoder.decode(
+                GrowthStoreEnvelope<T>.self,
+                from: data
+            )
+            return (envelope.value, envelope.schemaVersion)
+        }
+
+        return (
+            try decoder.decode(T.self, from: data),
+            GrowthRecordStoreSchema.legacyUnversioned
         )
     }
 }
