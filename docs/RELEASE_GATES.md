@@ -9,7 +9,7 @@ Statuswerte: **PASS / FAIL / BLOCKED_EXTERNAL**.
 | Strategy | FAIL |
 | Language | PASS |
 | Research | FAIL |
-| Temporal Semantics | FAIL |
+| Temporal Semantics | PASS |
 | Grounding / Provenance | FAIL |
 | Discovery | FAIL |
 | Rights | PASS |
@@ -47,6 +47,8 @@ Hinweis: **Upload Resume = PASS** basiert auf dem deterministischen Resumable-Up
 Hinweis: **Analytics = PASS** basiert auf den deterministischen YouTube-Analytics-Contract- und Kontexttests: Abrufe sind an ein veröffentlichtes Projekt, denselben Projekt-Datensatz, denselben Zielkanal und eine konkrete Video-ID gebunden; vor dem Abruf wird die aktuell autorisierte YouTube-Kanalidentität erneut validiert. Fehlende Provider-Zeilen bleiben fehlend statt als Nullwerte erfunden zu werden, und inkonsistente Responses führen zum Hard-Stop.
 
 Hinweis: **Language = PASS** basiert auf konsequenter deutscher Produktsprache in den kritischen First-Run-, Studio-, Review-, Einstellungen- und Journey-Flächen sowie einer davon getrennten, persistenten Content-Sprache. Die Content-Sprache wird bis zu YouTube `defaultLanguage` und `defaultAudioLanguage` weitergegeben. `Build/audit_language.py` läuft in der Canonical-CI und blockiert Regressionen auf bekannte englische Produktbegriffe.
+
+Hinweis: **Temporal Semantics = PASS** trennt elapsed Beobachtungsfenster von YouTube-Analytics-Kalenderperioden, verwendet die getestete Pacific-Date-Semantik des Providers und kennzeichnet Analytics-Snapshots ausdrücklich als `providerMayLag`. Abrufzeitpunkt, angefragter Start-/Endzeitraum und Veröffentlichungszeit werden nicht miteinander vermischt. `Build/audit_temporal.py` läuft in der Canonical-CI.
 
 Hinweis: **Rights = PASS** basiert auf einer expliziten, versionierten Nutzer-Rechtebestätigung plus konkretem Rechte-/Eigentumsnachweis am Produktionsmedium. Unknown/Prohibited, fehlende Evidenz oder fehlende Attestation verhindern den Eintritt in die Produktion; dieselbe Rechtefreigabe wird als Quality-Evidence geführt und am Publish-Preflight erneut zwingend geprüft.
 
