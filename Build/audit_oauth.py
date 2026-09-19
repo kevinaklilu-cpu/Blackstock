@@ -52,7 +52,7 @@ CONTRACTS = {
     "Sources/BlackstockApp/FirstRunView.swift": [
         "Eigene Desktop-OAuth-JSON auswählen …",
         "session.importOAuthJSON(from: url)",
-        "Ein enthaltenes Client Secret wird nicht benötigt und nicht gespeichert.",
+        "Client Secret wird nicht benötigt und nicht gespeichert.",
     ],
     "Sources/BlackstockApp/BlackstockApp.swift": [
         "Desktop-OAuth-JSON importieren …",
