@@ -292,6 +292,51 @@ struct StudioView: View {
                 Divider()
 
                 VStack(alignment: .leading, spacing: 10) {
+                    Text("Bildformat & Fokus")
+                        .font(.headline)
+
+                    Picker("Format", selection: $state.reframeAspectRatio) {
+                        ForEach(ReframeAspectRatio.allCases, id: \.self) { ratio in
+                            Text(ratio.germanTitle).tag(ratio)
+                        }
+                    }
+                    .pickerStyle(.menu)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("Fokus horizontal")
+                            Spacer()
+                            Text(String(format: "%.0f%%", state.reframeFocalX * 100))
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                        Slider(value: $state.reframeFocalX, in: 0...1)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("Fokus vertikal")
+                            Spacer()
+                            Text(String(format: "%.0f%%", state.reframeFocalY * 100))
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                        Slider(value: $state.reframeFocalY, in: 0...1)
+                    }
+
+                    Button("Reframe anwenden") {
+                        Task { await state.applyReframe() }
+                    }
+                    .buttonStyle(.bordered)
+
+                    Text("Der Fokuspunkt bleibt vollständig manuell kontrollierbar. Vorschau und finaler Render verwenden dieselbe Crop-Geometrie.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 10) {
                     Text("Render")
                         .font(.headline)
 
