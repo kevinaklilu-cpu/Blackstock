@@ -170,6 +170,8 @@ jobs:
             "installedAppPath": "/Applications/Blackstock.app",
             "installedAppVersion": "1.0.0",
             "installedAppBuild": 100,
+            "cameraEntitlementVerified": true,
+            "audioInputEntitlementVerified": true,
             "developerIDApplicationVerified": true,
             "gatekeeperApplicationAccepted": true,
             "notarySubmissionID": "00000000-0000-0000-0000-000000000001",
@@ -340,6 +342,8 @@ jobs:
               "installedAppPath": "/Applications/Blackstock.app",
               "installedAppVersion": "1.0.0",
               "installedAppBuild": 100,
+              "cameraEntitlementVerified": True,
+              "audioInputEntitlementVerified": True,
               "developerIDApplicationVerified": True,
               "gatekeeperApplicationAccepted": True,
               "notarySubmissionID": "00000000-0000-0000-0000-000000000001",
@@ -472,6 +476,24 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' /Applications/Blackstock.app/Contents/Info.plist)" = "de.blackstock.app"
           test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' /Applications/Blackstock.app/Contents/Info.plist)" = "13.0"
           codesign --verify --deep --strict --verbose=2 /Applications/Blackstock.app
+
+          ENTITLEMENTS="$RUNNER_TEMP/blackstock-entitlements.txt"
+          codesign --display --entitlements :- /Applications/Blackstock.app \
+            >"$ENTITLEMENTS" 2>&1
+          python3 - "$ENTITLEMENTS" <<'PY'
+          import plistlib
+          import sys
+
+          text = open(sys.argv[1], encoding="utf-8", errors="replace").read()
+          start = text.find("<?xml")
+          end = text.rfind("</plist>")
+          if start < 0 or end < 0:
+              raise SystemExit("codesign did not emit a readable entitlements plist")
+          payload = text[start:end + len("</plist>")].encode()
+          values = plistlib.loads(payload)
+          assert values.get("com.apple.security.device.camera") is True
+          assert values.get("com.apple.security.device.audio-input") is True
+          PY
       - name: Launch installed app on clean runner
         run: |
           set -euo pipefail
