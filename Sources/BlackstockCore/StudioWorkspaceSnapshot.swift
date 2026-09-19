@@ -45,6 +45,21 @@ public enum ProjectPackagingAssetKind: String, Codable, Sendable {
     case caption = "Captions"
 }
 
+public enum PublishPreparationSchema {
+    public static let legacyUnversioned = 1
+    public static let current = 2
+}
+
+public enum PublishPreparationMigrationError: Error, Sendable, Equatable {
+    case invalidSchemaVersion(Int)
+    case unsupportedFutureSchemaVersion(Int)
+}
+
+private struct PublishPreparationEnvelope: Codable, Sendable, Equatable {
+    let schemaVersion: Int
+    let snapshot: PublishPreparationSnapshot
+}
+
 public enum WorkspaceSchema {
     public static let legacyUnversioned = 1
     public static let current = 2
@@ -226,7 +241,11 @@ public struct ProjectWorkspaceStore: Sendable {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.sortedKeys]
-        let data = try encoder.encode(snapshot)
+        let envelope = PublishPreparationEnvelope(
+            schemaVersion: PublishPreparationSchema.current,
+            snapshot: snapshot
+        )
+        let data = try encoder.encode(envelope)
         try data.write(to: url, options: [.atomic])
     }
 
@@ -249,16 +268,14 @@ public struct ProjectWorkspaceStore: Sendable {
         }
 
         let data = try Data(contentsOf: url)
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        let snapshot = try decoder.decode(
-            PublishPreparationSnapshot.self,
-            from: data
+        let decoded = try decodePublishPreparationData(
+            data,
+            expectedProjectID: projectID
         )
-        guard snapshot.package.projectID == projectID else {
-            throw CocoaError(.fileReadCorruptFile)
+        if decoded.schemaVersion < PublishPreparationSchema.current {
+            try savePublishPreparation(decoded.snapshot)
         }
-        return snapshot
+        return decoded.snapshot
     }
 
     public func save(
@@ -361,6 +378,54 @@ public struct ProjectWorkspaceStore: Sendable {
                 ? decoded.schemaVersion
                 : nil
         )
+    }
+
+    private func decodePublishPreparationData(
+        _ data: Data,
+        expectedProjectID: UUID
+    ) throws -> (
+        snapshot: PublishPreparationSnapshot,
+        schemaVersion: Int
+    ) {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let object = try JSONSerialization.jsonObject(with: data)
+        guard let dictionary = object as? [String: Any] else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+
+        let snapshot: PublishPreparationSnapshot
+        let schemaVersion: Int
+
+        if let rawVersion = dictionary["schemaVersion"] {
+            guard let version = rawVersion as? Int,
+                  version > 0 else {
+                throw PublishPreparationMigrationError
+                    .invalidSchemaVersion((rawVersion as? Int) ?? 0)
+            }
+            guard version <= PublishPreparationSchema.current else {
+                throw PublishPreparationMigrationError
+                    .unsupportedFutureSchemaVersion(version)
+            }
+            let envelope = try decoder.decode(
+                PublishPreparationEnvelope.self,
+                from: data
+            )
+            snapshot = envelope.snapshot
+            schemaVersion = envelope.schemaVersion
+        } else {
+            snapshot = try decoder.decode(
+                PublishPreparationSnapshot.self,
+                from: data
+            )
+            schemaVersion = PublishPreparationSchema.legacyUnversioned
+        }
+
+        guard snapshot.package.projectID == expectedProjectID else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        return (snapshot, schemaVersion)
     }
 
     private func decodeWorkspaceData(
