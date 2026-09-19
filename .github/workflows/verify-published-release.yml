@@ -131,28 +131,54 @@ jobs:
           grep -q '"manifestSignatureVerified" : true'             "$RUNNER_TEMP/preinstall-release-evidence.json"
           grep -q '"packageHashVerified" : true'             "$RUNNER_TEMP/preinstall-release-evidence.json"
 
-      - name: Download already verified package for clean installation
-        env:
-          MANIFEST_URL: ${{ inputs.manifest_url }}
+      - name: Download cryptographically bound package for clean installation
         run: |
           set -euo pipefail
-          MANIFEST="$RUNNER_TEMP/production-manifest.json"
+          EVIDENCE="$RUNNER_TEMP/preinstall-release-evidence.json"
           PACKAGE="$RUNNER_TEMP/Blackstock-production.pkg"
 
-          curl             --fail             --location             --proto '=https'             --tlsv1.2             "$MANIFEST_URL"             --output "$MANIFEST"
+          python3 - "$EVIDENCE" "$RUNNER_TEMP/verified-package-url.txt" "$RUNNER_TEMP/verified-package-sha256.txt" <<'PY'
+          import json
+          import pathlib
+          import re
+          import sys
+          from urllib.parse import urlparse
 
-          PACKAGE_URL="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["packageURL"])' "$MANIFEST")"
-          EXPECTED_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sha256"])' "$MANIFEST")"
+          evidence = json.loads(pathlib.Path(sys.argv[1]).read_text())
+          if evidence.get("manifestSignatureVerified") is not True:
+              raise SystemExit("preinstall evidence did not verify the manifest signature")
+          if evidence.get("packageHashVerified") is not True:
+              raise SystemExit("preinstall evidence did not verify the package hash")
 
-          case "$PACKAGE_URL" in
-            https://*) ;;
-            *)
-              echo "Manifest packageURL is not HTTPS." >&2
-              exit 1
-              ;;
-          esac
+          package_url = str(evidence.get("packageURL", "")).strip()
+          parsed = urlparse(package_url)
+          host = (parsed.hostname or "").lower()
+          if (
+              parsed.scheme.lower() != "https"
+              or not host
+              or parsed.username is not None
+              or parsed.password is not None
+              or parsed.fragment
+              or host == "localhost"
+              or host.startswith("127.")
+              or host.endswith(".invalid")
+              or host.endswith(".example")
+              or host.endswith(".test")
+          ):
+              raise SystemExit("verified packageURL is not a valid production HTTPS URL")
 
-          curl             --fail             --location             --proto '=https'             --tlsv1.2             "$PACKAGE_URL"             --output "$PACKAGE"
+          expected_sha = str(evidence.get("packageSHA256", "")).lower()
+          if not re.fullmatch(r"[0-9a-f]{64}", expected_sha):
+              raise SystemExit("verified package SHA-256 is invalid")
+
+          pathlib.Path(sys.argv[2]).write_text(package_url + "\n")
+          pathlib.Path(sys.argv[3]).write_text(expected_sha + "\n")
+          PY
+
+          PACKAGE_URL="$(cat "$RUNNER_TEMP/verified-package-url.txt")"
+          EXPECTED_SHA="$(cat "$RUNNER_TEMP/verified-package-sha256.txt")"
+
+          curl             --fail             --location             --proto '=https'             --proto-redir '=https'             --tlsv1.2             "$PACKAGE_URL"             --output "$PACKAGE"
 
           ACTUAL_SHA="$(shasum -a 256 "$PACKAGE" | awk '{print $1}')"
           test "$EXPECTED_SHA" = "$ACTUAL_SHA"
@@ -214,7 +240,6 @@ jobs:
           path: |
             ${{ runner.temp }}/release-evidence.json
             ${{ runner.temp }}/preinstall-release-evidence.json
-            ${{ runner.temp }}/production-manifest.json
             ${{ runner.temp }}/production-app-launch.log
           retention-days: 30
           if-no-files-found: error
