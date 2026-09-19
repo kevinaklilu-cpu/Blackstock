@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 import BlackstockCore
 
 struct StudioView: View {
+    @ObservedObject var session: BlackstockSession
     let project: BlackstockProject
     let opportunitySource: MediaSourceReference?
     let contentLanguage: String
@@ -50,6 +51,9 @@ struct StudioView: View {
         .sheet(isPresented: $showRightsSheet) {
             rightsSheet
         }
+        .onAppear {
+            state.loadStoryboard(projectID: project.id)
+        }
         .sheet(isPresented: $showPackagingReview) {
             if let asset = state.asset,
                let artifact = state.renderArtifact {
@@ -80,6 +84,9 @@ struct StudioView: View {
                     .lineLimit(1)
                 Text("Zielkanal: \(project.targetChannelID)")
                     .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Text("Status: \(currentStage.rawValue)")
+                    .font(.caption2.monospaced())
                     .foregroundStyle(.secondary)
             }
             Button("Video importieren …") {
@@ -190,9 +197,23 @@ struct StudioView: View {
                             .font(.caption.monospaced())
                             .foregroundStyle(.secondary)
                         Button("Packaging & Review") {
-                            showPackagingReview = true
+                            if currentStage == .editing {
+                                if session.advanceActiveProject(
+                                    to: .packaging
+                                ) {
+                                    showPackagingReview = true
+                                }
+                            } else if currentStage == .packaging
+                                        || currentStage == .review {
+                                showPackagingReview = true
+                            }
                         }
                         .buttonStyle(.borderedProminent)
+                        .disabled(
+                            currentStage != .editing
+                            && currentStage != .packaging
+                            && currentStage != .review
+                        )
                     }
                     .padding(10)
                     .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 10))
@@ -237,6 +258,7 @@ struct StudioView: View {
                         ),
                         in: 0...max(asset.durationSeconds, 0.01)
                     )
+                    .disabled(!editingEnabled)
                     Slider(
                         value: Binding(
                             get: { state.trimEnd },
@@ -244,6 +266,7 @@ struct StudioView: View {
                         ),
                         in: 0...max(asset.durationSeconds, 0.01)
                     )
+                    .disabled(!editingEnabled)
                 }
                 .padding(.horizontal, 10)
             }
@@ -257,6 +280,7 @@ struct StudioView: View {
                     Task { await state.applyTrim() }
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled(!editingEnabled)
                 Spacer()
                 Text("Ende")
                     .font(.caption2)
@@ -283,11 +307,15 @@ struct StudioView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Aktueller Schritt")
                         .font(.headline)
-                    Label("Ausschnitt festlegen", systemImage: "scissors")
-                    Text("Weitere Werkzeuge erscheinen erst, wenn ihre Capability real implementiert und getestet ist.")
+                    Label(stageTitle(currentStage), systemImage: stageIcon(currentStage))
+                    Text(stageExplanation(currentStage))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+
+                Divider()
+
+                storyboardSection
 
                 Divider()
 
@@ -347,6 +375,7 @@ struct StudioView: View {
                             Task { await state.applyReframe() }
                         }
                         .buttonStyle(.borderedProminent)
+                        .disabled(!editingEnabled)
                     }
 
                     if let proposal = state.focalPointProposal {
@@ -390,7 +419,7 @@ struct StudioView: View {
                         }
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(state.isRendering)
+                    .disabled(state.isRendering || !editingEnabled)
 
                     Text("Blackstock rendert lokal auf dem Mac. Erst ein validiertes Render-Artefakt darf in Packaging/Publishing weitergehen.")
                         .font(.caption)
@@ -498,7 +527,7 @@ struct StudioView: View {
                         }
                     }
                     .buttonStyle(.bordered)
-                    .disabled(state.isTranscribing)
+                    .disabled(state.isTranscribing || !editingEnabled)
 
                     Text("Sprache: \(speechLocaleIdentifier) · nur On-Device; kein stiller Cloud-Fallback.")
                         .font(.caption)
@@ -641,6 +670,12 @@ struct StudioView: View {
                             rightsEvidence: rightsEvidence,
                             rightsConfirmed: rightsConfirmed
                         )
+                        if state.asset != nil,
+                           currentStage == .production {
+                            _ = session.advanceActiveProject(
+                                to: .preview
+                            )
+                        }
                     }
                     pendingURL = nil
                 }
@@ -672,6 +707,243 @@ struct StudioView: View {
             Color.primary.opacity(0.04),
             in: RoundedRectangle(cornerRadius: 8)
         )
+    }
+
+    @ViewBuilder
+    private var storyboardSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Storyboard")
+                    .font(.headline)
+                Spacer()
+                if let plan = state.storyboard {
+                    Text("v\(plan.version)")
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if currentStage == .preview {
+                Text("Die Preview ist verfügbar. Starte jetzt das Storyboard, bevor Schnittwerkzeuge freigeschaltet werden.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Button("Storyboard starten") {
+                    if session.advanceActiveProject(to: .storyboard) {
+                        state.loadStoryboard(projectID: project.id)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+            } else if currentStage == .storyboard
+                        || currentStage == .editing
+                        || currentStage == .packaging
+                        || currentStage == .review
+                        || currentStage == .publishing
+                        || currentStage == .published {
+                if let plan = state.storyboard {
+                    if plan.beats.isEmpty {
+                        Text("Noch keine Beats. Lege mindestens einen klaren Abschnitt an.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    ForEach(
+                        Array(plan.beats.enumerated()),
+                        id: \.element.id
+                    ) { index, beat in
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text("\(index + 1)")
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+
+                                TextField(
+                                    "Beat-Titel",
+                                    text: Binding(
+                                        get: {
+                                            state.storyboard?.beats
+                                                .first(where: { $0.id == beat.id })?
+                                                .title ?? beat.title
+                                        },
+                                        set: {
+                                            state.updateStoryboardBeat(
+                                                id: beat.id,
+                                                title: $0
+                                            )
+                                        }
+                                    )
+                                )
+                                .textFieldStyle(.roundedBorder)
+                            }
+
+                            TextField(
+                                "Zweck dieses Beats",
+                                text: Binding(
+                                    get: {
+                                        state.storyboard?.beats
+                                            .first(where: { $0.id == beat.id })?
+                                            .purpose ?? beat.purpose
+                                    },
+                                    set: {
+                                        state.updateStoryboardBeat(
+                                            id: beat.id,
+                                            purpose: $0
+                                        )
+                                    }
+                                )
+                            )
+                            .textFieldStyle(.roundedBorder)
+
+                            TextField(
+                                "Visuelle Richtung / Shot / B-Roll",
+                                text: Binding(
+                                    get: {
+                                        state.storyboard?.beats
+                                            .first(where: { $0.id == beat.id })?
+                                            .visualDirection
+                                            ?? beat.visualDirection
+                                    },
+                                    set: {
+                                        state.updateStoryboardBeat(
+                                            id: beat.id,
+                                            visualDirection: $0
+                                        )
+                                    }
+                                )
+                            )
+                            .textFieldStyle(.roundedBorder)
+
+                            if currentStage == .storyboard {
+                                HStack {
+                                    Button {
+                                        state.moveStoryboardBeat(
+                                            from: index,
+                                            to: max(index - 1, 0)
+                                        )
+                                    } label: {
+                                        Image(systemName: "arrow.up")
+                                    }
+                                    .disabled(index == 0)
+
+                                    Button {
+                                        state.moveStoryboardBeat(
+                                            from: index,
+                                            to: min(
+                                                index + 2,
+                                                plan.beats.count
+                                            )
+                                        )
+                                    } label: {
+                                        Image(systemName: "arrow.down")
+                                    }
+                                    .disabled(index == plan.beats.count - 1)
+
+                                    Spacer()
+
+                                    Button(role: .destructive) {
+                                        state.removeStoryboardBeat(
+                                            id: beat.id
+                                        )
+                                    } label: {
+                                        Image(systemName: "trash")
+                                    }
+                                }
+                                .buttonStyle(.borderless)
+                            }
+                        }
+                        .padding(8)
+                        .background(
+                            Color.primary.opacity(0.03),
+                            in: RoundedRectangle(cornerRadius: 9)
+                        )
+                    }
+
+                    if currentStage == .storyboard {
+                        Button("Beat hinzufügen") {
+                            state.addStoryboardBeat(
+                                projectID: project.id
+                            )
+                        }
+                        .buttonStyle(.bordered)
+
+                        Button("Bearbeitung starten") {
+                            _ = session.advanceActiveProject(
+                                to: .editing
+                            )
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!plan.isReadyForEditing)
+                    }
+                }
+            } else {
+                Text("Lade zuerst ein autorisiertes Produktionsmedium, um die Preview zu erzeugen.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var currentStage: BlackstockStage {
+        session.activeProject?.stage ?? project.stage
+    }
+
+    private var editingEnabled: Bool {
+        currentStage == .editing
+    }
+
+    private func stageTitle(_ stage: BlackstockStage) -> String {
+        switch stage {
+        case .production: return "Produktionsmedium vorbereiten"
+        case .preview: return "Preview prüfen"
+        case .storyboard: return "Storyboard strukturieren"
+        case .editing: return "Video bearbeiten"
+        case .packaging: return "Packaging vorbereiten"
+        case .review: return "Release prüfen"
+        case .publishing: return "Publishing läuft"
+        case .published: return "Veröffentlicht"
+        case .discovery: return "Discovery"
+        case .research: return "Research"
+        case .analysis: return "Analyse"
+        }
+    }
+
+    private func stageIcon(_ stage: BlackstockStage) -> String {
+        switch stage {
+        case .production: return "square.and.arrow.down"
+        case .preview: return "play.rectangle"
+        case .storyboard: return "rectangle.3.group"
+        case .editing: return "scissors"
+        case .packaging: return "shippingbox"
+        case .review: return "checklist"
+        case .publishing: return "arrow.up.circle"
+        case .published: return "checkmark.seal"
+        case .discovery: return "sparkle.magnifyingglass"
+        case .research: return "books.vertical"
+        case .analysis: return "chart.xyaxis.line"
+        }
+    }
+
+    private func stageExplanation(_ stage: BlackstockStage) -> String {
+        switch stage {
+        case .production:
+            return "Importiere autorisiertes Material. Bearbeitung bleibt bis zur Preview und zum Storyboard gesperrt."
+        case .preview:
+            return "Prüfe das geladene Medium und starte anschließend das Storyboard."
+        case .storyboard:
+            return "Lege die Beats und ihre Funktion fest. Danach wird Editing freigeschaltet."
+        case .editing:
+            return "Trim, Reframe, Captions, Audio-Prüfung und Render sind jetzt verfügbar."
+        case .packaging:
+            return "Bearbeitung ist eingefroren; Metadaten, Thumbnail, Captions und Review folgen."
+        case .review:
+            return "Alle Release-Gates müssen belegt sein, bevor Publishing starten darf."
+        case .publishing:
+            return "Remote-Aktionen werden journaled und auf den Zielkanal begrenzt."
+        case .published:
+            return "Die YouTube-Video-ID ist gespeichert; Analytics kann zurückgeführt werden."
+        case .discovery, .research, .analysis:
+            return "Dieser Projektstatus liegt vor der Produktionsphase."
+        }
     }
 
     private func retentionAvailabilityText(
