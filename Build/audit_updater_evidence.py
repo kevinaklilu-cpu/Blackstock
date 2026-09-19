@@ -32,7 +32,7 @@ requirements = {
     ],
     "Sources/BlackstockApp/BlackstockUpdateAudit.swift": [
         "update-evidence.json",
-        "Application Support",
+        ".applicationSupportDirectory",
         "recordPostUpdateLaunchIfMatching",
     ],
     "Build/validate_in_app_update_evidence.py": [
