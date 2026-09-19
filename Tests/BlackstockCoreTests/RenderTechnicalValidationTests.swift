@@ -85,6 +85,72 @@ final class RenderTechnicalValidationTests: XCTestCase {
         XCTAssertTrue(assessment.blockers.contains(.invalidDimensions))
     }
 
+    func testRequested4KRejects1080pOutput() {
+        let snapshot = RenderTechnicalSnapshot(
+            fileSizeBytes: 5_000_000,
+            durationSeconds: 30,
+            videoTrackCount: 1,
+            width: 1920,
+            height: 1080,
+            inspectedAt: Date()
+        )
+
+        let assessment = RenderTechnicalValidator().assess(
+            snapshot: snapshot,
+            expectedDurationSeconds: 30,
+            expectedRenderSize: nil,
+            expectedPreset: .uhd4K
+        )
+
+        XCTAssertFalse(assessment.validated)
+        XCTAssertTrue(
+            assessment.blockers.contains(.presetResolutionMismatch)
+        )
+    }
+
+    func testRequested4KAcceptsTrueLandscape4KOutput() {
+        let snapshot = RenderTechnicalSnapshot(
+            fileSizeBytes: 15_000_000,
+            durationSeconds: 30,
+            videoTrackCount: 1,
+            width: 3840,
+            height: 2160,
+            inspectedAt: Date()
+        )
+
+        let assessment = RenderTechnicalValidator().assess(
+            snapshot: snapshot,
+            expectedDurationSeconds: 30,
+            expectedRenderSize: nil,
+            expectedPreset: .uhd4K
+        )
+
+        XCTAssertTrue(assessment.validated)
+        XCTAssertFalse(
+            assessment.blockers.contains(.presetResolutionMismatch)
+        )
+    }
+
+    func testRequested4KAcceptsSquare2160Output() {
+        let snapshot = RenderTechnicalSnapshot(
+            fileSizeBytes: 10_000_000,
+            durationSeconds: 30,
+            videoTrackCount: 1,
+            width: 2160,
+            height: 2160,
+            inspectedAt: Date()
+        )
+
+        let assessment = RenderTechnicalValidator().assess(
+            snapshot: snapshot,
+            expectedDurationSeconds: 30,
+            expectedRenderSize: CGSize(width: 2160, height: 2160),
+            expectedPreset: .uhd4K
+        )
+
+        XCTAssertTrue(assessment.validated)
+    }
+
     func testLegacyArtifactWithoutValidationVersionIsNotCurrent() throws {
         struct LegacyArtifact: Codable {
             let id: UUID
