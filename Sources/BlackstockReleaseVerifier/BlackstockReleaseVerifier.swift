@@ -1,4 +1,5 @@
 import BlackstockCore
+import CryptoKit
 import Foundation
 
 private enum ReleaseVerifierError: Error, LocalizedError {
@@ -72,6 +73,7 @@ private struct ReleaseVerificationEvidence: Codable {
     let installedAppVersion: String?
     let installedAppBuild: Int?
     let installedAppSourceCommitSHA: String?
+    let installedAppExecutableSHA256: String?
     let cameraEntitlementVerified: Bool?
     let audioInputEntitlementVerified: Bool?
     let developerIDApplicationVerified: Bool?
@@ -211,6 +213,7 @@ private struct BlackstockReleaseVerifierMain {
         var installedAppVersion: String?
         var installedAppBuild: Int?
         var installedAppSourceCommitSHA: String?
+        var installedAppExecutableSHA256: String?
         var cameraEntitlementVerified: Bool?
         var audioInputEntitlementVerified: Bool?
         if let appURL = arguments.installedAppURL {
@@ -290,6 +293,18 @@ private struct BlackstockReleaseVerifierMain {
             installedAppSourceCommitSHA =
                 appSourceCommitSHA.lowercased()
 
+            guard let executableName =
+                    info["CFBundleExecutable"] as? String,
+                  !executableName.isEmpty else {
+                throw ReleaseVerifierError.installedAppVersionMismatch
+            }
+            let executableURL = appURL
+                .appendingPathComponent("Contents")
+                .appendingPathComponent("MacOS")
+                .appendingPathComponent(executableName)
+            installedAppExecutableSHA256 =
+                try sha256(of: executableURL)
+
             let entitlements = try requireSuccessful(
                 run(
                     "/usr/bin/codesign",
@@ -345,7 +360,7 @@ private struct BlackstockReleaseVerifierMain {
         )
 
         return ReleaseVerificationEvidence(
-            schemaVersion: 2,
+            schemaVersion: 3,
             verifiedAt: Date(),
             manifestURL: arguments.manifestURL,
             packageURL: manifest.packageURL,
@@ -368,6 +383,8 @@ private struct BlackstockReleaseVerifierMain {
             installedAppBuild: installedAppBuild,
             installedAppSourceCommitSHA:
                 installedAppSourceCommitSHA,
+            installedAppExecutableSHA256:
+                installedAppExecutableSHA256,
             cameraEntitlementVerified:
                 cameraEntitlementVerified,
             audioInputEntitlementVerified:
@@ -517,6 +534,27 @@ private struct BlackstockReleaseVerifierMain {
             && !host.hasSuffix(".invalid")
             && !host.hasSuffix(".example")
             && !host.hasSuffix(".test")
+    }
+
+    private static func sha256(
+        of url: URL
+    ) throws -> String {
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+
+        var hasher = SHA256()
+        while true {
+            let data = try handle.read(
+                upToCount: 1_048_576
+            ) ?? Data()
+            if data.isEmpty {
+                break
+            }
+            hasher.update(data: data)
+        }
+        return hasher.finalize().map {
+            String(format: "%02x", $0)
+        }.joined()
     }
 
     private static func run(
