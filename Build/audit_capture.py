@@ -12,16 +12,65 @@ requirements = {
         "case systemAudio",
         "allCanonicalCapturePathsReady",
     ],
+    "Sources/BlackstockCore/SupplementalCaptureAsset.swift": [
+        "struct SupplementalCaptureAsset",
+        "mayBeUsedInProduction",
+        "rightsConfirmed",
+    ],
+    "Sources/BlackstockCore/StudioWorkspaceSnapshot.swift": [
+        "public static let current = 3",
+        "supplementalCaptures",
+        "importSupplementalCapture",
+        'appendingPathComponent("Captures"',
+    ],
     "Sources/BlackstockApp/CaptureCapabilityProbe.swift": [
         "AVCaptureDevice.authorizationStatus(for: .video)",
         "AVCaptureDevice.authorizationStatus(for: .audio)",
         "CGPreflightScreenCaptureAccess()",
         "CGRequestScreenCaptureAccess()",
     ],
+    "Sources/BlackstockApp/CameraCaptureRecorder.swift": [
+        "AVCaptureSession()",
+        "AVCaptureMovieFileOutput()",
+        "startRecording(",
+        "stopRecording()",
+        "completedRecordingURL",
+    ],
+    "Sources/BlackstockApp/MicrophoneCaptureRecorder.swift": [
+        "AVAudioRecorder(",
+        "kAudioFormatMPEG4AAC",
+        "startRecording()",
+        "stopRecording()",
+        "completedRecordingURL",
+    ],
+    "Sources/BlackstockApp/ScreenCaptureRecorder.swift": [
+        "SCShareableContent",
+        "SCStreamConfiguration()",
+        "capturesAudio = true",
+        "excludesCurrentProcessAudio = true",
+        "SCRecordingOutput(",
+        "startCapture()",
+        "stopCapture()",
+    ],
     "Sources/BlackstockApp/CaptureCapabilityPanel.swift": [
         'GroupBox("Direkte Aufnahme")',
-        '"Zugriff anfragen"',
-        "CaptureKind.allCases",
+        '"Kamera aufnehmen"',
+        '"Mikrofon aufnehmen"',
+        '"Bildschirm aufnehmen"',
+        "onRecordedMedia(url, .camera)",
+        "onRecordedMedia(url, .microphone)",
+        "onRecordedMedia(url, .screen)",
+    ],
+    "Sources/BlackstockApp/StudioState.swift": [
+        "supplementalCaptures",
+        "importSupplementalCapture(",
+        '"supplemental-capture-imported"',
+    ],
+    "Sources/BlackstockApp/StudioView.swift": [
+        "pendingCaptureKind == .microphone",
+        "state.importSupplementalCapture(",
+        "state.importMovie(",
+        '"Zusätzliche Aufnahmen"',
     ],
     "Build/package.sh": [
         "<key>NSCameraUsageDescription</key>",
@@ -30,6 +79,11 @@ requirements = {
     "Tests/BlackstockCoreTests/CaptureCapabilityTests.swift": [
         "testAllCanonicalCaptureKindsAreRepresented",
         "testSnapshotRequiresEveryCanonicalPathReady",
+    ],
+    "Tests/BlackstockCoreTests/StudioWorkspaceSnapshotTests.swift": [
+        "testSupplementalCaptureIsCopiedIntoProjectWorkspace",
+        "testVersionTwoWorkspaceEnvelopeMigratesToCurrentSchema",
+        "testSupplementalCaptureRightsRoundTripInWorkspace",
     ],
 }
 
@@ -42,12 +96,17 @@ for relative, markers in requirements.items():
     text = path.read_text(encoding="utf-8")
     for marker in markers:
         if marker not in text:
-            errors.append(f"{relative}: missing capture contract marker: {marker}")
+            errors.append(
+                f"{relative}: missing capture contract marker: {marker}"
+            )
 
 if errors:
-    print("Capture foundation audit failed:", file=sys.stderr)
+    print("Capture audit failed:", file=sys.stderr)
     for error in errors:
         print(f"- {error}", file=sys.stderr)
     sys.exit(1)
 
-print("Capture foundation audit passed: four canonical capture paths are represented and permission-gated.")
+print(
+    "Capture audit passed: camera, microphone and screen/system-audio "
+    "recording paths are permission-gated, file-backed and project-bound."
+)
