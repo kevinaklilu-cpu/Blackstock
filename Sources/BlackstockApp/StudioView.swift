@@ -65,7 +65,8 @@ struct StudioView: View {
                     transcript: state.transcript,
                     generatedCaptionURL: state.captionURL,
                     audioTechnicalAssessment: state.audioTechnicalAssessment,
-                    audioSignalAssessment: state.audioSignalAssessment
+                    audioSignalAssessment: state.audioSignalAssessment,
+                    storyboard: state.storyboard
                 )
             }
         }
