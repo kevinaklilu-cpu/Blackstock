@@ -392,22 +392,22 @@ final class BlackstockSession: ObservableObject {
         errorMessage = nil
 
         do {
-            if project.stage == .review {
-                guard project.advance(
-                    to: .publishing,
-                    at: Date()
-                ) else {
-                    errorMessage = "Projekt konnte nicht in den Publishing-Status wechseln."
-                    return
-                }
-                try Self.store(project: project)
-                activeProject = project
-            }
-
-            guard project.stage == .publishing else {
-                errorMessage = "Projekt ist nicht im Publishing-Status."
+            guard project.stage == .review
+                    || project.stage == .publishing else {
+                errorMessage = "Projekt ist nicht im Review-/Publishing-Status."
                 return
             }
+
+            let deterministicReview = PublishReviewContext(
+                project: project,
+                artifact: artifact,
+                package: preparation.package,
+                qualityReview: preparation.qualityReview,
+                rightsValidated: asset.mayEnterProduction,
+                publicPublishingAllowed: publicPublishingAllowed,
+                userConfirmed: true
+            )
+            try deterministicReview.validate()
 
             let accessToken = try await validatedPublishingAccessToken(
                 targetChannelID: project.targetChannelID
@@ -428,6 +428,27 @@ final class BlackstockSession: ObservableObject {
 
             let networkAvailable = await LocalNetworkAvailabilityProbe()
                 .currentState() == .available
+            guard networkAvailable else {
+                errorMessage = "Upload gestoppt: Keine Netzwerkverbindung. Das Projekt bleibt im Review-Status."
+                return
+            }
+
+            if project.stage == .review {
+                guard project.advance(
+                    to: .publishing,
+                    at: Date()
+                ) else {
+                    errorMessage = "Projekt konnte nach bestandenem Preflight nicht in den Publishing-Status wechseln."
+                    return
+                }
+                try Self.store(project: project)
+                activeProject = project
+            }
+
+            guard project.stage == .publishing else {
+                errorMessage = "Projekt ist nicht im Publishing-Status."
+                return
+            }
 
             let review = PublishReviewContext(
                 project: project,
