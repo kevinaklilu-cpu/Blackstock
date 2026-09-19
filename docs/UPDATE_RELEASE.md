@@ -54,3 +54,12 @@ Das Tool:
 - Blackstock installiert Updates nicht still; der System-Installer wird nur nach ausdrücklicher Nutzeraktion geöffnet.
 - Signing, Notarisierung und Gatekeeper bleiben `BLOCKED_EXTERNAL`, bis der reale Produktionspfad mit Apple-Zertifikaten erfolgreich ausgeführt wurde.
 - Der Updater bleibt `FAIL`, bis eine reale Update-Endpoint-/Manifest-Konfiguration und ein vollständiger Update-E2E gegen ein signiertes Release nachgewiesen sind.
+
+
+## Produktionsnachweis
+
+Für den finalen Release-Nachweis gelten zusätzlich `docs/PRODUCTION_RELEASE_EVIDENCE.md`, `BlackstockReleaseVerifier`, `Build/validate_production_release_evidence.py` und `Build/validate_in_app_update_evidence.py`.
+
+Blackstock schreibt beim echten App-Update eine lokale Evidenzkette von der akzeptierten Manifest-Signatur über Paket-Hash und Installer-Team bis zur Übergabe an den macOS-Installer. Erst der anschließend gestartete exakte Ziel-Build kann diese Evidenz vervollständigen.
+
+Der Updater bleibt bis zu diesem realen Produktionslauf ausdrücklich `FAIL`.
