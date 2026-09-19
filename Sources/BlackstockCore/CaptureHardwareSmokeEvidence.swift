@@ -64,7 +64,7 @@ public struct CaptureHardwareSmokeEvidence:
     Codable,
     Sendable,
     Equatable {
-    public static let currentSchemaVersion = 4
+    public static let currentSchemaVersion = 5
 
     public var schemaVersion: Int
     public var testedAt: Date
@@ -74,6 +74,9 @@ public struct CaptureHardwareSmokeEvidence:
     public var macOSVersion: String
     public var hardwareModel: String
     public var installedFromPackage: Bool
+    public var installerReceiptPackageID: String
+    public var installerReceiptVersion: String
+    public var installerReceiptVerified: Bool
     public var applicationTeamID: String
     public var developerIDApplicationVerified: Bool
     public var applicationExecutableSHA256: String
@@ -99,6 +102,9 @@ public struct CaptureHardwareSmokeEvidence:
         macOSVersion: String,
         hardwareModel: String,
         installedFromPackage: Bool,
+        installerReceiptPackageID: String,
+        installerReceiptVersion: String,
+        installerReceiptVerified: Bool,
         applicationTeamID: String,
         developerIDApplicationVerified: Bool,
         applicationExecutableSHA256: String
@@ -112,6 +118,12 @@ public struct CaptureHardwareSmokeEvidence:
         self.macOSVersion = macOSVersion
         self.hardwareModel = hardwareModel
         self.installedFromPackage = installedFromPackage
+        self.installerReceiptPackageID =
+            installerReceiptPackageID
+        self.installerReceiptVersion =
+            installerReceiptVersion
+        self.installerReceiptVerified =
+            installerReceiptVerified
         self.applicationTeamID = applicationTeamID
         self.developerIDApplicationVerified =
             developerIDApplicationVerified
@@ -212,6 +224,9 @@ public struct CaptureHardwareSmokeEvidence:
 
     public var isComplete: Bool {
         installedFromPackage
+            && installerReceiptVerified
+            && !installerReceiptPackageID.isEmpty
+            && !installerReceiptVersion.isEmpty
             && developerIDApplicationVerified
             && !applicationTeamID.isEmpty
             && applicationExecutableSHA256.count == 64
