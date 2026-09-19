@@ -45,16 +45,34 @@ public enum ProjectPackagingAssetKind: String, Codable, Sendable {
     case caption = "Captions"
 }
 
+public enum WorkspaceSchema {
+    public static let legacyUnversioned = 1
+    public static let current = 2
+}
+
+public enum WorkspaceMigrationError: Error, Sendable, Equatable {
+    case invalidSchemaVersion(Int)
+    case unsupportedFutureSchemaVersion(Int)
+}
+
+private struct StudioWorkspaceEnvelope: Codable, Sendable, Equatable {
+    let schemaVersion: Int
+    let snapshot: StudioWorkspaceSnapshot
+}
+
 public struct WorkspaceLoadResult: Sendable, Equatable {
     public let snapshot: StudioWorkspaceSnapshot?
     public let recoveredFromBackup: Bool
+    public let migratedFromSchemaVersion: Int?
 
     public init(
         snapshot: StudioWorkspaceSnapshot?,
-        recoveredFromBackup: Bool
+        recoveredFromBackup: Bool,
+        migratedFromSchemaVersion: Int? = nil
     ) {
         self.snapshot = snapshot
         self.recoveredFromBackup = recoveredFromBackup
+        self.migratedFromSchemaVersion = migratedFromSchemaVersion
     }
 }
 
@@ -255,21 +273,24 @@ public struct ProjectWorkspaceStore: Sendable {
         let backupURL = directory.appendingPathComponent(
             "studio-workspace.backup.json"
         )
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = [.sortedKeys]
 
         if FileManager.default.fileExists(atPath: primaryURL.path),
            let primaryData = try? Data(contentsOf: primaryURL),
-           let primarySnapshot = try? decodeWorkspaceSnapshot(
+           (try? decodeWorkspaceData(
                 primaryData,
                 expectedProjectID: snapshot.projectID
-           ) {
-            let backupData = try encoder.encode(primarySnapshot)
-            try backupData.write(to: backupURL, options: [.atomic])
+           )) != nil {
+            try primaryData.write(to: backupURL, options: [.atomic])
         }
 
-        let data = try encoder.encode(snapshot)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.sortedKeys]
+        let envelope = StudioWorkspaceEnvelope(
+            schemaVersion: WorkspaceSchema.current,
+            snapshot: snapshot
+        )
+        let data = try encoder.encode(envelope)
         try data.write(to: primaryURL, options: [.atomic])
     }
 
@@ -310,13 +331,17 @@ public struct ProjectWorkspaceStore: Sendable {
         if primaryExists {
             do {
                 let data = try Data(contentsOf: primaryURL)
-                let snapshot = try decodeWorkspaceSnapshot(
+                let decoded = try decodeWorkspaceData(
                     data,
                     expectedProjectID: projectID
                 )
                 return WorkspaceLoadResult(
-                    snapshot: snapshot,
-                    recoveredFromBackup: false
+                    snapshot: decoded.snapshot,
+                    recoveredFromBackup: false,
+                    migratedFromSchemaVersion: decoded.schemaVersion
+                        < WorkspaceSchema.current
+                        ? decoded.schemaVersion
+                        : nil
                 )
             } catch {
                 guard backupExists else { throw error }
@@ -324,29 +349,66 @@ public struct ProjectWorkspaceStore: Sendable {
         }
 
         let backupData = try Data(contentsOf: backupURL)
-        let recovered = try decodeWorkspaceSnapshot(
+        let decoded = try decodeWorkspaceData(
             backupData,
             expectedProjectID: projectID
         )
         return WorkspaceLoadResult(
-            snapshot: recovered,
-            recoveredFromBackup: true
+            snapshot: decoded.snapshot,
+            recoveredFromBackup: true,
+            migratedFromSchemaVersion: decoded.schemaVersion
+                < WorkspaceSchema.current
+                ? decoded.schemaVersion
+                : nil
         )
     }
 
-    private func decodeWorkspaceSnapshot(
+    private func decodeWorkspaceData(
         _ data: Data,
         expectedProjectID: UUID
-    ) throws -> StudioWorkspaceSnapshot {
+    ) throws -> (
+        snapshot: StudioWorkspaceSnapshot,
+        schemaVersion: Int
+    ) {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        let snapshot = try decoder.decode(
-            StudioWorkspaceSnapshot.self,
-            from: data
-        )
+
+        let object = try JSONSerialization.jsonObject(with: data)
+        guard let dictionary = object as? [String: Any] else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+
+        let snapshot: StudioWorkspaceSnapshot
+        let schemaVersion: Int
+
+        if let rawVersion = dictionary["schemaVersion"] {
+            guard let version = rawVersion as? Int,
+                  version > 0 else {
+                throw WorkspaceMigrationError.invalidSchemaVersion(
+                    (rawVersion as? Int) ?? 0
+                )
+            }
+            guard version <= WorkspaceSchema.current else {
+                throw WorkspaceMigrationError
+                    .unsupportedFutureSchemaVersion(version)
+            }
+            let envelope = try decoder.decode(
+                StudioWorkspaceEnvelope.self,
+                from: data
+            )
+            snapshot = envelope.snapshot
+            schemaVersion = envelope.schemaVersion
+        } else {
+            snapshot = try decoder.decode(
+                StudioWorkspaceSnapshot.self,
+                from: data
+            )
+            schemaVersion = WorkspaceSchema.legacyUnversioned
+        }
+
         guard snapshot.projectID == expectedProjectID else {
             throw CocoaError(.fileReadCorruptFile)
         }
-        return snapshot
+        return (snapshot, schemaVersion)
     }
 }
