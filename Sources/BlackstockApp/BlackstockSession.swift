@@ -740,6 +740,16 @@ final class BlackstockSession: ObservableObject {
             return
         }
 
+        do {
+            try GrowthAnalyticsContextGuard().validate(
+                project: project,
+                record: record
+            )
+        } catch {
+            errorMessage = "Analytics-Abruf gestoppt: Der veröffentlichte Video-Datensatz stimmt nicht eindeutig mit Projekt, Zielkanal und Video-ID überein."
+            return
+        }
+
         isCollectingAnalytics = true
         defer { isCollectingAnalytics = false }
         errorMessage = nil
@@ -748,6 +758,14 @@ final class BlackstockSession: ObservableObject {
             let accessToken = try await validatedAnalyticsAccessToken(
                 targetChannelID: project.targetChannelID
             )
+            let identities = try await YouTubeAuthorizedClient(
+                accessToken: accessToken
+            ).myChannels()
+            _ = try PublishingChannelIdentityGuard().validate(
+                targetChannelID: project.targetChannelID,
+                identities: identities
+            )
+
             let due = GrowthObservationPlanner().duePlans(
                 for: record,
                 now: now

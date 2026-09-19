@@ -83,6 +83,37 @@ public struct PublishedVideoRecord: Codable, Sendable, Equatable, Identifiable {
     }
 }
 
+public enum GrowthAnalyticsContextError: Error, Sendable, Equatable {
+    case projectNotPublished
+    case projectMismatch
+    case channelMismatch
+    case missingVideoID
+}
+
+public struct GrowthAnalyticsContextGuard: Sendable {
+    public init() {}
+
+    public func validate(
+        project: BlackstockProject,
+        record: PublishedVideoRecord
+    ) throws {
+        guard project.stage == .published else {
+            throw GrowthAnalyticsContextError.projectNotPublished
+        }
+        guard record.projectID == project.id else {
+            throw GrowthAnalyticsContextError.projectMismatch
+        }
+        guard record.targetChannelID == project.targetChannelID else {
+            throw GrowthAnalyticsContextError.channelMismatch
+        }
+        guard !record.youtubeVideoID.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        ).isEmpty else {
+            throw GrowthAnalyticsContextError.missingVideoID
+        }
+    }
+}
+
 public struct GrowthObservation: Codable, Sendable, Equatable, Identifiable {
     public let id: UUID
     public let window: GrowthObservationWindow

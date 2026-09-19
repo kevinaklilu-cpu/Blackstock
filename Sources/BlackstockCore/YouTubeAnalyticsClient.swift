@@ -98,6 +98,34 @@ public struct YouTubeAnalyticsClient: Sendable {
         session: URLSession = .shared,
         now: Date = Date()
     ) async throws -> YouTubeAnalyticsSnapshot {
+        let request = snapshotRequest(
+            startDate: startDate,
+            endDate: endDate,
+            videoID: videoID
+        )
+
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw YouTubeAnalyticsAPIError.invalidResponse
+        }
+        guard 200..<300 ~= http.statusCode else {
+            throw YouTubeAnalyticsAPIError.api(http.statusCode)
+        }
+
+        return try decodeSnapshot(
+            data,
+            startDate: startDate,
+            endDate: endDate,
+            videoID: videoID,
+            retrievedAt: now
+        )
+    }
+
+    func snapshotRequest(
+        startDate: String,
+        endDate: String,
+        videoID: String?
+    ) -> URLRequest {
         let metricNames = [
             "views",
             "engagedViews",
@@ -111,30 +139,50 @@ public struct YouTubeAnalyticsClient: Sendable {
             "subscribersLost"
         ]
 
-        var components = URLComponents(string: "https://youtubeanalytics.googleapis.com/v2/reports")!
+        var components = URLComponents(
+            string: "https://youtubeanalytics.googleapis.com/v2/reports"
+        )!
         var items: [URLQueryItem] = [
             .init(name: "ids", value: "channel==MINE"),
             .init(name: "startDate", value: startDate),
             .init(name: "endDate", value: endDate),
-            .init(name: "metrics", value: metricNames.joined(separator: ","))
+            .init(
+                name: "metrics",
+                value: metricNames.joined(separator: ",")
+            )
         ]
-        if let videoID, !videoID.isEmpty {
-            items.append(.init(name: "filters", value: "video==\(videoID)"))
+        if let videoID,
+           !videoID.trimmingCharacters(
+                in: .whitespacesAndNewlines
+           ).isEmpty {
+            items.append(
+                .init(
+                    name: "filters",
+                    value: "video==\(videoID)"
+                )
+            )
         }
         components.queryItems = items
 
         var request = URLRequest(url: components.url!)
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue(
+            "Bearer \(accessToken)",
+            forHTTPHeaderField: "Authorization"
+        )
+        return request
+    }
 
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw YouTubeAnalyticsAPIError.invalidResponse
-        }
-        guard 200..<300 ~= http.statusCode else {
-            throw YouTubeAnalyticsAPIError.api(http.statusCode)
-        }
-
-        let decoded = try JSONDecoder().decode(AnalyticsResponse.self, from: data)
+    func decodeSnapshot(
+        _ data: Data,
+        startDate: String,
+        endDate: String,
+        videoID: String?,
+        retrievedAt: Date
+    ) throws -> YouTubeAnalyticsSnapshot {
+        let decoded = try JSONDecoder().decode(
+            AnalyticsResponse.self,
+            from: data
+        )
         guard let row = decoded.rows?.first else {
             throw YouTubeAnalyticsAPIError.missingRow
         }
@@ -143,24 +191,36 @@ public struct YouTubeAnalyticsClient: Sendable {
         guard names.count == row.count else {
             throw YouTubeAnalyticsAPIError.malformedResponse
         }
-        let values = Dictionary(uniqueKeysWithValues: zip(names, row))
+        let values = Dictionary(
+            uniqueKeysWithValues: zip(names, row)
+        )
 
         return YouTubeAnalyticsSnapshot(
             channelID: channelID,
             videoID: videoID,
             startDate: startDate,
             endDate: endDate,
-            retrievedAt: now,
+            retrievedAt: retrievedAt,
             views: values.int("views"),
             engagedViews: values.int("engagedViews"),
             likes: values.int("likes"),
             comments: values.int("comments"),
             shares: values.int("shares"),
-            estimatedMinutesWatched: values.double("estimatedMinutesWatched"),
-            averageViewDuration: values.double("averageViewDuration"),
-            averageViewPercentage: values.double("averageViewPercentage"),
-            subscribersGained: values.int("subscribersGained"),
-            subscribersLost: values.int("subscribersLost")
+            estimatedMinutesWatched: values.double(
+                "estimatedMinutesWatched"
+            ),
+            averageViewDuration: values.double(
+                "averageViewDuration"
+            ),
+            averageViewPercentage: values.double(
+                "averageViewPercentage"
+            ),
+            subscribersGained: values.int(
+                "subscribersGained"
+            ),
+            subscribersLost: values.int(
+                "subscribersLost"
+            )
         )
     }
 }
