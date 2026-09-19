@@ -11,7 +11,7 @@ Statuswerte: **PASS / FAIL / BLOCKED_EXTERNAL**.
 | Research | FAIL |
 | Temporal Semantics | PASS |
 | Grounding / Provenance | PASS |
-| Discovery | FAIL |
+| Discovery | PASS |
 | Rights | PASS |
 | Capture | FAIL |
 | Editing | PASS |
@@ -51,6 +51,8 @@ Hinweis: **Language = PASS** basiert auf konsequenter deutscher Produktsprache i
 Hinweis: **Temporal Semantics = PASS** trennt elapsed Beobachtungsfenster von YouTube-Analytics-Kalenderperioden, verwendet die getestete Pacific-Date-Semantik des Providers und kennzeichnet Analytics-Snapshots ausdrücklich als `providerMayLag`. Abrufzeitpunkt, angefragter Start-/Endzeitraum und Veröffentlichungszeit werden nicht miteinander vermischt. `Build/audit_temporal.py` läuft in der Canonical-CI.
 
 Hinweis: **Grounding / Provenance = PASS** basiert auf einer durchgehenden Provider- und Kontextbindung: Opportunity-Projekte bewahren YouTube-Provider-ID, Quell-URL, Abrufzeit, Strategy-Version und expliziten Zielkanal; fehlende Signale werden sichtbar gelassen statt geschätzt. Kommentar- und Analytics-Daten behalten Provider-Fakten und werden gegen erwartetes Projekt, Video und Zielkanal hart validiert. `Build/audit_grounding.py` läuft in der Canonical-CI.
+
+Hinweis: **Discovery = PASS** basiert auf dem aktuellen autorisierten YouTube-Pfad: Blackstock lädt reale Video-Kandidaten für den strategischen Suchraum, verwendet ausschließlich offizielle YouTube-Sortierparameter, zeigt Provider-Rohwerte und Abrufzeitpunkte transparent, lässt fehlende Signale fehlend und erzeugt keinen eigenen Opportunity-/Virality-Score. Die ausgewählte Opportunity wird mit Provider-ID, Quell-URL und Zielkanalbindung in ein Projekt überführt. `Build/audit_discovery.py` läuft in der Canonical-CI.
 
 Hinweis: **Rights = PASS** basiert auf einer expliziten, versionierten Nutzer-Rechtebestätigung plus konkretem Rechte-/Eigentumsnachweis am Produktionsmedium. Unknown/Prohibited, fehlende Evidenz oder fehlende Attestation verhindern den Eintritt in die Produktion; dieselbe Rechtefreigabe wird als Quality-Evidence geführt und am Publish-Preflight erneut zwingend geprüft.
 
