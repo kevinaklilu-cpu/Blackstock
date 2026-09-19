@@ -7,7 +7,7 @@ Statuswerte: **PASS / FAIL / BLOCKED_EXTERNAL**.
 | Product Journey | FAIL |
 | Guided Experience | FAIL |
 | Strategy | FAIL |
-| Language | FAIL |
+| Language | PASS |
 | Research | FAIL |
 | Temporal Semantics | FAIL |
 | Grounding / Provenance | FAIL |
@@ -45,6 +45,8 @@ Hinweis: **Wrong Channel E2E = PASS** basiert auf den deterministischen Hard-Sto
 Hinweis: **Upload Resume = PASS** basiert auf dem deterministischen Resumable-Upload-End-to-End-Test: Eine vorhandene Remote-Session wird abgefragt, der von YouTube gemeldete Remote-Offset gewinnt gegenüber lokalem Zwischenstand, nur der verbleibende Byte-Range wird übertragen, jeder PUT ist authentifiziert und der Fortschritt wird persistent bis `remoteCommitted` mit Video-ID und finalem Offset fortgeschrieben.
 
 Hinweis: **Analytics = PASS** basiert auf den deterministischen YouTube-Analytics-Contract- und Kontexttests: Abrufe sind an ein veröffentlichtes Projekt, denselben Projekt-Datensatz, denselben Zielkanal und eine konkrete Video-ID gebunden; vor dem Abruf wird die aktuell autorisierte YouTube-Kanalidentität erneut validiert. Fehlende Provider-Zeilen bleiben fehlend statt als Nullwerte erfunden zu werden, und inkonsistente Responses führen zum Hard-Stop.
+
+Hinweis: **Language = PASS** basiert auf konsequenter deutscher Produktsprache in den kritischen First-Run-, Studio-, Review-, Einstellungen- und Journey-Flächen sowie einer davon getrennten, persistenten Content-Sprache. Die Content-Sprache wird bis zu YouTube `defaultLanguage` und `defaultAudioLanguage` weitergegeben. `Build/audit_language.py` läuft in der Canonical-CI und blockiert Regressionen auf bekannte englische Produktbegriffe.
 
 Hinweis: **Rights = PASS** basiert auf einer expliziten, versionierten Nutzer-Rechtebestätigung plus konkretem Rechte-/Eigentumsnachweis am Produktionsmedium. Unknown/Prohibited, fehlende Evidenz oder fehlende Attestation verhindern den Eintritt in die Produktion; dieselbe Rechtefreigabe wird als Quality-Evidence geführt und am Publish-Preflight erneut zwingend geprüft.
 
