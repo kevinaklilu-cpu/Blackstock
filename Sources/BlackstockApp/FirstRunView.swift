@@ -45,7 +45,7 @@ struct FirstRunView: View {
             Spacer()
 
             Text("Vom Signal\nzum nächsten Video.")
-                .font(.system(size: 44, weight: .bold, design: .rounded))
+                .font(.largeTitle.bold())
                 .tracking(-1.1)
             Text("Recherche, Produktion, Veröffentlichung und echtes Lernen aus deinem YouTube-Kanal – mit nachvollziehbaren Quellen statt erfundenen Scores.")
                 .font(.title3)
@@ -104,7 +104,7 @@ struct FirstRunView: View {
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
             Text(stepTitle)
-                .font(.system(size: 34, weight: .bold, design: .rounded))
+                .font(.title.bold())
             Text(stepSubtitle)
                 .foregroundStyle(.secondary)
         }
