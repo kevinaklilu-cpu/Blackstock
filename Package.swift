@@ -10,6 +10,10 @@ let package = Package(
         .executable(
             name: "BlackstockE2ESmoke",
             targets: ["BlackstockE2ESmoke"]
+        ),
+        .executable(
+            name: "BlackstockReleaseVerifier",
+            targets: ["BlackstockReleaseVerifier"]
         )
     ],
     targets: [
@@ -20,6 +24,10 @@ let package = Package(
         ),
         .executableTarget(
             name: "BlackstockE2ESmoke",
+            dependencies: ["BlackstockCore"]
+        ),
+        .executableTarget(
+            name: "BlackstockReleaseVerifier",
             dependencies: ["BlackstockCore"]
         ),
         .testTarget(
