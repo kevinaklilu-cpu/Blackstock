@@ -597,6 +597,8 @@ struct PackagingReviewView: View {
                         } label: {
                             Image(systemName: "trash")
                         }
+                        .accessibilityLabel("Packaging-Variante löschen")
+                        .accessibilityHint(variant.title)
                         .buttonStyle(.borderless)
                         .disabled(reviewFrozen)
                     }
