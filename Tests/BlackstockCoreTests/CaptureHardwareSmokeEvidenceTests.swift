@@ -186,11 +186,23 @@ final class CaptureHardwareSmokeEvidenceTests:
         )
         XCTAssertEqual(
             object["schemaVersion"] as? Int,
-            4
+            5
         )
         XCTAssertEqual(
             object["blackstockSourceCommitSHA"] as? String,
             String(repeating: "1", count: 40)
+        )
+        XCTAssertEqual(
+            object["installerReceiptPackageID"] as? String,
+            "de.blackstock.app"
+        )
+        XCTAssertEqual(
+            object["installerReceiptVersion"] as? String,
+            "1.0.0"
+        )
+        XCTAssertEqual(
+            object["installerReceiptVerified"] as? Bool,
+            true
         )
         XCTAssertEqual(
             object["applicationTeamID"] as? String,
@@ -231,6 +243,10 @@ final class CaptureHardwareSmokeEvidenceTests:
             macOSVersion: "26.6.2",
             hardwareModel: "MacBookProTest",
             installedFromPackage: true,
+            installerReceiptPackageID:
+                "de.blackstock.app",
+            installerReceiptVersion: "1.0.0",
+            installerReceiptVerified: true,
             applicationTeamID: "ABC123TEAM",
             developerIDApplicationVerified: true,
             applicationExecutableSHA256:
