@@ -246,7 +246,7 @@ struct PackagingReviewView: View {
                         .inspect(url: durableURL)
                     session.errorMessage = nil
                 } catch {
-                    session.errorMessage = "Thumbnail konnte nicht sicher in den Projekt-Workspace übernommen werden: \(error.localizedDescription)"
+                    session.errorMessage = "Vorschaubild konnte nicht sicher in den Projekt-Arbeitsbereich übernommen werden: \(error.localizedDescription)"
                 }
             }
         }
@@ -295,7 +295,7 @@ struct PackagingReviewView: View {
                     ]
                     session.errorMessage = nil
                 } catch {
-                    session.errorMessage = "Caption-Datei konnte nicht sicher in den Projekt-Workspace übernommen werden: \(error.localizedDescription)"
+                    session.errorMessage = "Untertiteldatei konnte nicht sicher in den Projekt-Arbeitsbereich übernommen werden: \(error.localizedDescription)"
                 }
             }
         }
@@ -305,9 +305,9 @@ struct PackagingReviewView: View {
         VStack(alignment: .leading, spacing: 5) {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Packaging & Review")
+                    Text("Veröffentlichungspaket & Prüfung")
                         .font(.title2.bold())
-                    Text("Alles prüfen, bevor Blackstock eine Remote-Aktion zulässt.")
+                    Text("Alles prüfen, bevor Blackstock eine externe Aktion zulässt.")
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -573,7 +573,7 @@ struct PackagingReviewView: View {
     }
 
     private var packagingVariantsSection: some View {
-        GroupBox("Packaging-Varianten") {
+        GroupBox("Varianten des Veröffentlichungspakets") {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Bis zu drei Titel-/Thumbnail-Kombinationen vorbereiten. Blackstock markiert keinen Gewinner ohne echte YouTube-Testdaten.")
                     .font(.caption)
@@ -598,7 +598,7 @@ struct PackagingReviewView: View {
                         } label: {
                             Image(systemName: "trash")
                         }
-                        .accessibilityLabel("Packaging-Variante löschen")
+                        .accessibilityLabel("Variante des Veröffentlichungspakets löschen")
                         .accessibilityHint(variant.title)
                         .buttonStyle(.borderless)
                         .disabled(reviewFrozen)
@@ -615,7 +615,7 @@ struct PackagingReviewView: View {
                         _ = try packagingVariants.add(
                             title: title,
                             thumbnailURL: thumbnailURL,
-                            note: "Packaging-Kandidat",
+                            note: "Kandidat für Veröffentlichungspaket",
                             at: Date()
                         )
                     } catch {
@@ -646,7 +646,7 @@ struct PackagingReviewView: View {
     }
 
     private var manualReviewSection: some View {
-        GroupBox("Qualitative Review") {
+        GroupBox("Qualitative Prüfung") {
             VStack(alignment: .leading, spacing: 14) {
                 Text("Blackstock misst technische Fakten automatisch. Inhaltliche Qualität wird direkt am Video geprüft und als Nutzer-Evidenz protokolliert.")
                     .font(.caption)
@@ -717,7 +717,7 @@ struct PackagingReviewView: View {
                 )
                 .textFieldStyle(.roundedBorder)
 
-                Text("Nur eine konkrete Notiz zählt als Review-Evidenz.")
+                Text("Nur eine konkrete Notiz zählt als Prüf-Evidenz.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -775,8 +775,8 @@ struct PackagingReviewView: View {
 
     private func areaTitle(_ area: CreatorQualityArea) -> String {
         switch area {
-        case .packaging: return "Packaging"
-        case .retentionStructure: return "Retention-Struktur"
+        case .packaging: return "Veröffentlichungspaket"
+        case .retentionStructure: return "Zuschauerbindungs-Struktur"
         case .audio: return "Audio"
         case .captions: return "Captions"
         case .visualComposition: return "Visuals"
@@ -812,7 +812,7 @@ struct PackagingReviewView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Label(project.targetChannelID, systemImage: "person.crop.rectangle")
                     .font(.callout.monospaced())
-                Text("Dieser Zielkanal ist Teil des Projekts und kann beim Publishing nicht still überschrieben werden.")
+                Text("Dieser Zielkanal ist Teil des Projekts und kann bei der Veröffentlichung nicht still überschrieben werden.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -836,11 +836,11 @@ struct PackagingReviewView: View {
                     area: .renderIntegrity
                 )
                 qualityRow(
-                    title: "Packaging",
+                    title: "Veröffentlichungspaket",
                     area: .packaging
                 )
                 qualityRow(
-                    title: "Retention-Struktur",
+                    title: "Zuschauerbindungs-Struktur",
                     area: .retentionStructure
                 )
                 qualityRow(
@@ -869,14 +869,14 @@ struct PackagingReviewView: View {
                         )
                         .font(.headline)
 
-                        Text("Blackstock schaltet Publishing erst frei, wenn diese Bereiche durch reale Analyzer oder eine nachvollziehbare Review-Evidenz abgedeckt sind.")
+                        Text("Blackstock schaltet die Veröffentlichung erst frei, wenn diese Bereiche durch reale Analysewerkzeuge oder eine nachvollziehbare Prüf-Evidenz abgedeckt sind.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
 
                 if currentStage == .packaging {
-                    Button("Review abschließen") {
+                    Button("Prüfung abschließen") {
                         do {
                             let review = qualityReview
                             try session.savePublishPreparation(
@@ -889,7 +889,7 @@ struct PackagingReviewView: View {
                                 to: .review
                             )
                         } catch {
-                            session.errorMessage = "Review konnte nicht gespeichert werden: \(error.localizedDescription)"
+                            session.errorMessage = "Prüfung konnte nicht gespeichert werden: \(error.localizedDescription)"
                         }
                     }
                     .buttonStyle(.borderedProminent)
@@ -898,7 +898,7 @@ struct PackagingReviewView: View {
                         || draftPackage.metadata.title.isEmpty
                     )
 
-                    Text("Der Review-Snapshot wird vor dem Statuswechsel gespeichert. Noch keine Remote-Aktion.")
+                    Text("Der Prüfstand wird vor dem Statuswechsel gespeichert. Noch keine externe Aktion.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 } else if currentStage == .review
@@ -916,7 +916,7 @@ struct PackagingReviewView: View {
     private var publishingAuthorizationPanel: some View {
         VStack(alignment: .leading, spacing: 10) {
             Label(
-                "Review gespeichert",
+                "Prüfung gespeichert",
                 systemImage: "checkmark.seal.fill"
             )
             .foregroundStyle(.green)
@@ -924,12 +924,12 @@ struct PackagingReviewView: View {
             if session.publishingAuthorizedChannelID
                 == project.targetChannelID {
                 Label(
-                    "Publishing-Berechtigung für diesen Zielkanal verifiziert",
+                    "Veröffentlichungsberechtigung für diesen Zielkanal verifiziert",
                     systemImage: "person.crop.circle.badge.checkmark"
                 )
                 .font(.caption)
 
-                Text("Der echte Upload bleibt bis zur finalen Remote-Bestätigung getrennt. Public/Unlisted ist nur nach extern verifiziertem YouTube-Compliance-Gate verfügbar.")
+                Text("Der echte Upload bleibt bis zur finalen Bestätigung der externen Aktion getrennt. Öffentlich/Nicht gelistet ist nur nach extern verifiziertem YouTube-Compliance-Gate verfügbar.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
 
@@ -964,7 +964,7 @@ struct PackagingReviewView: View {
                             .font(.caption.monospaced())
                             .textSelection(.enabled)
                         if result.uploadReused {
-                            Text("Der bereits journaled Remote-Upload wurde wiederverwendet; kein Doppel-Upload.")
+                            Text("Der bereits protokollierte YouTube-Upload wurde wiederverwendet; kein Doppel-Upload.")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
@@ -983,7 +983,7 @@ struct PackagingReviewView: View {
                         Label(
                             session.isAuthorizingPublishing
                                 ? "Google-Autorisierung läuft …"
-                                : "Publishing-Berechtigung aktivieren",
+                                : "Veröffentlichungsberechtigung aktivieren",
                             systemImage: "key"
                         )
                     }
@@ -993,7 +993,7 @@ struct PackagingReviewView: View {
 
                 if let plan = session.publishingScopePlan(),
                    plan.state == .reauthorizationRequired {
-                    Text("Blackstock fordert gezielt die fehlenden YouTube-Upload-/Packaging-Berechtigungen an und prüft danach den Projekt-Zielkanal erneut.")
+                    Text("Blackstock fordert gezielt die fehlenden YouTube-Upload- und Veröffentlichungspaket-Berechtigungen an und prüft danach den Projekt-Zielkanal erneut.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
