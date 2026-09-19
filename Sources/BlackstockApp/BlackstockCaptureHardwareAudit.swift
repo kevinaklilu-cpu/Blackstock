@@ -366,7 +366,7 @@ enum BlackstockCaptureHardwareAudit {
             )
             let prefix = "TeamIdentifier="
             guard let line = output
-                    .split(whereSeparator: \.isNewline)
+                    .split(whereSeparator: { $0.isNewline })
                     .map(String.init)
                     .first(where: {
                         $0.hasPrefix(prefix)
