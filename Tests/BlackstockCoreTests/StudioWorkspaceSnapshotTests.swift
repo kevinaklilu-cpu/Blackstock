@@ -451,6 +451,131 @@ final class StudioWorkspaceSnapshotTests: XCTestCase {
         }
     }
 
+    func testPublishPreparationRecoversLastValidatedBackup() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let projectID = UUID()
+        let store = ProjectWorkspaceStore(rootURL: root)
+
+        func makeSnapshot(title: String, savedAt: TimeInterval) -> PublishPreparationSnapshot {
+            PublishPreparationSnapshot(
+                package: PublishPackage(
+                    projectID: projectID,
+                    targetChannelID: "channel-A",
+                    renderArtifactID: UUID(),
+                    metadata: YouTubeUploadMetadata(
+                        title: title,
+                        description: "Beschreibung",
+                        privacyStatus: .privateVideo,
+                        selfDeclaredMadeForKids: false
+                    ),
+                    thumbnail: nil,
+                    captions: []
+                ),
+                qualityReview: CreatorQualityReview(
+                    projectID: projectID,
+                    stage: .review,
+                    evidence: [],
+                    findings: [],
+                    reviewedAt: Date(timeIntervalSince1970: savedAt)
+                ),
+                packagingVariants: PackagingVariantSet(),
+                savedAt: Date(timeIntervalSince1970: savedAt)
+            )
+        }
+
+        let first = makeSnapshot(title: "Erste Fassung", savedAt: 10)
+        let second = makeSnapshot(title: "Zweite Fassung", savedAt: 20)
+
+        try store.savePublishPreparation(first)
+        try store.savePublishPreparation(second)
+
+        let directory = try store.projectDirectory(projectID: projectID)
+        let primaryURL = directory.appendingPathComponent(
+            "publish-preparation.json"
+        )
+        let backupURL = directory.appendingPathComponent(
+            "publish-preparation.backup.json"
+        )
+
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: backupURL.path)
+        )
+        try Data("{broken-json".utf8).write(
+            to: primaryURL,
+            options: [.atomic]
+        )
+
+        let recovered = try store.loadPublishPreparationWithRecovery(
+            projectID: projectID
+        )
+
+        XCTAssertTrue(recovered.recoveredFromBackup)
+        XCTAssertEqual(recovered.snapshot, first)
+
+        let restoredPrimary = try store.loadPublishPreparationWithRecovery(
+            projectID: projectID
+        )
+        XCTAssertFalse(restoredPrimary.recoveredFromBackup)
+        XCTAssertEqual(restoredPrimary.snapshot, first)
+    }
+
+    func testInvalidPublishPreparationPrimaryNeverReplacesValidatedBackup() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let projectID = UUID()
+        let store = ProjectWorkspaceStore(rootURL: root)
+        let snapshot = PublishPreparationSnapshot(
+            package: PublishPackage(
+                projectID: projectID,
+                targetChannelID: "channel-A",
+                renderArtifactID: UUID(),
+                metadata: YouTubeUploadMetadata(
+                    title: "Video",
+                    description: "Beschreibung",
+                    privacyStatus: .privateVideo,
+                    selfDeclaredMadeForKids: false
+                ),
+                thumbnail: nil,
+                captions: []
+            ),
+            qualityReview: CreatorQualityReview(
+                projectID: projectID,
+                stage: .review,
+                evidence: [],
+                findings: [],
+                reviewedAt: Date(timeIntervalSince1970: 4)
+            ),
+            packagingVariants: PackagingVariantSet(),
+            savedAt: Date(timeIntervalSince1970: 5)
+        )
+
+        try store.savePublishPreparation(snapshot)
+        try store.savePublishPreparation(snapshot)
+
+        let directory = try store.projectDirectory(projectID: projectID)
+        let primaryURL = directory.appendingPathComponent(
+            "publish-preparation.json"
+        )
+        let backupURL = directory.appendingPathComponent(
+            "publish-preparation.backup.json"
+        )
+        let backupBefore = try Data(contentsOf: backupURL)
+
+        try Data("not-json".utf8).write(
+            to: primaryURL,
+            options: [.atomic]
+        )
+        try store.savePublishPreparation(snapshot)
+
+        let backupAfter = try Data(contentsOf: backupURL)
+        XCTAssertEqual(backupAfter, backupBefore)
+    }
+
     func testPublishPreparationRoundTripsInProjectWorkspace() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
