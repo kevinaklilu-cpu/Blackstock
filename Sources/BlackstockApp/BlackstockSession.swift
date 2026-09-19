@@ -1206,6 +1206,23 @@ final class BlackstockSession: ObservableObject {
         )
     }
 
+    private func researchDecisionStore() throws -> ResearchDecisionStore {
+        let base = try FileManager.default.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        let root = base
+            .appendingPathComponent("Blackstock", isDirectory: true)
+            .appendingPathComponent("Research", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: root,
+            withIntermediateDirectories: true
+        )
+        return ResearchDecisionStore(rootURL: root)
+    }
+
     private func projectWorkspaceStore() throws -> ProjectWorkspaceStore {
         let base = try FileManager.default.url(
             for: .applicationSupportDirectory,
@@ -1422,6 +1439,20 @@ final class BlackstockSession: ObservableObject {
             )
             try Self.store(project: seed.project)
             try Self.store(source: seed.source)
+            let providerFacts = Self.providerFacts(
+                for: opportunity
+            )
+            try researchDecisionStore().saveResearch(
+                ResearchEvidenceRecord(
+                    projectID: seed.project.id,
+                    opportunityID: opportunity.id,
+                    source: seed.source,
+                    researchQuestion: "",
+                    providerFacts: providerFacts,
+                    creatorNotes: "",
+                    createdAt: Date()
+                )
+            )
             activeProject = seed.project
             activeOpportunitySource = seed.source
             UserDefaults.standard.set(channel.id, forKey: "blackstock.workspace.channelID")
@@ -1442,6 +1473,101 @@ final class BlackstockSession: ObservableObject {
         UserDefaults.standard.set(contentLanguage, forKey: "blackstock.workspace.contentLanguage")
         UserDefaults.standard.set(true, forKey: "blackstock.firstRun.complete")
         onboardingComplete = true
+    }
+
+    func loadResearchEvidence(
+        projectID: UUID
+    ) -> ResearchEvidenceRecord? {
+        try? researchDecisionStore().loadResearch(
+            projectID: projectID
+        )
+    }
+
+    func loadAnalysisDecision(
+        projectID: UUID
+    ) -> AnalysisDecisionRecord? {
+        try? researchDecisionStore().loadAnalysis(
+            projectID: projectID
+        )
+    }
+
+    @discardableResult
+    func completeResearch(
+        question: String,
+        creatorNotes: String
+    ) -> Bool {
+        guard let project = activeProject,
+              project.stage == .research,
+              let existing = loadResearchEvidence(
+                projectID: project.id
+              ) else {
+            errorMessage = "Für dieses Projekt liegt keine gebundene Recherche-Evidence vor."
+            return false
+        }
+
+        let completed = ResearchEvidenceRecord(
+            projectID: project.id,
+            opportunityID: existing.opportunityID,
+            source: existing.source,
+            researchQuestion: question,
+            providerFacts: existing.providerFacts,
+            creatorNotes: creatorNotes,
+            createdAt: Date()
+        )
+        guard completed.isComplete else {
+            errorMessage = "Recherche benötigt eine konkrete Frage, Provider-Fakten und eigene Notizen."
+            return false
+        }
+
+        do {
+            try researchDecisionStore().saveResearch(completed)
+        } catch {
+            errorMessage = "Recherche-Evidence konnte nicht gespeichert werden: \(describe(error))"
+            return false
+        }
+        return advanceActiveProject(to: .analysis)
+    }
+
+    @discardableResult
+    func completeAnalysis(
+        decision: ProductionDecision,
+        rationale: String,
+        riskOrUnknown: String
+    ) -> Bool {
+        guard let project = activeProject,
+              project.stage == .analysis,
+              let research = loadResearchEvidence(
+                projectID: project.id
+              ),
+              research.isComplete else {
+            errorMessage = "Analyse bleibt gesperrt, bis vollständige Recherche-Evidence vorliegt."
+            return false
+        }
+
+        let record = AnalysisDecisionRecord(
+            projectID: project.id,
+            decision: decision,
+            rationale: rationale,
+            riskOrUnknown: riskOrUnknown,
+            createdAt: Date()
+        )
+        guard record.isComplete else {
+            errorMessage = "Analyse benötigt eine Begründung und mindestens ein offenes Risiko oder eine Unsicherheit."
+            return false
+        }
+
+        do {
+            try researchDecisionStore().saveAnalysis(record)
+        } catch {
+            errorMessage = "Analyse-Entscheidung konnte nicht gespeichert werden: \(describe(error))"
+            return false
+        }
+
+        guard decision == .pursue else {
+            errorMessage = "Opportunity wurde bewusst verworfen. Das Projekt bleibt in der Analyse und wechselt nicht in Produktion."
+            return false
+        }
+        return advanceActiveProject(to: .production)
     }
 
     @discardableResult
@@ -1563,6 +1689,32 @@ final class BlackstockSession: ObservableObject {
         decoder.dateDecodingStrategy = .iso8601
         guard let previous = try? decoder.decode(ChannelStrategy.self, from: data) else { return 1 }
         return previous.version + 1
+    }
+
+    private static func providerFacts(
+        for opportunity: YouTubeOpportunityCandidate
+    ) -> [String] {
+        var facts: [String] = [
+            "YouTube-Video-ID: \(opportunity.videoID)",
+            "Quellkanal: \(opportunity.channelTitle) (\(opportunity.channelID))",
+            "Suchraum: \(opportunity.query)",
+            "Datenabruf: \(opportunity.retrievedAt.formatted(date: .abbreviated, time: .shortened))"
+        ]
+        if let publishedAt = opportunity.publishedAt {
+            facts.append(
+                "Veröffentlicht: \(publishedAt.formatted(date: .abbreviated, time: .shortened))"
+            )
+        }
+        if let value = opportunity.metrics.viewCount {
+            facts.append("Views: \(value)")
+        }
+        if let value = opportunity.metrics.likeCount {
+            facts.append("Likes: \(value)")
+        }
+        if let value = opportunity.metrics.commentCount {
+            facts.append("Kommentare: \(value)")
+        }
+        return facts
     }
 
     private func describe(_ error: Error) -> String {
