@@ -312,7 +312,7 @@ private struct OverviewView: View {
                             .buttonStyle(.borderedProminent)
                         } else if guidance.recommendedSurface == .overview {
                             Label(
-                                "Du bist bereits im passenden Published/Learning-Bereich.",
+                                "Du bist bereits im passenden Bereich Veröffentlicht / Lernen.",
                                 systemImage: "checkmark.circle"
                             )
                             .font(.caption)
