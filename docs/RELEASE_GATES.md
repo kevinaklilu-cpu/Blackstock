@@ -36,7 +36,7 @@ Statuswerte: **PASS / FAIL / BLOCKED_EXTERNAL**.
 | Updater | FAIL |
 | Clean-Machine E2E | FAIL |
 
-Hinweis: **Installer = PASS** basiert auf der Canonical-CI: Das erzeugte `.pkg` wird auf einem frischen macOS-Runner installiert, Bundle-Metadaten und Codesign werden geprüft und die installierte App wird gestartet. **Clean-Machine E2E** bleibt FAIL, weil dieser Smoke-Test noch keinen vollständigen Nutzerpfad bis Veröffentlichung und Lernen abdeckt.
+Hinweis: **Installer = PASS** basiert auf der Canonical-CI: Das erzeugte `.pkg` wird auf einem frischen macOS-Runner installiert, Bundle-Metadaten und Codesign werden geprüft und die installierte App wird gestartet. **Clean-Machine E2E = FAIL** bleibt bis zum ersten erfolgreichen Lauf des neuen installierten Creator-Loop-Smokes bestehen. Der CI-only Helper wird jetzt opt-in in das Entwicklungspaket eingebettet und direkt aus `/Applications/Blackstock.app/Contents/Helpers/BlackstockE2ESmoke` ausgeführt. Er erzeugt reales lokales AV-Testmaterial, rendert und validiert es inklusive professioneller Audio-QC, durchläuft Publishing mit gemockter externer HTTP-Grenze, verifiziert Upload-Journaling, Analytics, Growth-Learning und Persistenz-Roundtrip. `Build/audit_clean_machine.py` verhindert, dass dieser installierte E2E-Vertrag unbemerkt aus der Canonical-CI verschwindet.
 
 Hinweis: **Comments = PASS** bezieht sich auf den implementierten read-only Pfad für veröffentlichte Videos: GET-only YouTube-CommentThreads, Plaintext, Pagination, spezifische Providerfehler, erneute Zielkanal-Identitätsprüfung und Video-/Kanal-Kontext-Hard-Stop. Schreib-, Antwort- oder Moderationsaktionen sind daraus ausdrücklich nicht abgeleitet.
 
