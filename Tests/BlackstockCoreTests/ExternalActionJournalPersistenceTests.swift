@@ -58,7 +58,8 @@ final class ExternalActionJournalPersistenceTests: XCTestCase {
             try await journal.upsert(entry)
             XCTFail("Persistenzfehler wurde erwartet.")
         } catch {
-            XCTAssertNil(await journal.entry(for: "upload:2"))
+            let restored = await journal.entry(for: "upload:2")
+            XCTAssertNil(restored)
         }
     }
 }
