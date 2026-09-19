@@ -27,6 +27,8 @@ jobs:
         run: python3 Build/audit_accessibility.py
       - name: Security contract audit
         run: python3 Build/audit_security.py
+      - name: Privacy contract audit
+        run: python3 Build/audit_privacy.py
       - name: Swift tests
         run: swift test
       - name: Release build
