@@ -242,7 +242,7 @@ struct StudioView: View {
     private func timeline(_ asset: ProductionMediaAsset) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Timeline")
+                Text("Zeitleiste")
                     .font(.headline)
                 Spacer()
                 Text(timeLabel(state.trimStart) + " – " + timeLabel(state.trimEnd))
