@@ -33,6 +33,8 @@ jobs:
         run: python3 Build/audit_language.py
       - name: Temporal semantics audit
         run: python3 Build/audit_temporal.py
+      - name: Grounding and provenance audit
+        run: python3 Build/audit_grounding.py
       - name: Swift tests
         run: swift test
       - name: Release build
