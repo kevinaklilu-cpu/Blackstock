@@ -8,7 +8,7 @@ Statuswerte: **PASS / FAIL / BLOCKED_EXTERNAL**.
 | Guided Experience | FAIL |
 | Strategy | PASS |
 | Language | PASS |
-| Research | FAIL |
+| Research | PASS |
 | Temporal Semantics | PASS |
 | Grounding / Provenance | PASS |
 | Discovery | PASS |
@@ -55,6 +55,8 @@ Hinweis: **Grounding / Provenance = PASS** basiert auf einer durchgehenden Provi
 Hinweis: **Discovery = PASS** basiert auf dem aktuellen autorisierten YouTube-Pfad: Blackstock lädt reale Video-Kandidaten für den strategischen Suchraum, verwendet ausschließlich offizielle YouTube-Sortierparameter, zeigt Provider-Rohwerte und Abrufzeitpunkte transparent, lässt fehlende Signale fehlend und erzeugt keinen eigenen Opportunity-/Virality-Score. Die ausgewählte Opportunity wird mit Provider-ID, Quell-URL und Zielkanalbindung in ein Projekt überführt. `Build/audit_discovery.py` läuft in der Canonical-CI.
 
 Hinweis: **Strategy = PASS** basiert auf einer expliziten, versionierten Kanalstrategie. Der Nutzer muss Kanal-Schwerpunkt, Content-Versprechen, Zielgruppen-Hypothese und mindestens eine Säule angeben; angrenzende und ausgeschlossene Themen sowie das Hauptziel werden separat modelliert. Blackstock erfindet fehlende Strategie-Felder nicht. `Build/audit_strategy.py` und die Core-Tests sichern diese Verträge in der Canonical-CI ab.
+
+Hinweis: **Research = PASS** basiert auf projektgebundenen, atomar gespeicherten Recherchebelegen. Beim Übergang aus Discovery werden reale Provider-Fakten der gewählten YouTube-Opportunity eingefroren; Recherchefrage und eigene Einordnung werden separat vom Nutzer ergänzt. Analyse bleibt gesperrt, bis Frage, Provider-Fakten und Notizen vollständig sind. `Build/audit_research.py` und Core-Tests sichern den Pfad in der Canonical-CI ab.
 
 Hinweis: **Rights = PASS** basiert auf einer expliziten, versionierten Nutzer-Rechtebestätigung plus konkretem Rechte-/Eigentumsnachweis am Produktionsmedium. Unknown/Prohibited, fehlende Evidenz oder fehlende Attestation verhindern den Eintritt in die Produktion; dieselbe Rechtefreigabe wird als Quality-Evidence geführt und am Publish-Preflight erneut zwingend geprüft.
 
