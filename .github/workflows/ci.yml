@@ -476,6 +476,8 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' /Applications/Blackstock.app/Contents/Info.plist)" = "de.blackstock.app"
           test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' /Applications/Blackstock.app/Contents/Info.plist)" = "13.0"
           codesign --verify --deep --strict --verbose=2 /Applications/Blackstock.app
+          codesign --display --verbose=4 /Applications/Blackstock.app 2>&1 \
+            | grep -qi 'runtime'
 
           ENTITLEMENTS="$RUNNER_TEMP/blackstock-entitlements.txt"
           codesign --display --entitlements :- /Applications/Blackstock.app \
