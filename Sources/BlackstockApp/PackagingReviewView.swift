@@ -449,7 +449,7 @@ struct PackagingReviewView: View {
     }
 
     private var packagingAssetsSection: some View {
-        GroupBox("Thumbnail & Captions") {
+        GroupBox("Vorschaubild & Untertitel") {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
