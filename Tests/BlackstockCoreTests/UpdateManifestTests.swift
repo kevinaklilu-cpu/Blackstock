@@ -3,6 +3,8 @@ import XCTest
 @testable import BlackstockCore
 
 final class UpdateManifestTests: XCTestCase {
+    private let sourceCommitSHA =
+        String(repeating: "1", count: 40)
     func testValidSignedHTTPSManifestIsAccepted() throws {
         let privateKey = Curve25519.Signing.PrivateKey()
         let publishedAt = Date(timeIntervalSince1970: 1_700_000_000)
@@ -11,6 +13,7 @@ final class UpdateManifestTests: XCTestCase {
             build: 42,
             packageURL: URL(string: "https://updates.example.com/Blackstock.pkg")!,
             sha256: String(repeating: "a", count: 64),
+            sourceCommitSHA: sourceCommitSHA,
             publishedAt: publishedAt,
             signature: ""
         )
@@ -22,6 +25,7 @@ final class UpdateManifestTests: XCTestCase {
             build: manifest.build,
             packageURL: manifest.packageURL,
             sha256: manifest.sha256,
+            sourceCommitSHA: sourceCommitSHA,
             publishedAt: manifest.publishedAt,
             signature: signature.base64EncodedString()
         )
@@ -44,6 +48,7 @@ final class UpdateManifestTests: XCTestCase {
             build: 42,
             packageURL: URL(string: "http://updates.example.com/Blackstock.pkg")!,
             sha256: String(repeating: "b", count: 64),
+            sourceCommitSHA: sourceCommitSHA,
             publishedAt: publishedAt,
             signature: ""
         )
@@ -52,6 +57,7 @@ final class UpdateManifestTests: XCTestCase {
             build: manifest.build,
             packageURL: manifest.packageURL,
             sha256: manifest.sha256,
+            sourceCommitSHA: sourceCommitSHA,
             publishedAt: manifest.publishedAt,
             signature: try privateKey.signature(
                 for: manifest.signedPayload
@@ -81,6 +87,7 @@ final class UpdateManifestTests: XCTestCase {
             build: 42,
             packageURL: URL(string: "https://updates.example.com/Blackstock.pkg")!,
             sha256: String(repeating: "c", count: 64),
+            sourceCommitSHA: sourceCommitSHA,
             publishedAt: publishedAt,
             signature: ""
         )
@@ -92,6 +99,7 @@ final class UpdateManifestTests: XCTestCase {
             build: 42,
             packageURL: unsigned.packageURL,
             sha256: unsigned.sha256,
+            sourceCommitSHA: sourceCommitSHA,
             publishedAt: publishedAt,
             signature: signature.base64EncodedString()
         )
@@ -117,6 +125,7 @@ final class UpdateManifestTests: XCTestCase {
             build: 1,
             packageURL: URL(string: "https://updates.example.com/Blackstock.pkg")!,
             sha256: String(repeating: "d", count: 64),
+            sourceCommitSHA: sourceCommitSHA,
             publishedAt: Date(timeIntervalSince1970: 1_700_000_000),
             signature: "unused"
         )
@@ -135,6 +144,7 @@ final class UpdateManifestTests: XCTestCase {
             build: 100,
             packageURL: manifest.packageURL,
             sha256: manifest.sha256,
+            sourceCommitSHA: sourceCommitSHA,
             publishedAt: manifest.publishedAt,
             signature: "unused"
         )
