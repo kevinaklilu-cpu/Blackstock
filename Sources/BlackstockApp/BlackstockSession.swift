@@ -119,12 +119,34 @@ final class BlackstockSession: ObservableObject {
 
         do {
             let data = try Data(contentsOf: url, options: .mappedIfSafe)
-            let config = try OAuthClientConfiguration.parseGoogleDesktopJSON(data)
-            try BlackstockKeychain.write(config.clientID, account: "google.oauth.importedClientID")
+            let config = try OAuthClientConfiguration
+                .parseGoogleDesktopJSON(data)
+            let previousClientID = effectiveClientID
+            let nextClientID =
+                OAuthClientConfiguration.preferredClientID(
+                    bundled: bundledClientID,
+                    imported: config.clientID
+                )
+            let clientChanged = OAuthClientBindingPolicy()
+                .requiresCredentialInvalidation(
+                    previousClientID: previousClientID,
+                    nextClientID: nextClientID
+                )
+
+            if clientChanged {
+                _ = try BlackstockKeychain.deleteAccounts(
+                    withPrefix: "youtube."
+                )
+            }
+
+            try BlackstockKeychain.write(
+                config.clientID,
+                account: "google.oauth.importedClientID"
+            )
             importedOAuthClientID = config.clientID
-            tokenSet = nil
-            publishingAuthorizedChannelID = nil
-            analyticsAuthorizedChannelID = nil
+            clearOAuthRuntimeAuthorizationState(
+                clearChannelSelection: clientChanged
+            )
             errorMessage = nil
         } catch {
             errorMessage = "OAuth-JSON konnte nicht übernommen werden: \(describe(error))"
@@ -281,11 +303,27 @@ final class BlackstockSession: ObservableObject {
 
     func removeImportedOAuthConfiguration() {
         do {
-            try BlackstockKeychain.delete("google.oauth.importedClientID")
+            let previousClientID = effectiveClientID
+            let nextClientID = bundledClientID
+            let clientChanged = OAuthClientBindingPolicy()
+                .requiresCredentialInvalidation(
+                    previousClientID: previousClientID,
+                    nextClientID: nextClientID
+                )
+
+            if clientChanged {
+                _ = try BlackstockKeychain.deleteAccounts(
+                    withPrefix: "youtube."
+                )
+            }
+
+            try BlackstockKeychain.delete(
+                "google.oauth.importedClientID"
+            )
             importedOAuthClientID = ""
-            tokenSet = nil
-            publishingAuthorizedChannelID = nil
-            analyticsAuthorizedChannelID = nil
+            clearOAuthRuntimeAuthorizationState(
+                clearChannelSelection: clientChanged
+            )
             errorMessage = nil
         } catch {
             errorMessage = "OAuth-Konfiguration konnte nicht entfernt werden: \(describe(error))"
@@ -1665,6 +1703,22 @@ final class BlackstockSession: ObservableObject {
             bundled: bundledClientID,
             imported: importedClientID
         )
+    }
+
+    private func clearOAuthRuntimeAuthorizationState(
+        clearChannelSelection: Bool
+    ) {
+        tokenSet = nil
+        publishingAuthorizedChannelID = nil
+        analyticsAuthorizedChannelID = nil
+        lastPublishingResult = nil
+        latestCommentPage = nil
+        latestCommentsVideoID = nil
+
+        if clearChannelSelection {
+            channels = []
+            selectedChannelID = nil
+        }
     }
 
     private func validateStoredOAuthClient(for channelID: String) throws {
