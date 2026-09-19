@@ -137,7 +137,7 @@ public struct PublishReviewContext: Sendable, Equatable {
               artifact.projectID == project.id else {
             throw PublishPackageValidationError.renderMismatch
         }
-        guard artifact.validated else {
+        guard artifact.hasCurrentTechnicalValidation else {
             throw PublishPackageValidationError.renderNotValidated
         }
         guard let qualityReview else {
