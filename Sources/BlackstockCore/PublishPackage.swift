@@ -90,6 +90,8 @@ public enum PublishPackageValidationError: Error, Sendable, Equatable {
     case rightsNotValidated
     case titleMissing
     case metadataInvalid
+    case thumbnailInvalid
+    case captionInvalid
     case publicPublishingNotAllowed
     case userConfirmationRequired
 }
@@ -165,6 +167,37 @@ public struct PublishReviewContext: Sendable, Equatable {
         } catch {
             throw PublishPackageValidationError.metadataInvalid
         }
+
+        if let thumbnail = package.thumbnail {
+            do {
+                let assessment = try ThumbnailTechnicalInspector()
+                    .inspect(url: thumbnail.fileURL)
+                guard assessment.uploadCompatible else {
+                    throw PublishPackageValidationError.thumbnailInvalid
+                }
+            } catch let validationError as PublishPackageValidationError {
+                throw validationError
+            } catch {
+                throw PublishPackageValidationError.thumbnailInvalid
+            }
+        }
+
+        for caption in package.captions {
+            let language = caption.language.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+            guard !language.isEmpty,
+                  FileManager.default.fileExists(
+                    atPath: caption.fileURL.path
+                  ),
+                  let fileSize = try? caption.fileURL.resourceValues(
+                    forKeys: [.fileSizeKey]
+                  ).fileSize,
+                  fileSize > 0 else {
+                throw PublishPackageValidationError.captionInvalid
+            }
+        }
+
         if package.metadata.privacyStatus != .privateVideo && !publicPublishingAllowed {
             throw PublishPackageValidationError.publicPublishingNotAllowed
         }

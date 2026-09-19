@@ -136,6 +136,60 @@ final class PublishPackageTests: XCTestCase {
         }
     }
 
+    func testUnreadableThumbnailBlocksPublishReview() throws {
+        let source = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("png")
+        defer { try? FileManager.default.removeItem(at: source) }
+        try Data("not-an-image".utf8).write(to: source)
+
+        let setup = makeReview(
+            privacy: .privateVideo,
+            publicPublishingAllowed: false,
+            userConfirmed: true,
+            thumbnail: PublishThumbnail(
+                fileURL: source,
+                mimeType: "image/png"
+            )
+        )
+
+        XCTAssertThrowsError(try setup.validate()) {
+            XCTAssertEqual(
+                $0 as? PublishPackageValidationError,
+                .thumbnailInvalid
+            )
+        }
+    }
+
+    func testEmptyCaptionFileBlocksPublishReview() throws {
+        let source = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("vtt")
+        defer { try? FileManager.default.removeItem(at: source) }
+        try Data().write(to: source)
+
+        let setup = makeReview(
+            privacy: .privateVideo,
+            publicPublishingAllowed: false,
+            userConfirmed: true,
+            captions: [
+                PublishCaptionTrack(
+                    language: "de",
+                    name: "Deutsch",
+                    fileURL: source,
+                    mimeType: "text/vtt"
+                )
+            ]
+        )
+
+        XCTAssertThrowsError(try setup.validate()) {
+            XCTAssertEqual(
+                $0 as? PublishPackageValidationError,
+                .captionInvalid
+            )
+        }
+    }
+
     func testQualityReviewIsMandatory() {
         let projectID = UUID()
         let project = BlackstockProject(
@@ -220,7 +274,9 @@ final class PublishPackageTests: XCTestCase {
     private func makeReview(
         privacy: YouTubePrivacyStatus,
         publicPublishingAllowed: Bool,
-        userConfirmed: Bool
+        userConfirmed: Bool,
+        thumbnail: PublishThumbnail? = nil,
+        captions: [PublishCaptionTrack] = []
     ) -> PublishReviewContext {
         let projectID = UUID()
         let project = BlackstockProject(
@@ -260,8 +316,8 @@ final class PublishPackageTests: XCTestCase {
                 privacyStatus: privacy,
                 selfDeclaredMadeForKids: false
             ),
-            thumbnail: nil,
-            captions: []
+            thumbnail: thumbnail,
+            captions: captions
         )
         return .init(
             project: project,
