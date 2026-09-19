@@ -739,12 +739,30 @@ struct StudioView: View {
                                 rightsEvidence: rightsEvidence,
                                 rightsConfirmed: rightsConfirmed
                             )
-                            if saved {
+                            if saved,
+                               let persisted = state
+                                    .supplementalCaptures
+                                    .last(where: {
+                                        $0.kind == .microphone
+                                    }) {
+                                await BlackstockCaptureHardwareAudit
+                                    .recordPersistedCapture(
+                                        kind: .microphone,
+                                        fileURL:
+                                            persisted.fileURL,
+                                        projectID: project.id
+                                    )
                                 try? FileManager.default.removeItem(
                                     at: url
                                 )
+                                BlackstockCaptureHardwareAudit
+                                    .recordTemporaryCleanup(
+                                        for: .microphone,
+                                        temporaryURL: url
+                                    )
                             }
                         } else {
+                            let previousAssetID = state.asset?.id
                             await state.importMovie(
                                 url: url,
                                 projectID: project.id,
@@ -752,11 +770,24 @@ struct StudioView: View {
                                 rightsEvidence: rightsEvidence,
                                 rightsConfirmed: rightsConfirmed
                             )
-                            if state.asset != nil {
-                                if captureKind != nil {
+                            if let imported = state.asset,
+                               imported.id != previousAssetID {
+                                if let captureKind {
+                                    await BlackstockCaptureHardwareAudit
+                                        .recordPersistedCapture(
+                                            kind: captureKind,
+                                            fileURL:
+                                                imported.sourceURL,
+                                            projectID: project.id
+                                        )
                                     try? FileManager.default.removeItem(
                                         at: url
                                     )
+                                    BlackstockCaptureHardwareAudit
+                                        .recordTemporaryCleanup(
+                                            for: captureKind,
+                                            temporaryURL: url
+                                        )
                                 }
                                 if currentStage == .production {
                                     _ = session.advanceActiveProject(
