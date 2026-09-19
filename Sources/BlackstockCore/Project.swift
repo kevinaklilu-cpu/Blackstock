@@ -4,10 +4,10 @@ public struct BlackstockProject: Codable, Sendable, Equatable, Identifiable {
     public let id: UUID
     public var title: String
     public let targetChannelID: String
-    public var stage: BlackstockStage
+    public private(set) var stage: BlackstockStage
     public let strategyVersion: Int
     public let createdAt: Date
-    public var updatedAt: Date
+    public private(set) var updatedAt: Date
 
     public init(
         id: UUID = UUID(),
