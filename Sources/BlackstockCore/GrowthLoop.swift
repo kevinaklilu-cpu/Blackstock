@@ -135,12 +135,16 @@ public struct GrowthLearningEngine: Sendable {
         var facts: [String] = []
         let a = latest.analytics
 
-        if let value = a.views { facts.append("YouTube meldet \(value) Views im Beobachtungsfenster.") }
+        if let value = a.views { facts.append("YouTube meldet \(value) Views im abgefragten YouTube-Analytics-Zeitraum.") }
         if let value = a.estimatedMinutesWatched { facts.append("YouTube meldet \(Int(value.rounded())) Minuten Wiedergabezeit.") }
         if let value = a.averageViewDuration { facts.append("YouTube meldet \(Int(value.rounded())) Sekunden durchschnittliche Wiedergabedauer.") }
         if let value = a.averageViewPercentage { facts.append("YouTube meldet \(String(format: "%.1f", value)) % durchschnittlich angesehene Videodauer.") }
         if let value = a.subscribersGained { facts.append("YouTube meldet \(value) gewonnene Abonnenten.") }
         if let value = a.subscribersLost { facts.append("YouTube meldet \(value) verlorene Abonnenten.") }
+
+        facts.append(
+            "Analytics-Zeitraum: \(a.requestedStartDate) bis \(a.requestedEndDate); Datenabruf: \(a.retrievedAt.formatted(date: .abbreviated, time: .shortened)). YouTube-Analytics können verzögert sein."
+        )
 
         return GrowthLearningRecord(
             publishedVideoID: record.id,
