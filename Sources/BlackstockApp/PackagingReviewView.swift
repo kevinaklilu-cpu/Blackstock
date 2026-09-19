@@ -717,7 +717,7 @@ struct PackagingReviewView: View {
                         set: { manualNotes[area] = $0 }
                     )
                 )
-                .accessibilityLabel("Prüfnotiz: \\(areaTitle(area))")
+                .accessibilityLabel("Prüfnotiz: \(areaTitle(area))")
                 .accessibilityHint("Konkrete Beobachtung als Prüf-Evidenz festhalten")
                 .textFieldStyle(.roundedBorder)
 
