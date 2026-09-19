@@ -10,7 +10,7 @@ final class ClosedCreatorLoopTests: XCTestCase {
             renderValidated: true,
             rightsValidated: true,
             authorizationAvailable: true,
-            quotaAvailable: true,
+            quotaState: .unknown,
             networkAvailable: true
         )
 
