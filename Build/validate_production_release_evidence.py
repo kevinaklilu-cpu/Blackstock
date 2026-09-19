@@ -45,6 +45,8 @@ required = [
     "installedAppPath",
     "installedAppVersion",
     "installedAppBuild",
+    "cameraEntitlementVerified",
+    "audioInputEntitlementVerified",
     "developerIDApplicationVerified",
     "gatekeeperApplicationAccepted",
     "notarySubmissionID",
@@ -122,6 +124,8 @@ for key in [
     "developerIDInstallerVerified",
     "staplerValidated",
     "gatekeeperInstallerAccepted",
+    "cameraEntitlementVerified",
+    "audioInputEntitlementVerified",
     "developerIDApplicationVerified",
     "gatekeeperApplicationAccepted",
 ]:
