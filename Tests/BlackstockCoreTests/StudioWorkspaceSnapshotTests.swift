@@ -34,6 +34,38 @@ final class StudioWorkspaceSnapshotTests: XCTestCase {
         XCTAssertEqual(restored, snapshot)
     }
 
+    func testSupplementalCaptureIsCopiedIntoProjectWorkspace() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let source = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("m4a")
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            try? FileManager.default.removeItem(at: source)
+        }
+
+        try Data("audio".utf8).write(to: source)
+        let projectID = UUID()
+        let assetID = UUID()
+        let destination = try ProjectWorkspaceStore(
+            rootURL: root
+        ).importSupplementalCapture(
+            sourceURL: source,
+            projectID: projectID,
+            assetID: assetID
+        )
+
+        XCTAssertTrue(
+            FileManager.default.fileExists(
+                atPath: destination.path
+            )
+        )
+        XCTAssertTrue(destination.path.contains("Captures"))
+        XCTAssertTrue(destination.path.contains(projectID.uuidString))
+        XCTAssertNotEqual(destination, source)
+    }
+
     func testImportedMediaIsCopiedIntoProjectWorkspace() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -154,6 +186,113 @@ final class StudioWorkspaceSnapshotTests: XCTestCase {
             result.migratedFromSchemaVersion,
             WorkspaceSchema.legacyUnversioned
         )
+    }
+
+    func testVersionTwoWorkspaceEnvelopeMigratesToCurrentSchema() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let projectID = UUID()
+        let snapshot = StudioWorkspaceSnapshot(
+            projectID: projectID,
+            mediaAsset: nil,
+            editGraph: EditGraph(createdAt: Date(timeIntervalSince1970: 1)),
+            activityLedger: ActivityLedger(),
+            storyboard: StoryboardPlan(
+                projectID: projectID,
+                updatedAt: Date(timeIntervalSince1970: 2)
+            ),
+            trimStart: 0,
+            trimEnd: 10,
+            transcript: nil,
+            captionURL: nil,
+            renderArtifact: nil,
+            updatedAt: Date(timeIntervalSince1970: 3)
+        )
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let snapshotData = try encoder.encode(snapshot)
+        var snapshotObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: snapshotData)
+                as? [String: Any]
+        )
+        snapshotObject.removeValue(forKey: "supplementalCaptures")
+
+        let envelope: [String: Any] = [
+            "schemaVersion": 2,
+            "snapshot": snapshotObject
+        ]
+
+        let store = ProjectWorkspaceStore(rootURL: root)
+        let directory = try store.projectDirectory(projectID: projectID)
+        let primaryURL = directory
+            .appendingPathComponent("studio-workspace.json")
+        try JSONSerialization.data(
+            withJSONObject: envelope,
+            options: [.sortedKeys]
+        ).write(to: primaryURL, options: [.atomic])
+
+        let result = try store.loadWithRecovery(projectID: projectID)
+        let restored = try XCTUnwrap(result.snapshot)
+        XCTAssertEqual(restored.supplementalCaptures, nil)
+        XCTAssertEqual(result.migratedFromSchemaVersion, 2)
+
+        try store.save(restored)
+        let migratedData = try Data(contentsOf: primaryURL)
+        let migratedObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: migratedData)
+                as? [String: Any]
+        )
+        XCTAssertEqual(
+            migratedObject["schemaVersion"] as? Int,
+            WorkspaceSchema.current
+        )
+    }
+
+    func testSupplementalCaptureRightsRoundTripInWorkspace() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let projectID = UUID()
+        let capture = SupplementalCaptureAsset(
+            projectID: projectID,
+            kind: .microphone,
+            fileURL: URL(fileURLWithPath: "/tmp/voice.m4a"),
+            mimeType: "audio/mp4",
+            rightsBasis: "Eigenes Material",
+            rightsEvidence: "Eigene Mikrofonaufnahme",
+            rightsConfirmed: true,
+            createdAt: Date(timeIntervalSince1970: 4)
+        )
+        let snapshot = StudioWorkspaceSnapshot(
+            projectID: projectID,
+            mediaAsset: nil,
+            editGraph: EditGraph(createdAt: Date(timeIntervalSince1970: 1)),
+            activityLedger: ActivityLedger(),
+            storyboard: StoryboardPlan(
+                projectID: projectID,
+                updatedAt: Date(timeIntervalSince1970: 2)
+            ),
+            trimStart: 0,
+            trimEnd: 0,
+            transcript: nil,
+            captionURL: nil,
+            renderArtifact: nil,
+            supplementalCaptures: [capture],
+            updatedAt: Date(timeIntervalSince1970: 5)
+        )
+
+        let store = ProjectWorkspaceStore(rootURL: root)
+        try store.save(snapshot)
+        let restored = try XCTUnwrap(
+            store.load(projectID: projectID)
+        )
+
+        XCTAssertEqual(restored.supplementalCaptures, [capture])
+        XCTAssertTrue(capture.mayBeUsedInProduction)
     }
 
     func testSavingAfterLegacyLoadWritesCurrentSchemaEnvelope() throws {
