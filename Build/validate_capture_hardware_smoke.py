@@ -28,6 +28,7 @@ required_root = [
     "testedAt",
     "blackstockVersion",
     "blackstockBuild",
+    "blackstockSourceCommitSHA",
     "macOSVersion",
     "hardwareModel",
     "installedFromPackage",
@@ -46,7 +47,7 @@ for key in required_root:
     if key not in data:
         fail(f"missing field: {key}")
 
-if data["schemaVersion"] != 1:
+if data["schemaVersion"] != 2:
     fail("unsupported schemaVersion")
 
 try:
@@ -60,6 +61,10 @@ for key in ["blackstockVersion", "blackstockBuild", "macOSVersion", "hardwareMod
         fail(f"{key} must not be empty")
     if value.upper() == "UNBEKANNT":
         fail(f"{key} must not be unknown")
+
+source_commit = str(data["blackstockSourceCommitSHA"]).strip().lower()
+if not re.fullmatch(r"[0-9a-f]{40}", source_commit):
+    fail("blackstockSourceCommitSHA must be a 40-character hexadecimal Git commit SHA")
 
 for key in [
     "installedFromPackage",
