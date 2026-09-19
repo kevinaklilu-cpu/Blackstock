@@ -121,6 +121,19 @@ Zusätzlich muss auf einem sauberen Mac der tatsächliche Blackstock-App-Pfad ge
 10. Blackstock neu starten;
 11. Bundle-Version und Build müssen exakt der Manifest-Zielversion entsprechen.
 
+Blackstock protokolliert diesen Pfad selbst lokal unter:
+
+`~/Library/Application Support/Blackstock/Update/update-evidence.json`
+
+Die Evidenz wird erst vollständig, wenn derselbe ältere Build ein gültiges Manifest akzeptiert hat, das Paket Hash- und Installer-Team-Prüfung bestanden hat, der macOS-Installer tatsächlich geöffnet wurde und anschließend exakt der Manifest-Ziel-Build gestartet ist.
+
+Nach dem erfolgreichen Test:
+
+```bash
+python3 Build/validate_in_app_update_evidence.py \
+  "$HOME/Library/Application Support/Blackstock/Update/update-evidence.json"
+```
+
 Die App darf bei falscher Manifest-Signatur, falschem Hash, falschem Team oder Nicht-HTTPS-URL niemals den Installer öffnen.
 
 ## 7. Gate-Regel
