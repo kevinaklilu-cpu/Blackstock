@@ -153,7 +153,7 @@ jobs:
           EVIDENCE="$RUNNER_TEMP/release-evidence.json"
           cat > "$EVIDENCE" <<'JSON'
           {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "verifiedAt": "2026-09-19T20:00:00Z",
             "manifestURL": "https://updates.blackstock.app/update-manifest.json",
             "packageURL": "https://updates.blackstock.app/Blackstock.pkg",
@@ -162,6 +162,7 @@ jobs:
             "targetVersion": "1.0.0",
             "targetBuild": 100,
             "packageSHA256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "sourceCommitSHA": "1111111111111111111111111111111111111111",
             "installerTeamID": "ABC123TEAM",
             "manifestSignatureVerified": true,
             "updateAvailabilityVerified": true,
@@ -172,6 +173,7 @@ jobs:
             "installedAppPath": "/Applications/Blackstock.app",
             "installedAppVersion": "1.0.0",
             "installedAppBuild": 100,
+            "installedAppSourceCommitSHA": "1111111111111111111111111111111111111111",
             "cameraEntitlementVerified": true,
             "audioInputEntitlementVerified": true,
             "developerIDApplicationVerified": true,
@@ -202,7 +204,7 @@ jobs:
           EVIDENCE="$RUNNER_TEMP/in-app-update-evidence.json"
           cat > "$EVIDENCE" <<'JSON'
           {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "value": {
               "id": "00000000-0000-0000-0000-000000000001",
               "currentVersion": "0.9.0",
@@ -212,6 +214,7 @@ jobs:
               "startedAt": 810000000.0,
               "targetVersion": "1.0.0",
               "targetBuild": 100,
+              "targetSourceCommitSHA": "1111111111111111111111111111111111111111",
               "packageURL": "https://updates.blackstock.app/Blackstock.pkg",
               "packageSHA256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
               "manifestVerifiedAt": 810000001.0,
@@ -220,6 +223,7 @@ jobs:
               "installerOpenedAt": 810000003.0,
               "observedInstalledVersion": "1.0.0",
               "observedInstalledBuild": 100,
+              "observedInstalledSourceCommitSHA": "1111111111111111111111111111111111111111",
               "postUpdateLaunchVerifiedAt": 810000004.0
             }
           }
@@ -259,6 +263,7 @@ jobs:
           root = pathlib.Path(sys.argv[1])
           capture_hash = sys.argv[2]
           package_hash = "a" * 64
+          source_commit = "1" * 40
 
           capture = {
               "schemaVersion": 1,
@@ -325,7 +330,7 @@ jobs:
           }
 
           release = {
-              "schemaVersion": 1,
+              "schemaVersion": 2,
               "verifiedAt": "2026-09-19T20:00:00Z",
               "manifestURL": "https://updates.blackstock.app/update-manifest.json",
               "packageURL": "https://updates.blackstock.app/Blackstock.pkg",
@@ -334,6 +339,7 @@ jobs:
               "targetVersion": "1.0.0",
               "targetBuild": 100,
               "packageSHA256": package_hash,
+              "sourceCommitSHA": source_commit,
               "installerTeamID": "ABC123TEAM",
               "manifestSignatureVerified": True,
               "updateAvailabilityVerified": True,
@@ -344,6 +350,7 @@ jobs:
               "installedAppPath": "/Applications/Blackstock.app",
               "installedAppVersion": "1.0.0",
               "installedAppBuild": 100,
+              "installedAppSourceCommitSHA": source_commit,
               "cameraEntitlementVerified": True,
               "audioInputEntitlementVerified": True,
               "developerIDApplicationVerified": True,
@@ -353,7 +360,7 @@ jobs:
           }
 
           updater = {
-              "schemaVersion": 1,
+              "schemaVersion": 2,
               "value": {
                   "id": "00000000-0000-0000-0000-000000000001",
                   "currentVersion": "0.9.0",
@@ -363,6 +370,7 @@ jobs:
                   "startedAt": 810000000.0,
                   "targetVersion": "1.0.0",
                   "targetBuild": 100,
+                  "targetSourceCommitSHA": source_commit,
                   "packageURL": "https://updates.blackstock.app/Blackstock.pkg",
                   "packageSHA256": package_hash,
                   "manifestVerifiedAt": 810000001.0,
@@ -371,6 +379,7 @@ jobs:
                   "installerOpenedAt": 810000003.0,
                   "observedInstalledVersion": "1.0.0",
                   "observedInstalledBuild": 100,
+                  "observedInstalledSourceCommitSHA": source_commit,
                   "postUpdateLaunchVerifiedAt": 810000004.0,
               },
           }
@@ -401,6 +410,24 @@ jobs:
             --production-release-evidence "$ROOT/release.json" \
             --in-app-update-evidence "$ROOT/updater.json"; then
             echo "Cross-release mismatch was unexpectedly accepted." >&2
+            exit 1
+          fi
+
+          python3 - "$ROOT/updater.json" <<'PY'
+          import json
+          import sys
+          path = sys.argv[1]
+          data = json.load(open(path))
+          data["value"]["packageSHA256"] = "a" * 64
+          data["value"]["observedInstalledSourceCommitSHA"] = "2" * 40
+          json.dump(data, open(path, "w"))
+          PY
+
+          if python3 Build/verify_market_readiness.py \
+            --capture-evidence "$ROOT/capture.json" \
+            --production-release-evidence "$ROOT/release.json" \
+            --in-app-update-evidence "$ROOT/updater.json"; then
+            echo "Source-commit mismatch was unexpectedly accepted." >&2
             exit 1
           fi
 
@@ -519,6 +546,7 @@ jobs:
             --package-url "https://updates.blackstock.invalid/Blackstock.pkg" \
             --version "0.1.0" \
             --build "1" \
+            --source-commit-sha "${GITHUB_SHA}" \
             --output "$RUNNER_TEMP/dist/update-manifest.json"
 
           test -s "$RUNNER_TEMP/dist/update-manifest.json"
@@ -527,6 +555,7 @@ jobs:
           test "$EXPECTED_SHA" = "$ACTUAL_SHA"
           test "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$RUNNER_TEMP/dist/update-manifest.json")" = "0.1.0"
           test "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["build"])' "$RUNNER_TEMP/dist/update-manifest.json")" = "1"
+          test "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sourceCommitSHA"])' "$RUNNER_TEMP/dist/update-manifest.json")" = "$GITHUB_SHA"
           test -n "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["signature"])' "$RUNNER_TEMP/dist/update-manifest.json")"
 
       - name: Install package on clean runner
