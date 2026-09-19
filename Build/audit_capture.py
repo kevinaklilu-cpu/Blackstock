@@ -76,10 +76,6 @@ requirements = {
         "state.importMovie(",
         '"Zusätzliche Aufnahmen"',
     ],
-    "Build/package.sh": [
-        "<key>NSCameraUsageDescription</key>",
-        "<key>NSMicrophoneUsageDescription</key>",
-    ],
     "Tests/BlackstockCoreTests/CaptureCapabilityTests.swift": [
         "testAllCanonicalCaptureKindsAreRepresented",
         "testSnapshotRequiresEveryCanonicalPathReady",
@@ -122,9 +118,13 @@ requirements = {
         "com.apple.security.device.audio-input",
     ],
     "Build/package.sh": [
+        "<key>NSCameraUsageDescription</key>",
+        "<key>NSMicrophoneUsageDescription</key>",
         "Build/Blackstock.entitlements",
         "--entitlements",
         "--options runtime",
+        '--sign "$APP_SIGN_IDENTITY" "$APP"',
+        '--sign - "$APP"',
     ],
     "Build/validate_capture_hardware_smoke.py": [
         "durationSeconds must be at least 5 seconds",
@@ -149,6 +149,34 @@ for relative, markers in requirements.items():
             errors.append(
                 f"{relative}: missing capture contract marker: {marker}"
             )
+
+package_script = (ROOT / "Build/package.sh").read_text(
+    encoding="utf-8"
+)
+entitlement_flag = '--entitlements "$ROOT/Build/Blackstock.entitlements"'
+if package_script.count(entitlement_flag) < 2:
+    errors.append(
+        "Build/package.sh: capture entitlements must be applied to both "
+        "Developer ID and ad-hoc app signing paths"
+    )
+
+developer_id_contract = """codesign --force --options runtime --timestamp \\
+    --entitlements "$ROOT/Build/Blackstock.entitlements" \\
+    --sign "$APP_SIGN_IDENTITY" "$APP""""
+if developer_id_contract not in package_script:
+    errors.append(
+        "Build/package.sh: Developer ID Application signing path must "
+        "include Hardened Runtime and capture entitlements"
+    )
+
+adhoc_contract = """codesign --force --deep --options runtime \\
+    --entitlements "$ROOT/Build/Blackstock.entitlements" \\
+    --sign - "$APP""""
+if adhoc_contract not in package_script:
+    errors.append(
+        "Build/package.sh: ad-hoc CI signing path must include Hardened "
+        "Runtime and capture entitlements"
+    )
 
 if errors:
     print("Capture audit failed:", file=sys.stderr)
