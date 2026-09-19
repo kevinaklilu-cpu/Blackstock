@@ -125,6 +125,7 @@ public struct PackagingExperimentRecord: Codable, Sendable, Equatable, Identifia
     public let variantIDs: [UUID]
     public let interpretation: PackagingExperimentInterpretation
     public let youtubeExperimentReference: String?
+    public let youtubeWinningVariantID: UUID?
     public let createdAt: Date
 
     public init(
@@ -133,6 +134,7 @@ public struct PackagingExperimentRecord: Codable, Sendable, Equatable, Identifia
         variantIDs: [UUID],
         interpretation: PackagingExperimentInterpretation = .awaitingYouTubeData,
         youtubeExperimentReference: String? = nil,
+        youtubeWinningVariantID: UUID? = nil,
         createdAt: Date
     ) {
         self.id = id
@@ -140,10 +142,17 @@ public struct PackagingExperimentRecord: Codable, Sendable, Equatable, Identifia
         self.variantIDs = Array(variantIDs.prefix(3))
         self.interpretation = interpretation
         self.youtubeExperimentReference = youtubeExperimentReference
+        self.youtubeWinningVariantID = youtubeWinningVariantID
         self.createdAt = createdAt
     }
 
-    public var mayClaimWinner: Bool {
-        false
+    public var mayPresentYouTubeWinner: Bool {
+        guard interpretation == .observedOnly,
+              let youtubeExperimentReference,
+              !youtubeExperimentReference.isEmpty,
+              let youtubeWinningVariantID else {
+            return false
+        }
+        return variantIDs.contains(youtubeWinningVariantID)
     }
 }
