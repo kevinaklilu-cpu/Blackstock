@@ -426,6 +426,8 @@ private final class LegacyScreenCaptureRecordingImplementation:
             appendVideo(sampleBuffer)
         case .audio:
             appendAudio(sampleBuffer)
+        case .microphone:
+            break
         @unknown default:
             break
         }
