@@ -54,6 +54,13 @@ final class BlackstockSession: ObservableObject {
     @Published var channels: [YouTubeChannelIdentity] = []
     @Published var selectedChannelID: String?
     @Published var primaryTopic = ""
+    @Published var topicDefinition = ""
+    @Published var contentPromise = ""
+    @Published var audienceHypothesis = ""
+    @Published var strategyPillars = ""
+    @Published var adjacentTopics = ""
+    @Published var excludedTopics = ""
+    @Published var strategicObjective: StrategicObjective = .balanced
     @Published var contentLanguage = "de"
     @Published var opportunities: [YouTubeOpportunityCandidate] = []
     @Published var isWorking = false
@@ -199,6 +206,13 @@ final class BlackstockSession: ObservableObject {
         channels = []
         selectedChannelID = nil
         primaryTopic = ""
+        topicDefinition = ""
+        contentPromise = ""
+        audienceHypothesis = ""
+        strategyPillars = ""
+        adjacentTopics = ""
+        excludedTopics = ""
+        strategicObjective = .balanced
         contentLanguage = "de"
         opportunities = []
         isWorking = false
@@ -1225,14 +1239,29 @@ final class BlackstockSession: ObservableObject {
     }
 
     func continueFromTopic() {
-        let value = primaryTopic.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty else {
-            errorMessage = "Lege zuerst den strategischen Kanal-Schwerpunkt fest."
-            return
+        do {
+            let draft = currentStrategyDraft()
+            try draft.validate()
+            primaryTopic = draft.primaryTopic
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            errorMessage = nil
+            step = .language
+        } catch let error as ChannelStrategyDraftValidationError {
+            switch error {
+            case .missingPrimaryTopic:
+                errorMessage = "Lege zuerst den strategischen Kanal-Schwerpunkt fest."
+            case .missingTopicDefinition:
+                errorMessage = "Beschreibe, was inhaltlich zu deinem Kanalthema gehört."
+            case .missingContentPromise:
+                errorMessage = "Formuliere ein konkretes Versprechen an die Zuschauer."
+            case .missingAudienceHypothesis:
+                errorMessage = "Beschreibe, für wen der Kanal hauptsächlich gedacht ist."
+            case .missingPillars:
+                errorMessage = "Lege mindestens eine wiederkehrende Inhaltssäule fest."
+            }
+        } catch {
+            errorMessage = "Die Kanalstrategie konnte nicht geprüft werden: \(describe(error))"
         }
-        primaryTopic = value
-        errorMessage = nil
-        step = .language
     }
 
     func prepareChannelAndLoadOpportunities() async {
@@ -1259,19 +1288,12 @@ final class BlackstockSession: ObservableObject {
                 return
             }
 
-            let strategy = ChannelStrategy(
+            let strategy = try currentStrategyDraft().makeStrategy(
                 channelID: channel.id,
-                primaryTopic: primaryTopic,
-                topicDefinition: primaryTopic,
-                contentPromise: primaryTopic,
-                pillars: [],
-                adjacentTopics: [],
-                excludedTopics: [],
                 defaultContentLanguage: contentLanguage,
-                researchLanguages: contentLanguage == "de" ? ["de", "en"] : [contentLanguage],
-                audienceHypothesis: "",
-                objectives: [.balanced],
-                explorationPolicy: .init(),
+                researchLanguages: contentLanguage == "de"
+                    ? ["de", "en"]
+                    : [contentLanguage],
                 effectiveFrom: Date(),
                 version: nextStrategyVersion(for: channel.id)
             )
@@ -1385,6 +1407,13 @@ final class BlackstockSession: ObservableObject {
         UserDefaults.standard.removeObject(forKey: "blackstock.workspace.primaryTopic")
         UserDefaults.standard.removeObject(forKey: "blackstock.workspace.contentLanguage")
         primaryTopic = ""
+        topicDefinition = ""
+        contentPromise = ""
+        audienceHypothesis = ""
+        strategyPillars = ""
+        adjacentTopics = ""
+        excludedTopics = ""
+        strategicObjective = .balanced
         contentLanguage = "de"
         step = .welcome
         channels = []
@@ -1394,6 +1423,19 @@ final class BlackstockSession: ObservableObject {
         latestCommentsVideoID = nil
         isLoadingComments = false
         errorMessage = nil
+    }
+
+    private func currentStrategyDraft() -> ChannelStrategyDraft {
+        ChannelStrategyDraft(
+            primaryTopic: primaryTopic,
+            topicDefinition: topicDefinition,
+            contentPromise: contentPromise,
+            pillars: ChannelStrategyDraft.parseList(strategyPillars),
+            adjacentTopics: ChannelStrategyDraft.parseList(adjacentTopics),
+            excludedTopics: ChannelStrategyDraft.parseList(excludedTopics),
+            audienceHypothesis: audienceHypothesis,
+            objective: strategicObjective
+        )
     }
 
     private func storedStrategyVersion(for channelID: String) -> Int {
