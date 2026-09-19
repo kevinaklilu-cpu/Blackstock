@@ -3,6 +3,8 @@ import XCTest
 
 final class InAppUpdateEvidenceTests:
     XCTestCase {
+    private let sourceCommitSHA =
+        String(repeating: "1", count: 40)
 
     func testVerifiedUpdateCompletesOnlyAfterTargetBuildLaunch()
         throws {
@@ -69,6 +71,8 @@ final class InAppUpdateEvidenceTests:
                 .recordPostUpdateLaunchIfMatching(
                     installedVersion: "0.9.0",
                     installedBuild: 90,
+                    installedSourceCommitSHA:
+                        sourceCommitSHA,
                     now: Date(
                         timeIntervalSinceReferenceDate:
                             104
@@ -84,6 +88,8 @@ final class InAppUpdateEvidenceTests:
                 .recordPostUpdateLaunchIfMatching(
                     installedVersion: "1.0.0",
                     installedBuild: 100,
+                    installedSourceCommitSHA:
+                        sourceCommitSHA,
                     now: Date(
                         timeIntervalSinceReferenceDate:
                             105.875
@@ -103,6 +109,10 @@ final class InAppUpdateEvidenceTests:
         XCTAssertEqual(
             reloaded?.observedInstalledBuild,
             100
+        )
+        XCTAssertEqual(
+            reloaded?.observedInstalledSourceCommitSHA,
+            sourceCommitSHA
         )
     }
 
@@ -283,6 +293,7 @@ final class InAppUpdateEvidenceTests:
                 repeating: "a",
                 count: 64
             ),
+            sourceCommitSHA: sourceCommitSHA,
             publishedAt: Date(
                 timeIntervalSince1970:
                     1_789_000_000
