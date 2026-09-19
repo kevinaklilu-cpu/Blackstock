@@ -112,7 +112,7 @@ struct PackagingReviewView: View {
                 initialValue: [
                     PublishCaptionTrack(
                         language: language,
-                        name: "Blackstock Captions",
+                        name: "Blackstock Untertitel",
                         fileURL: generatedCaptionURL,
                         mimeType: Self.captionMIMEType(for: generatedCaptionURL)
                     )
@@ -288,7 +288,7 @@ struct PackagingReviewView: View {
                     captionTracks = [
                         PublishCaptionTrack(
                             language: language,
-                            name: "Blackstock Captions",
+                            name: "Blackstock Untertitel",
                             fileURL: durableURL,
                             mimeType: Self.captionMIMEType(for: durableURL)
                         )
@@ -449,7 +449,7 @@ struct PackagingReviewView: View {
     }
 
     private var packagingAssetsSection: some View {
-        GroupBox("Thumbnail & Captions") {
+        GroupBox("Vorschaubild & Untertitel") {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
@@ -566,7 +566,7 @@ struct PackagingReviewView: View {
     ) -> String {
         switch finding {
         case .belowRecommendedMinimumWidth:
-            return "YouTube empfiehlt für Video-Thumbnails mindestens 640 px Breite."
+            return "YouTube empfiehlt für Video-Vorschaubilder mindestens 640 px Breite."
         case .notSixteenByNine:
             return "Für normale Videos empfiehlt YouTube 16:9."
         }
@@ -782,7 +782,7 @@ struct PackagingReviewView: View {
         case .packaging: return "Veröffentlichungspaket"
         case .retentionStructure: return "Zuschauerbindungs-Struktur"
         case .audio: return "Audio"
-        case .captions: return "Captions"
+        case .captions: return "Untertitel"
         case .visualComposition: return "Visuals"
         case .demandFit: return "Demand Fit"
         case .rightsAndPolicy: return "Rechte & Policy"
@@ -799,7 +799,7 @@ struct PackagingReviewView: View {
         case .audio:
             return "Ist Sprache verständlich, ohne hörbares Clipping, störende Pegelsprünge oder dominante Nebengeräusche?"
         case .captions:
-            return "Stimmen Captions bei einer Stichprobe mit dem gesprochenen Inhalt und Timing überein?"
+            return "Stimmen die Untertitel bei einer Stichprobe mit dem gesprochenen Inhalt und Timing überein?"
         case .visualComposition:
             return "Sind Motiv, Crop, Overlays und Lesbarkeit über die relevanten Abschnitte visuell sauber?"
         case .demandFit:
@@ -852,7 +852,7 @@ struct PackagingReviewView: View {
                     area: .audio
                 )
                 qualityRow(
-                    title: "Captions",
+                    title: "Untertitel",
                     area: .captions
                 )
                 qualityRow(
