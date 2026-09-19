@@ -225,6 +225,10 @@ def main():
             "package SHA-256 values"
         )
 
+    capture_source_commit = normalize_source_commit(
+        capture.get("blackstockSourceCommitSHA"),
+        "capture.blackstockSourceCommitSHA",
+    )
     release_source_commit = normalize_source_commit(
         release.get("sourceCommitSHA"),
         "release.sourceCommitSHA",
@@ -242,6 +246,7 @@ def main():
         "updater.observedInstalledSourceCommitSHA",
     )
     source_commits = {
+        capture_source_commit,
         release_source_commit,
         installed_source_commit,
         updater_target_source_commit,
@@ -249,8 +254,8 @@ def main():
     }
     if len(source_commits) != 1:
         fail(
-            "production release and updater evidence do not refer to "
-            "the same exact source commit"
+            "capture, production release and updater evidence do not "
+            "refer to the same exact source commit"
         )
 
     if release.get("installedAppPath") != "/Applications/Blackstock.app":
