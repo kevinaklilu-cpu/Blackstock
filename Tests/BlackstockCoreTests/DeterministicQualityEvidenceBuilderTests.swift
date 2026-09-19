@@ -169,12 +169,14 @@ final class DeterministicQualityEvidenceBuilderTests: XCTestCase {
 
         XCTAssertTrue(
             review.evidence.contains {
-                $0.source == "Blackstock Local Audio Technical Inspector"
+                $0.source == "Blackstock Final Render Audio Technical Inspector"
+                && $0.reference == artifact.id.uuidString
             }
         )
         XCTAssertTrue(
             review.evidence.contains {
-                $0.source == "Blackstock Local PCM Analyzer"
+                $0.source == "Blackstock Final Render PCM Analyzer"
+                && $0.reference == artifact.id.uuidString
             }
         )
         XCTAssertFalse(review.coveredAreas.contains(.audio))
