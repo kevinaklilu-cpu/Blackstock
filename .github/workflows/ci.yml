@@ -232,6 +232,168 @@ jobs:
             exit 1
           fi
 
+      - name: Market-readiness verifier contract audit
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/market-readiness"
+          mkdir -p "$ROOT"
+          CAMERA="$ROOT/camera.mov"
+          MICROPHONE="$ROOT/microphone.m4a"
+          SCREEN="$ROOT/screen.mp4"
+          printf x > "$CAMERA"
+          printf x > "$MICROPHONE"
+          printf x > "$SCREEN"
+          HASH="$(shasum -a 256 "$CAMERA" | awk '{print $1}')"
+
+          python3 - "$ROOT" "$HASH" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          root = pathlib.Path(sys.argv[1])
+          capture_hash = sys.argv[2]
+          package_hash = "a" * 64
+
+          capture = {
+              "schemaVersion": 1,
+              "testedAt": "2026-09-19T20:00:00Z",
+              "blackstockVersion": "1.0.0",
+              "blackstockBuild": "100",
+              "macOSVersion": "macOS 26.6.2",
+              "hardwareModel": "MacBookProTest",
+              "installedFromPackage": True,
+              "camera": {
+                  "permissionGranted": True,
+                  "recordingCreated": True,
+                  "durationSeconds": 5.2,
+                  "persistedToProject": True,
+                  "videoTrackPresent": True,
+                  "projectID": "00000000-0000-0000-0000-000000000101",
+                  "recordedLaunchID": "00000000-0000-0000-0000-000000000201",
+                  "persistedFilePath": str(root / "camera.mov"),
+                  "persistedFileSHA256": capture_hash,
+              },
+              "microphone": {
+                  "permissionGranted": True,
+                  "recordingCreated": True,
+                  "durationSeconds": 5.1,
+                  "persistedToProject": True,
+                  "decodedSamples": 24000,
+                  "projectID": "00000000-0000-0000-0000-000000000102",
+                  "recordedLaunchID": "00000000-0000-0000-0000-000000000202",
+                  "persistedFilePath": str(root / "microphone.m4a"),
+                  "persistedFileSHA256": capture_hash,
+              },
+              "screen": {
+                  "permissionGranted": True,
+                  "recordingCreated": True,
+                  "durationSeconds": 5.4,
+                  "persistedToProject": True,
+                  "videoTrackPresent": True,
+                  "projectID": "00000000-0000-0000-0000-000000000103",
+                  "recordedLaunchID": "00000000-0000-0000-0000-000000000203",
+                  "persistedFilePath": str(root / "screen.mp4"),
+                  "persistedFileSHA256": capture_hash,
+              },
+              "systemAudio": {
+                  "permissionGranted": True,
+                  "recordingCreated": True,
+                  "durationSeconds": 5.4,
+                  "persistedToProject": True,
+                  "decodedSamples": 48000,
+                  "projectID": "00000000-0000-0000-0000-000000000103",
+                  "recordedLaunchID": "00000000-0000-0000-0000-000000000203",
+                  "persistedFilePath": str(root / "screen.mp4"),
+                  "persistedFileSHA256": capture_hash,
+              },
+              "deniedPermissionHardStopPassed": True,
+              "temporaryCleanupPassed": True,
+              "appRestartPersistencePassed": True,
+              "restartVerifiedLaunchID": "00000000-0000-0000-0000-000000000301",
+              "deniedPermissionKinds": [
+                  "camera", "microphone", "screen", "systemAudio"
+              ],
+              "temporaryCleanupKinds": [
+                  "camera", "microphone", "screen", "systemAudio"
+              ],
+          }
+
+          release = {
+              "schemaVersion": 1,
+              "verifiedAt": "2026-09-19T20:00:00Z",
+              "manifestURL": "https://updates.blackstock.app/update-manifest.json",
+              "packageURL": "https://updates.blackstock.app/Blackstock.pkg",
+              "currentVersion": "0.9.0",
+              "currentBuild": 90,
+              "targetVersion": "1.0.0",
+              "targetBuild": 100,
+              "packageSHA256": package_hash,
+              "installerTeamID": "ABC123TEAM",
+              "manifestSignatureVerified": True,
+              "updateAvailabilityVerified": True,
+              "packageHashVerified": True,
+              "developerIDInstallerVerified": True,
+              "staplerValidated": True,
+              "gatekeeperInstallerAccepted": True,
+              "installedAppPath": "/Applications/Blackstock.app",
+              "developerIDApplicationVerified": True,
+              "gatekeeperApplicationAccepted": True,
+              "notarySubmissionID": "00000000-0000-0000-0000-000000000001",
+              "notaryStatus": "Accepted",
+          }
+
+          updater = {
+              "schemaVersion": 1,
+              "value": {
+                  "id": "00000000-0000-0000-0000-000000000001",
+                  "currentVersion": "0.9.0",
+                  "currentBuild": 90,
+                  "manifestURL": "https://updates.blackstock.app/update-manifest.json",
+                  "expectedInstallerTeamID": "ABC123TEAM",
+                  "startedAt": 810000000.0,
+                  "targetVersion": "1.0.0",
+                  "targetBuild": 100,
+                  "packageURL": "https://updates.blackstock.app/Blackstock.pkg",
+                  "packageSHA256": package_hash,
+                  "manifestVerifiedAt": 810000001.0,
+                  "packageIntegrityVerifiedAt": 810000002.0,
+                  "installerTeamVerifiedAt": 810000002.0,
+                  "installerOpenedAt": 810000003.0,
+                  "observedInstalledVersion": "1.0.0",
+                  "observedInstalledBuild": 100,
+                  "postUpdateLaunchVerifiedAt": 810000004.0,
+              },
+          }
+
+          (root / "capture.json").write_text(json.dumps(capture))
+          (root / "release.json").write_text(json.dumps(release))
+          (root / "updater.json").write_text(json.dumps(updater))
+          PY
+
+          python3 Build/verify_market_readiness.py \
+            --capture-evidence "$ROOT/capture.json" \
+            --production-release-evidence "$ROOT/release.json" \
+            --in-app-update-evidence "$ROOT/updater.json" \
+            --output "$ROOT/market-readiness.json"
+          grep -q '"ready": true' "$ROOT/market-readiness.json"
+
+          python3 - "$ROOT/updater.json" <<'PY'
+          import json
+          import sys
+          path = sys.argv[1]
+          data = json.load(open(path))
+          data["value"]["packageSHA256"] = "b" * 64
+          json.dump(data, open(path, "w"))
+          PY
+
+          if python3 Build/verify_market_readiness.py \
+            --capture-evidence "$ROOT/capture.json" \
+            --production-release-evidence "$ROOT/release.json" \
+            --in-app-update-evidence "$ROOT/updater.json"; then
+            echo "Cross-release mismatch was unexpectedly accepted." >&2
+            exit 1
+          fi
+
       - name: Swift tests
         run: swift test
       - name: Release build
