@@ -272,7 +272,9 @@ struct PackagingReviewView: View {
         }
         .fileImporter(
             isPresented: $showCaptionImporter,
-            allowedContentTypes: [UTType(filenameExtension: "vtt") ?? .plainText, .plainText],
+            allowedContentTypes: ["vtt", "srt"].compactMap {
+                UTType(filenameExtension: $0)
+            },
             allowsMultipleSelection: false
         ) { result in
             if case .success(let urls) = result, let url = urls.first {
