@@ -15,7 +15,7 @@ Statuswerte: **PASS / FAIL / BLOCKED_EXTERNAL**.
 | Rights | FAIL |
 | Capture | FAIL |
 | Editing | FAIL |
-| Audio | PASS |
+| Audio | FAIL |
 | Captions | PASS |
 | Packaging | PASS |
 | Video QC / 4K | PASS |
@@ -24,9 +24,9 @@ Statuswerte: **PASS / FAIL / BLOCKED_EXTERNAL**.
 | Upload Resume | PASS |
 | Analytics | PASS |
 | Comments | PASS |
-| Security | PASS |
-| Privacy | PASS |
-| Accessibility | PASS |
+| Security | FAIL |
+| Privacy | FAIL |
+| Accessibility | FAIL |
 | Recovery | PASS |
 | Migration | PASS |
 | Installer | PASS |
@@ -46,7 +46,7 @@ Hinweis: **Upload Resume = PASS** basiert auf dem deterministischen Resumable-Up
 
 Hinweis: **Analytics = PASS** basiert auf den deterministischen YouTube-Analytics-Contract- und Kontexttests: Abrufe sind an ein veröffentlichtes Projekt, denselben Projekt-Datensatz, denselben Zielkanal und eine konkrete Video-ID gebunden; vor dem Abruf wird die aktuell autorisierte YouTube-Kanalidentität erneut validiert. Fehlende Provider-Zeilen bleiben fehlend statt als Nullwerte erfunden zu werden, und inkonsistente Responses führen zum Hard-Stop.
 
-Hinweis: **Audio = PASS** basiert auf Messungen des finalen gerenderten Edits, nicht des Rohmaterials: Blackstock prüft Audiospur, Sample-Rate und Kanalzahl und analysiert lokal PCM-Samples für Peak, RMS und Full-Scale-Samples. Fehlende Audiospur oder eine Analyse ohne Samples sind Blocker; mögliche Qualitätsprobleme bleiben als Warnungen und eine hörbare Prüfung auf Verständlichkeit, Störgeräusche und Pegelsprünge bleibt explizite Review-Evidenz. Peak/RMS werden nicht fälschlich als LUFS ausgegeben.
+Hinweis: **Audio bleibt FAIL**. Bereits vorhanden und belegt sind Messungen des finalen gerenderten Edits, nicht des Rohmaterials: Blackstock prüft Audiospur, Sample-Rate und Kanalzahl und analysiert lokal PCM-Samples für Peak, RMS und Full-Scale-Samples. Fehlende Audiospur oder eine Analyse ohne Samples sind Blocker; mögliche Qualitätsprobleme bleiben als Warnungen und eine hörbare Prüfung auf Verständlichkeit, Störgeräusche und Pegelsprünge bleibt explizite Review-Evidenz. Peak/RMS werden nicht fälschlich als LUFS ausgegeben.
 
 Hinweis: **Captions = PASS** basiert auf der transkribierten editierten Timeline, nicht auf dem ungeänderten Quellmedium. WebVTT/SRT werden vor dem Review technisch validiert; ungültige UTF-8-Daten, fehlende/ungültige Timings, leere Cues, nicht-monotone Reihenfolge und Überlappungen blockieren die Veröffentlichung. Caption-Uploads laufen zusätzlich journaled/idempotent über den gebundenen YouTube-Publishing-Pfad.
 
@@ -56,16 +56,18 @@ Hinweis: **Video QC / 4K = PASS** basiert auf dem realen lokalen AVFoundation-Re
 
 Hinweis: **Publishing = PASS** bezieht sich auf den sicheren kanonischen YouTube-Pfad: vollständiger Review-/Rights-/Render-/Packaging-Preflight, echte Netzwerkprüfung, unmittelbar erneute Verifikation genau eines autorisierten Projekt-Zielkanals, finaler ausdrücklicher Nutzer-Confirm, resumable/idempotenter Upload und journaled Thumbnail-/Caption-Aktionen. Public/Unlisted bleibt zusätzlich hinter dem separat auditierten Build-Flag gesperrt; ohne dieses Flag ist nur der freigegebene private Publish-Pfad zulässig.
 
-Hinweis: **Accessibility = PASS** basiert auf expliziter VoiceOver-Semantik für die kritischen First-Run-, Studio- und Veröffentlichungsprüfungs-Kontrollen, inklusive dynamischer Accessibility-Werte für Trim-/Reframe-Regler sowie Beschriftungen für icon-only Aktionen und Controls mit ausgeblendeten sichtbaren Labels. Die Canonical-CI führt zusätzlich `Build/audit_accessibility.py` aus und blockiert Regressionen bei diesen Semantik-Verträgen.
+Hinweis: **Accessibility bleibt FAIL**. Bereits vorhanden und CI-abgesichert sind expliziter VoiceOver-Semantik für die kritischen First-Run-, Studio- und Veröffentlichungsprüfungs-Kontrollen, inklusive dynamischer Accessibility-Werte für Trim-/Reframe-Regler sowie Beschriftungen für icon-only Aktionen und Controls mit ausgeblendeten sichtbaren Labels. Die Canonical-CI führt zusätzlich `Build/audit_accessibility.py` aus und blockiert Regressionen bei diesen Semantik-Verträgen.
 
-Hinweis: **Security = PASS** bezieht sich auf die deterministisch abgesicherten App-Pfade: Google Desktop OAuth verwendet PKCE S256 und zufälligen State, der Callback lauscht ausschließlich auf 127.0.0.1 und akzeptiert nur den erwarteten Callback-Pfad, OAuth-Berechtigungen werden capability-basiert minimiert und bei Erweiterung neu autorisiert, Tokens/Scopes/OAuth-Client-Bindung liegen im gerätegebundenen macOS-Keychain mit Zugriff nur im entsperrten Zustand, und ein Wechsel der OAuth-Client-ID invalidiert die bestehende Autorisierung. Zusätzlich sind Update-Manifest, Paket-Hash und Developer-ID-Installer-Team kryptografisch bzw. systemseitig gebunden. Die separaten Apple-Gates Signing, Notarization und Gatekeeper bleiben davon unberührt und weiterhin BLOCKED_EXTERNAL.
+Hinweis: **Security bleibt FAIL**. Bereits umgesetzt sind die deterministisch abgesicherten App-Pfade: Google Desktop OAuth verwendet PKCE S256 und zufälligen State, der Callback lauscht ausschließlich auf 127.0.0.1 und akzeptiert nur den erwarteten Callback-Pfad, OAuth-Berechtigungen werden capability-basiert minimiert und bei Erweiterung neu autorisiert, Tokens/Scopes/OAuth-Client-Bindung liegen im gerätegebundenen macOS-Keychain mit Zugriff nur im entsperrten Zustand, und ein Wechsel der OAuth-Client-ID invalidiert die bestehende Autorisierung. Zusätzlich sind Update-Manifest, Paket-Hash und Developer-ID-Installer-Team kryptografisch bzw. systemseitig gebunden. Die separaten Apple-Gates Signing, Notarization und Gatekeeper bleiben davon unberührt und weiterhin BLOCKED_EXTERNAL.
 
-Hinweis: **Privacy = PASS** basiert auf lokaler Datenhaltung, gerätegebundenem Keychain für Google-/YouTube-Zugangsdaten, sicherem OAuth-JSON-Import ohne Persistenz des client_secret, nichtpersistentem WebKit-Speicher für eingebettete YouTube-Recherche mit youtube-nocookie.com sowie einer bestätigungspflichtigen Löschfunktion, die Blackstock-Keychain-Einträge, blackstock.*-Einstellungen und den lokalen Application-Support-Datenbaum entfernt und Teilfehler sichtbar meldet.
+Hinweis: **Privacy bleibt FAIL**. Bereits umgesetzt sind lokaler Datenhaltung, gerätegebundenem Keychain für Google-/YouTube-Zugangsdaten, sicherem OAuth-JSON-Import ohne Persistenz des client_secret, nichtpersistentem WebKit-Speicher für eingebettete YouTube-Recherche mit youtube-nocookie.com sowie einer bestätigungspflichtigen Löschfunktion, die Blackstock-Keychain-Einträge, blackstock.*-Einstellungen und den lokalen Application-Support-Datenbaum entfernt und Teilfehler sichtbar meldet.
 
 Hinweis: **Recovery = PASS** basiert auf validierter lokaler Workspace-Wiederherstellung: Vor einem neuen atomaren Save wird nur ein lesbarer, zum Projekt gehörender Primärstand als Backup gesichert. Ist der Primärstand beschädigt, lädt Blackstock den letzten validierten Backup-Stand, protokolliert die Wiederherstellung im Activity Ledger und persistiert den wiederhergestellten Zustand erneut. Ein beschädigter Primärstand darf ein vorhandenes valides Backup nicht überschreiben.
 
 Hinweis: **Migration = PASS** basiert auf versionierter Persistenz für Studio-Workspace, Publish-Preparation sowie Published-/Growth-Learning-Daten. Unversionierte Legacy-Dateien werden deterministisch auf das aktuelle Schema migriert und erneut atomar gespeichert; unbekannte Future-Schema-Versionen führen zum Hard-Stop statt zu stiller Fehlinterpretation.
 
 Hinweis: **Updater = FAIL** bleibt absichtlich bestehen. Manifest-Signatur, HTTPS-Pflicht, SHA-256-Paketprüfung und Developer-ID-Installer-Teamprüfung sind implementiert; für PASS fehlen weiterhin eine reale Produktions-Endpoint-Konfiguration und ein vollständiger Update-E2E gegen ein tatsächlich signiertes Release.
+
+Hinweis zur strikten Gate-Auslegung: **Audio** benötigt zusätzlich den im Canonical-Gate geforderten professionellen Audio-Toolset-Nachweis; **Security** benötigt Threat Model plus Security-Test-Suite; **Privacy** benötigt zusätzlich Revoke/Export/Retention; **Accessibility** benötigt zusätzlich Keyboard-/Focus-, Reduced-Motion-, Contrast- und Text-Scaling-Nachweise. Die vorhandenen Teilimplementierungen bleiben erhalten, reichen aber bewusst nicht für PASS.
 
 **STATUS: NOCH NICHT MARKTREIF**
