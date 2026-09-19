@@ -12,6 +12,7 @@ struct PackagingReviewView: View {
     let generatedCaptionURL: URL?
     let audioTechnicalAssessment: AudioTechnicalAssessment?
     let audioSignalAssessment: AudioSignalAssessment?
+    let storyboard: StoryboardPlan?
 
     @Environment(\.dismiss) private var dismiss
 
@@ -27,6 +28,7 @@ struct PackagingReviewView: View {
     @State private var manualChecks: Set<CreatorQualityArea> = []
     @State private var persistedReview: CreatorQualityReview?
     @State private var manualNotes: [CreatorQualityArea: String] = [:]
+    @State private var useStoryboardChapters = false
 
     private let requiredQualityAreas: Set<CreatorQualityArea> = [
         .packaging,
@@ -46,7 +48,8 @@ struct PackagingReviewView: View {
         transcript: LocalTranscript?,
         generatedCaptionURL: URL?,
         audioTechnicalAssessment: AudioTechnicalAssessment?,
-        audioSignalAssessment: AudioSignalAssessment?
+        audioSignalAssessment: AudioSignalAssessment?,
+        storyboard: StoryboardPlan?
     ) {
         self.session = session
         self.project = project
@@ -56,6 +59,7 @@ struct PackagingReviewView: View {
         self.generatedCaptionURL = generatedCaptionURL
         self.audioTechnicalAssessment = audioTechnicalAssessment
         self.audioSignalAssessment = audioSignalAssessment
+        self.storyboard = storyboard
         let saved = session.loadPublishPreparation(
             projectID: project.id
         )
@@ -173,7 +177,7 @@ struct PackagingReviewView: View {
             renderArtifactID: artifact.id,
             metadata: .init(
                 title: title.trimmingCharacters(in: .whitespacesAndNewlines),
-                description: description,
+                description: effectiveDescription,
                 tags: tagsArray,
                 categoryID: nil,
                 privacyStatus: privacyStatus,
@@ -195,6 +199,7 @@ struct PackagingReviewView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     header
                     metadataSection
+                    chaptersSection
                     packagingAssetsSection
                     manualReviewSection
                     targetSection
@@ -287,6 +292,97 @@ struct PackagingReviewView: View {
             }
             .padding(.vertical, 6)
             .disabled(reviewFrozen)
+        }
+    }
+
+    private var storyboardChapters: [YouTubeChapter] {
+        guard let storyboard else { return [] }
+        return StoryboardChapterBuilder().build(from: storyboard)
+    }
+
+    private var chapterValidationError: YouTubeChapterValidationError? {
+        do {
+            try YouTubeChapterValidator().validate(
+                storyboardChapters,
+                videoDurationSeconds: asset.durationSeconds
+            )
+            return nil
+        } catch let error as YouTubeChapterValidationError {
+            return error
+        } catch {
+            return .fewerThanThreeChapters
+        }
+    }
+
+    private var effectiveDescription: String {
+        guard useStoryboardChapters,
+              chapterValidationError == nil else {
+            return description
+        }
+        return YouTubeDescriptionComposer().appendingChapters(
+            description: description,
+            chapters: storyboardChapters
+        )
+    }
+
+    private var chaptersSection: some View {
+        GroupBox("Kapitel") {
+            VStack(alignment: .leading, spacing: 10) {
+                Toggle(
+                    "Kapitel aus dem Storyboard in die Beschreibung übernehmen",
+                    isOn: $useStoryboardChapters
+                )
+                .disabled(
+                    reviewFrozen
+                    || storyboardChapters.isEmpty
+                    || chapterValidationError != nil
+                )
+
+                if storyboardChapters.isEmpty {
+                    Text("Noch keine Storyboard-Beats mit Zeitbereichen vorhanden.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if let error = chapterValidationError {
+                    Label(
+                        chapterValidationMessage(error),
+                        systemImage: "exclamationmark.triangle"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                } else {
+                    ForEach(storyboardChapters) { chapter in
+                        HStack {
+                            Text(YouTubeDescriptionComposer.timestamp(chapter.startSeconds))
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                            Text(chapter.title)
+                                .font(.caption)
+                            Spacer()
+                        }
+                    }
+                    Text("Validiert: 00:00-Start, mindestens drei Kapitel, aufsteigend und jeweils mindestens zehn Sekunden.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.vertical, 6)
+        }
+    }
+
+    private func chapterValidationMessage(
+        _ error: YouTubeChapterValidationError
+    ) -> String {
+        switch error {
+        case .fewerThanThreeChapters:
+            return "YouTube benötigt mindestens drei Kapitel."
+        case .firstChapterMustStartAtZero:
+            return "Das erste Kapitel muss bei 00:00 beginnen."
+        case .nonAscendingTimestamps:
+            return "Kapitel müssen zeitlich streng aufsteigend sein."
+        case .chapterShorterThanTenSeconds(let index):
+            return "Kapitel \(index + 1) ist kürzer als zehn Sekunden."
+        case .emptyTitle(let index):
+            return "Kapitel \(index + 1) hat keinen Titel."
         }
     }
 
