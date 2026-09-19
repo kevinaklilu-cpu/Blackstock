@@ -11,6 +11,8 @@ requirements = {
         "recordPackageVerified",
         "recordInstallerOpened",
         "recordPostUpdateLaunchIfMatching",
+        "targetSourceCommitSHA",
+        "observedInstalledSourceCommitSHA",
         "postUpdateLaunchVerifiedAt",
         "isComplete",
     ],
@@ -50,6 +52,8 @@ requirements = {
     ],
     "Build/validate_in_app_update_evidence.py": [
         "observedInstalledVersion",
+        "targetSourceCommitSHA",
+        "observedInstalledSourceCommitSHA",
         "postUpdateLaunchVerifiedAt",
         "must use a real production host",
     ],
@@ -61,6 +65,9 @@ requirements = {
         "stapler",
         "notarytool",
         "spctl",
+        "sourceCommitSHA",
+        "installedAppSourceCommitSHA",
+        "BlackstockSourceCommitSHA",
     ],
     "Build/validate_production_release_evidence.py": [
         "developerIDInstallerVerified",
