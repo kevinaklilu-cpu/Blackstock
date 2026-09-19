@@ -6,6 +6,7 @@ public struct BlackstockUpdateManifest: Codable, Sendable, Equatable {
     public let build: Int
     public let packageURL: URL
     public let sha256: String
+    public let sourceCommitSHA: String
     public let publishedAt: Date
     public let signature: String
 
@@ -14,6 +15,7 @@ public struct BlackstockUpdateManifest: Codable, Sendable, Equatable {
         build: Int,
         packageURL: URL,
         sha256: String,
+        sourceCommitSHA: String,
         publishedAt: Date,
         signature: String
     ) {
@@ -21,6 +23,7 @@ public struct BlackstockUpdateManifest: Codable, Sendable, Equatable {
         self.build = build
         self.packageURL = packageURL
         self.sha256 = sha256.lowercased()
+        self.sourceCommitSHA = sourceCommitSHA.lowercased()
         self.publishedAt = publishedAt
         self.signature = signature
     }
@@ -33,6 +36,7 @@ public struct BlackstockUpdateManifest: Codable, Sendable, Equatable {
                 String(build),
                 packageURL.absoluteString,
                 sha256.lowercased(),
+                sourceCommitSHA.lowercased(),
                 timestamp
             ]
             .joined(separator: "\n")
@@ -46,6 +50,7 @@ public enum UpdateManifestValidationError: Error, Sendable, Equatable {
     case invalidBuild
     case packageURLMustUseHTTPS
     case invalidSHA256
+    case invalidSourceCommitSHA
     case invalidPublicKey
     case invalidSignatureEncoding
     case invalidSignature
@@ -75,6 +80,10 @@ public struct UpdateManifestVerifier: Sendable {
         guard manifest.sha256.count == 64,
               manifest.sha256.allSatisfy({ $0.isHexDigit }) else {
             throw UpdateManifestValidationError.invalidSHA256
+        }
+        guard manifest.sourceCommitSHA.count == 40,
+              manifest.sourceCommitSHA.allSatisfy({ $0.isHexDigit }) else {
+            throw UpdateManifestValidationError.invalidSourceCommitSHA
         }
         guard let publicKeyData = Data(base64Encoded: publicKeyBase64),
               let publicKey = try? Curve25519.Signing.PublicKey(
