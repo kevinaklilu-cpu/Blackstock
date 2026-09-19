@@ -226,7 +226,7 @@ final class BlackstockSession: ObservableObject {
             localDirectoriesRemoved = report.directoryCount
         } catch {
             failures.append(
-                "Lokale Projekt-/Growth-Daten konnten nicht vollständig entfernt werden: \(describe(error))"
+                "Lokale Projekt-/Wachstumsdaten konnten nicht vollständig entfernt werden: \(describe(error))"
             )
         }
 
