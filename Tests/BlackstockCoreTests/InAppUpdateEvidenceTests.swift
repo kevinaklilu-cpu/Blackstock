@@ -73,6 +73,8 @@ final class InAppUpdateEvidenceTests:
                     installedBuild: 90,
                     installedSourceCommitSHA:
                         sourceCommitSHA,
+                    installedExecutableSHA256:
+                        String(repeating: "a", count: 64),
                     now: Date(
                         timeIntervalSinceReferenceDate:
                             104
@@ -90,6 +92,8 @@ final class InAppUpdateEvidenceTests:
                     installedBuild: 100,
                     installedSourceCommitSHA:
                         sourceCommitSHA,
+                    installedExecutableSHA256:
+                        String(repeating: "a", count: 64),
                     now: Date(
                         timeIntervalSinceReferenceDate:
                             105.875
@@ -113,6 +117,10 @@ final class InAppUpdateEvidenceTests:
         XCTAssertEqual(
             reloaded?.observedInstalledSourceCommitSHA,
             sourceCommitSHA
+        )
+        XCTAssertEqual(
+            reloaded?.observedInstalledExecutableSHA256,
+            String(repeating: "a", count: 64)
         )
     }
 
