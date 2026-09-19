@@ -29,6 +29,10 @@ final class StudioState: ObservableObject {
     @Published var reframeFocalY: Double = 0.5
     @Published var isSuggestingFocalPoint = false
     @Published var focalPointProposal: VisionFocalPointProposal?
+    @Published var transcriptStructure: TranscriptStructureSnapshot?
+    @Published var retentionAdvisory: LocalRetentionAdvisory?
+    @Published var retentionAdvisorAvailability: LocalRetentionAdvisorAvailability?
+    @Published var isAnalyzingRetention = false
 
     private var correlationID = UUID()
 
@@ -83,6 +87,9 @@ final class StudioState: ObservableObject {
             renderArtifact = nil
             transcript = nil
             captionURL = nil
+            transcriptStructure = nil
+            retentionAdvisory = nil
+            retentionAdvisorAvailability = nil
             audioTechnicalAssessment = nil
             audioSignalAssessment = nil
             focalPointProposal = nil
@@ -147,6 +154,9 @@ final class StudioState: ObservableObject {
         renderArtifact = nil
         transcript = nil
         captionURL = nil
+        transcriptStructure = nil
+        retentionAdvisory = nil
+        retentionAdvisorAvailability = nil
 
         ledger.append(.init(
             timestamp: Date(),
@@ -175,6 +185,9 @@ final class StudioState: ObservableObject {
         renderArtifact = nil
         transcript = nil
         captionURL = nil
+        transcriptStructure = nil
+        retentionAdvisory = nil
+        retentionAdvisorAvailability = nil
 
         ledger.append(.init(
             timestamp: Date(),
@@ -198,6 +211,9 @@ final class StudioState: ObservableObject {
         renderArtifact = nil
         transcript = nil
         captionURL = nil
+        transcriptStructure = nil
+        retentionAdvisory = nil
+        retentionAdvisorAvailability = nil
 
         ledger.append(.init(
             timestamp: Date(),
@@ -341,6 +357,14 @@ final class StudioState: ObservableObject {
 
             transcript = localTranscript
             captionURL = outputURL
+            let structure = TranscriptStructureAnalyzer().analyze(
+                transcript: localTranscript
+            )
+            transcriptStructure = structure
+            retentionAdvisory = nil
+            retentionAdvisorAvailability = LocalRetentionAdvisor().availability(
+                localeIdentifier: localTranscript.localeIdentifier
+            )
 
             ledger.append(.init(
                 timestamp: Date(),
@@ -355,6 +379,50 @@ final class StudioState: ObservableObject {
             errorMessage = nil
         } catch {
             errorMessage = "Lokale Transkription fehlgeschlagen: \(error.localizedDescription)"
+        }
+    }
+
+    func analyzeRetentionLocally() async {
+        guard let transcript,
+              let transcriptStructure else {
+            errorMessage = "Erstelle zuerst ein lokales Transkript."
+            return
+        }
+
+        let advisor = LocalRetentionAdvisor()
+        let availability = advisor.availability(
+            localeIdentifier: transcript.localeIdentifier
+        )
+        retentionAdvisorAvailability = availability
+        guard availability == .available else {
+            retentionAdvisory = nil
+            errorMessage = "Lokale Retention-Hinweise sind auf diesem Mac oder für diese Sprache nicht verfügbar. Die gemessenen Struktur-Fakten und die manuelle Review bleiben verfügbar."
+            return
+        }
+
+        isAnalyzingRetention = true
+        defer { isAnalyzingRetention = false }
+
+        do {
+            let advisory = try await advisor.analyze(
+                transcript: transcript,
+                structure: transcriptStructure
+            )
+            retentionAdvisory = advisory
+            ledger.append(.init(
+                timestamp: Date(),
+                actor: .blackstock,
+                stage: .editing,
+                action: "local-retention-advisory-generated",
+                summary: "Lokale Retention-/Strukturhinweise wurden aus Transkript und gemessenen Struktur-Fakten erstellt; sie sind keine Release-Evidenz.",
+                relatedSourceIDs: advisory.segmentIDs.map(\.uuidString),
+                reversible: false,
+                correlationID: correlationID
+            ))
+            errorMessage = nil
+        } catch {
+            retentionAdvisory = nil
+            errorMessage = "Lokale Retention-Hinweise konnten nicht erstellt werden: \(error.localizedDescription)"
         }
     }
 
