@@ -51,8 +51,8 @@ struct StudioView: View {
         .sheet(isPresented: $showRightsSheet) {
             rightsSheet
         }
-        .onAppear {
-            state.loadStoryboard(projectID: project.id)
+        .task(id: project.id) {
+            await state.loadWorkspace(projectID: project.id)
         }
         .sheet(isPresented: $showPackagingReview) {
             if let asset = state.asset,
@@ -667,6 +667,7 @@ struct StudioView: View {
                     Task {
                         await state.importMovie(
                             url: url,
+                            projectID: project.id,
                             authorization: rightsSelection,
                             rightsEvidence: rightsEvidence,
                             rightsConfirmed: rightsConfirmed
