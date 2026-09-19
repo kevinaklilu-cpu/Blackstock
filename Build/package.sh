@@ -22,6 +22,7 @@ UPDATE_PUBLIC_KEY="${BLACKSTOCK_UPDATE_PUBLIC_KEY_BASE64:-}"
 UPDATE_INSTALLER_TEAM_ID="${BLACKSTOCK_UPDATE_INSTALLER_TEAM_ID:-}"
 INCLUDE_E2E_SMOKE="${BLACKSTOCK_INCLUDE_E2E_SMOKE:-0}"
 PRODUCTION_RELEASE="${BLACKSTOCK_PRODUCTION_RELEASE:-0}"
+SOURCE_COMMIT_SHA="${BLACKSTOCK_SOURCE_COMMIT_SHA:-}"
 
 if [[ "$PUBLIC_PUBLISHING_APPROVED" == "1" ]]; then
   PUBLIC_PUBLISHING_PLIST="<true/>"
@@ -30,6 +31,10 @@ else
 fi
 
 if [[ "$PRODUCTION_RELEASE" == "1" ]]; then
+  if [[ ! "$SOURCE_COMMIT_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+    echo "Production release requires BLACKSTOCK_SOURCE_COMMIT_SHA as a 40-character Git commit SHA." >&2
+    exit 1
+  fi
   if [[ "$INCLUDE_E2E_SMOKE" == "1" ]]; then
     echo "Production release must not include the CI-only E2E helper." >&2
     exit 1
@@ -88,6 +93,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>${VERSION}</string>
 <key>CFBundleVersion</key><string>${BUILD_NUMBER}</string>
+<key>BlackstockSourceCommitSHA</key><string>${SOURCE_COMMIT_SHA}</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>NSHighResolutionCapable</key><true/>
 <key>NSCameraUsageDescription</key><string>Blackstock verwendet die Kamera nur nach deiner Freigabe, um autorisierte Produktionsaufnahmen direkt in dein lokales Projekt aufzunehmen.</string>
