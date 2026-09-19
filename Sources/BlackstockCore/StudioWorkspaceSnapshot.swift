@@ -11,6 +11,7 @@ public struct StudioWorkspaceSnapshot: Codable, Sendable, Equatable {
     public let transcript: LocalTranscript?
     public let captionURL: URL?
     public let renderArtifact: RenderArtifact?
+    public let supplementalCaptures: [SupplementalCaptureAsset]?
     public let updatedAt: Date
 
     public init(
@@ -24,6 +25,7 @@ public struct StudioWorkspaceSnapshot: Codable, Sendable, Equatable {
         transcript: LocalTranscript?,
         captionURL: URL?,
         renderArtifact: RenderArtifact?,
+        supplementalCaptures: [SupplementalCaptureAsset] = [],
         updatedAt: Date
     ) {
         self.projectID = projectID
@@ -36,6 +38,7 @@ public struct StudioWorkspaceSnapshot: Codable, Sendable, Equatable {
         self.transcript = transcript
         self.captionURL = captionURL
         self.renderArtifact = renderArtifact
+        self.supplementalCaptures = supplementalCaptures
         self.updatedAt = updatedAt
     }
 }
@@ -62,7 +65,7 @@ private struct PublishPreparationEnvelope: Codable, Sendable, Equatable {
 
 public enum WorkspaceSchema {
     public static let legacyUnversioned = 1
-    public static let current = 2
+    public static let current = 3
 }
 
 public enum WorkspaceMigrationError: Error, Sendable, Equatable {
@@ -120,6 +123,20 @@ public struct ProjectWorkspaceStore: Sendable {
             projectID: projectID
         )
         .appendingPathComponent("Media", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        return directory
+    }
+
+    public func captureDirectory(
+        projectID: UUID
+    ) throws -> URL {
+        let directory = try projectDirectory(
+            projectID: projectID
+        )
+        .appendingPathComponent("Captures", isDirectory: true)
         try FileManager.default.createDirectory(
             at: directory,
             withIntermediateDirectories: true
@@ -193,6 +210,21 @@ public struct ProjectWorkspaceStore: Sendable {
         assetID: UUID
     ) throws -> URL {
         let directory = try mediaDirectory(
+            projectID: projectID
+        )
+        return try copyProjectFile(
+            sourceURL: sourceURL,
+            destinationDirectory: directory,
+            assetID: assetID
+        )
+    }
+
+    public func importSupplementalCapture(
+        sourceURL: URL,
+        projectID: UUID,
+        assetID: UUID
+    ) throws -> URL {
+        let directory = try captureDirectory(
             projectID: projectID
         )
         return try copyProjectFile(
