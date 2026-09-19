@@ -15,6 +15,7 @@ INSTALLER_SIGN_IDENTITY="${BLACKSTOCK_INSTALLER_IDENTITY:-}"
 NOTARY_PROFILE="${BLACKSTOCK_NOTARY_KEYCHAIN_PROFILE:-}"
 UPDATE_MANIFEST_URL="${BLACKSTOCK_UPDATE_MANIFEST_URL:-}"
 UPDATE_PUBLIC_KEY="${BLACKSTOCK_UPDATE_PUBLIC_KEY_BASE64:-}"
+UPDATE_INSTALLER_TEAM_ID="${BLACKSTOCK_UPDATE_INSTALLER_TEAM_ID:-}"
 
 if [[ "$PUBLIC_PUBLISHING_APPROVED" == "1" ]]; then
   PUBLIC_PUBLISHING_PLIST="<true/>"
@@ -54,6 +55,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <key>BlackstockYouTubePublicPublishingApproved</key>${PUBLIC_PUBLISHING_PLIST}
 <key>BlackstockUpdateManifestURL</key><string>${UPDATE_MANIFEST_URL}</string>
 <key>BlackstockUpdatePublicKeyBase64</key><string>${UPDATE_PUBLIC_KEY}</string>
+<key>BlackstockUpdateInstallerTeamID</key><string>${UPDATE_INSTALLER_TEAM_ID}</string>
 </dict></plist>
 PLIST
 
