@@ -46,9 +46,10 @@ final class StudioState: ObservableObject {
             let store = try makeWorkspaceStore()
             workspaceStore = store
 
-            if let snapshot = try store.load(
+            if let loadResult = try store.loadResult(
                 projectID: projectID
             ) {
+                let snapshot = loadResult.snapshot
                 asset = snapshot.mediaAsset
                 graph = snapshot.editGraph
                 ledger = snapshot.activityLedger
@@ -58,6 +59,47 @@ final class StudioState: ObservableObject {
                 transcript = snapshot.transcript
                 captionURL = snapshot.captionURL
                 renderArtifact = snapshot.renderArtifact
+
+                if loadResult.source == .backup {
+                    ledger.append(.init(
+                        timestamp: Date(),
+                        actor: .blackstock,
+                        stage: .editing,
+                        action: "workspace-recovered-from-backup",
+                        summary: "Blackstock hat den letzten lesbaren Workspace-Snapshot aus der Backup-Kopie wiederhergestellt.",
+                        reversible: false,
+                        correlationID: correlationID
+                    ))
+                    try store.restorePrimary(
+                        StudioWorkspaceSnapshot(
+                            projectID: projectID,
+                            mediaAsset: asset,
+                            editGraph: graph,
+                            activityLedger: ledger,
+                            storyboard: storyboard ?? StoryboardPlan(
+                                projectID: projectID,
+                                updatedAt: Date()
+                            ),
+                            trimStart: trimStart,
+                            trimEnd: trimEnd,
+                            transcript: transcript,
+                            captionURL: captionURL,
+                            renderArtifact: renderArtifact,
+                            updatedAt: Date()
+                        )
+                    )
+                } else if loadResult.source == .legacy {
+                    ledger.append(.init(
+                        timestamp: Date(),
+                        actor: .blackstock,
+                        stage: .editing,
+                        action: "workspace-migrated",
+                        summary: "Blackstock hat einen älteren Workspace-Snapshot in das aktuelle versionierte Format migriert.",
+                        reversible: false,
+                        correlationID: correlationID
+                    ))
+                    persistWorkspaceIfPossible()
+                }
 
                 if let reframe = graph.currentOperations
                     .last(where: { $0.type == .reframe })?
