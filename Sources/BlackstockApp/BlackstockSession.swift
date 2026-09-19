@@ -578,7 +578,10 @@ final class BlackstockSession: ObservableObject {
             latestGrowthLearning = GrowthLearningEngine()
                 .summarize(record)
             if let latestGrowthLearning {
-                try persistGrowthLearning(latestGrowthLearning)
+                try persistGrowthLearning(
+                    latestGrowthLearning,
+                    projectID: record.projectID
+                )
             }
 
             if !delayedWindows.isEmpty {
@@ -723,25 +726,27 @@ final class BlackstockSession: ObservableObject {
     }
 
     private func persistGrowthLearning(
-        _ learning: GrowthLearningRecord
+        _ learning: GrowthLearningRecord,
+        projectID: UUID? = nil
     ) throws {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        let data = try encoder.encode(learning)
-        UserDefaults.standard.set(
-            data,
-            forKey: "blackstock.growth-learning.\(learning.publishedVideoID.uuidString)"
+        let resolvedProjectID = projectID
+            ?? activeProject?.id
+        guard let resolvedProjectID else {
+            return
+        }
+        try growthRecordStore().save(
+            learning: learning,
+            projectID: resolvedProjectID
         )
     }
 
     private func persistPublishedRecord(
         _ record: PublishedVideoRecord
     ) throws {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        let data = try encoder.encode(record)
-        UserDefaults.standard.set(
-            data,
+        try growthRecordStore().save(
+            record: record
+        )
+        UserDefaults.standard.removeObject(
             forKey: "blackstock.published-record.\(record.projectID.uuidString)"
         )
     }
@@ -749,16 +754,67 @@ final class BlackstockSession: ObservableObject {
     func loadPublishedRecord(
         projectID: UUID
     ) -> PublishedVideoRecord? {
-        guard let data = UserDefaults.standard.data(
-            forKey: "blackstock.published-record.\(projectID.uuidString)"
-        ) else {
+        do {
+            let store = try growthRecordStore()
+            if let record = try store.loadRecord(
+                projectID: projectID
+            ) {
+                return record
+            }
+
+            // One-time migration from the earlier UserDefaults storage.
+            let key = "blackstock.published-record.\(projectID.uuidString)"
+            guard let data = UserDefaults.standard.data(
+                forKey: key
+            ) else {
+                return nil
+            }
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let record = try decoder.decode(
+                PublishedVideoRecord.self,
+                from: data
+            )
+            try store.save(record: record)
+            UserDefaults.standard.removeObject(
+                forKey: key
+            )
+            return record
+        } catch {
             return nil
         }
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return try? decoder.decode(
-            PublishedVideoRecord.self,
-            from: data
+    }
+
+    func loadGrowthLearning(
+        projectID: UUID
+    ) -> GrowthLearningRecord? {
+        try? growthRecordStore().loadLearning(
+            projectID: projectID
+        )
+    }
+
+    private func growthRecordStore() throws -> GrowthRecordStore {
+        let base = try FileManager.default.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        let root = base
+            .appendingPathComponent(
+                "Blackstock",
+                isDirectory: true
+            )
+            .appendingPathComponent(
+                "Growth",
+                isDirectory: true
+            )
+        try FileManager.default.createDirectory(
+            at: root,
+            withIntermediateDirectories: true
+        )
+        return GrowthRecordStore(
+            rootURL: root
         )
     }
 
