@@ -173,17 +173,15 @@ final class YouTubeResumableUploaderTests: XCTestCase {
         XCTAssertFalse(result.reusedCommittedAction)
         XCTAssertEqual(requestCount, 2)
 
-        let committed = try XCTUnwrap(
-            await journal.entry(for: idempotencyKey)
-        )
+        let committedEntry = await journal.entry(for: idempotencyKey)
+        let committed = try XCTUnwrap(committedEntry)
         XCTAssertEqual(committed.state, .remoteCommitted)
         XCTAssertEqual(committed.remoteResourceID, "video-123")
         XCTAssertEqual(committed.nextByteOffset, 10)
 
         let reloaded = try ExternalActionJournal.persistent(at: journalURL)
-        let persisted = try XCTUnwrap(
-            await reloaded.entry(for: idempotencyKey)
-        )
+        let persistedEntry = await reloaded.entry(for: idempotencyKey)
+        let persisted = try XCTUnwrap(persistedEntry)
         XCTAssertEqual(persisted.state, .remoteCommitted)
         XCTAssertEqual(persisted.remoteResourceID, "video-123")
         XCTAssertEqual(persisted.nextByteOffset, 10)
