@@ -103,4 +103,60 @@ final class GrowthObservationPlannerTests: XCTestCase {
 
         XCTAssertEqual(plan?.temporalSemantic, .analyticsPeriod)
     }
+    func testGrowthWindowLabelsDoNotChangeCanonicalRawValues() {
+        XCTAssertEqual(
+            GrowthObservationWindow.first24Hours.rawValue,
+            "FIRST_24_HOURS"
+        )
+        XCTAssertEqual(
+            GrowthObservationWindow.first24Hours.germanTitle,
+            "24 Std."
+        )
+        XCTAssertEqual(
+            GrowthObservationWindow.first28Days.rawValue,
+            "FIRST_28_DAYS"
+        )
+        XCTAssertEqual(
+            GrowthObservationWindow.first28Days.germanTitle,
+            "28 Tage"
+        )
+    }
+
+    func testAnalyticsSnapshotRemainsExplicitAnalyticsPeriodWithLagWarning() {
+        let snapshot = YouTubeAnalyticsSnapshot(
+            channelID: "channel",
+            videoID: "video",
+            startDate: "2026-09-01",
+            endDate: "2026-09-07",
+            retrievedAt: Date(),
+            views: 10,
+            engagedViews: nil,
+            likes: nil,
+            comments: nil,
+            shares: nil,
+            estimatedMinutesWatched: nil,
+            averageViewDuration: nil,
+            averageViewPercentage: nil,
+            subscribersGained: nil,
+            subscribersLost: nil
+        )
+
+        XCTAssertEqual(
+            snapshot.temporalSemantic,
+            .analyticsPeriod
+        )
+        XCTAssertEqual(
+            snapshot.completeness,
+            .providerMayLag
+        )
+        XCTAssertEqual(
+            snapshot.requestedStartDate,
+            "2026-09-01"
+        )
+        XCTAssertEqual(
+            snapshot.requestedEndDate,
+            "2026-09-07"
+        )
+    }
+
 }
