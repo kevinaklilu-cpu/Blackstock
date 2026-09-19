@@ -51,6 +51,35 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' /Applications/Blackstock.app/Contents/Info.plist)" = "de.blackstock.app"
           test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' /Applications/Blackstock.app/Contents/Info.plist)" = "13.0"
           codesign --verify --deep --strict --verbose=2 /Applications/Blackstock.app
+      - name: Launch installed app on clean runner
+        run: |
+          set -euo pipefail
+          APP_BIN="/Applications/Blackstock.app/Contents/MacOS/Blackstock"
+          LOG="$RUNNER_TEMP/blackstock-launch.log"
+
+          "$APP_BIN" >"$LOG" 2>&1 &
+          pid=$!
+
+          sleep 3
+          if ! kill -0 "$pid" 2>/dev/null; then
+            echo "Blackstock exited during the launch-stability window."
+            cat "$LOG" || true
+            exit 1
+          fi
+
+          kill -TERM "$pid"
+          for _ in {1..10}; do
+            if ! kill -0 "$pid" 2>/dev/null; then
+              exit 0
+            fi
+            sleep 0.5
+          done
+
+          kill -KILL "$pid" 2>/dev/null || true
+          echo "Blackstock required a forced stop after smoke testing."
+          cat "$LOG" || true
+          exit 1
+
       - uses: actions/upload-artifact@v4
         with:
           name: Blackstock-development-pkg
