@@ -186,7 +186,11 @@ final class CaptureHardwareSmokeEvidenceTests:
         )
         XCTAssertEqual(
             object["schemaVersion"] as? Int,
-            1
+            2
+        )
+        XCTAssertEqual(
+            object["blackstockSourceCommitSHA"] as? String,
+            String(repeating: "1", count: 40)
         )
         XCTAssertNotNil(object["camera"])
         XCTAssertNotNil(object["systemAudio"])
@@ -210,6 +214,8 @@ final class CaptureHardwareSmokeEvidenceTests:
             ),
             blackstockVersion: "1.0.0",
             blackstockBuild: "100",
+            blackstockSourceCommitSHA:
+                String(repeating: "1", count: 40),
             macOSVersion: "26.6.2",
             hardwareModel: "MacBookProTest",
             installedFromPackage: true
