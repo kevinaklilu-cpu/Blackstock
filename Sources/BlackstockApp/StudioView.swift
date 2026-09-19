@@ -201,7 +201,7 @@ struct StudioView: View {
                         Text(String(artifact.sha256.prefix(12)) + "…")
                             .font(.caption.monospaced())
                             .foregroundStyle(.secondary)
-                        Button("Packaging & Review") {
+                        Button("Veröffentlichungspaket & Prüfung") {
                             if currentStage == .editing {
                                 if session.advanceActiveProject(
                                     to: .packaging
@@ -448,7 +448,7 @@ struct StudioView: View {
                     .buttonStyle(.borderedProminent)
                     .disabled(state.isRendering || !editingEnabled)
 
-                    Text("Blackstock rendert lokal auf dem Mac. Erst ein validiertes Render-Artefakt darf in Packaging/Publishing weitergehen.")
+                    Text("Blackstock rendert lokal auf dem Mac. Erst ein validiertes Render-Artefakt darf in Veröffentlichungspaket und Veröffentlichung weitergehen.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -575,7 +575,7 @@ struct StudioView: View {
                     Divider()
 
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("Retention & Struktur")
+                        Text("Zuschauerbindung & Struktur")
                             .font(.headline)
 
                         ForEach(structure.factualSummary, id: \.self) { fact in
@@ -752,7 +752,7 @@ struct StudioView: View {
             }
 
             if currentStage == .preview {
-                Text("Die Preview ist verfügbar. Starte jetzt das Storyboard, bevor Schnittwerkzeuge freigeschaltet werden.")
+                Text("Die Vorschau ist verfügbar. Starte jetzt das Storyboard, bevor Schnittwerkzeuge freigeschaltet werden.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -907,7 +907,7 @@ struct StudioView: View {
                     }
                 }
             } else {
-                Text("Lade zuerst ein autorisiertes Produktionsmedium, um die Preview zu erzeugen.")
+                Text("Lade zuerst ein autorisiertes Produktionsmedium, um die Vorschau zu erzeugen.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -925,12 +925,12 @@ struct StudioView: View {
     private func stageTitle(_ stage: BlackstockStage) -> String {
         switch stage {
         case .production: return "Produktionsmedium vorbereiten"
-        case .preview: return "Preview prüfen"
+        case .preview: return "Vorschau prüfen"
         case .storyboard: return "Storyboard strukturieren"
         case .editing: return "Video bearbeiten"
-        case .packaging: return "Packaging vorbereiten"
+        case .packaging: return "Veröffentlichungspaket vorbereiten"
         case .review: return "Release prüfen"
-        case .publishing: return "Publishing läuft"
+        case .publishing: return "Veröffentlichung läuft"
         case .published: return "Veröffentlicht"
         case .discovery: return "Discovery"
         case .research: return "Research"
@@ -957,19 +957,19 @@ struct StudioView: View {
     private func stageExplanation(_ stage: BlackstockStage) -> String {
         switch stage {
         case .production:
-            return "Importiere autorisiertes Material. Bearbeitung bleibt bis zur Preview und zum Storyboard gesperrt."
+            return "Importiere autorisiertes Material. Bearbeitung bleibt bis zur Vorschau und zum Storyboard gesperrt."
         case .preview:
             return "Prüfe das geladene Medium und starte anschließend das Storyboard."
         case .storyboard:
-            return "Lege die Beats und ihre Funktion fest. Danach wird Editing freigeschaltet."
+            return "Lege die Beats und ihre Funktion fest. Danach wird die Bearbeitung freigeschaltet."
         case .editing:
             return "Trim, Reframe, Captions, Audio-Prüfung und Render sind jetzt verfügbar."
         case .packaging:
-            return "Bearbeitung ist eingefroren; Metadaten, Thumbnail, Captions und Review folgen."
+            return "Bearbeitung ist eingefroren; Metadaten, Thumbnail, Captions und Prüfung folgen."
         case .review:
-            return "Alle Release-Gates müssen belegt sein, bevor Publishing starten darf."
+            return "Alle Freigabeprüfungen müssen belegt sein, bevor die Veröffentlichung starten darf."
         case .publishing:
-            return "Remote-Aktionen werden journaled und auf den Zielkanal begrenzt."
+            return "Externe Aktionen werden protokolliert und auf den Zielkanal begrenzt."
         case .published:
             return "Die YouTube-Video-ID ist gespeichert; Analytics kann zurückgeführt werden."
         case .discovery, .research, .analysis:
@@ -982,7 +982,7 @@ struct StudioView: View {
     ) -> String {
         switch availability {
         case .available:
-            return "Lokale Retention-Hinweise sind verfügbar."
+            return "Lokale Hinweise zur Zuschauerbindung sind verfügbar."
         case .unsupportedOS:
             return "Lokale Foundation-Models-Hinweise benötigen eine unterstützte macOS-Version."
         case .frameworkUnavailable:
