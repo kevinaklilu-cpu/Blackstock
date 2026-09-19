@@ -101,6 +101,152 @@ final class GrowthRecordStoreTests: XCTestCase {
         XCTAssertNotNil(object["value"])
     }
 
+
+    func testPublishedRecordRecoversLastValidatedBackupAfterPrimaryCorruption() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let projectID = UUID()
+        let store = GrowthRecordStore(rootURL: root)
+        let first = PublishedVideoRecord(
+            projectID: projectID,
+            experimentID: nil,
+            targetChannelID: "channel-A",
+            youtubeVideoID: "video-A",
+            publishedAt: Date(timeIntervalSince1970: 100)
+        )
+        let second = PublishedVideoRecord(
+            projectID: projectID,
+            experimentID: nil,
+            targetChannelID: "channel-A",
+            youtubeVideoID: "video-B",
+            publishedAt: Date(timeIntervalSince1970: 200)
+        )
+
+        try store.save(record: first)
+        try store.save(record: second)
+
+        let directory = try store.projectDirectory(projectID: projectID)
+        let primaryURL = directory.appendingPathComponent(
+            "published-video.json"
+        )
+        let backupURL = directory.appendingPathComponent(
+            "published-video.backup.json"
+        )
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: backupURL.path)
+        )
+
+        try Data("broken".utf8).write(
+            to: primaryURL,
+            options: [.atomic]
+        )
+
+        let recovered = try store.loadRecordWithRecovery(
+            projectID: projectID
+        )
+        XCTAssertTrue(recovered.recoveredFromBackup)
+        XCTAssertEqual(recovered.value, first)
+    }
+
+    func testGrowthLearningRecoversLastValidatedBackupAfterPrimaryCorruption() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let projectID = UUID()
+        let publishedVideoID = UUID()
+        let store = GrowthRecordStore(rootURL: root)
+        let first = GrowthLearningRecord(
+            publishedVideoID: publishedVideoID,
+            experimentID: nil,
+            observationIDs: [],
+            facts: ["Erster Fakt"],
+            nextQuestion: "Erste Frage?",
+            createdAt: Date(timeIntervalSince1970: 100)
+        )
+        let second = GrowthLearningRecord(
+            publishedVideoID: publishedVideoID,
+            experimentID: nil,
+            observationIDs: [],
+            facts: ["Zweiter Fakt"],
+            nextQuestion: "Zweite Frage?",
+            createdAt: Date(timeIntervalSince1970: 200)
+        )
+
+        try store.save(learning: first, projectID: projectID)
+        try store.save(learning: second, projectID: projectID)
+
+        let directory = try store.projectDirectory(projectID: projectID)
+        let primaryURL = directory.appendingPathComponent(
+            "growth-learning.json"
+        )
+        let backupURL = directory.appendingPathComponent(
+            "growth-learning.backup.json"
+        )
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: backupURL.path)
+        )
+
+        try Data("broken".utf8).write(
+            to: primaryURL,
+            options: [.atomic]
+        )
+
+        let recovered = try store.loadLearningWithRecovery(
+            projectID: projectID
+        )
+        XCTAssertTrue(recovered.recoveredFromBackup)
+        XCTAssertEqual(recovered.value, first)
+    }
+
+    func testInvalidGrowthPrimaryNeverOverwritesValidatedBackup() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let projectID = UUID()
+        let store = GrowthRecordStore(rootURL: root)
+        let first = PublishedVideoRecord(
+            projectID: projectID,
+            experimentID: nil,
+            targetChannelID: "channel-A",
+            youtubeVideoID: "video-A",
+            publishedAt: Date(timeIntervalSince1970: 100)
+        )
+        let second = PublishedVideoRecord(
+            projectID: projectID,
+            experimentID: nil,
+            targetChannelID: "channel-A",
+            youtubeVideoID: "video-B",
+            publishedAt: Date(timeIntervalSince1970: 200)
+        )
+
+        try store.save(record: first)
+        try store.save(record: second)
+
+        let directory = try store.projectDirectory(projectID: projectID)
+        let primaryURL = directory.appendingPathComponent(
+            "published-video.json"
+        )
+        let backupURL = directory.appendingPathComponent(
+            "published-video.backup.json"
+        )
+        let backupBefore = try Data(contentsOf: backupURL)
+
+        try Data("not-json".utf8).write(
+            to: primaryURL,
+            options: [.atomic]
+        )
+        try store.save(record: second)
+
+        XCTAssertEqual(
+            try Data(contentsOf: backupURL),
+            backupBefore
+        )
+    }
+
     func testFutureGrowthSchemaHardStops() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
