@@ -60,7 +60,7 @@ jobs:
 
           cat > "$EVIDENCE" <<JSON
           {
-            "schemaVersion": 2,
+            "schemaVersion": 3,
             "testedAt": "2026-09-19T20:00:00Z",
             "blackstockVersion": "1.0.0",
             "blackstockBuild": "100",
@@ -68,6 +68,8 @@ jobs:
             "macOSVersion": "macOS 26.6.2",
             "hardwareModel": "MacBookProTest",
             "installedFromPackage": true,
+            "applicationTeamID": "ABC123TEAM",
+            "developerIDApplicationVerified": true,
             "camera": {
               "permissionGranted": true,
               "recordingCreated": true,
@@ -267,7 +269,7 @@ jobs:
           source_commit = "1" * 40
 
           capture = {
-              "schemaVersion": 2,
+              "schemaVersion": 3,
               "testedAt": "2026-09-19T20:00:00Z",
               "blackstockVersion": "1.0.0",
               "blackstockBuild": "100",
@@ -275,6 +277,8 @@ jobs:
               "macOSVersion": "macOS 26.6.2",
               "hardwareModel": "MacBookProTest",
               "installedFromPackage": True,
+              "applicationTeamID": "ABC123TEAM",
+              "developerIDApplicationVerified": True,
               "camera": {
                   "permissionGranted": True,
                   "recordingCreated": True,
@@ -397,6 +401,32 @@ jobs:
             --in-app-update-evidence "$ROOT/updater.json" \
             --output "$ROOT/market-readiness.json"
           grep -q '"ready": true' "$ROOT/market-readiness.json"
+
+          python3 - "$ROOT/capture.json" <<'PY'
+          import json
+          import sys
+          path = sys.argv[1]
+          data = json.load(open(path))
+          data["applicationTeamID"] = "OTHERTEAM"
+          json.dump(data, open(path, "w"))
+          PY
+
+          if python3 Build/verify_market_readiness.py \
+            --capture-evidence "$ROOT/capture.json" \
+            --production-release-evidence "$ROOT/release.json" \
+            --in-app-update-evidence "$ROOT/updater.json"; then
+            echo "Cross-team capture mismatch was unexpectedly accepted." >&2
+            exit 1
+          fi
+
+          python3 - "$ROOT/capture.json" <<'PY'
+          import json
+          import sys
+          path = sys.argv[1]
+          data = json.load(open(path))
+          data["applicationTeamID"] = "ABC123TEAM"
+          json.dump(data, open(path, "w"))
+          PY
 
           python3 - "$ROOT/updater.json" <<'PY'
           import json
