@@ -35,6 +35,7 @@ public enum RenderTechnicalBlocker: String, Sendable, Equatable, CaseIterable {
     case invalidDimensions
     case durationMismatch
     case dimensionMismatch
+    case presetResolutionMismatch
 }
 
 public struct RenderTechnicalAssessment: Sendable, Equatable {
@@ -60,7 +61,8 @@ public struct RenderTechnicalValidator: Sendable {
     public func assess(
         snapshot: RenderTechnicalSnapshot,
         expectedDurationSeconds: Double,
-        expectedRenderSize: CGSize?
+        expectedRenderSize: CGSize?,
+        expectedPreset: LocalRenderPreset? = nil
     ) -> RenderTechnicalAssessment {
         var blockers: [RenderTechnicalBlocker] = []
 
@@ -94,10 +96,46 @@ public struct RenderTechnicalValidator: Sendable {
             }
         }
 
+        if let expectedPreset,
+           snapshot.width > 0,
+           snapshot.height > 0,
+           !Self.matchesResolutionClass(
+                width: snapshot.width,
+                height: snapshot.height,
+                preset: expectedPreset
+           ) {
+            blockers.append(.presetResolutionMismatch)
+        }
+
         return RenderTechnicalAssessment(
             snapshot: snapshot,
             blockers: blockers
         )
+    }
+
+    private static func matchesResolutionClass(
+        width: Int,
+        height: Int,
+        preset: LocalRenderPreset
+    ) -> Bool {
+        let shortEdge = min(width, height)
+        let longEdge = max(width, height)
+        let isSquare = abs(width - height) <= 2
+
+        switch preset {
+        case .hd1080:
+            if isSquare {
+                return shortEdge >= 1_080
+            }
+            return shortEdge >= 1_080
+                && longEdge >= 1_920
+        case .uhd4K:
+            if isSquare {
+                return shortEdge >= 2_160
+            }
+            return shortEdge >= 2_160
+                && longEdge >= 3_840
+        }
     }
 }
 
@@ -113,6 +151,7 @@ public actor LocalRenderTechnicalInspector {
         url: URL,
         expectedDurationSeconds: Double,
         expectedRenderSize: CGSize?,
+        expectedPreset: LocalRenderPreset? = nil,
         now: Date = Date()
     ) async throws -> RenderTechnicalAssessment {
         guard FileManager.default.fileExists(atPath: url.path) else {
@@ -154,7 +193,8 @@ public actor LocalRenderTechnicalInspector {
         return RenderTechnicalValidator().assess(
             snapshot: snapshot,
             expectedDurationSeconds: expectedDurationSeconds,
-            expectedRenderSize: expectedRenderSize
+            expectedRenderSize: expectedRenderSize,
+            expectedPreset: expectedPreset
         )
     }
 }
