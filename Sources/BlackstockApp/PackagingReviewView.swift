@@ -21,6 +21,8 @@ struct PackagingReviewView: View {
     @State private var captionTracks: [PublishCaptionTrack] = []
     @State private var showThumbnailImporter = false
     @State private var showCaptionImporter = false
+    @State private var manualChecks: Set<CreatorQualityArea> = []
+    @State private var manualNotes: [CreatorQualityArea: String] = [:]
 
     private let requiredQualityAreas: Set<CreatorQualityArea> = [
         .packaging,
@@ -61,13 +63,32 @@ struct PackagingReviewView: View {
         }
     }
 
-    private var qualityReview: CreatorQualityReview {
+    private var automaticQualityReview: CreatorQualityReview {
         DeterministicQualityEvidenceBuilder().build(
             projectID: project.id,
             asset: asset,
             artifact: artifact,
             transcript: transcript,
             captionURL: generatedCaptionURL
+        )
+    }
+
+    private var manualAttestations: [ManualQualityAttestation] {
+        manualChecks.compactMap { area in
+            guard let note = manualNotes[area] else { return nil }
+            let attestation = ManualQualityAttestation(
+                area: area,
+                note: note,
+                confirmedAt: Date()
+            )
+            return attestation.isValid ? attestation : nil
+        }
+    }
+
+    private var qualityReview: CreatorQualityReview {
+        QualityReviewComposer().compose(
+            automatic: automaticQualityReview,
+            manualAttestations: manualAttestations
         )
     }
 
@@ -117,6 +138,7 @@ struct PackagingReviewView: View {
                     header
                     metadataSection
                     packagingAssetsSection
+                    manualReviewSection
                     targetSection
                 }
                 .padding(22)
@@ -241,6 +263,124 @@ struct PackagingReviewView: View {
                 }
             }
             .padding(.vertical, 6)
+        }
+    }
+
+    private var manualReviewSection: some View {
+        GroupBox("Qualitative Review") {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Blackstock misst technische Fakten automatisch. Inhaltliche Qualität wird direkt am Video geprüft und als Nutzer-Evidenz protokolliert.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                ForEach(manualReviewAreas, id: \.self) { area in
+                    manualReviewRow(area)
+                    if area != manualReviewAreas.last {
+                        Divider()
+                    }
+                }
+            }
+            .padding(.vertical, 6)
+        }
+    }
+
+    @ViewBuilder
+    private func manualReviewRow(_ area: CreatorQualityArea) -> some View {
+        let automaticallyCovered = automaticQualityReview.coveredAreas.contains(area)
+
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(areaTitle(area))
+                        .font(.headline)
+                    Text(areaQuestion(area))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+
+                if automaticallyCovered {
+                    Label("Automatisch belegt", systemImage: "checkmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                } else {
+                    Toggle(
+                        "Geprüft",
+                        isOn: Binding(
+                            get: { manualChecks.contains(area) },
+                            set: { enabled in
+                                if enabled {
+                                    manualChecks.insert(area)
+                                } else {
+                                    manualChecks.remove(area)
+                                    manualNotes[area] = ""
+                                }
+                            }
+                        )
+                    )
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                }
+            }
+
+            if !automaticallyCovered && manualChecks.contains(area) {
+                TextField(
+                    "Kurze Beobachtung festhalten …",
+                    text: Binding(
+                        get: { manualNotes[area] ?? "" },
+                        set: { manualNotes[area] = $0 }
+                    )
+                )
+                .textFieldStyle(.roundedBorder)
+
+                Text("Nur eine konkrete Notiz zählt als Review-Evidenz.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var manualReviewAreas: [CreatorQualityArea] {
+        [
+            .packaging,
+            .retentionStructure,
+            .audio,
+            .captions,
+            .visualComposition
+        ]
+    }
+
+    private func areaTitle(_ area: CreatorQualityArea) -> String {
+        switch area {
+        case .packaging: return "Packaging"
+        case .retentionStructure: return "Retention-Struktur"
+        case .audio: return "Audio"
+        case .captions: return "Captions"
+        case .visualComposition: return "Visuals"
+        case .demandFit: return "Demand Fit"
+        case .rightsAndPolicy: return "Rechte & Policy"
+        case .renderIntegrity: return "Renderintegrität"
+        }
+    }
+
+    private func areaQuestion(_ area: CreatorQualityArea) -> String {
+        switch area {
+        case .packaging:
+            return "Versprechen Titel und Thumbnail ehrlich, klar und passend, was das Video tatsächlich liefert?"
+        case .retentionStructure:
+            return "Startet das Video ohne unnötigen Leerlauf und bleibt die Struktur verständlich und fokussiert?"
+        case .audio:
+            return "Ist Sprache verständlich, ohne hörbares Clipping, störende Pegelsprünge oder dominante Nebengeräusche?"
+        case .captions:
+            return "Stimmen Captions bei einer Stichprobe mit dem gesprochenen Inhalt und Timing überein?"
+        case .visualComposition:
+            return "Sind Motiv, Crop, Overlays und Lesbarkeit über die relevanten Abschnitte visuell sauber?"
+        case .demandFit:
+            return "Passt das Thema zur dokumentierten Nachfrage?"
+        case .rightsAndPolicy:
+            return "Sind Rechte und Plattformregeln belegt?"
+        case .renderIntegrity:
+            return "Ist das Render-Artefakt technisch valide?"
         }
     }
 
