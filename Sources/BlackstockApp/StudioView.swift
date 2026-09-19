@@ -398,7 +398,7 @@ struct StudioView: View {
                         .buttonStyle(.bordered)
                         .disabled(state.isSuggestingFocalPoint)
 
-                        Button("Reframe anwenden") {
+                        Button("Ausschnitt anwenden") {
                             Task { await state.applyReframe() }
                         }
                         .buttonStyle(.borderedProminent)
@@ -415,7 +415,7 @@ struct StudioView: View {
                         }
                     }
 
-                    Text("Vision darf nur die Regler vorpositionieren. Erst „Reframe anwenden“ schreibt eine Änderung in den EditGraph; Vorschau und finaler Render verwenden danach dieselbe Crop-Geometrie.")
+                    Text("Vision darf nur die Regler vorpositionieren. Erst „Ausschnitt anwenden“ schreibt eine Änderung in den EditGraph; Vorschau und finales Rendering verwenden danach dieselbe Ausschnitt-Geometrie.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -556,7 +556,7 @@ struct StudioView: View {
                     .buttonStyle(.bordered)
                     .disabled(state.isTranscribing || !editingEnabled)
 
-                    Text("Sprache: \(speechLocaleIdentifier) · nur On-Device; kein stiller Cloud-Fallback.")
+                    Text("Sprache: \(speechLocaleIdentifier) · nur lokal auf dem Gerät; kein stiller Cloud-Fallback.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
