@@ -187,18 +187,84 @@ struct FirstRunView: View {
     }
 
     private var topic: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            TextField("z. B. KI für Selbstständige", text: $session.primaryTopic)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                TextField(
+                    "Kanal-Schwerpunkt, z. B. KI für Selbstständige",
+                    text: $session.primaryTopic
+                )
                 .accessibilityLabel("Strategischer Kanal-Schwerpunkt")
                 .textFieldStyle(.roundedBorder)
                 .font(.title3)
-            Text("Das ist der strategische Kern für künftige Research- und Opportunity-Abfragen, nicht nur ein einzelnes Suchkeyword.")
+
+                TextField(
+                    "Was gehört konkret zu diesem Thema?",
+                    text: $session.topicDefinition
+                )
+                .accessibilityLabel("Definition des Kanalthemas")
+                .textFieldStyle(.roundedBorder)
+
+                TextField(
+                    "Welches konkrete Versprechen gibst du den Zuschauern?",
+                    text: $session.contentPromise
+                )
+                .accessibilityLabel("Versprechen an die Zuschauer")
+                .textFieldStyle(.roundedBorder)
+
+                TextField(
+                    "Für wen ist der Kanal hauptsächlich gedacht?",
+                    text: $session.audienceHypothesis
+                )
+                .accessibilityLabel("Zielgruppen-Hypothese")
+                .textFieldStyle(.roundedBorder)
+
+                TextField(
+                    "Inhaltssäulen, durch Kommas getrennt",
+                    text: $session.strategyPillars
+                )
+                .accessibilityLabel("Wiederkehrende Inhaltssäulen")
+                .textFieldStyle(.roundedBorder)
+
+                Picker(
+                    "Primäres strategisches Ziel",
+                    selection: $session.strategicObjective
+                ) {
+                    ForEach(StrategicObjective.allCases, id: \.self) { objective in
+                        Text(objective.germanTitle).tag(objective)
+                    }
+                }
+                .pickerStyle(.menu)
+
+                DisclosureGroup("Optionale strategische Grenzen") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        TextField(
+                            "Angrenzende Themen, optional",
+                            text: $session.adjacentTopics
+                        )
+                        .textFieldStyle(.roundedBorder)
+
+                        TextField(
+                            "Ausgeschlossene Themen, optional",
+                            text: $session.excludedTopics
+                        )
+                        .textFieldStyle(.roundedBorder)
+                    }
+                    .padding(.top, 8)
+                }
+
+                Text(
+                    "Blackstock speichert nur deine Angaben. Versprechen, Zielgruppe und Inhaltssäulen werden nicht aus dem Kanalthema erfunden."
+                )
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            HStack {
-                Spacer()
-                Button("Weiter") { session.continueFromTopic() }
+
+                HStack {
+                    Spacer()
+                    Button("Weiter") {
+                        session.continueFromTopic()
+                    }
                     .buttonStyle(.borderedProminent)
+                }
             }
         }
     }
@@ -509,7 +575,7 @@ struct FirstRunView: View {
         switch session.step {
         case .welcome: "Google öffnet im Systembrowser. Blackstock fordert zunächst nur Leserechte für YouTube an."
         case .channel: "Wähle den konkreten Zielkanal explizit aus."
-        case .topic: "Lege den strategischen Kern fest. Historische Beobachtungen bleiben davon getrennt."
+        case .topic: "Lege Thema, Versprechen, Zielgruppe und wiederkehrende Inhaltssäulen ausdrücklich fest."
         case .language: "Produkt- und Content-Sprache sind unterschiedliche Einstellungen."
         case .preparing: "Nur reale, verfügbare Daten werden verarbeitet."
         case .opportunities: "Diese Liste stammt aus der realen YouTube-API und ist noch keine automatisch behauptete Empfehlung."

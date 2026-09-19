@@ -1,6 +1,22 @@
 import Foundation
 
-public enum StrategicObjective: String, Codable, Sendable, CaseIterable { case balanced, reach, watchTime, subscribers, revenue }
+public enum StrategicObjective: String, Codable, Sendable, CaseIterable {
+    case balanced
+    case reach
+    case watchTime
+    case subscribers
+    case revenue
+
+    public var germanTitle: String {
+        switch self {
+        case .balanced: return "Ausgewogen"
+        case .reach: return "Reichweite"
+        case .watchTime: return "Wiedergabezeit"
+        case .subscribers: return "Abonnenten"
+        case .revenue: return "Umsatz"
+        }
+    }
+}
 
 public struct HistoricalChannelProfile: Codable, Sendable, Equatable {
     public var observedTopics: [String]
@@ -73,6 +89,21 @@ public struct ChannelStrategy: Codable, Sendable, Equatable {
         copy.version += 1
         copy.effectiveFrom = date
         return copy
+    }
+
+    public func hasSameConfiguration(as other: ChannelStrategy) -> Bool {
+        channelID == other.channelID
+            && primaryTopic == other.primaryTopic
+            && topicDefinition == other.topicDefinition
+            && contentPromise == other.contentPromise
+            && pillars == other.pillars
+            && adjacentTopics == other.adjacentTopics
+            && excludedTopics == other.excludedTopics
+            && defaultContentLanguage == other.defaultContentLanguage
+            && researchLanguages == other.researchLanguages
+            && audienceHypothesis == other.audienceHypothesis
+            && objectives == other.objectives
+            && explorationPolicy == other.explorationPolicy
     }
 }
 
