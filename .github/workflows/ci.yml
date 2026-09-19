@@ -31,6 +31,8 @@ jobs:
         run: python3 Build/audit_privacy.py
       - name: Product language audit
         run: python3 Build/audit_language.py
+      - name: Temporal semantics audit
+        run: python3 Build/audit_temporal.py
       - name: Swift tests
         run: swift test
       - name: Release build
