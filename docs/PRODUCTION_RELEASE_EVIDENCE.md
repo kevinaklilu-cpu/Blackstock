@@ -18,6 +18,71 @@ Für einen echten Produktionslauf werden benötigt:
 
 Der CI-only E2E-Helper darf in einem Produktionspaket nicht enthalten sein.
 
+
+## GitHub Actions: empfohlener Produktionspfad
+
+Blackstock enthält zwei bewusst getrennte manuelle Workflows:
+
+1. **Blackstock Production Release** (`.github/workflows/production-release.yml`)
+   - baut den Release,
+   - importiert Developer-ID-Zertifikate nur in einen temporären Runner-Keychain,
+   - signiert App und Installer,
+   - notarisiert mit App-Store-Connect-API-Key,
+   - prüft `Accepted`, Stapling und Gatekeeper,
+   - erzeugt das signierte Update-Manifest,
+   - lädt das Release-Bundle als GitHub-Artefakt hoch.
+
+2. **Blackstock Verify Published Release** (`.github/workflows/verify-published-release.yml`)
+   - läuft erst **nach** Veröffentlichung von Manifest und Paket unter den realen HTTPS-URLs,
+   - verifiziert Manifest-Signatur, Paket-Hash, Installer-Team und Notarisierungsstatus,
+   - installiert das verifizierte Paket auf einem frischen macOS-Runner,
+   - verifiziert Developer ID Application, Gatekeeper sowie exakte Manifest-Version und -Build der installierten App,
+   - startet die installierte Produktions-App,
+   - erzeugt `release-evidence.json`.
+
+Beide Workflows sind ausschließlich `workflow_dispatch`. Ein Push oder Pull Request darf niemals automatisch einen Produktionsrelease auslösen.
+
+### Erforderliche GitHub Secrets
+
+Für **Blackstock Production Release**:
+
+- `BLACKSTOCK_APP_CERT_P12_BASE64`
+- `BLACKSTOCK_APP_CERT_PASSWORD`
+- `BLACKSTOCK_INSTALLER_CERT_P12_BASE64`
+- `BLACKSTOCK_INSTALLER_CERT_PASSWORD`
+- `BLACKSTOCK_CODESIGN_IDENTITY`
+- `BLACKSTOCK_INSTALLER_IDENTITY`
+- `BLACKSTOCK_APPLE_TEAM_ID`
+- `BLACKSTOCK_NOTARY_KEY_P8_BASE64`
+- `BLACKSTOCK_NOTARY_KEY_ID`
+- `BLACKSTOCK_NOTARY_ISSUER`
+- `BLACKSTOCK_UPDATE_PRIVATE_KEY_BASE64`
+- `BLACKSTOCK_UPDATE_PUBLIC_KEY_BASE64`
+- optional für den eingebetteten Google-Client: `BLACKSTOCK_GOOGLE_OAUTH_CLIENT_ID`
+
+Für **Blackstock Verify Published Release** werden nur die zur unabhängigen Verifikation nötigen Secrets verwendet:
+
+- `BLACKSTOCK_UPDATE_PUBLIC_KEY_BASE64`
+- `BLACKSTOCK_APPLE_TEAM_ID`
+- `BLACKSTOCK_NOTARY_KEY_P8_BASE64`
+- `BLACKSTOCK_NOTARY_KEY_ID`
+- `BLACKSTOCK_NOTARY_ISSUER`
+
+Der private Blackstock-Update-Signaturschlüssel wird bewusst **nicht** im Verifikationsworkflow benötigt.
+
+### Workflow-Reihenfolge
+
+1. Production Release mit Zielversion, Build, zukünftiger Manifest-URL und Paket-URL starten.
+2. Das erzeugte `Blackstock.pkg` und `update-manifest.json` exakt unter diesen HTTPS-URLs veröffentlichen.
+3. Die Notary Submission ID aus `notary-response.json` übernehmen.
+4. Verify Published Release mit der realen Manifest-URL, einer älteren Ausgangsversion/-Build und genau dieser Submission ID starten.
+5. `release-evidence.json` archivieren.
+6. Auf einem realen Mac den vollständigen In-App-Updater-Versionswechsel durchführen und die von Blackstock erzeugte `update-evidence.json` sichern.
+7. Den realen Capture-Hardware-Smoke durchführen.
+8. Erst dann `Build/verify_market_readiness.py` über alle drei realen Evidenzdateien laufen lassen.
+
+Die Canonical-CI prüft mit `Build/audit_production_release_workflows.py`, dass diese Trennung, die Secret-Bindung und der Ausschluss des CI-only E2E-Helpers aus Produktionspaketen erhalten bleiben.
+
 ## 2. Produktionspaket erzeugen
 
 Beispiel:
