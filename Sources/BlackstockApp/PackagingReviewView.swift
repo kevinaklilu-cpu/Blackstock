@@ -123,7 +123,8 @@ struct PackagingReviewView: View {
             transcript: transcript,
             captionURL: generatedCaptionURL,
             audioTechnicalAssessment: audioTechnicalAssessment,
-            audioSignalAssessment: audioSignalAssessment
+            audioSignalAssessment: audioSignalAssessment,
+            thumbnailAssessment: thumbnailAssessment
         )
     }
 
