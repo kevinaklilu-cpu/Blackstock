@@ -439,7 +439,7 @@ private struct OverviewView: View {
                     if session.latestCommentsVideoID == record.youtubeVideoID,
                        let page = session.latestCommentPage {
                         if page.threads.isEmpty {
-                            Text("YouTube liefert aktuell keine veröffentlichten Top-Level-Kommentare für dieses Video.")
+                            Text("YouTube liefert aktuell keine veröffentlichten Hauptkommentare für dieses Video.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         } else {
