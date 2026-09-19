@@ -9,7 +9,7 @@ requirements = {
     "Package.swift": [
         'name: "BlackstockE2ESmoke"',
     ],
-    "Sources/BlackstockE2ESmoke/main.swift": [
+    "Sources/BlackstockE2ESmoke/BlackstockE2ESmoke.swift": [
         "BLACKSTOCK_E2E_PASS",
         "SyntheticMediaFactory",
         "LocalVideoRenderer()",
