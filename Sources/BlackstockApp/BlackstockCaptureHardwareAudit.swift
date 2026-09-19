@@ -1,6 +1,7 @@
 #if os(macOS)
 import AVFoundation
 import BlackstockCore
+import CryptoKit
 import Foundation
 
 enum BlackstockCaptureHardwareAudit {
@@ -62,6 +63,8 @@ enum BlackstockCaptureHardwareAudit {
 
         let snapshot =
             CaptureCapabilityProbe().inspect()
+        let persistedSHA256 =
+            sha256(of: fileURL)
 
         updateEvidence { evidence in
             let kinds = canonicalKinds(
@@ -112,7 +115,9 @@ enum BlackstockCaptureHardwareAudit {
                         recordedLaunchID:
                             launchID,
                         persistedFilePath:
-                            fileURL.path
+                            fileURL.path,
+                        persistedFileSHA256:
+                            persistedSHA256
                     )
             }
 
@@ -229,6 +234,37 @@ enum BlackstockCaptureHardwareAudit {
                     "capture-hardware-smoke.json"
                 )
         )
+    }
+
+    private static func sha256(
+        of url: URL
+    ) -> String? {
+        guard let handle =
+                try? FileHandle(forReadingFrom: url) else {
+            return nil
+        }
+        defer {
+            try? handle.close()
+        }
+
+        var hasher = SHA256()
+        do {
+            while true {
+                let data = try handle.read(
+                    upToCount: 1_048_576
+                ) ?? Data()
+                if data.isEmpty {
+                    break
+                }
+                hasher.update(data: data)
+            }
+        } catch {
+            return nil
+        }
+
+        return hasher.finalize().map {
+            String(format: "%02x", $0)
+        }.joined()
     }
 
     private static func currentMetadata()
