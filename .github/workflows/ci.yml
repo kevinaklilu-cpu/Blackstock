@@ -92,6 +92,50 @@ jobs:
             exit 1
           fi
 
+      - name: Updater evidence audit
+        run: python3 Build/audit_updater_evidence.py
+      - name: In-app update evidence validator audit
+        run: |
+          set -euo pipefail
+          EVIDENCE="$RUNNER_TEMP/in-app-update-evidence.json"
+          cat > "$EVIDENCE" <<'JSON'
+          {
+            "schemaVersion": 1,
+            "value": {
+              "id": "00000000-0000-0000-0000-000000000001",
+              "currentVersion": "0.9.0",
+              "currentBuild": 90,
+              "manifestURL": "https://updates.blackstock.app/update-manifest.json",
+              "expectedInstallerTeamID": "ABC123TEAM",
+              "startedAt": 810000000.0,
+              "targetVersion": "1.0.0",
+              "targetBuild": 100,
+              "packageURL": "https://updates.blackstock.app/Blackstock.pkg",
+              "packageSHA256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "manifestVerifiedAt": 810000001.0,
+              "packageIntegrityVerifiedAt": 810000002.0,
+              "installerTeamVerifiedAt": 810000002.0,
+              "installerOpenedAt": 810000003.0,
+              "observedInstalledVersion": "1.0.0",
+              "observedInstalledBuild": 100,
+              "postUpdateLaunchVerifiedAt": 810000004.0
+            }
+          }
+          JSON
+          python3 Build/validate_in_app_update_evidence.py "$EVIDENCE"
+
+          python3 - "$EVIDENCE" <<'PY'
+          import json, sys
+          path = sys.argv[1]
+          data = json.load(open(path))
+          data["value"]["observedInstalledBuild"] = 99
+          json.dump(data, open(path, "w"))
+          PY
+          if python3 Build/validate_in_app_update_evidence.py "$EVIDENCE"; then
+            echo "Invalid in-app update evidence was unexpectedly accepted." >&2
+            exit 1
+          fi
+
       - name: Swift tests
         run: swift test
       - name: Release build
