@@ -154,6 +154,10 @@ struct StudioView: View {
                 showImporter = true
             }
             .buttonStyle(.borderedProminent)
+
+            CaptureCapabilityPanel()
+                .frame(maxWidth: 620)
+
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
