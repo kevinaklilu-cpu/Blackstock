@@ -97,6 +97,7 @@ requirements = {
         "recordTemporaryCleanup",
         "reconcileRestartPersistence",
         "persistedFilePath",
+        "persistedFileSHA256",
     ],
     "Tests/BlackstockCoreTests/CaptureHardwareSmokeEvidenceTests.swift": [
         "testCompleteEvidenceRequiresAllFourPathsAndExternalChecks",
@@ -112,6 +113,9 @@ requirements = {
         "reconcilePostRestart",
         'capture-hardware-smoke.json',
         '"/Applications/Blackstock.app"',
+        "CryptoKit",
+        "SHA256()",
+        "persistedFileSHA256",
     ],
     "Build/validate_capture_hardware_smoke.py": [
         "durationSeconds must be at least 5 seconds",
@@ -119,6 +123,8 @@ requirements = {
         "videoTrackPresent must be true",
         "installedFromPackage",
         "appRestartPersistencePassed",
+        "persistedFileSHA256 does not match persisted file",
+        "restartVerifiedLaunchID",
     ],
 }
 
