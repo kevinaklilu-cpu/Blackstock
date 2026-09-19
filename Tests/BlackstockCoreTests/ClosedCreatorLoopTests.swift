@@ -115,6 +115,61 @@ final class ClosedCreatorLoopTests: XCTestCase {
         XCTAssertEqual(request.httpBody, data)
     }
 
+    func testResumableStatusReconcilesCompletedUpload() throws {
+        let data = Data(
+            #"{"id":"youtube-video-complete"}"#.utf8
+        )
+
+        let status = try YouTubeResumableUploader.resumableStatus(
+            statusCode: 201,
+            rangeHeader: nil,
+            data: data
+        )
+
+        XCTAssertEqual(
+            status,
+            .completed(videoID: "youtube-video-complete")
+        )
+    }
+
+    func testResumableStatusDetectsExpiredSession() throws {
+        let status = try YouTubeResumableUploader.resumableStatus(
+            statusCode: 404,
+            rangeHeader: nil,
+            data: Data()
+        )
+
+        XCTAssertEqual(status, .expired)
+    }
+
+    func testResumableStatusPreservesProviderOffset() throws {
+        let status = try YouTubeResumableUploader.resumableStatus(
+            statusCode: 308,
+            rangeHeader: "bytes=0-1048575",
+            data: Data()
+        )
+
+        XCTAssertEqual(
+            status,
+            .incomplete(nextOffset: 1_048_576)
+        )
+    }
+
+    func testUnexpectedResumableStatusDoesNotMasqueradeAsResume() {
+        XCTAssertThrowsError(
+            try YouTubeResumableUploader.resumableStatus(
+                statusCode: 503,
+                rangeHeader: nil,
+                data: Data()
+            )
+        ) {
+            XCTAssertEqual(
+                $0 as? YouTubeUploadError,
+                .uploadFailed(503)
+            )
+        }
+    }
+
     func testUploadResponseExtractsRealYouTubeVideoID() {
         let data = Data(#"{"id":"youtube-video-123","kind":"youtube#video"}"#.utf8)
         XCTAssertEqual(
