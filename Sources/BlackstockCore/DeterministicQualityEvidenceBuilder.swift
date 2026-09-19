@@ -192,8 +192,88 @@ public struct DeterministicQualityEvidenceBuilder: Sendable {
         if let technical = audioTechnicalAssessment,
            technical.snapshot.hasAudioTrack,
            let technicalEvidence = audioTechnicalEvidence {
-            guard let signal = audioSignalAssessment,
-                  let signalEvidence = audioSignalEvidence else {
+            if let signal = audioSignalAssessment,
+               let signalEvidence = audioSignalEvidence {
+                if signal.snapshot.analyzedSampleCount == 0 {
+                    findings.append(
+                        QualityFinding(
+                            area: .audio,
+                            severity: .blocker,
+                            title: "Audioanalyse ohne Samples",
+                            explanation: "Die Audiospur ist vorhanden, aber der lokale PCM-Analyzer konnte keine Samples aus dem aktuellen Render auswerten.",
+                            recommendedAction: "Render erneut erzeugen oder das Audioformat prüfen.",
+                            evidenceIDs: [
+                                technicalEvidence.id,
+                                signalEvidence.id
+                            ]
+                        )
+                    )
+                } else if let loudness = audioLoudnessAssessment,
+                          let loudnessEvidence = audioLoudnessEvidence,
+                          loudness.snapshot.integratedLUFS != nil,
+                          loudness.snapshot.truePeakDBTP != nil {
+                    findings.append(
+                        QualityFinding(
+                            area: .audio,
+                            severity: .info,
+                            title: "Audio des finalen Renders professionell gemessen",
+                            explanation: "PCM-Signal, Integrated Loudness und True Peak des aktuellen Renders wurden lokal nach dem ITU-R-BS.1770-Messpfad bestimmt.",
+                            recommendedAction: nil,
+                            evidenceIDs: [
+                                technicalEvidence.id,
+                                signalEvidence.id,
+                                loudnessEvidence.id
+                            ]
+                        )
+                    )
+
+                    if loudness.findings.contains(
+                        .truePeakAboveFullScale
+                    ) {
+                        findings.append(
+                            QualityFinding(
+                                area: .audio,
+                                severity: .warning,
+                                title: "True Peak über 0 dBTP",
+                                explanation: "Die oversampelte True-Peak-Messung des finalen Renders liegt über digitalem Vollpegel.",
+                                recommendedAction: "Audiomix oder Limiting prüfen und den finalen Render anschließend erneut messen.",
+                                evidenceIDs: [loudnessEvidence.id]
+                            )
+                        )
+                    }
+                } else {
+                    let ids = [
+                        technicalEvidence.id,
+                        signalEvidence.id,
+                        audioLoudnessEvidence?.id
+                    ].compactMap { $0 }
+                    findings.append(
+                        QualityFinding(
+                            area: .audio,
+                            severity: .blocker,
+                            title: "Professionelle Loudness-Messung fehlt",
+                            explanation: "Für den aktuellen Render liegen keine vollständigen Integrated-LUFS- und True-Peak-Werte aus dem professionellen Messpfad vor.",
+                            recommendedAction: "BS.1770-Loudness-/True-Peak-Analyse erneut ausführen; Peak/RMS allein ersetzen diesen Nachweis nicht.",
+                            evidenceIDs: ids
+                        )
+                    )
+                }
+
+                if signal.findings.contains(
+                    .fullScaleSamplesDetected
+                ) {
+                    findings.append(
+                        QualityFinding(
+                            area: .audio,
+                            severity: .warning,
+                            title: "Full-Scale-Samples erkannt",
+                            explanation: "Der lokale PCM-Analyzer hat Samples am digitalen Vollpegel erkannt.",
+                            recommendedAction: "Im finalen Review gezielt auf hörbares Clipping oder Verzerrungen prüfen.",
+                            evidenceIDs: [signalEvidence.id]
+                        )
+                    )
+                }
+            } else {
                 findings.append(
                     QualityFinding(
                         area: .audio,
@@ -202,78 +282,6 @@ public struct DeterministicQualityEvidenceBuilder: Sendable {
                         explanation: "Die Audiospur ist vorhanden, aber die lokale PCM-Analyse des aktuellen Renders fehlt.",
                         recommendedAction: "Finalen Render erneut analysieren, bevor veröffentlicht wird.",
                         evidenceIDs: [technicalEvidence.id]
-                    )
-                )
-                return CreatorQualityReview(
-                    projectID: projectID,
-                    stage: .review,
-                    evidence: evidence,
-                    findings: findings,
-                    reviewedAt: reviewedAt
-                )
-            }
-
-            if signal.snapshot.analyzedSampleCount == 0 {
-                findings.append(
-                    QualityFinding(
-                        area: .audio,
-                        severity: .blocker,
-                        title: "Audioanalyse ohne Samples",
-                        explanation: "Die Audiospur ist vorhanden, aber der lokale PCM-Analyzer konnte keine Samples aus dem aktuellen Render auswerten.",
-                        recommendedAction: "Render erneut erzeugen oder das Audioformat prüfen.",
-                        evidenceIDs: [
-                            technicalEvidence.id,
-                            signalEvidence.id
-                        ]
-                    )
-                )
-            } else if let loudness = audioLoudnessAssessment,
-                      let loudnessEvidence = audioLoudnessEvidence,
-                      loudness.snapshot.integratedLUFS != nil,
-                      loudness.snapshot.truePeakDBTP != nil {
-                findings.append(
-                    QualityFinding(
-                        area: .audio,
-                        severity: .info,
-                        title: "Audio des finalen Renders professionell gemessen",
-                        explanation: "PCM-Signal, Integrated Loudness und True Peak des aktuellen Renders wurden lokal nach dem ITU-R-BS.1770-Messpfad bestimmt.",
-                        recommendedAction: nil,
-                        evidenceIDs: [
-                            technicalEvidence.id,
-                            signalEvidence.id,
-                            loudnessEvidence.id
-                        ]
-                    )
-                )
-
-                if loudness.findings.contains(
-                    .truePeakAboveFullScale
-                ) {
-                    findings.append(
-                        QualityFinding(
-                            area: .audio,
-                            severity: .warning,
-                            title: "True Peak über 0 dBTP",
-                            explanation: "Die oversampelte True-Peak-Messung des finalen Renders liegt über digitalem Vollpegel.",
-                            recommendedAction: "Audiomix oder Limiting prüfen und den finalen Render anschließend erneut messen.",
-                            evidenceIDs: [loudnessEvidence.id]
-                        )
-                    )
-                }
-            } else {
-                let ids = [
-                    technicalEvidence.id,
-                    signalEvidence.id,
-                    audioLoudnessEvidence?.id
-                ].compactMap { $0 }
-                findings.append(
-                    QualityFinding(
-                        area: .audio,
-                        severity: .blocker,
-                        title: "Professionelle Loudness-Messung fehlt",
-                        explanation: "Für den aktuellen Render liegen keine vollständigen Integrated-LUFS- und True-Peak-Werte aus dem professionellen Messpfad vor.",
-                        recommendedAction: "BS.1770-Loudness-/True-Peak-Analyse erneut ausführen; Peak/RMS allein ersetzen diesen Nachweis nicht.",
-                        evidenceIDs: ids
                     )
                 )
             }
@@ -287,21 +295,6 @@ public struct DeterministicQualityEvidenceBuilder: Sendable {
                         explanation: "Die gemessene Sample-Rate liegt unter 44.100 Hz.",
                         recommendedAction: "Quelle und Export-Einstellungen prüfen, wenn höhere Audioqualität erwartet wird.",
                         evidenceIDs: [technicalEvidence.id]
-                    )
-                )
-            }
-
-            if signal.findings.contains(
-                .fullScaleSamplesDetected
-            ) {
-                findings.append(
-                    QualityFinding(
-                        area: .audio,
-                        severity: .warning,
-                        title: "Full-Scale-Samples erkannt",
-                        explanation: "Der lokale PCM-Analyzer hat Samples am digitalen Vollpegel erkannt.",
-                        recommendedAction: "Im finalen Review gezielt auf hörbares Clipping oder Verzerrungen prüfen.",
-                        evidenceIDs: [signalEvidence.id]
                     )
                 )
             }
