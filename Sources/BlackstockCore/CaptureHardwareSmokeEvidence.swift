@@ -13,6 +13,7 @@ public struct CaptureHardwarePathEvidence:
     public var projectID: UUID?
     public var recordedLaunchID: UUID?
     public var persistedFilePath: String?
+    public var persistedFileSHA256: String?
 
     public init(
         permissionGranted: Bool = false,
@@ -23,7 +24,8 @@ public struct CaptureHardwarePathEvidence:
         videoTrackPresent: Bool? = nil,
         projectID: UUID? = nil,
         recordedLaunchID: UUID? = nil,
-        persistedFilePath: String? = nil
+        persistedFilePath: String? = nil,
+        persistedFileSHA256: String? = nil
     ) {
         self.permissionGranted = permissionGranted
         self.recordingCreated = recordingCreated
@@ -34,6 +36,8 @@ public struct CaptureHardwarePathEvidence:
         self.projectID = projectID
         self.recordedLaunchID = recordedLaunchID
         self.persistedFilePath = persistedFilePath
+        self.persistedFileSHA256 =
+            persistedFileSHA256?.lowercased()
     }
 
     public func satisfies(
@@ -160,6 +164,7 @@ public struct CaptureHardwareSmokeEvidence:
                 && $0.projectID != nil
                 && $0.recordedLaunchID != nil
                 && $0.persistedFilePath != nil
+                && $0.persistedFileSHA256 != nil
         }) else {
             appRestartPersistencePassed = false
             restartVerifiedLaunchID = nil
