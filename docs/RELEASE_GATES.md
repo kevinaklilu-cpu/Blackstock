@@ -24,7 +24,7 @@ Statuswerte: **PASS / FAIL / BLOCKED_EXTERNAL**.
 | Upload Resume | PASS |
 | Analytics | PASS |
 | Comments | PASS |
-| Security | FAIL |
+| Security | PASS |
 | Privacy | FAIL |
 | Accessibility | FAIL |
 | Recovery | PASS |
@@ -64,7 +64,7 @@ Hinweis: **Publishing = PASS** bezieht sich auf den sicheren kanonischen YouTube
 
 Hinweis: **Accessibility bleibt FAIL**. Bereits vorhanden und CI-abgesichert sind expliziter VoiceOver-Semantik für die kritischen First-Run-, Studio- und Veröffentlichungsprüfungs-Kontrollen, inklusive dynamischer Accessibility-Werte für Trim-/Reframe-Regler sowie Beschriftungen für icon-only Aktionen und Controls mit ausgeblendeten sichtbaren Labels. Die Canonical-CI führt zusätzlich `Build/audit_accessibility.py` aus und blockiert Regressionen bei diesen Semantik-Verträgen.
 
-Hinweis: **Security bleibt FAIL**. Bereits umgesetzt sind die deterministisch abgesicherten App-Pfade: Google Desktop OAuth verwendet PKCE S256 und zufälligen State, der Callback lauscht ausschließlich auf 127.0.0.1 und akzeptiert nur den erwarteten Callback-Pfad, OAuth-Berechtigungen werden capability-basiert minimiert und bei Erweiterung neu autorisiert, Tokens/Scopes/OAuth-Client-Bindung liegen im gerätegebundenen macOS-Keychain mit Zugriff nur im entsperrten Zustand, und ein Wechsel der OAuth-Client-ID invalidiert die bestehende Autorisierung. Zusätzlich sind Update-Manifest, Paket-Hash und Developer-ID-Installer-Team kryptografisch bzw. systemseitig gebunden. Die separaten Apple-Gates Signing, Notarization und Gatekeeper bleiben davon unberührt und weiterhin BLOCKED_EXTERNAL.
+Hinweis: **Security = PASS** basiert zusätzlich auf dem versionierten `docs/THREAT_MODEL.md` und der in der Canonical-CI ausgeführten `Build/audit_security.py`-Suite. Der Audit erzwingt die kritischen Quellcode-Verträge und zentrale Negativtests. Bereits umgesetzt sind die deterministisch abgesicherten App-Pfade: Google Desktop OAuth verwendet PKCE S256 und zufälligen State, der Callback lauscht ausschließlich auf 127.0.0.1 und akzeptiert nur den erwarteten Callback-Pfad, OAuth-Berechtigungen werden capability-basiert minimiert und bei Erweiterung neu autorisiert, Tokens/Scopes/OAuth-Client-Bindung liegen im gerätegebundenen macOS-Keychain mit Zugriff nur im entsperrten Zustand, und ein Wechsel der OAuth-Client-ID invalidiert die bestehende Autorisierung. Zusätzlich sind Update-Manifest, Paket-Hash und Developer-ID-Installer-Team kryptografisch bzw. systemseitig gebunden. Die separaten Apple-Gates Signing, Notarization und Gatekeeper bleiben davon unberührt und weiterhin BLOCKED_EXTERNAL.
 
 Hinweis: **Privacy bleibt FAIL**. Bereits umgesetzt sind lokaler Datenhaltung, gerätegebundenem Keychain für Google-/YouTube-Zugangsdaten, sicherem OAuth-JSON-Import ohne Persistenz des client_secret, nichtpersistentem WebKit-Speicher für eingebettete YouTube-Recherche mit youtube-nocookie.com sowie einer bestätigungspflichtigen Löschfunktion, die Blackstock-Keychain-Einträge, blackstock.*-Einstellungen und den lokalen Application-Support-Datenbaum entfernt und Teilfehler sichtbar meldet.
 
@@ -74,6 +74,6 @@ Hinweis: **Migration = PASS** basiert auf versionierter Persistenz für Studio-W
 
 Hinweis: **Updater = FAIL** bleibt absichtlich bestehen. Manifest-Signatur, HTTPS-Pflicht, SHA-256-Paketprüfung und Developer-ID-Installer-Teamprüfung sind implementiert; für PASS fehlen weiterhin eine reale Produktions-Endpoint-Konfiguration und ein vollständiger Update-E2E gegen ein tatsächlich signiertes Release.
 
-Hinweis zur strikten Gate-Auslegung: **Audio** benötigt zusätzlich den im Canonical-Gate geforderten professionellen Audio-Toolset-Nachweis; **Security** benötigt Threat Model plus Security-Test-Suite; **Privacy** benötigt zusätzlich Revoke/Export/Retention; **Accessibility** benötigt zusätzlich Keyboard-/Focus-, Reduced-Motion-, Contrast- und Text-Scaling-Nachweise. Die vorhandenen Teilimplementierungen bleiben erhalten, reichen aber bewusst nicht für PASS.
+Hinweis zur strikten Gate-Auslegung: **Audio** benötigt zusätzlich den im Canonical-Gate geforderten professionellen Audio-Toolset-Nachweis; **Privacy** benötigt zusätzlich Revoke/Export/Retention; **Accessibility** benötigt zusätzlich Keyboard-/Focus-, Reduced-Motion-, Contrast- und Text-Scaling-Nachweise. Die vorhandenen Teilimplementierungen bleiben erhalten, reichen aber bewusst nicht für PASS.
 
 **STATUS: NOCH NICHT MARKTREIF**
