@@ -63,4 +63,70 @@ final class GrowthRecordStoreTests: XCTestCase {
             try store.loadLearning(projectID: projectID)
         )
     }
+    func testLegacyPublishedRecordIsMigratedToVersionedEnvelope() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let projectID = UUID()
+        let store = GrowthRecordStore(rootURL: root)
+        let directory = try store.projectDirectory(projectID: projectID)
+        let url = directory.appendingPathComponent("published-video.json")
+        let record = PublishedVideoRecord(
+            projectID: projectID,
+            experimentID: nil,
+            targetChannelID: "channel-A",
+            youtubeVideoID: "video-A",
+            publishedAt: Date(timeIntervalSince1970: 100)
+        )
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(record).write(to: url, options: [.atomic])
+
+        XCTAssertEqual(
+            try store.loadRecord(projectID: projectID),
+            record
+        )
+
+        let data = try Data(contentsOf: url)
+        let object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data)
+                as? [String: Any]
+        )
+        XCTAssertEqual(
+            object["schemaVersion"] as? Int,
+            GrowthRecordStoreSchema.current
+        )
+        XCTAssertNotNil(object["value"])
+    }
+
+    func testFutureGrowthSchemaHardStops() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let projectID = UUID()
+        let store = GrowthRecordStore(rootURL: root)
+        let directory = try store.projectDirectory(projectID: projectID)
+        let url = directory.appendingPathComponent("published-video.json")
+        let futureVersion = GrowthRecordStoreSchema.current + 1
+
+        try Data(
+            """
+            {"schemaVersion":\(futureVersion),"value":{}}
+            """.utf8
+        ).write(to: url, options: [.atomic])
+
+        XCTAssertThrowsError(
+            try store.loadRecord(projectID: projectID)
+        ) { error in
+            XCTAssertEqual(
+                error as? GrowthRecordStoreError,
+                .unsupportedFutureSchemaVersion(futureVersion)
+            )
+        }
+    }
+
+
 }
