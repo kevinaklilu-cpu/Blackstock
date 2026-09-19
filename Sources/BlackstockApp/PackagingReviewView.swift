@@ -330,6 +330,7 @@ struct PackagingReviewView: View {
                     .textFieldStyle(.roundedBorder)
 
                 TextEditor(text: $description)
+                    .accessibilityLabel("YouTube-Beschreibung")
                     .font(.body)
                     .frame(minHeight: 120)
                     .overlay(
