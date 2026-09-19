@@ -12,9 +12,9 @@ Statuswerte: **PASS / FAIL / BLOCKED_EXTERNAL**.
 | Temporal Semantics | FAIL |
 | Grounding / Provenance | FAIL |
 | Discovery | FAIL |
-| Rights | FAIL |
+| Rights | PASS |
 | Capture | FAIL |
-| Editing | FAIL |
+| Editing | PASS |
 | Audio | FAIL |
 | Captions | PASS |
 | Packaging | PASS |
@@ -45,6 +45,12 @@ Hinweis: **Wrong Channel E2E = PASS** basiert auf den deterministischen Hard-Sto
 Hinweis: **Upload Resume = PASS** basiert auf dem deterministischen Resumable-Upload-End-to-End-Test: Eine vorhandene Remote-Session wird abgefragt, der von YouTube gemeldete Remote-Offset gewinnt gegenüber lokalem Zwischenstand, nur der verbleibende Byte-Range wird übertragen, jeder PUT ist authentifiziert und der Fortschritt wird persistent bis `remoteCommitted` mit Video-ID und finalem Offset fortgeschrieben.
 
 Hinweis: **Analytics = PASS** basiert auf den deterministischen YouTube-Analytics-Contract- und Kontexttests: Abrufe sind an ein veröffentlichtes Projekt, denselben Projekt-Datensatz, denselben Zielkanal und eine konkrete Video-ID gebunden; vor dem Abruf wird die aktuell autorisierte YouTube-Kanalidentität erneut validiert. Fehlende Provider-Zeilen bleiben fehlend statt als Nullwerte erfunden zu werden, und inkonsistente Responses führen zum Hard-Stop.
+
+Hinweis: **Rights = PASS** basiert auf einer expliziten, versionierten Nutzer-Rechtebestätigung plus konkretem Rechte-/Eigentumsnachweis am Produktionsmedium. Unknown/Prohibited, fehlende Evidenz oder fehlende Attestation verhindern den Eintritt in die Produktion; dieselbe Rechtefreigabe wird als Quality-Evidence geführt und am Publish-Preflight erneut zwingend geprüft.
+
+Hinweis: **Editing = PASS** umfasst den persistenten nicht-destruktiven EditGraph mit Undo/Redo, Timeline/Storyboard, Trim, überlappungsbereinigte Remove-Range-Operationen und manuelles Reframe. Vorschau und finaler AVFoundation-Render verwenden dieselben editierenden Operationen; Änderungen invalidieren stale Render-/Audio-Evidenz und werden im Activity Ledger nachvollziehbar gespeichert.
+
+Hinweis: **Capture = FAIL** bleibt bewusst bestehen: Der Canonical-Gate verlangt Camera/Mic/Screen/System-Audio-Capture. Der vorhandene autorisierte Datei-Ingest in den lokalen Projekt-Workspace ist dafür wertvolle Media-Infrastruktur, ersetzt diese vier Capture-Pfade aber nicht.
 
 Hinweis: **Audio bleibt FAIL**. Bereits vorhanden und belegt sind Messungen des finalen gerenderten Edits, nicht des Rohmaterials: Blackstock prüft Audiospur, Sample-Rate und Kanalzahl und analysiert lokal PCM-Samples für Peak, RMS und Full-Scale-Samples. Fehlende Audiospur oder eine Analyse ohne Samples sind Blocker; mögliche Qualitätsprobleme bleiben als Warnungen und eine hörbare Prüfung auf Verständlichkeit, Störgeräusche und Pegelsprünge bleibt explizite Review-Evidenz. Peak/RMS werden nicht fälschlich als LUFS ausgegeben.
 
