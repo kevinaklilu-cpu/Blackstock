@@ -35,6 +35,39 @@ enum BlackstockKeychain {
         guard status == errSecSuccess else { throw KeychainError.status(status) }
     }
 
+
+    @discardableResult
+    static func deleteAccounts(withPrefix prefix: String) throws -> Int {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecReturnAttributes as String: true,
+            kSecMatchLimit as String: kSecMatchLimitAll
+        ]
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(
+            query as CFDictionary,
+            &result
+        )
+        if status == errSecItemNotFound {
+            return 0
+        }
+        guard status == errSecSuccess else {
+            throw KeychainError.status(status)
+        }
+
+        let items = result as? [[String: Any]] ?? []
+        let accounts = items.compactMap {
+            $0[kSecAttrAccount as String] as? String
+        }
+        .filter { $0.hasPrefix(prefix) }
+
+        for account in accounts {
+            try delete(account)
+        }
+        return accounts.count
+    }
+
     static func delete(_ account: String) throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,

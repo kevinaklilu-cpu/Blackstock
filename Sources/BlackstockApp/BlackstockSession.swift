@@ -105,6 +105,20 @@ final class BlackstockSession: ObservableObject {
         }
     }
 
+    @discardableResult
+    func removeLocalGoogleCredentials() throws -> Int {
+        let removed = try BlackstockKeychain.deleteAccounts(
+            withPrefix: "youtube."
+        )
+        tokenSet = nil
+        publishingAuthorizedChannelID = nil
+        analyticsAuthorizedChannelID = nil
+        lastPublishingResult = nil
+        channels = []
+        selectedChannelID = nil
+        return removed
+    }
+
     func removeImportedOAuthConfiguration() {
         do {
             try BlackstockKeychain.delete("google.oauth.importedClientID")
