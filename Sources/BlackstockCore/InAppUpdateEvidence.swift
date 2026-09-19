@@ -13,7 +13,7 @@ public enum InAppUpdateEvidenceError:
 }
 
 public enum InAppUpdateEvidenceSchema {
-    public static let current = 1
+    public static let current = 2
 }
 
 public struct InAppUpdateEvidence:
@@ -29,6 +29,7 @@ public struct InAppUpdateEvidence:
 
     public var targetVersion: String?
     public var targetBuild: Int?
+    public var targetSourceCommitSHA: String?
     public var packageURL: URL?
     public var packageSHA256: String?
     public var manifestVerifiedAt: Date?
@@ -37,6 +38,7 @@ public struct InAppUpdateEvidence:
     public var installerOpenedAt: Date?
     public var observedInstalledVersion: String?
     public var observedInstalledBuild: Int?
+    public var observedInstalledSourceCommitSHA: String?
     public var postUpdateLaunchVerifiedAt: Date?
 
     public init(
@@ -56,6 +58,7 @@ public struct InAppUpdateEvidence:
         self.startedAt = startedAt
         targetVersion = nil
         targetBuild = nil
+        targetSourceCommitSHA = nil
         packageURL = nil
         packageSHA256 = nil
         manifestVerifiedAt = nil
@@ -64,12 +67,14 @@ public struct InAppUpdateEvidence:
         installerOpenedAt = nil
         observedInstalledVersion = nil
         observedInstalledBuild = nil
+        observedInstalledSourceCommitSHA = nil
         postUpdateLaunchVerifiedAt = nil
     }
 
     public var hasVerifiedManifest: Bool {
         targetVersion != nil
             && targetBuild != nil
+            && targetSourceCommitSHA != nil
             && packageURL != nil
             && packageSHA256 != nil
             && manifestVerifiedAt != nil
@@ -86,8 +91,11 @@ public struct InAppUpdateEvidence:
               installerOpenedAt != nil,
               let targetVersion,
               let targetBuild,
+              let targetSourceCommitSHA,
               observedInstalledVersion == targetVersion,
               observedInstalledBuild == targetBuild,
+              observedInstalledSourceCommitSHA
+                == targetSourceCommitSHA,
               postUpdateLaunchVerifiedAt != nil else {
             return false
         }
@@ -137,6 +145,8 @@ public struct InAppUpdateEvidenceStore: Sendable {
         var evidence = try requireEvidence()
         evidence.targetVersion = manifest.version
         evidence.targetBuild = manifest.build
+        evidence.targetSourceCommitSHA =
+            manifest.sourceCommitSHA.lowercased()
         evidence.packageURL = manifest.packageURL
         evidence.packageSHA256 =
             manifest.sha256.lowercased()
@@ -188,6 +198,7 @@ public struct InAppUpdateEvidenceStore: Sendable {
     public func recordPostUpdateLaunchIfMatching(
         installedVersion: String,
         installedBuild: Int,
+        installedSourceCommitSHA: String,
         now: Date = Date()
     ) throws -> InAppUpdateEvidence? {
         guard var evidence = try load() else {
@@ -199,7 +210,10 @@ public struct InAppUpdateEvidenceStore: Sendable {
         guard evidence.targetVersion
                 == installedVersion,
               evidence.targetBuild
-                == installedBuild else {
+                == installedBuild,
+              evidence.targetSourceCommitSHA
+                == installedSourceCommitSHA.lowercased()
+        else {
             return evidence
         }
 
@@ -207,6 +221,8 @@ public struct InAppUpdateEvidenceStore: Sendable {
             installedVersion
         evidence.observedInstalledBuild =
             installedBuild
+        evidence.observedInstalledSourceCommitSHA =
+            installedSourceCommitSHA.lowercased()
         evidence.postUpdateLaunchVerifiedAt = now
         try save(evidence)
         return evidence
@@ -263,6 +279,8 @@ public struct InAppUpdateEvidenceStore: Sendable {
                 == manifest.version,
               evidence.targetBuild
                 == manifest.build,
+              evidence.targetSourceCommitSHA
+                == manifest.sourceCommitSHA.lowercased(),
               evidence.packageURL
                 == manifest.packageURL,
               evidence.packageSHA256
