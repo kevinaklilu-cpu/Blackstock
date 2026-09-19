@@ -25,6 +25,8 @@ jobs:
           grep -q 'NOCH NICHT MARKTREIF' README.md
       - name: Accessibility semantic audit
         run: python3 Build/audit_accessibility.py
+      - name: Security contract audit
+        run: python3 Build/audit_security.py
       - name: Swift tests
         run: swift test
       - name: Release build
