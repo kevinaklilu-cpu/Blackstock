@@ -27,6 +27,8 @@ final class StudioState: ObservableObject {
     @Published var reframeAspectRatio: ReframeAspectRatio = .landscape16x9
     @Published var reframeFocalX: Double = 0.5
     @Published var reframeFocalY: Double = 0.5
+    @Published var isSuggestingFocalPoint = false
+    @Published var focalPointProposal: VisionFocalPointProposal?
 
     private var correlationID = UUID()
 
@@ -83,6 +85,10 @@ final class StudioState: ObservableObject {
             captionURL = nil
             audioTechnicalAssessment = nil
             audioSignalAssessment = nil
+            focalPointProposal = nil
+            reframeAspectRatio = .landscape16x9
+            reframeFocalX = 0.5
+            reframeFocalY = 0.5
 
             ledger.append(.init(
                 timestamp: Date(),
@@ -205,6 +211,42 @@ final class StudioState: ObservableObject {
         ))
 
         await refreshPreviewAfterHistoryChange()
+    }
+
+    func suggestFocalPoint() async {
+        guard let asset else {
+            errorMessage = "Kein Produktionsmedium geladen."
+            return
+        }
+
+        isSuggestingFocalPoint = true
+        defer { isSuggestingFocalPoint = false }
+
+        do {
+            let proposal = try await LocalVisionFocalPointSuggester()
+                .suggest(url: asset.sourceURL)
+            focalPointProposal = proposal
+            reframeFocalX = proposal.focalX
+            reframeFocalY = proposal.focalY
+
+            ledger.append(.init(
+                timestamp: Date(),
+                actor: .blackstock,
+                stage: .editing,
+                action: "reframe-focus-proposed",
+                summary: "\(proposal.explanation) Der Vorschlag wurde nur in die Regler übernommen und noch nicht angewendet.",
+                relatedSourceIDs: [asset.id.uuidString],
+                reversible: false,
+                correlationID: correlationID
+            ))
+            errorMessage = nil
+        } catch LocalVisionFocalPointError.noRelevantObservation {
+            focalPointProposal = nil
+            errorMessage = "Vision hat in den Stichproben kein Gesicht oder keine Person erkannt. Der Fokus bleibt vollständig manuell."
+        } catch {
+            focalPointProposal = nil
+            errorMessage = "Lokaler Fokusvorschlag fehlgeschlagen: \(error.localizedDescription)"
+        }
     }
 
     func applyReframe() async {
