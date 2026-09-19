@@ -26,8 +26,20 @@ public struct ActionAuthorization: Sendable, Equatable {
     }
 }
 
+public enum PublicationQuotaState: String, Codable, Sendable {
+    case unknown = "UNKNOWN"
+    case available = "AVAILABLE"
+    case unavailable = "UNAVAILABLE"
+}
+
 public enum PublicationPreflightError: Error, Equatable, Sendable {
-    case missingTargetChannel, wrongChannel, renderNotValidated, rightsNotValidated, authorizationMissing, quotaUnavailable, networkUnavailable
+    case missingTargetChannel
+    case wrongChannel
+    case renderNotValidated
+    case rightsNotValidated
+    case authorizationMissing
+    case quotaUnavailable
+    case networkUnavailable
 }
 
 public struct PublicationPreflightContext: Sendable, Equatable {
@@ -37,7 +49,7 @@ public struct PublicationPreflightContext: Sendable, Equatable {
     public let renderValidated: Bool
     public let rightsValidated: Bool
     public let authorizationAvailable: Bool
-    public let quotaAvailable: Bool
+    public let quotaState: PublicationQuotaState
     public let networkAvailable: Bool
     public func validate() throws {
         guard let target = projectTargetChannelID, !target.isEmpty else { throw PublicationPreflightError.missingTargetChannel }
@@ -45,7 +57,9 @@ public struct PublicationPreflightContext: Sendable, Equatable {
         guard renderValidated else { throw PublicationPreflightError.renderNotValidated }
         guard rightsValidated else { throw PublicationPreflightError.rightsNotValidated }
         guard authorizationAvailable else { throw PublicationPreflightError.authorizationMissing }
-        guard quotaAvailable else { throw PublicationPreflightError.quotaUnavailable }
+        guard quotaState != .unavailable else {
+            throw PublicationPreflightError.quotaUnavailable
+        }
         guard networkAvailable else { throw PublicationPreflightError.networkUnavailable }
     }
 }
