@@ -76,6 +76,106 @@ public struct EditTimeRange: Codable, Sendable, Equatable {
     public var endSeconds: Double { startSeconds + durationSeconds }
 }
 
+public enum ReframeAspectRatio: String, Codable, Sendable, CaseIterable, Hashable {
+    case landscape16x9 = "16:9"
+    case portrait9x16 = "9:16"
+    case square1x1 = "1:1"
+
+    public var ratio: Double {
+        switch self {
+        case .landscape16x9: return 16.0 / 9.0
+        case .portrait9x16: return 9.0 / 16.0
+        case .square1x1: return 1.0
+        }
+    }
+
+    public var germanTitle: String {
+        switch self {
+        case .landscape16x9: return "16:9 Querformat"
+        case .portrait9x16: return "9:16 Hochformat"
+        case .square1x1: return "1:1 Quadrat"
+        }
+    }
+}
+
+public struct ReframeSpec: Codable, Sendable, Equatable {
+    public let aspectRatio: ReframeAspectRatio
+    public let focalX: Double
+    public let focalY: Double
+
+    public init(
+        aspectRatio: ReframeAspectRatio,
+        focalX: Double = 0.5,
+        focalY: Double = 0.5
+    ) {
+        self.aspectRatio = aspectRatio
+        self.focalX = min(max(focalX, 0), 1)
+        self.focalY = min(max(focalY, 0), 1)
+    }
+}
+
+public struct ReframeCropPlan: Codable, Sendable, Equatable {
+    public let sourceWidth: Double
+    public let sourceHeight: Double
+    public let cropX: Double
+    public let cropY: Double
+    public let cropWidth: Double
+    public let cropHeight: Double
+
+    public init(
+        sourceWidth: Double,
+        sourceHeight: Double,
+        cropX: Double,
+        cropY: Double,
+        cropWidth: Double,
+        cropHeight: Double
+    ) {
+        self.sourceWidth = sourceWidth
+        self.sourceHeight = sourceHeight
+        self.cropX = cropX
+        self.cropY = cropY
+        self.cropWidth = cropWidth
+        self.cropHeight = cropHeight
+    }
+
+    public static func make(
+        sourceWidth: Double,
+        sourceHeight: Double,
+        spec: ReframeSpec
+    ) -> ReframeCropPlan? {
+        guard sourceWidth > 0, sourceHeight > 0 else { return nil }
+
+        let sourceRatio = sourceWidth / sourceHeight
+        let targetRatio = spec.aspectRatio.ratio
+
+        if sourceRatio > targetRatio {
+            let cropHeight = sourceHeight
+            let cropWidth = cropHeight * targetRatio
+            let maxX = max(sourceWidth - cropWidth, 0)
+            return .init(
+                sourceWidth: sourceWidth,
+                sourceHeight: sourceHeight,
+                cropX: maxX * spec.focalX,
+                cropY: 0,
+                cropWidth: cropWidth,
+                cropHeight: cropHeight
+            )
+        }
+
+        let cropWidth = sourceWidth
+        let cropHeight = cropWidth / targetRatio
+        let maxY = max(sourceHeight - cropHeight, 0)
+        return .init(
+            sourceWidth: sourceWidth,
+            sourceHeight: sourceHeight,
+            cropX: 0,
+            cropY: maxY * spec.focalY,
+            cropWidth: cropWidth,
+            cropHeight: cropHeight
+        )
+    }
+}
+
 public enum EditOperationType: String, Codable, Sendable {
     case trim
     case removeRange
@@ -93,6 +193,7 @@ public struct EditOperation: Codable, Sendable, Equatable, Identifiable {
     public let timeRange: EditTimeRange?
     public let value: Double?
     public let text: String?
+    public let reframeSpec: ReframeSpec?
     public let createdAt: Date
 
     public init(
@@ -101,6 +202,7 @@ public struct EditOperation: Codable, Sendable, Equatable, Identifiable {
         timeRange: EditTimeRange? = nil,
         value: Double? = nil,
         text: String? = nil,
+        reframeSpec: ReframeSpec? = nil,
         createdAt: Date
     ) {
         self.id = id
@@ -108,6 +210,7 @@ public struct EditOperation: Codable, Sendable, Equatable, Identifiable {
         self.timeRange = timeRange
         self.value = value
         self.text = text
+        self.reframeSpec = reframeSpec
         self.createdAt = createdAt
     }
 }
