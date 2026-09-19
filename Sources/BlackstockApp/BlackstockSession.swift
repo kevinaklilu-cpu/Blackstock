@@ -69,6 +69,9 @@ final class BlackstockSession: ObservableObject {
     @Published var isAuthorizingAnalytics = false
     @Published var isCollectingAnalytics = false
     @Published private(set) var latestGrowthLearning: GrowthLearningRecord?
+    @Published var isLoadingComments = false
+    @Published private(set) var latestCommentPage: YouTubeCommentThreadPage?
+    @Published private(set) var latestCommentsVideoID: String?
     @Published private(set) var importedOAuthClientID: String
 
     private var tokenSet: GoogleOAuthTokenSet?
@@ -126,6 +129,8 @@ final class BlackstockSession: ObservableObject {
         publishingAuthorizedChannelID = nil
         analyticsAuthorizedChannelID = nil
         lastPublishingResult = nil
+        latestCommentPage = nil
+        latestCommentsVideoID = nil
         channels = []
         selectedChannelID = nil
         return removed
@@ -187,6 +192,9 @@ final class BlackstockSession: ObservableObject {
         analyticsAuthorizedChannelID = nil
         lastPublishingResult = nil
         latestGrowthLearning = nil
+        latestCommentPage = nil
+        latestCommentsVideoID = nil
+        isLoadingComments = false
         step = .welcome
         channels = []
         selectedChannelID = nil
@@ -796,6 +804,110 @@ final class BlackstockSession: ObservableObject {
         }
     }
 
+    func validatedReadOnlyAccessToken(
+        targetChannelID: String
+    ) async throws -> String {
+        let storedScopes = BlackstockKeychain.read(
+            "youtube.\(targetChannelID).scopes"
+        )
+        let plan = GoogleOAuthScopePlanner().plan(
+            capabilities: [.discoveryReadOnly],
+            tokenScopeString: storedScopes
+        )
+        guard plan.state == .alreadyAuthorized else {
+            throw PublishingSessionError.missingScopes
+        }
+        try validateStoredOAuthClient(for: targetChannelID)
+
+        let refreshToken = BlackstockKeychain.read(
+            "youtube.\(targetChannelID).refreshToken"
+        )
+        if !refreshToken.isEmpty {
+            let refreshed = try await GoogleOAuthTokenRefresher().refresh(
+                refreshToken: refreshToken,
+                clientID: effectiveClientID
+            )
+            try BlackstockKeychain.write(
+                refreshed.accessToken,
+                account: "youtube.\(targetChannelID).accessToken"
+            )
+            return refreshed.accessToken
+        }
+
+        let accessToken = BlackstockKeychain.read(
+            "youtube.\(targetChannelID).accessToken"
+        )
+        guard !accessToken.isEmpty else {
+            throw PublishingSessionError.missingToken
+        }
+        return accessToken
+    }
+
+    func loadPublishedComments(
+        project: BlackstockProject,
+        record: PublishedVideoRecord
+    ) async {
+        guard project.stage == .published,
+              record.projectID == project.id,
+              record.targetChannelID == project.targetChannelID else {
+            errorMessage = "Kommentare können nur für das eindeutig veröffentlichte Projekt geladen werden."
+            return
+        }
+
+        isLoadingComments = true
+        defer { isLoadingComments = false }
+
+        do {
+            let accessToken = try await validatedReadOnlyAccessToken(
+                targetChannelID: project.targetChannelID
+            )
+            let identities = try await YouTubeAuthorizedClient(
+                accessToken: accessToken
+            ).myChannels()
+            _ = try PublishingChannelIdentityGuard().validate(
+                targetChannelID: project.targetChannelID,
+                identities: identities
+            )
+
+            let page = try await YouTubeCommentsClient(
+                accessToken: accessToken
+            ).listThreads(
+                videoID: record.youtubeVideoID,
+                maxResults: 20,
+                order: .time
+            )
+
+            do {
+                try YouTubeCommentContextGuard().validate(
+                    page: page,
+                    expectedVideoID: record.youtubeVideoID,
+                    expectedChannelID: project.targetChannelID
+                )
+            } catch {
+                latestCommentPage = nil
+                latestCommentsVideoID = nil
+                errorMessage = "Kommentarabruf gestoppt: YouTube lieferte Daten für einen unerwarteten Video- oder Kanalkontext."
+                return
+            }
+
+            latestCommentPage = page
+            latestCommentsVideoID = record.youtubeVideoID
+            errorMessage = nil
+        } catch YouTubeCommentsError.commentsDisabled {
+            latestCommentPage = nil
+            latestCommentsVideoID = record.youtubeVideoID
+            errorMessage = "Kommentare sind für dieses YouTube-Video deaktiviert."
+        } catch YouTubeCommentsError.videoNotFound {
+            latestCommentPage = nil
+            latestCommentsVideoID = nil
+            errorMessage = "Das veröffentlichte YouTube-Video wurde beim Kommentarabruf nicht gefunden."
+        } catch {
+            latestCommentPage = nil
+            latestCommentsVideoID = nil
+            errorMessage = "Kommentare konnten nicht geladen werden: \(describe(error))"
+        }
+    }
+
     func validatedAnalyticsAccessToken(
         targetChannelID: String
     ) async throws -> String {
@@ -1278,6 +1390,9 @@ final class BlackstockSession: ObservableObject {
         channels = []
         selectedChannelID = nil
         opportunities = []
+        latestCommentPage = nil
+        latestCommentsVideoID = nil
+        isLoadingComments = false
         errorMessage = nil
     }
 

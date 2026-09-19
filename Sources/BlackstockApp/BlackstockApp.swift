@@ -400,6 +400,140 @@ private struct OverviewView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                Divider()
+
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("YouTube-Kommentare")
+                                .font(.headline)
+                            Text("Read-only · Top-Level-Threads")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button {
+                            Task {
+                                await session.loadPublishedComments(
+                                    project: project,
+                                    record: record
+                                )
+                            }
+                        } label: {
+                            HStack {
+                                if session.isLoadingComments {
+                                    ProgressView().controlSize(.small)
+                                }
+                                Label(
+                                    session.isLoadingComments
+                                        ? "Kommentare werden geladen …"
+                                        : "Kommentare aktualisieren",
+                                    systemImage: "bubble.left.and.bubble.right"
+                                )
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(session.isLoadingComments)
+                    }
+
+                    if session.latestCommentsVideoID == record.youtubeVideoID,
+                       let page = session.latestCommentPage {
+                        if page.threads.isEmpty {
+                            Text("YouTube liefert aktuell keine veröffentlichten Top-Level-Kommentare für dieses Video.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(page.threads.prefix(8)) { thread in
+                                HStack(alignment: .top, spacing: 10) {
+                                    AsyncImage(
+                                        url: thread.topLevelComment
+                                            .authorProfileImageURL
+                                    ) { image in
+                                        image.resizable().scaledToFill()
+                                    } placeholder: {
+                                        Circle()
+                                            .fill(Color.primary.opacity(0.08))
+                                    }
+                                    .frame(width: 32, height: 32)
+                                    .clipShape(Circle())
+                                    .accessibilityHidden(true)
+
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        HStack {
+                                            Text(
+                                                thread.topLevelComment
+                                                    .authorDisplayName
+                                            )
+                                            .font(.caption.weight(.semibold))
+                                            Spacer()
+                                            if let publishedAt = thread
+                                                .topLevelComment.publishedAt {
+                                                Text(
+                                                    publishedAt.formatted(
+                                                        date: .abbreviated,
+                                                        time: .shortened
+                                                    )
+                                                )
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
+                                            }
+                                        }
+
+                                        Text(
+                                            thread.topLevelComment.textDisplay
+                                        )
+                                        .font(.caption)
+                                        .textSelection(.enabled)
+
+                                        HStack(spacing: 10) {
+                                            if let likes = thread
+                                                .topLevelComment.likeCount {
+                                                Label(
+                                                    "\(likes)",
+                                                    systemImage: "hand.thumbsup"
+                                                )
+                                            }
+                                            if let replies = thread
+                                                .totalReplyCount {
+                                                Label(
+                                                    "\(replies) Antworten",
+                                                    systemImage: "arrowshape.turn.up.left"
+                                                )
+                                            }
+                                        }
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                    }
+                                }
+                                .padding(.vertical, 4)
+                            }
+
+                            if page.threads.count > 8
+                                || page.nextPageToken != nil {
+                                Text("Weitere Kommentare sind bei YouTube vorhanden; diese Ansicht zeigt bewusst nur einen begrenzten read-only Ausschnitt.")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Text(
+                                "Abruf: "
+                                + page.retrievedAt.formatted(
+                                    date: .abbreviated,
+                                    time: .shortened
+                                )
+                                + " · YouTube Data API · Sortierung: Neueste. "
+                                + "Die Antwortzahl stammt von YouTube; Antworten selbst werden hier noch nicht vollständig geladen."
+                            )
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        Text("Noch keine Kommentare für dieses veröffentlichte Video abgerufen.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
                 if let error = session.errorMessage {
                     Label(
                         error,
