@@ -64,7 +64,7 @@ public struct CaptureHardwareSmokeEvidence:
     Codable,
     Sendable,
     Equatable {
-    public static let currentSchemaVersion = 3
+    public static let currentSchemaVersion = 4
 
     public var schemaVersion: Int
     public var testedAt: Date
@@ -76,6 +76,7 @@ public struct CaptureHardwareSmokeEvidence:
     public var installedFromPackage: Bool
     public var applicationTeamID: String
     public var developerIDApplicationVerified: Bool
+    public var applicationExecutableSHA256: String
 
     public var camera: CaptureHardwarePathEvidence
     public var microphone: CaptureHardwarePathEvidence
@@ -99,7 +100,8 @@ public struct CaptureHardwareSmokeEvidence:
         hardwareModel: String,
         installedFromPackage: Bool,
         applicationTeamID: String,
-        developerIDApplicationVerified: Bool
+        developerIDApplicationVerified: Bool,
+        applicationExecutableSHA256: String
     ) {
         schemaVersion = Self.currentSchemaVersion
         self.testedAt = testedAt
@@ -113,6 +115,8 @@ public struct CaptureHardwareSmokeEvidence:
         self.applicationTeamID = applicationTeamID
         self.developerIDApplicationVerified =
             developerIDApplicationVerified
+        self.applicationExecutableSHA256 =
+            applicationExecutableSHA256.lowercased()
         camera = .init()
         microphone = .init()
         screen = .init()
@@ -210,6 +214,9 @@ public struct CaptureHardwareSmokeEvidence:
         installedFromPackage
             && developerIDApplicationVerified
             && !applicationTeamID.isEmpty
+            && applicationExecutableSHA256.count == 64
+            && applicationExecutableSHA256
+                .allSatisfy({ $0.isHexDigit })
             && allCanonicalPathsPass
             && deniedPermissionHardStopPassed
             && temporaryCleanupPassed
