@@ -1,5 +1,9 @@
 import Foundation
 
+public enum YouTubeAnalyticsCompleteness: String, Codable, Sendable {
+    case providerMayLag = "PROVIDER_MAY_LAG"
+}
+
 public struct YouTubeAnalyticsSnapshot: Codable, Sendable, Equatable, Identifiable {
     public let id: UUID
     public let channelID: String
@@ -53,6 +57,17 @@ public struct YouTubeAnalyticsSnapshot: Codable, Sendable, Equatable, Identifiab
         self.subscribersGained = subscribersGained
         self.subscribersLost = subscribersLost
     }
+
+    public var temporalSemantic: TemporalSemantic {
+        .analyticsPeriod
+    }
+
+    public var completeness: YouTubeAnalyticsCompleteness {
+        .providerMayLag
+    }
+
+    public var requestedStartDate: String { startDate }
+    public var requestedEndDate: String { endDate }
 
     public var netSubscribers: Int? {
         guard let gained = subscribersGained, let lost = subscribersLost else { return nil }
