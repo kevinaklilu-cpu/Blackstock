@@ -59,7 +59,7 @@ final class StudioState: ObservableObject {
                         actor: .blackstock,
                         stage: .editing,
                         action: "workspace-recovered-from-backup",
-                        summary: "Der primäre Projekt-Workspace war nicht lesbar. Blackstock hat den letzten validierten lokalen Backup-Stand geladen.",
+                        summary: "Der primäre Projekt-Arbeitsbereich war nicht lesbar. Blackstock hat den letzten validierten lokalen Sicherungsstand geladen.",
                         reversible: false,
                         correlationID: correlationID
                     ))
@@ -70,7 +70,7 @@ final class StudioState: ObservableObject {
                         actor: .blackstock,
                         stage: .editing,
                         action: "workspace-schema-migrated",
-                        summary: "Projekt-Workspace wurde lokal von Schema v\(sourceVersion) auf v\(WorkspaceSchema.current) migriert.",
+                        summary: "Projekt-Arbeitsbereich wurde lokal von Schema v\(sourceVersion) auf v\(WorkspaceSchema.current) migriert.",
                         reversible: false,
                         correlationID: correlationID
                     ))
@@ -108,7 +108,7 @@ final class StudioState: ObservableObject {
                         renderArtifact = nil
                         persistWorkspaceIfPossible()
                         if fileExists {
-                            errorMessage = "Der gespeicherte Render stammt aus einer älteren Validierungslogik und muss vor Packaging neu gerendert werden."
+                            errorMessage = "Der gespeicherte Render stammt aus einer älteren Validierungslogik und muss vor dem Veröffentlichungspaket neu gerendert werden."
                         }
                     }
                 }
@@ -122,7 +122,7 @@ final class StudioState: ObservableObject {
                             for: asset.sourceURL
                         )
                     } else {
-                        errorMessage = "Das gespeicherte Produktionsmedium fehlt im Projekt-Workspace."
+                        errorMessage = "Das gespeicherte Produktionsmedium fehlt im Projekt-Arbeitsbereich."
                     }
                 }
                 if loadResult.recoveredFromBackup
@@ -130,9 +130,9 @@ final class StudioState: ObservableObject {
                     persistWorkspaceIfPossible()
                 }
                 if loadResult.recoveredFromBackup {
-                    errorMessage = "Projekt-Workspace wurde aus dem letzten validierten lokalen Backup wiederhergestellt."
+                    errorMessage = "Projekt-Arbeitsbereich wurde aus dem letzten validierten lokalen Sicherungsstand wiederhergestellt."
                 } else if let sourceVersion = loadResult.migratedFromSchemaVersion {
-                    errorMessage = "Projekt-Workspace wurde sicher von Schema v\(sourceVersion) auf v\(WorkspaceSchema.current) migriert."
+                    errorMessage = "Projekt-Arbeitsbereich wurde sicher von Schema v\(sourceVersion) auf v\(WorkspaceSchema.current) migriert."
                 }
                 return
             }
@@ -140,7 +140,7 @@ final class StudioState: ObservableObject {
             loadStoryboard(projectID: projectID)
             persistWorkspaceIfPossible()
         } catch {
-            errorMessage = "Projekt-Workspace konnte nicht geladen werden: \(error.localizedDescription)"
+            errorMessage = "Projekt-Arbeitsbereich konnte nicht geladen werden: \(error.localizedDescription)"
         }
     }
 
@@ -704,7 +704,7 @@ final class StudioState: ObservableObject {
         retentionAdvisorAvailability = availability
         guard availability == .available else {
             retentionAdvisory = nil
-            errorMessage = "Lokale Retention-Hinweise sind auf diesem Mac oder für diese Sprache nicht verfügbar. Die gemessenen Struktur-Fakten und die manuelle Review bleiben verfügbar."
+            errorMessage = "Lokale Hinweise zur Zuschauerbindung sind auf diesem Mac oder für diese Sprache nicht verfügbar. Die gemessenen Struktur-Fakten und die manuelle Prüfung bleiben verfügbar."
             return
         }
 
@@ -722,7 +722,7 @@ final class StudioState: ObservableObject {
                 actor: .blackstock,
                 stage: .editing,
                 action: "local-retention-advisory-generated",
-                summary: "Lokale Retention-/Strukturhinweise wurden aus Transkript und gemessenen Struktur-Fakten erstellt; sie sind keine Release-Evidenz.",
+                summary: "Lokale Hinweise zur Zuschauerbindung und Struktur wurden aus Transkript und gemessenen Struktur-Fakten erstellt; sie sind keine Freigabe-Evidenz.",
                 relatedSourceIDs: advisory.segmentIDs.map(\.uuidString),
                 reversible: false,
                 correlationID: correlationID
@@ -731,7 +731,7 @@ final class StudioState: ObservableObject {
             errorMessage = nil
         } catch {
             retentionAdvisory = nil
-            errorMessage = "Lokale Retention-Hinweise konnten nicht erstellt werden: \(error.localizedDescription)"
+            errorMessage = "Lokale Hinweise zur Zuschauerbindung konnten nicht erstellt werden: \(error.localizedDescription)"
         }
     }
 
@@ -921,7 +921,7 @@ final class StudioState: ObservableObject {
             )
             try store.save(snapshot)
         } catch {
-            errorMessage = "Autosave des Projekt-Workspace fehlgeschlagen: \(error.localizedDescription)"
+            errorMessage = "Automatisches Speichern des Projekt-Arbeitsbereichs fehlgeschlagen: \(error.localizedDescription)"
         }
     }
 
