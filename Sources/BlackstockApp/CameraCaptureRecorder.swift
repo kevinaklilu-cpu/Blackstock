@@ -13,6 +13,7 @@ final class CameraCaptureRecorder: NSObject, ObservableObject {
     private let session = AVCaptureSession()
     private let movieOutput = AVCaptureMovieFileOutput()
     private var configured = false
+    private var configuredWithMicrophone = false
 
     func startRecording() async {
         guard !isPreparing, !isRecording else { return }
@@ -63,7 +64,14 @@ final class CameraCaptureRecorder: NSObject, ObservableObject {
     }
 
     private func configureIfNeeded() throws {
-        guard !configured else { return }
+        let microphoneAuthorized =
+            AVCaptureDevice.authorizationStatus(for: .audio)
+                == .authorized
+
+        if configured,
+           configuredWithMicrophone == microphoneAuthorized {
+            return
+        }
 
         guard AVCaptureDevice.authorizationStatus(for: .video)
                 == .authorized else {
@@ -77,14 +85,20 @@ final class CameraCaptureRecorder: NSObject, ObservableObject {
         defer { session.commitConfiguration() }
         session.sessionPreset = .high
 
+        for input in session.inputs {
+            session.removeInput(input)
+        }
+        for output in session.outputs {
+            session.removeOutput(output)
+        }
+
         let cameraInput = try AVCaptureDeviceInput(device: camera)
         guard session.canAddInput(cameraInput) else {
             throw CameraCaptureError.cannotAddCameraInput
         }
         session.addInput(cameraInput)
 
-        if AVCaptureDevice.authorizationStatus(for: .audio)
-                == .authorized,
+        if microphoneAuthorized,
            let microphone = AVCaptureDevice.default(for: .audio) {
             let microphoneInput = try AVCaptureDeviceInput(
                 device: microphone
@@ -104,6 +118,7 @@ final class CameraCaptureRecorder: NSObject, ObservableObject {
         )
 
         configured = true
+        configuredWithMicrophone = microphoneAuthorized
     }
 }
 
