@@ -69,7 +69,20 @@ Ein Abbruch während einer laufenden Aufnahme muss temporäre Dateien bereinigen
 
 ## Evidenzdatei
 
-Der Test wird als JSON gespeichert und mit `Build/validate_capture_hardware_smoke.py` validiert.
+Blackstock erzeugt und aktualisiert die Hardware-Evidenz automatisch während der echten App-Nutzung unter:
+
+`~/Library/Application Support/Blackstock/Diagnostics/capture-hardware-smoke.json`
+
+Die Einstellungen zeigen für jeden der vier kanonischen Pfade den aktuellen technischen Nachweis und können die Datei im Finder öffnen. Ein lokaler Entwicklungsstart zählt nicht als Installer-Nachweis; `installedFromPackage` wird nur für `/Applications/Blackstock.app` gesetzt.
+
+Nach dem vollständigen Test wird dieselbe Datei auf demselben Mac validiert:
+
+```bash
+python3 Build/validate_capture_hardware_smoke.py \
+  "$HOME/Library/Application Support/Blackstock/Diagnostics/capture-hardware-smoke.json"
+```
+
+Der Validator prüft zusätzlich, dass die projektgebundenen Capture-Dateien noch existieren, Screen und Systemaudio aus derselben ScreenCaptureKit-Datei stammen und der Restart-Nachweis aus einer anderen App-Launch-ID als die Aufnahmen stammt.
 
 Pflichtfelder:
 
@@ -90,6 +103,11 @@ Pflichtfelder:
 - `deniedPermissionHardStopPassed`
 - `temporaryCleanupPassed`
 - `appRestartPersistencePassed`
+- `restartVerifiedLaunchID`
+- `deniedPermissionKinds`: alle vier kanonischen Capture-Arten
+- `temporaryCleanupKinds`: alle vier kanonischen Capture-Arten
+
+Jeder Pfad enthält zusätzlich die projektgebundene `projectID`, die `recordedLaunchID` und den `persistedFilePath`. Diese Felder werden von Blackstock selbst geschrieben; die persistierte Datei muss beim finalen Validatorlauf noch vorhanden sein.
 
 Jeder Pflichtpfad muss PASS sein. Ein fehlendes Feld, Dauer <= 0, fehlende reale Spur oder fehlende Projektbindung führt zum FAIL.
 
