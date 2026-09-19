@@ -59,10 +59,17 @@ requirements = {
         "installedAppVersion",
         "installedAppBuild",
         "installedAppVersionMismatch",
+        "cameraEntitlementVerified",
+        "audioInputEntitlementVerified",
+        "missingCaptureEntitlements",
+        "com.apple.security.device.camera",
+        "com.apple.security.device.audio-input",
     ],
     "Build/validate_production_release_evidence.py": [
         "installedAppVersion",
         "installedAppBuild",
+        "cameraEntitlementVerified",
+        "audioInputEntitlementVerified",
         "/Applications/Blackstock.app",
     ],
 }
