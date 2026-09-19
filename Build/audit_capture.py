@@ -94,6 +94,8 @@ requirements = {
         "reconcileRestartPersistence",
         "persistedFilePath",
         "persistedFileSHA256",
+        "blackstockSourceCommitSHA",
+        "currentSchemaVersion = 2",
     ],
     "Tests/BlackstockCoreTests/CaptureHardwareSmokeEvidenceTests.swift": [
         "testCompleteEvidenceRequiresAllFourPathsAndExternalChecks",
@@ -112,6 +114,7 @@ requirements = {
         "CryptoKit",
         "SHA256()",
         "persistedFileSHA256",
+        "BlackstockSourceCommitSHA",
     ],
     "Build/Blackstock.entitlements": [
         "com.apple.security.device.camera",
@@ -134,6 +137,8 @@ requirements = {
         "appRestartPersistencePassed",
         "persistedFileSHA256 does not match persisted file",
         "restartVerifiedLaunchID",
+        "blackstockSourceCommitSHA",
+        "40-character hexadecimal Git commit SHA",
     ],
 }
 
