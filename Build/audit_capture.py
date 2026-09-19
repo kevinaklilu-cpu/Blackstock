@@ -117,6 +117,15 @@ requirements = {
         "SHA256()",
         "persistedFileSHA256",
     ],
+    "Build/Blackstock.entitlements": [
+        "com.apple.security.device.camera",
+        "com.apple.security.device.audio-input",
+    ],
+    "Build/package.sh": [
+        "Build/Blackstock.entitlements",
+        "--entitlements",
+        "--options runtime",
+    ],
     "Build/validate_capture_hardware_smoke.py": [
         "durationSeconds must be at least 5 seconds",
         "decodedSamples must be greater than zero",
