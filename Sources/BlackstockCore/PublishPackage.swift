@@ -186,14 +186,19 @@ public struct PublishReviewContext: Sendable, Equatable {
             let language = caption.language.trimmingCharacters(
                 in: .whitespacesAndNewlines
             )
-            guard !language.isEmpty,
-                  FileManager.default.fileExists(
-                    atPath: caption.fileURL.path
-                  ),
-                  let fileSize = try? caption.fileURL.resourceValues(
-                    forKeys: [.fileSizeKey]
-                  ).fileSize,
-                  fileSize > 0 else {
+            guard !language.isEmpty else {
+                throw PublishPackageValidationError.captionInvalid
+            }
+
+            do {
+                let assessment = try CaptionTechnicalInspector()
+                    .inspect(url: caption.fileURL)
+                guard assessment.uploadCompatible else {
+                    throw PublishPackageValidationError.captionInvalid
+                }
+            } catch let validationError as PublishPackageValidationError {
+                throw validationError
+            } catch {
                 throw PublishPackageValidationError.captionInvalid
             }
         }
