@@ -246,7 +246,7 @@ struct PackagingReviewView: View {
                         .inspect(url: durableURL)
                     session.errorMessage = nil
                 } catch {
-                    session.errorMessage = "Thumbnail konnte nicht sicher in den Projekt-Workspace übernommen werden: \(error.localizedDescription)"
+                    session.errorMessage = "Vorschaubild konnte nicht sicher in den Projekt-Arbeitsbereich übernommen werden: \(error.localizedDescription)"
                 }
             }
         }
@@ -295,7 +295,7 @@ struct PackagingReviewView: View {
                     ]
                     session.errorMessage = nil
                 } catch {
-                    session.errorMessage = "Caption-Datei konnte nicht sicher in den Projekt-Workspace übernommen werden: \(error.localizedDescription)"
+                    session.errorMessage = "Untertiteldatei konnte nicht sicher in den Projekt-Arbeitsbereich übernommen werden: \(error.localizedDescription)"
                 }
             }
         }
@@ -307,7 +307,7 @@ struct PackagingReviewView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Veröffentlichungspaket & Prüfung")
                         .font(.title2.bold())
-                    Text("Alles prüfen, bevor Blackstock eine Remote-Aktion zulässt.")
+                    Text("Alles prüfen, bevor Blackstock eine externe Aktion zulässt.")
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -776,7 +776,7 @@ struct PackagingReviewView: View {
     private func areaTitle(_ area: CreatorQualityArea) -> String {
         switch area {
         case .packaging: return "Veröffentlichungspaket"
-        case .retentionStructure: return "Retention-Struktur"
+        case .retentionStructure: return "Zuschauerbindungs-Struktur"
         case .audio: return "Audio"
         case .captions: return "Captions"
         case .visualComposition: return "Visuals"
@@ -812,7 +812,7 @@ struct PackagingReviewView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Label(project.targetChannelID, systemImage: "person.crop.rectangle")
                     .font(.callout.monospaced())
-                Text("Dieser Zielkanal ist Teil des Projekts und kann beim Publishing nicht still überschrieben werden.")
+                Text("Dieser Zielkanal ist Teil des Projekts und kann bei der Veröffentlichung nicht still überschrieben werden.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -840,7 +840,7 @@ struct PackagingReviewView: View {
                     area: .packaging
                 )
                 qualityRow(
-                    title: "Retention-Struktur",
+                    title: "Zuschauerbindungs-Struktur",
                     area: .retentionStructure
                 )
                 qualityRow(
@@ -924,7 +924,7 @@ struct PackagingReviewView: View {
             if session.publishingAuthorizedChannelID
                 == project.targetChannelID {
                 Label(
-                    "Publishing-Berechtigung für diesen Zielkanal verifiziert",
+                    "Veröffentlichungsberechtigung für diesen Zielkanal verifiziert",
                     systemImage: "person.crop.circle.badge.checkmark"
                 )
                 .font(.caption)
