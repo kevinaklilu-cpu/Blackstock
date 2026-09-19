@@ -29,6 +29,7 @@ struct PackagingReviewView: View {
     @State private var persistedReview: CreatorQualityReview?
     @State private var manualNotes: [CreatorQualityArea: String] = [:]
     @State private var useStoryboardChapters = false
+    @State private var thumbnailAssessment: ThumbnailTechnicalAssessment?
 
     private let requiredQualityAreas: Set<CreatorQualityArea> = [
         .packaging,
@@ -85,8 +86,12 @@ struct PackagingReviewView: View {
                 .selfDeclaredMadeForKids
                 ?? false
         )
-        _thumbnailURL = State(
-            initialValue: saved?.package.thumbnail?.fileURL
+        let savedThumbnailURL = saved?.package.thumbnail?.fileURL
+        _thumbnailURL = State(initialValue: savedThumbnailURL)
+        _thumbnailAssessment = State(
+            initialValue: savedThumbnailURL.flatMap {
+                try? ThumbnailTechnicalInspector().inspect(url: $0)
+            }
         )
         _captionTracks = State(
             initialValue: saved?.package.captions ?? []
@@ -217,8 +222,11 @@ struct PackagingReviewView: View {
             allowedContentTypes: [.image],
             allowsMultipleSelection: false
         ) { result in
-            if case .success(let urls) = result {
-                thumbnailURL = urls.first
+            if case .success(let urls) = result,
+               let url = urls.first {
+                thumbnailURL = url
+                thumbnailAssessment = try? ThumbnailTechnicalInspector()
+                    .inspect(url: url)
             }
         }
         .fileImporter(
@@ -403,6 +411,10 @@ struct PackagingReviewView: View {
                     }
                 }
 
+                if let assessment = thumbnailAssessment {
+                    thumbnailTechnicalFacts(assessment)
+                }
+
                 Divider()
 
                 HStack {
@@ -421,6 +433,88 @@ struct PackagingReviewView: View {
             }
             .padding(.vertical, 6)
             .disabled(reviewFrozen)
+        }
+    }
+
+    @ViewBuilder
+    private func thumbnailTechnicalFacts(
+        _ assessment: ThumbnailTechnicalAssessment
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Technische Thumbnail-Prüfung")
+                .font(.caption.weight(.semibold))
+
+            Text(
+                "\(assessment.snapshot.width) × \(assessment.snapshot.height) · "
+                + ByteCountFormatter.string(
+                    fromByteCount: assessment.snapshot.fileSizeBytes,
+                    countStyle: .file
+                )
+                + " · \(assessment.snapshot.mimeType)"
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            ForEach(assessment.uploadBlockers, id: \.self) { blocker in
+                Label(
+                    thumbnailBlockerText(blocker),
+                    systemImage: "xmark.octagon.fill"
+                )
+                .font(.caption)
+                .foregroundStyle(.red)
+            }
+
+            ForEach(assessment.bestPracticeFindings, id: \.self) { finding in
+                Label(
+                    thumbnailBestPracticeText(finding),
+                    systemImage: "info.circle"
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
+            if assessment.uploadCompatible
+                && assessment.bestPracticeFindings.isEmpty {
+                Label(
+                    "Technisch upload-kompatibel und ohne aktuelle Format-Hinweise.",
+                    systemImage: "checkmark.circle.fill"
+                )
+                .font(.caption)
+                .foregroundStyle(.green)
+            }
+
+            Text("Technische Kompatibilität ist keine Bewertung der kreativen Thumbnail-Qualität.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(8)
+        .background(
+            Color.primary.opacity(0.035),
+            in: RoundedRectangle(cornerRadius: 8)
+        )
+    }
+
+    private func thumbnailBlockerText(
+        _ blocker: ThumbnailUploadBlocker
+    ) -> String {
+        switch blocker {
+        case .unsupportedMimeType:
+            return "Dieses Dateiformat wird vom YouTube-Thumbnail-Upload nicht unterstützt."
+        case .exceedsFiftyMB:
+            return "Die Datei überschreitet das aktuelle 50-MB-Uploadlimit."
+        case .invalidDimensions:
+            return "Die Bildabmessungen konnten nicht gültig bestimmt werden."
+        }
+    }
+
+    private func thumbnailBestPracticeText(
+        _ finding: ThumbnailBestPracticeFinding
+    ) -> String {
+        switch finding {
+        case .belowRecommendedMinimumWidth:
+            return "YouTube empfiehlt für Video-Thumbnails mindestens 640 px Breite."
+        case .notSixteenByNine:
+            return "Für normale Videos empfiehlt YouTube 16:9."
         }
     }
 
