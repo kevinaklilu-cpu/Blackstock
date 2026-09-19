@@ -60,10 +60,11 @@ jobs:
 
           cat > "$EVIDENCE" <<JSON
           {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "testedAt": "2026-09-19T20:00:00Z",
             "blackstockVersion": "1.0.0",
             "blackstockBuild": "100",
+            "blackstockSourceCommitSHA": "1111111111111111111111111111111111111111",
             "macOSVersion": "macOS 26.6.2",
             "hardwareModel": "MacBookProTest",
             "installedFromPackage": true,
@@ -266,10 +267,11 @@ jobs:
           source_commit = "1" * 40
 
           capture = {
-              "schemaVersion": 1,
+              "schemaVersion": 2,
               "testedAt": "2026-09-19T20:00:00Z",
               "blackstockVersion": "1.0.0",
               "blackstockBuild": "100",
+              "blackstockSourceCommitSHA": source_commit,
               "macOSVersion": "macOS 26.6.2",
               "hardwareModel": "MacBookProTest",
               "installedFromPackage": True,
