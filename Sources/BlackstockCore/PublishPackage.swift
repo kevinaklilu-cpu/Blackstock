@@ -62,6 +62,7 @@ public struct PublishPackage: Codable, Sendable, Equatable {
 
 public enum PublishPackageValidationError: Error, Sendable, Equatable {
     case projectMismatch
+    case projectStageNotReady
     case channelMismatch
     case renderMismatch
     case renderNotValidated
@@ -103,6 +104,9 @@ public struct PublishReviewContext: Sendable, Equatable {
     public func validate() throws {
         guard package.projectID == project.id else {
             throw PublishPackageValidationError.projectMismatch
+        }
+        guard project.stage == .review || project.stage == .publishing else {
+            throw PublishPackageValidationError.projectStageNotReady
         }
         guard package.targetChannelID == project.targetChannelID else {
             throw PublishPackageValidationError.channelMismatch
