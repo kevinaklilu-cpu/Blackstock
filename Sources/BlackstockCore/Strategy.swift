@@ -90,6 +90,21 @@ public struct ChannelStrategy: Codable, Sendable, Equatable {
         copy.effectiveFrom = date
         return copy
     }
+
+    public func hasSameConfiguration(as other: ChannelStrategy) -> Bool {
+        channelID == other.channelID
+            && primaryTopic == other.primaryTopic
+            && topicDefinition == other.topicDefinition
+            && contentPromise == other.contentPromise
+            && pillars == other.pillars
+            && adjacentTopics == other.adjacentTopics
+            && excludedTopics == other.excludedTopics
+            && defaultContentLanguage == other.defaultContentLanguage
+            && researchLanguages == other.researchLanguages
+            && audienceHypothesis == other.audienceHypothesis
+            && objectives == other.objectives
+            && explorationPolicy == other.explorationPolicy
+    }
 }
 
 public struct ContentLanguageStrategy: Codable, Sendable, Equatable {
