@@ -119,4 +119,65 @@ final class DeterministicQualityEvidenceBuilderTests: XCTestCase {
             }
         )
     }
+    func testAudioMeasurementsBecomeEvidenceWithoutAutoPassingAudioGate() {
+        let projectID = UUID()
+        let asset = ProductionMediaAsset(
+            displayName: "video.mov",
+            sourceURL: URL(fileURLWithPath: "/tmp/video.mov"),
+            durationSeconds: 10,
+            authorization: .owned,
+            rightsEvidence: ["eigene Aufnahme"],
+            rightsAttestation: .init(
+                confirmedByUser: true,
+                attestedAt: Date()
+            ),
+            importedAt: Date()
+        )
+        let artifact = RenderArtifact(
+            projectID: projectID,
+            fileURL: URL(fileURLWithPath: "/tmp/video.mp4"),
+            sha256: "abc",
+            mimeType: "video/mp4",
+            validated: true,
+            createdAt: Date()
+        )
+        let technical = AudioTechnicalAssessment.evaluate(
+            .init(
+                hasAudioTrack: true,
+                sampleRateHz: 48_000,
+                channelCount: 2,
+                inspectedAt: Date()
+            )
+        )
+        let signal = AudioSignalAssessment.evaluate(
+            .init(
+                peakDBFS: -1.0,
+                rmsDBFS: -18.0,
+                analyzedSampleCount: 1000,
+                fullScaleSampleCount: 0,
+                inspectedAt: Date()
+            )
+        )
+
+        let review = DeterministicQualityEvidenceBuilder().build(
+            projectID: projectID,
+            asset: asset,
+            artifact: artifact,
+            audioTechnicalAssessment: technical,
+            audioSignalAssessment: signal
+        )
+
+        XCTAssertTrue(
+            review.evidence.contains {
+                $0.source == "Blackstock Local Audio Technical Inspector"
+            }
+        )
+        XCTAssertTrue(
+            review.evidence.contains {
+                $0.source == "Blackstock Local PCM Analyzer"
+            }
+        )
+        XCTAssertFalse(review.coveredAreas.contains(.audio))
+    }
+
 }
