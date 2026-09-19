@@ -95,7 +95,9 @@ requirements = {
         "persistedFilePath",
         "persistedFileSHA256",
         "blackstockSourceCommitSHA",
-        "currentSchemaVersion = 2",
+        "applicationTeamID",
+        "developerIDApplicationVerified",
+        "currentSchemaVersion = 3",
     ],
     "Tests/BlackstockCoreTests/CaptureHardwareSmokeEvidenceTests.swift": [
         "testCompleteEvidenceRequiresAllFourPathsAndExternalChecks",
@@ -115,6 +117,10 @@ requirements = {
         "SHA256()",
         "persistedFileSHA256",
         "BlackstockSourceCommitSHA",
+        "BlackstockUpdateInstallerTeamID",
+        "applicationSigningMetadata",
+        "Authority=Developer ID Application",
+        "TeamIdentifier=",
     ],
     "Build/Blackstock.entitlements": [
         "com.apple.security.device.camera",
@@ -139,6 +145,8 @@ requirements = {
         "restartVerifiedLaunchID",
         "blackstockSourceCommitSHA",
         "40-character hexadecimal Git commit SHA",
+        "applicationTeamID",
+        "developerIDApplicationVerified",
     ],
 }
 
