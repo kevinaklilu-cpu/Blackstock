@@ -1501,7 +1501,7 @@ final class BlackstockSession: ObservableObject {
               let existing = loadResearchEvidence(
                 projectID: project.id
               ) else {
-            errorMessage = "Für dieses Projekt liegt keine gebundene Recherche-Evidence vor."
+            errorMessage = "Für dieses Projekt liegen keine gebundenen Recherchebelege vor."
             return false
         }
 
@@ -1522,7 +1522,7 @@ final class BlackstockSession: ObservableObject {
         do {
             try researchDecisionStore().saveResearch(completed)
         } catch {
-            errorMessage = "Recherche-Evidence konnte nicht gespeichert werden: \(describe(error))"
+            errorMessage = "Recherchebelege konnten nicht gespeichert werden: \(describe(error))"
             return false
         }
         return advanceActiveProject(to: .analysis)
@@ -1540,7 +1540,7 @@ final class BlackstockSession: ObservableObject {
                 projectID: project.id
               ),
               research.isComplete else {
-            errorMessage = "Analyse bleibt gesperrt, bis vollständige Recherche-Evidence vorliegt."
+            errorMessage = "Analyse bleibt gesperrt, bis vollständige Recherchebelege vorliegen."
             return false
         }
 
