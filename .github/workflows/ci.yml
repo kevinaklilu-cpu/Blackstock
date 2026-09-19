@@ -422,6 +422,49 @@ jobs:
 
       - name: Production release workflow audit
         run: python3 Build/audit_production_release_workflows.py
+      - name: Production package configuration audit
+        run: |
+          set -euo pipefail
+          KEY="$(python3 -c 'import base64; print(base64.b64encode(bytes(range(32))).decode())')"
+
+          python3 Build/validate_production_package_config.py \
+            --manifest-url "https://updates.blackstock.app/update-manifest.json" \
+            --public-key-base64 "$KEY" \
+            --installer-team-id "ABC123TEAM"
+
+          for BAD_URL in \
+            "http://updates.blackstock.app/update-manifest.json" \
+            "https://localhost/update-manifest.json" \
+            "https://updates.blackstock.invalid" \
+            "https://user:pass@updates.blackstock.app/update-manifest.json" \
+            "https://updates.blackstock.app/update-manifest.json#fragment"
+          do
+            if python3 Build/validate_production_package_config.py \
+              --manifest-url "$BAD_URL" \
+              --public-key-base64 "$KEY" \
+              --installer-team-id "ABC123TEAM"; then
+              echo "Invalid production manifest URL was unexpectedly accepted: $BAD_URL" >&2
+              exit 1
+            fi
+          done
+
+          BAD_KEY="$(python3 -c 'import base64; print(base64.b64encode(bytes(range(31))).decode())')"
+          if python3 Build/validate_production_package_config.py \
+            --manifest-url "https://updates.blackstock.app/update-manifest.json" \
+            --public-key-base64 "$BAD_KEY" \
+            --installer-team-id "ABC123TEAM"; then
+            echo "Invalid production update public key was unexpectedly accepted." >&2
+            exit 1
+          fi
+
+          if python3 Build/validate_production_package_config.py \
+            --manifest-url "https://updates.blackstock.app/update-manifest.json" \
+            --public-key-base64 "$KEY" \
+            --installer-team-id "ABC-123"; then
+            echo "Invalid production installer Team ID was unexpectedly accepted." >&2
+            exit 1
+          fi
+
       - name: Production package fail-closed audit
         run: |
           set -euo pipefail
