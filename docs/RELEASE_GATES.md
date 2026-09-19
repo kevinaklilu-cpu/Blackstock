@@ -6,7 +6,7 @@ Statuswerte: **PASS / FAIL / BLOCKED_EXTERNAL**.
 | --- | --- |
 | Product Journey | FAIL |
 | Guided Experience | FAIL |
-| Strategy | FAIL |
+| Strategy | PASS |
 | Language | PASS |
 | Research | FAIL |
 | Temporal Semantics | PASS |
@@ -53,6 +53,8 @@ Hinweis: **Temporal Semantics = PASS** trennt elapsed Beobachtungsfenster von Yo
 Hinweis: **Grounding / Provenance = PASS** basiert auf einer durchgehenden Provider- und Kontextbindung: Opportunity-Projekte bewahren YouTube-Provider-ID, Quell-URL, Abrufzeit, Strategy-Version und expliziten Zielkanal; fehlende Signale werden sichtbar gelassen statt geschätzt. Kommentar- und Analytics-Daten behalten Provider-Fakten und werden gegen erwartetes Projekt, Video und Zielkanal hart validiert. `Build/audit_grounding.py` läuft in der Canonical-CI.
 
 Hinweis: **Discovery = PASS** basiert auf dem aktuellen autorisierten YouTube-Pfad: Blackstock lädt reale Video-Kandidaten für den strategischen Suchraum, verwendet ausschließlich offizielle YouTube-Sortierparameter, zeigt Provider-Rohwerte und Abrufzeitpunkte transparent, lässt fehlende Signale fehlend und erzeugt keinen eigenen Opportunity-/Virality-Score. Die ausgewählte Opportunity wird mit Provider-ID, Quell-URL und Zielkanalbindung in ein Projekt überführt. `Build/audit_discovery.py` läuft in der Canonical-CI.
+
+Hinweis: **Strategy = PASS** basiert auf einer expliziten, versionierten Kanalstrategie. Der Nutzer muss Kanal-Schwerpunkt, Content-Versprechen, Zielgruppen-Hypothese und mindestens eine Säule angeben; angrenzende und ausgeschlossene Themen sowie das Hauptziel werden separat modelliert. Blackstock erfindet fehlende Strategie-Felder nicht. `Build/audit_strategy.py` und die Core-Tests sichern diese Verträge in der Canonical-CI ab.
 
 Hinweis: **Rights = PASS** basiert auf einer expliziten, versionierten Nutzer-Rechtebestätigung plus konkretem Rechte-/Eigentumsnachweis am Produktionsmedium. Unknown/Prohibited, fehlende Evidenz oder fehlende Attestation verhindern den Eintritt in die Produktion; dieselbe Rechtefreigabe wird als Quality-Evidence geführt und am Publish-Preflight erneut zwingend geprüft.
 
