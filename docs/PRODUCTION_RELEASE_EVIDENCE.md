@@ -70,6 +70,8 @@ Für **Blackstock Verify Published Release** werden nur die zur unabhängigen Ve
 
 Der private Blackstock-Update-Signaturschlüssel wird bewusst **nicht** im Verifikationsworkflow benötigt.
 
+Vor dem Import der Apple-Zertifikate führt **Blackstock Production Release** außerdem `Build/verify_update_key_pair.swift` aus. Der Workflow stoppt, wenn der konfigurierte öffentliche Update-Schlüssel nicht exakt zum privaten Manifest-Signaturschlüssel gehört. Dadurch kann kein notarisiertes Produktionspaket mit einem Manifest-Schlüssel gebaut werden, den die ausgelieferte App später nicht verifizieren kann.
+
 ### Workflow-Reihenfolge
 
 1. Production Release mit Zielversion, Build, zukünftiger Manifest-URL und Paket-URL starten.
