@@ -230,7 +230,8 @@ public struct YouTubeResumableUploader: Sendable {
             )
         } catch {
             entry = await journal.entry(for: idempotencyKey) ?? entry
-            if case YouTubeUploadError.expiredUploadSession = error {
+            if let uploadError = error as? YouTubeUploadError,
+               uploadError == .expiredUploadSession {
                 entry.state = .prepared
                 entry.remoteSessionURL = nil
                 entry.nextByteOffset = 0
