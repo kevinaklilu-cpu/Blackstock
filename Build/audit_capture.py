@@ -75,7 +75,10 @@ requirements = {
         "SupplementalVideoInsertInput",
     ],
     "Sources/BlackstockApp/StudioView.swift": [
-        "if captureKind == .microphone",
+        "let isSupplementalCapture =",
+        "captureKind == .microphone",
+        "captureKind == .camera",
+        "captureKind == .screen",
         "state.importSupplementalCapture(",
         "state.importMovie(",
         '"Zusätzliche Aufnahmen"',
