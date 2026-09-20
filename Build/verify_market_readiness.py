@@ -156,6 +156,20 @@ def main():
     if not isinstance(updater, dict):
         fail("in-app update evidence has no value object")
 
+    release_current_version = normalize_version(
+        release.get("currentVersion"),
+        "release.currentVersion",
+    )
+    updater_current_version = normalize_version(
+        updater.get("currentVersion"),
+        "updater.currentVersion",
+    )
+    if release_current_version != updater_current_version:
+        fail(
+            "production release and updater evidence do not refer to "
+            "the same source update version"
+        )
+
     capture_version = normalize_version(
         capture.get("blackstockVersion"),
         "capture.blackstockVersion",
@@ -172,6 +186,20 @@ def main():
         updater.get("observedInstalledVersion"),
         "updater.observedInstalledVersion",
     )
+
+    release_current_build = as_positive_int(
+        release.get("currentBuild"),
+        "release.currentBuild",
+    )
+    updater_current_build = as_positive_int(
+        updater.get("currentBuild"),
+        "updater.currentBuild",
+    )
+    if release_current_build != updater_current_build:
+        fail(
+            "production release and updater evidence do not refer to "
+            "the same source update build"
+        )
 
     capture_build = as_positive_int(
         capture.get("blackstockBuild"),
@@ -310,6 +338,8 @@ def main():
             "+00:00",
             "Z",
         ),
+        "sourceVersion": release_current_version,
+        "sourceBuild": release_current_build,
         "version": release_version,
         "build": release_build,
         "installerTeamID": release_team_id,
