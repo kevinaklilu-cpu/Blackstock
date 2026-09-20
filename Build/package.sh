@@ -97,6 +97,7 @@ require_universal_binary() {
 APP="$WORK/Blackstock.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 swift Build/generate_app_icon.swift "$APP/Contents/Resources/Blackstock.icns"
+test -s "$APP/Contents/Resources/Blackstock.icns"
 lipo -create   "$ARM64_BIN_DIR/Blackstock"   "$X86_64_BIN_DIR/Blackstock"   -output "$APP/Contents/MacOS/Blackstock"
 chmod +x "$APP/Contents/MacOS/Blackstock"
 require_universal_binary "$APP/Contents/MacOS/Blackstock"
@@ -134,6 +135,9 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <key>BlackstockUpdateInstallerTeamID</key><string>${UPDATE_INSTALLER_TEAM_ID}</string>
 </dict></plist>
 PLIST
+
+/usr/libexec/PlistBuddy -c "Print :CFBundleIconFile" "$APP/Contents/Info.plist" | grep -qx "Blackstock.icns"
+test -s "$APP/Contents/Resources/Blackstock.icns"
 
 if [[ -n "$APP_SIGN_IDENTITY" ]]; then
   if [[ "$INCLUDE_E2E_SMOKE" == "1" ]]; then
