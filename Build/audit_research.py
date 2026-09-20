@@ -19,11 +19,12 @@ REQUIRED = {
         "testAnalysisCompletenessRequiresRationaleAndExplicitUnknown",
     ],
     "Sources/BlackstockCore/OpportunityProjectFactory.swift": [
-        "stage: .research",
+        "initialStage: BlackstockStage = .research",
         "externalID: videoID",
         "discoveredAt: opportunity.retrievedAt",
     ],
     "Sources/BlackstockApp/BlackstockSession.swift": [
+        "productionIntentKind == .standardProject",
         "providerFacts(",
         "completeResearch(",
         "project.stage == .research",
