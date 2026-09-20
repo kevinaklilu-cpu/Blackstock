@@ -516,6 +516,25 @@ struct StudioView: View {
                                 .buttonStyle(.bordered)
                                 .disabled(!editingEnabled)
 
+                                Button {
+                                    Task {
+                                        await state
+                                            .applySavedClipSelection(
+                                                selection
+                                            )
+                                    }
+                                } label: {
+                                    Label(
+                                        "Übernehmen",
+                                        systemImage:
+                                            "checkmark.circle"
+                                    )
+                                }
+                                .buttonStyle(
+                                    .borderedProminent
+                                )
+                                .disabled(!editingEnabled)
+
                                 Button(
                                     role: .destructive
                                 ) {
