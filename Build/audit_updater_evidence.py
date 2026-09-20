@@ -90,6 +90,16 @@ requirements = {
         "gatekeeperApplicationAccepted",
         "installedAppExecutableSHA256",
     ],
+    "Build/verify_market_readiness.py": [
+        "release.currentVersion",
+        "updater.currentVersion",
+        "same source update version",
+        "release.currentBuild",
+        "updater.currentBuild",
+        "same source update build",
+        '"sourceVersion"',
+        '"sourceBuild"',
+    ],
     "docs/PRODUCTION_RELEASE_EVIDENCE.md": [
         "Echter Updater-E2E",
         "Updater = FAIL",
