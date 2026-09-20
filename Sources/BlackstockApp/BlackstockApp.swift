@@ -142,19 +142,6 @@ private struct WorkspaceShell: View {
         .onChange(of: session.activeProject?.stage) { _ in
             routeToCurrentProject()
         }
-        .onChange(of: session.activeProject?.stage) { newStage in
-            guard let newStage else { return }
-            switch newStage.journeyGuidance.recommendedSurface {
-            case .studio:
-                selection = "Studio"
-            case .overview:
-                selection = "Übersicht"
-            case .none:
-                if newStage == .discovery {
-                    selection = "Chancen"
-                }
-            }
-        }
         .onChange(of: commandPaletteRequest) { _ in
             showCommandPalette = true
         }
@@ -189,7 +176,9 @@ private struct WorkspaceShell: View {
         case .overview:
             selection = "Übersicht"
         case .none:
-            break
+            if project.stage == .discovery {
+                selection = "Chancen"
+            }
         }
     }
 }
