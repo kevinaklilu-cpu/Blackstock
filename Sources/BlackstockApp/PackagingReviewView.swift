@@ -756,7 +756,7 @@ struct PackagingReviewView: View {
     private var manualReviewSection: some View {
         GroupBox("Qualitative Prüfung") {
             VStack(alignment: .leading, spacing: 14) {
-                Text("Blackstock misst technische Fakten automatisch. Inhaltliche Qualität wird direkt am Video geprüft und als Nutzer-Evidenz protokolliert.")
+                Text("Blackstock prüft technische Punkte automatisch. Inhaltliche Punkte bestätigst du direkt am Video.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -787,7 +787,7 @@ struct PackagingReviewView: View {
                 Spacer()
 
                 if automaticallyCovered {
-                    Label("Automatisch belegt", systemImage: "checkmark.circle.fill")
+                    Label("Automatisch geprüft", systemImage: "checkmark.circle.fill")
                         .font(.caption)
                         .foregroundStyle(.green)
                 } else {
@@ -826,10 +826,10 @@ struct PackagingReviewView: View {
                     )
                 )
                 .accessibilityLabel("Prüfnotiz: \(areaTitle(area))")
-                .accessibilityHint("Konkrete Beobachtung als Prüf-Evidenz festhalten")
+                .accessibilityHint("Beobachtung festhalten")
                 .textFieldStyle(.roundedBorder)
 
-                Text("Nur eine konkrete Notiz zählt als Prüf-Evidenz.")
+                Text("Schreibe kurz auf, was du geprüft hast.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -886,7 +886,7 @@ struct PackagingReviewView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Text("Messwerte sind technische Evidenz; die hörbare Prüfung auf Verständlichkeit, Störgeräusche und Pegelsprünge bleibt zusätzlich erforderlich.")
+                Text("Die Messwerte helfen bei der Tonprüfung. Hör das Video zusätzlich kurz auf Verständlichkeit und Störgeräusche ab.")
                     .foregroundStyle(.secondary)
             }
             .font(.caption)
@@ -936,7 +936,7 @@ struct PackagingReviewView: View {
         case .demandFit:
             return "Passt das Thema zur dokumentierten Nachfrage?"
         case .rightsAndPolicy:
-            return "Sind Rechte und Plattformregeln belegt?"
+            return "Sind Rechte und Plattformregeln geklärt?"
         case .renderIntegrity:
             return "Ist das Render-Artefakt technisch valide?"
         }
@@ -994,7 +994,7 @@ struct PackagingReviewView: View {
                 Divider()
 
                 if missingAreas.isEmpty {
-                    Label("Alle geforderten Qualitätsbereiche sind belegt.", systemImage: "checkmark.circle.fill")
+                    Label("Alle nötigen Qualitätsprüfungen sind abgeschlossen.", systemImage: "checkmark.circle.fill")
                         .foregroundStyle(.green)
                 } else {
                     VStack(alignment: .leading, spacing: 6) {
@@ -1004,7 +1004,7 @@ struct PackagingReviewView: View {
                         )
                         .font(.headline)
 
-                        Text("Blackstock schaltet die Veröffentlichung erst frei, wenn diese Bereiche durch reale Analysewerkzeuge oder eine nachvollziehbare Prüf-Evidenz abgedeckt sind.")
+                        Text("Blackstock schaltet die Veröffentlichung frei, sobald alle nötigen Prüfungen abgeschlossen sind.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -1153,7 +1153,7 @@ struct PackagingReviewView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.callout.weight(.semibold))
-                Text(covered ? "Belegt" : "Noch nicht geprüft")
+                Text(covered ? "Geprüft" : "Noch nicht geprüft")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
