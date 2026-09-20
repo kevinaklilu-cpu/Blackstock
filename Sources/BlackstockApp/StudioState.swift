@@ -43,6 +43,7 @@ final class StudioState: ObservableObject {
     @Published var localClipCandidates: [LocalClipCandidate] = []
     @Published var savedClipSelections: [SavedClipSelection] = []
     @Published var isGeneratingClipCandidates = false
+    @Published var isCreatingAutomaticHighlights = false
     @Published var clipCandidateStatusMessage: String?
     @Published var previewedLocalClipCandidateID: UUID?
     @Published var renderingSavedClipID: UUID?
@@ -1126,6 +1127,142 @@ final class StudioState: ObservableObject {
                 "Lokale Clip-Analyse fehlgeschlagen: "
                 + error.localizedDescription
         }
+    }
+
+    func createAutomaticHighlights(
+        localeIdentifier: String,
+        maximumHighlights: Int = 3
+    ) async {
+        guard !isCreatingAutomaticHighlights else { return }
+
+        isCreatingAutomaticHighlights = true
+        defer { isCreatingAutomaticHighlights = false }
+
+        await generateLocalClipCandidates(
+            localeIdentifier: localeIdentifier
+        )
+        guard errorMessage == nil,
+              !localClipCandidates.isEmpty else {
+            return
+        }
+
+        let ranked = LocalHighlightCandidateRanker()
+            .rank(localClipCandidates)
+        let selected = Array(
+            ranked.prefix(max(maximumHighlights, 1))
+        )
+
+        savedClipSelections = selected.enumerated().map {
+            index, candidate in
+            SavedClipSelection(
+                sourceRange: candidate.sourceRange,
+                title: automaticHighlightTitle(
+                    candidate,
+                    index: index
+                ),
+                transcriptPreview: candidate.transcriptPreview,
+                wordCount: candidate.wordCount,
+                transcript: clipTranscript(for: candidate),
+                renderArtifact: nil,
+                savedAt: Date()
+            )
+        }
+
+        guard let primary = selected.first else {
+            return
+        }
+
+        reframeAspectRatio = .portrait9x16
+        reframeFocalX = 0.5
+        reframeFocalY = 0.5
+        captionVisualStyle = .strong
+
+        await applyLocalClipCandidate(primary)
+        guard errorMessage == nil else { return }
+
+        if let firstSaved = savedClipSelections.first,
+           let transcript = firstSaved.transcript {
+            self.transcript = transcript
+            transcriptStructure = TranscriptStructureAnalyzer()
+                .analyze(transcript: transcript)
+            burnInCaptionsEnabled = true
+        }
+
+        let before = graph.headID
+        let reframe = EditOperation(
+            type: .reframe,
+            reframeSpec: ReframeSpec(
+                aspectRatio: .portrait9x16,
+                focalX: reframeFocalX,
+                focalY: reframeFocalY
+            ),
+            createdAt: Date()
+        )
+        let revision = graph.apply(
+            reframe,
+            actor: .blackstock
+        )
+        lastUndoneRevisionID = nil
+        renderArtifact = nil
+
+        ledger.append(.init(
+            timestamp: Date(),
+            actor: .blackstock,
+            stage: .editing,
+            action: "automatic-highlights-prepared",
+            summary:
+                "\(selected.count) Highlights wurden lokal priorisiert, als Clips gespeichert und für Hochkant-Export mit kräftigen Untertiteln vorbereitet.",
+            relatedSourceIDs: selected.map { $0.id.uuidString },
+            beforeRevisionID: before,
+            afterRevisionID: revision.id,
+            reversible: true,
+            correlationID: correlationID
+        ))
+
+        do {
+            try await rebuildPreview()
+            persistWorkspaceIfPossible()
+        } catch {
+            errorMessage =
+                "Die automatische Highlight-Vorschau konnte nicht aktualisiert werden: "
+                + error.localizedDescription
+            return
+        }
+
+        await renderAllSavedClipSelections()
+        guard errorMessage == nil else { return }
+
+        if let first = savedClipSelections.first,
+           first.renderArtifact != nil {
+            await useSavedClipForPackaging(first)
+        }
+
+        clipCandidateStatusMessage =
+            "\(selected.count) Highlights sind geschnitten, als Hochkant-Clips vorbereitet und lokal validiert gerendert."
+        errorMessage = nil
+    }
+
+    private func automaticHighlightTitle(
+        _ candidate: LocalClipCandidate,
+        index: Int
+    ) -> String {
+        let normalized = candidate.transcriptPreview
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let firstSentence = normalized
+            .split(
+                whereSeparator: { ".!?".contains($0) },
+                maxSplits: 1
+            )
+            .first
+            .map(String.init)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let firstSentence,
+           !firstSentence.isEmpty {
+            return String(firstSentence.prefix(72))
+        }
+        return "Highlight \(index + 1)"
     }
 
     func saveLocalClipCandidate(
