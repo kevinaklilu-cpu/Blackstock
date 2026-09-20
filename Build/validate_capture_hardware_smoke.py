@@ -71,6 +71,10 @@ try:
     )
 except ValueError:
     fail("installerReceiptInstalledAt must be ISO-8601")
+if tested_at.tzinfo is None:
+    fail("testedAt must include a timezone")
+if installer_receipt_installed_at.tzinfo is None:
+    fail("installerReceiptInstalledAt must include a timezone")
 if installer_receipt_installed_at > tested_at + timedelta(seconds=1):
     fail("installerReceiptInstalledAt must not postdate testedAt")
 
