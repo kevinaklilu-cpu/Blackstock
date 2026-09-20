@@ -36,8 +36,10 @@ Blackstock enthält zwei bewusst getrennte manuelle Workflows:
 2. **Blackstock Verify Published Release** (`.github/workflows/verify-published-release.yml`)
    - läuft erst **nach** Veröffentlichung von Manifest und Paket unter den realen HTTPS-URLs,
    - verifiziert Manifest-Signatur, Paket-Hash, Installer-Team und Notarisierungsstatus,
-   - gibt die dabei geprüften Paketbytes über `--verified-package-output` aus,
-   - installiert exakt diese geprüfte Datei auf einem frischen macOS-Runner, ohne zweiten Manifest- oder Paketdownload,
+   - persistiert den dabei signaturgeprüften Manifest-Snapshot über `--verified-manifest-output` und die geprüften Paketbytes über `--verified-package-output`,
+   - installiert exakt diese geprüfte Paketdatei auf einem frischen macOS-Runner,
+   - führt die Post-Install-Prüfung ausschließlich mit `--verified-manifest-input` und `--verified-package-input` über denselben Snapshot aus, ohne Manifest oder Paket erneut aus dem Netz zu laden,
+   - vergleicht Pre-Install- und Post-Install-Evidence auf identische Release-Identität,
    - verifiziert Developer ID Application, Gatekeeper sowie exakte Manifest-Version, -Build, **Source-Commit und Executable-SHA-256** der installierten App,
    - startet die installierte Produktions-App,
    - erzeugt `release-evidence.json`.
@@ -156,11 +158,14 @@ swift run -c release BlackstockReleaseVerifier \
   --installed-app "/Applications/Blackstock.app" \
   --notary-submission-id "$BLACKSTOCK_NOTARY_SUBMISSION_ID" \
   --notary-keychain-profile "$BLACKSTOCK_NOTARY_KEYCHAIN_PROFILE" \
+  --verified-manifest-output verified-update-manifest.json \
   --verified-package-output verified-Blackstock.pkg \
-  --output release-evidence.json
+  --output preinstall-release-evidence.json
 ```
 
 Ein erfolgreicher Lauf schreibt `BLACKSTOCK_RELEASE_VERIFY_PASS`.
+
+Für den Installationspfad wird dieser erste Lauf als unveränderlicher Release-Snapshot behandelt. Nach der Installation wird derselbe Verifier erneut mit `--verified-manifest-input verified-update-manifest.json` und `--verified-package-input verified-Blackstock.pkg` ausgeführt. Dieser zweite Lauf greift für Manifest und Paket nicht mehr auf das Netzwerk zu. Der Workflow verlangt zusätzlich, dass die identitätsbildenden Felder der Pre-Install- und Post-Install-Evidence exakt übereinstimmen.
 
 Er prüft:
 
@@ -169,7 +174,9 @@ Er prüft:
 - Manifest beschreibt gegenüber der Ausgangsversion tatsächlich ein Update.
 - Paket wird von der im Manifest angegebenen HTTPS-URL geladen.
 - Paket-SHA-256 entspricht exakt dem signierten Manifest.
-- Optional kann genau diese bereits geprüfte Paketdatei über `--verified-package-output` atomar für den anschließenden Installationsschritt persistiert werden; die persistierte Kopie wird erneut gegen denselben signierten Manifest-SHA-256 geprüft.
+- Der signaturgeprüfte Manifest-Snapshot kann byteidentisch über `--verified-manifest-output` persistiert werden.
+- Genau die bereits geprüfte Paketdatei kann über `--verified-package-output` für den anschließenden Installationsschritt persistiert werden; die persistierte Kopie wird erneut gegen denselben signierten Manifest-SHA-256 geprüft.
+- `--verified-manifest-input` und `--verified-package-input` müssen gemeinsam angegeben werden. Damit kann die Post-Install-Prüfung denselben unveränderlichen Release-Snapshot erneut prüfen, statt Remote-Artefakte ein zweites Mal abzurufen.
 - Der Source-Commit-SHA ist Teil des signierten Manifest-Payloads.
 - Paket ist ein Developer-ID-Installer des erwarteten Apple-Teams.
 - Stapled Notarization Ticket ist gültig.
