@@ -98,10 +98,23 @@ Auf einem **autorisierten lokalen Produktionsmedium** kann Blackstock im Studio 
 2. Ein deterministischer lokaler Generator nutzt Segmentgrenzen und gemessene Pausen, um zusammenhängende Ausschnitte vorzuschlagen.
 3. Jeder Vorschlag zeigt ausschließlich nachvollziehbare Fakten: Quell-Zeitbereich, Dauer, Wortzahl, Transkript-Vorschau und – falls verfügbar – Spracherkennungs-Konfidenz.
 4. Es gibt keinen Viralitäts-, Gewinner-, Qualitäts- oder Erfolgs-Score.
-5. Erst **„Diesen Ausschnitt übernehmen“** schreibt einen Trim in den EditGraph.
-6. Der Trim bleibt non-destruktiv und ist über Undo/Redo reversibel. Bestehende weitere EditGraph-Operationen bleiben nachvollziehbar erhalten.
+5. **„Vorschau abspielen“** spielt den Kandidaten im Hauptplayer, ohne den EditGraph zu ändern; **„Zurück zur aktuellen Schnittvorschau“** stellt den bestehenden Schnitt wieder her.
+6. Erst **„Diesen Ausschnitt übernehmen“** schreibt einen Trim in den EditGraph.
+7. Der Trim bleibt non-destruktiv und ist über Undo/Redo reversibel. Bestehende weitere EditGraph-Operationen bleiben nachvollziehbar erhalten.
 
 Diese lokale Funktion ersetzt **keine** Ingest-Berechtigung für fremde YouTube-Videos. Ein Research-Video bleibt Playback/Research, solange keine zulässige Produktionsquelle oder ein verifiziert freigegebener Ingest-Pfad vorliegt.
+
+## Sichtbare lokale Burn-in-Captions
+
+Nach der lokalen On-Device-Transkription kann der Nutzer **„Sichtbare Captions ins Video rendern“** explizit aktivieren.
+
+- Die VTT-Datei bleibt separat für YouTube/Packaging erhalten.
+- Der Studio-Player zeigt bei aktivierter Option dieselben Transcript-Zeitfenster als sichtbare Caption-Vorschau.
+- Der finale lokale MP4-Render erhält einen zweiten AVFoundation/Core-Animation-Pass und brennt diese Captions tatsächlich in die Bildpixel ein.
+- Burn-in ist projektbezogen gespeichert und standardmäßig deaktiviert, bis der Nutzer es einschaltet.
+- Ändert ein Schnitt die Transcript-Timeline, verwirft Blackstock veraltete Caption-/Burn-in-Zustände statt falsche Texte weiterzuverwenden.
+- Aktivieren oder Deaktivieren invalidiert einen bestehenden Render, damit Packaging nie still ein Video mit einer anderen Caption-Konfiguration verwendet.
+- Alles läuft lokal; für Burn-in-Captions ist kein Cloud-Provider erforderlich.
 
 ## Keine Überladung
 
