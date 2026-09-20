@@ -95,6 +95,10 @@ require_universal_binary() {
 
 APP="$WORK/Blackstock.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+ICONSET="$WORK/Blackstock.iconset"
+swift Build/generate_app_icon.swift "$ICONSET"
+iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/Blackstock.icns"
+test -s "$APP/Contents/Resources/Blackstock.icns"
 lipo -create   "$ARM64_BIN_DIR/Blackstock"   "$X86_64_BIN_DIR/Blackstock"   -output "$APP/Contents/MacOS/Blackstock"
 chmod +x "$APP/Contents/MacOS/Blackstock"
 require_universal_binary "$APP/Contents/MacOS/Blackstock"
@@ -112,6 +116,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <plist version="1.0"><dict>
 <key>CFBundleDisplayName</key><string>Blackstock</string>
 <key>CFBundleExecutable</key><string>Blackstock</string>
+<key>CFBundleIconFile</key><string>Blackstock.icns</string>
 <key>CFBundleIdentifier</key><string>${BUNDLE_ID}</string>
 <key>CFBundleName</key><string>Blackstock</string>
 <key>CFBundlePackageType</key><string>APPL</string>
@@ -147,6 +152,7 @@ else
     --sign - "$APP"
 fi
 codesign --verify --deep --strict "$APP"
+test -s "$APP/Contents/Resources/Blackstock.icns"
 require_universal_binary "$APP/Contents/MacOS/Blackstock"
 if [[ "$INCLUDE_E2E_SMOKE" == "1" ]]; then
   require_universal_binary "$APP/Contents/Helpers/BlackstockE2ESmoke"
