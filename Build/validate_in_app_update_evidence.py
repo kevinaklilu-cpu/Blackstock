@@ -26,7 +26,7 @@ try:
 except Exception as error:
     fail(f"invalid JSON: {error}")
 
-if envelope.get("schemaVersion") != 4:
+if envelope.get("schemaVersion") != 5:
     fail("unsupported schemaVersion")
 
 value = envelope.get("value")
@@ -37,6 +37,14 @@ required = [
     "id",
     "currentVersion",
     "currentBuild",
+    "currentSourceCommitSHA",
+    "currentExecutableSHA256",
+    "currentAppPath",
+    "currentApplicationTeamID",
+    "currentDeveloperIDApplicationVerified",
+    "currentInstallerReceiptPackageID",
+    "currentInstallerReceiptVersion",
+    "currentInstallerReceiptVerified",
     "manifestURL",
     "expectedInstallerTeamID",
     "startedAt",
@@ -96,6 +104,31 @@ if value["observedInstalledVersion"] != value["targetVersion"]:
 if observed_build != target_build:
     fail("observedInstalledBuild must equal targetBuild")
 
+current_source_commit = str(value["currentSourceCommitSHA"]).strip().lower()
+if not re.fullmatch(r"[0-9a-f]{40}", current_source_commit):
+    fail("currentSourceCommitSHA must be a 40-character hexadecimal Git commit SHA")
+
+current_executable_sha256 = str(value["currentExecutableSHA256"]).strip().lower()
+if not re.fullmatch(r"[0-9a-f]{64}", current_executable_sha256):
+    fail("currentExecutableSHA256 must be a 64-character hexadecimal SHA-256")
+
+if str(value["currentAppPath"]).strip() != "/Applications/Blackstock.app":
+    fail("currentAppPath must be /Applications/Blackstock.app")
+
+current_team = str(value["currentApplicationTeamID"]).strip()
+if not re.fullmatch(r"[A-Za-z0-9]+", current_team):
+    fail("currentApplicationTeamID must be ASCII alphanumeric")
+
+if value["currentDeveloperIDApplicationVerified"] is not True:
+    fail("currentDeveloperIDApplicationVerified must be true")
+
+if str(value["currentInstallerReceiptPackageID"]).strip() != "de.blackstock.app":
+    fail("currentInstallerReceiptPackageID must equal de.blackstock.app")
+if str(value["currentInstallerReceiptVersion"]).strip() != str(value["currentVersion"]):
+    fail("currentInstallerReceiptVersion must equal currentVersion")
+if value["currentInstallerReceiptVerified"] is not True:
+    fail("currentInstallerReceiptVerified must be true")
+
 for key in ["manifestURL", "packageURL"]:
     parsed = urlparse(str(value[key]))
     if parsed.scheme.lower() != "https" or not parsed.hostname:
@@ -124,6 +157,8 @@ except (ValueError, TypeError):
 team = str(value["expectedInstallerTeamID"]).strip()
 if not re.fullmatch(r"[A-Za-z0-9]+", team):
     fail("expectedInstallerTeamID must be ASCII alphanumeric")
+if current_team != team:
+    fail("currentApplicationTeamID must equal expectedInstallerTeamID")
 
 sha = str(value["packageSHA256"]).lower()
 if not re.fullmatch(r"[0-9a-f]{64}", sha):
