@@ -274,6 +274,15 @@ def main():
             "package SHA-256 values"
         )
 
+    updater_current_source_commit = normalize_source_commit(
+        updater.get("currentSourceCommitSHA"),
+        "updater.currentSourceCommitSHA",
+    )
+    updater_current_executable_sha256 = normalize_sha256(
+        updater.get("currentExecutableSHA256"),
+        "updater.currentExecutableSHA256",
+    )
+
     capture_source_commit = normalize_source_commit(
         capture.get("blackstockSourceCommitSHA"),
         "capture.blackstockSourceCommitSHA",
@@ -361,6 +370,8 @@ def main():
         ),
         "sourceVersion": release_current_version,
         "sourceBuild": release_current_build,
+        "sourceAppSourceCommitSHA": updater_current_source_commit,
+        "sourceAppExecutableSHA256": updater_current_executable_sha256,
         "version": release_version,
         "build": release_build,
         "installerTeamID": release_team_id,
