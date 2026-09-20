@@ -116,6 +116,15 @@ Nach der lokalen On-Device-Transkription kann der Nutzer **„Sichtbare Captions
 - Aktivieren oder Deaktivieren invalidiert einen bestehenden Render, damit Packaging nie still ein Video mit einer anderen Caption-Konfiguration verwendet.
 - Alles läuft lokal; für Burn-in-Captions ist kein Cloud-Provider erforderlich.
 
+## Multi-Clip-Ausgabe und Packaging
+
+Gespeicherte lokale Clip-Kandidaten können als eigene validierte MP4-Dateien gerendert werden. Danach stehen zwei getrennte Nutzeraktionen zur Verfügung:
+
+- **Exportieren …** kopiert alle bereits validiert gerenderten Clips in einen vom Nutzer gewählten Ordner. Falls für einen Clip ein lokales Transkript vorliegt, wird zusätzlich eine WebVTT-Datei erzeugt. Ein JSON-Manifest bindet Clip-ID, Quell-Zeitbereich, Dateiname und Render-SHA-256.
+- **Für Packaging verwenden** übernimmt genau einen validierten gespeicherten Clip als aktuellen Packaging-/Review-Kandidaten. Der Clip wird dabei in den aktiven Schnittkontext geladen, damit Vorschau, Transkript, Audio-QC und Veröffentlichungspaket auf demselben Inhalt basieren.
+
+Batch-Export und Publishing bleiben bewusst getrennt: Export schreibt nur lokale Dateien. Eine externe Veröffentlichung erfordert weiterhin die normalen Review-, Rechte-, Kanal- und Bestätigungsgates.
+
 ## Keine Überladung
 
 Navigation zeigt keine nicht validierten Produktflächen.
