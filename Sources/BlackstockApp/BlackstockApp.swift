@@ -49,17 +49,17 @@ private struct WorkspaceShell: View {
         NavigationSplitView {
             VStack(spacing: 0) {
                 HStack(alignment: .center, spacing: 10) {
-                    BlackstockBrandMark(width: 40)
+                    BlackstockBrandMark(width: 34)
 
                     Text("Blackstock")
-                        .font(.title3.weight(.bold))
+                        .font(.headline.weight(.bold))
                         .lineLimit(1)
                         .fixedSize(horizontal: true, vertical: false)
 
                     Spacer(minLength: 0)
                 }
-                .frame(maxWidth: .infinity, minHeight: 62)
-                .padding(.horizontal, 16)
+                .frame(maxWidth: .infinity, minHeight: 54)
+                .padding(.horizontal, 14)
                 .background(BlackstockDesign.sidebar)
 
                 Divider()
