@@ -37,9 +37,16 @@ else:
 
         for permission_line_number, permission_line in enumerate(lines, 1):
             normalized = permission_line.strip().lower()
-            if normalized == "permissions: write-all" or re.fullmatch(
-                r"[a-z0-9_-]+:\s*write",
-                normalized,
+            if (
+                normalized == "permissions: write-all"
+                or re.fullmatch(
+                    r"[a-z0-9_-]+:\s*write(?:\s*#.*)?",
+                    normalized,
+                )
+                or (
+                    normalized.startswith("permissions:")
+                    and "write" in normalized
+                )
             ):
                 errors.append(
                     f"{path.relative_to(ROOT)}:{permission_line_number}: "
