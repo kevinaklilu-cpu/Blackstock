@@ -209,7 +209,7 @@ public struct GoogleOAuthTokenExchange: Sendable {
             "grant_type": "authorization_code",
             "code_verifier": verifier
         ]
-        if let clientSecret = normalized(clientSecret) {
+        if let clientSecret = normalizedOAuthField(clientSecret) {
             fields["client_secret"] = clientSecret
         }
 
@@ -270,7 +270,7 @@ func tokenEndpointError(
     )
 }
 
-func normalized(_ value: String?) -> String? {
+func normalizedOAuthField(_ value: String?) -> String? {
     guard let value else {
         return nil
     }
