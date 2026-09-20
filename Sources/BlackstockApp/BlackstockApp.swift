@@ -21,7 +21,9 @@ struct BlackstockApp: App {
                     FirstRunView(session: session)
                 }
             }
-            .frame(minWidth: 1040, minHeight: 700)
+            .frame(minWidth: 1180, minHeight: 760)
+            .tint(BlackstockDesign.accent)
+            .background(BlackstockDesign.canvas)
         }
         .windowStyle(.titleBar)
         .commands {
@@ -52,8 +54,9 @@ private struct WorkspaceShell: View {
                         .font(.headline)
                     Spacer()
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 14)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 16)
+                .background(BlackstockDesign.sidebar)
 
                 Divider()
 
@@ -72,7 +75,11 @@ private struct WorkspaceShell: View {
                     Label("Einstellungen", systemImage: "gearshape")
                         .tag("Einstellungen")
                 }
+                .listStyle(.sidebar)
+                .scrollContentBackground(.hidden)
+                .background(BlackstockDesign.sidebar)
             }
+            .background(BlackstockDesign.sidebar)
         } detail: {
             switch selection {
             case "Chancen":
@@ -127,6 +134,8 @@ private struct WorkspaceShell: View {
                 )
             }
         }
+        .navigationSplitViewStyle(.balanced)
+        .background(BlackstockDesign.canvas)
         .task {
             if session.activeProject?.stage.journeyGuidance
                 .recommendedSurface == .studio {
