@@ -695,12 +695,15 @@ final class StudioState: ObservableObject {
         }
     }
 
-    func prepareShortFormSetup() {
-        reframeAspectRatio = .portrait9x16
-        captionVisualStyle = .strong
+    func prepareOutputPreset(
+        _ preset: CreatorOutputPreset
+    ) {
+        reframeAspectRatio = preset.aspectRatio
+        captionVisualStyle = preset.captionStyle
 
         if transcript != nil {
-            burnInCaptionsEnabled = true
+            burnInCaptionsEnabled =
+                preset.prefersVisibleCaptions
         }
 
         renderArtifact = nil
@@ -708,16 +711,20 @@ final class StudioState: ObservableObject {
             timestamp: Date(),
             actor: .user,
             stage: .editing,
-            action: "short-form-setup-prepared",
+            action: "output-preset-prepared",
             summary:
                 transcript == nil
-                ? "Shorts/Reels-Setup vorbereitet: 9:16 und kräftiger Untertitelstil. Sichtbare Untertitel bleiben aus, bis ein lokales Transkript vorhanden ist."
-                : "Shorts/Reels-Setup vorbereitet: 9:16, kräftiger Untertitelstil und sichtbare Untertitel aktiviert. Der Reframe ist noch nicht angewendet.",
+                ? "Ausgabe-Preset „\(preset.germanTitle)“ vorbereitet. Sichtbare Untertitel bleiben aus, bis ein lokales Transkript vorhanden ist."
+                : "Ausgabe-Preset „\(preset.germanTitle)“ vorbereitet. Format und Untertiteloptionen wurden vorpositioniert; die Formatänderung ist noch nicht angewendet.",
             reversible: false,
             correlationID: correlationID
         ))
         persistWorkspaceIfPossible()
         errorMessage = nil
+    }
+
+    func prepareShortFormSetup() {
+        prepareOutputPreset(.shortVertical)
     }
 
     func applyReframe() async {
