@@ -695,6 +695,31 @@ final class StudioState: ObservableObject {
         }
     }
 
+    func prepareShortFormSetup() {
+        reframeAspectRatio = .portrait9x16
+        captionVisualStyle = .strong
+
+        if transcript != nil {
+            burnInCaptionsEnabled = true
+        }
+
+        renderArtifact = nil
+        ledger.append(.init(
+            timestamp: Date(),
+            actor: .user,
+            stage: .editing,
+            action: "short-form-setup-prepared",
+            summary:
+                transcript == nil
+                ? "Shorts/Reels-Setup vorbereitet: 9:16 und kräftiger Untertitelstil. Sichtbare Untertitel bleiben aus, bis ein lokales Transkript vorhanden ist."
+                : "Shorts/Reels-Setup vorbereitet: 9:16, kräftiger Untertitelstil und sichtbare Untertitel aktiviert. Der Reframe ist noch nicht angewendet.",
+            reversible: false,
+            correlationID: correlationID
+        ))
+        persistWorkspaceIfPossible()
+        errorMessage = nil
+    }
+
     func applyReframe() async {
         guard asset != nil else { return }
 
