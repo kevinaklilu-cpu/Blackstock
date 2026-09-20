@@ -331,7 +331,7 @@ struct OpportunityWorkspaceView: View {
                     }
                 } label: {
                     Label(
-                        "Als Projekt übernehmen",
+                        "Als neues Projekt übernehmen",
                         systemImage: "plus.rectangle.on.folder"
                     )
                 }
