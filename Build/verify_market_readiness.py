@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import math
 import re
 import subprocess
 import sys
@@ -41,7 +42,7 @@ def load_json(path_value, label):
     if not path.is_file():
         fail(f"{label} file not found: {path}")
     try:
-        return path, json.loads(path.read_text(encoding="utf-8"))
+        return path, json.loads(path.read_text(encoding="utf-8"), parse_constant=lambda token: (_ for _ in ()).throw(ValueError(f"non-finite JSON number: {token}")))
     except Exception as error:
         fail(f"{label} is invalid JSON: {error}")
 
