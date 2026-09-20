@@ -137,10 +137,10 @@ private struct WorkspaceShell: View {
         .navigationSplitViewStyle(.balanced)
         .background(BlackstockDesign.canvas)
         .task {
-            if session.activeProject?.stage.journeyGuidance
-                .recommendedSurface == .studio {
-                selection = "Studio"
-            }
+            routeToCurrentProject()
+        }
+        .onChange(of: session.activeProject?.stage) { _ in
+            routeToCurrentProject()
         }
         .onChange(of: commandPaletteRequest) { _ in
             showCommandPalette = true
@@ -159,6 +159,24 @@ private struct WorkspaceShell: View {
                     session.resetFirstRun()
                 }
             )
+        }
+    }
+
+    private func routeToCurrentProject() {
+        guard let project = session.activeProject else {
+            if selection == "Studio" {
+                selection = "Übersicht"
+            }
+            return
+        }
+
+        switch project.stage.journeyGuidance.recommendedSurface {
+        case .studio:
+            selection = "Studio"
+        case .overview:
+            selection = "Übersicht"
+        case .none:
+            break
         }
     }
 }
