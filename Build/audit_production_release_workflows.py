@@ -41,8 +41,13 @@ requirements = {
         "preinstall-release-evidence.json",
         "manifestSignatureVerified",
         "packageHashVerified",
+        "--verified-manifest-output",
         "--verified-package-output",
+        "--verified-manifest-input",
+        "--verified-package-input",
+        "verified-update-manifest.json",
         "Blackstock-production.pkg",
+        "post-install evidence diverged from pre-install verified snapshot",
         "Install exact package verified by release verifier",
         "sudo installer",
         "Launch verified production app",
@@ -81,7 +86,12 @@ requirements = {
         "com.apple.security.device.audio-input",
         "isProductionHTTPSURL(manifest.packageURL)",
         "isProductionHTTPSURL(finalURL)",
+        "--verified-manifest-input",
+        "--verified-package-input",
+        "--verified-manifest-output",
         "--verified-package-output",
+        "incompleteVerifiedSnapshotArguments",
+        "persistVerifiedManifest(",
         "persistVerifiedPackage(",
         "expectedSHA256: manifest.sha256",
     ],
@@ -138,6 +148,26 @@ if "curl " in verify or "\ncurl" in verify:
 if "--verified-package-output" not in verify:
     errors.append(
         "published release verification must persist the exact verifier-checked package for installation"
+    )
+if verify.count("--verified-manifest-output") != 1:
+    errors.append(
+        "published release verification must persist exactly one verified manifest snapshot before installation"
+    )
+if verify.count("--verified-package-output") != 1:
+    errors.append(
+        "published release verification must persist exactly one verified package snapshot before installation"
+    )
+if verify.count("--verified-manifest-input") != 1:
+    errors.append(
+        "post-install verification must consume the verified manifest snapshot exactly once"
+    )
+if verify.count("--verified-package-input") != 1:
+    errors.append(
+        "post-install verification must consume the verified package snapshot exactly once"
+    )
+if "post-install evidence diverged from pre-install verified snapshot" not in verify:
+    errors.append(
+        "published release workflow must cross-bind post-install evidence to pre-install evidence"
     )
 if errors:
     print("Production release workflow audit failed:", file=sys.stderr)
