@@ -65,11 +65,14 @@ final class BlackstockSession: ObservableObject {
     @Published var youtubeRegions: [YouTubeI18nRegion] = []
     @Published var youtubeVideoCategories: [YouTubeVideoCategory] = []
     @Published var channelRegionCode = ""
-    @Published var selectedVideoCategoryID = ""
+    @Published var channelCategoryID = ""
+    @Published var opportunityTimeWindow:
+        OpportunityTimeWindow = .last7Days
     @Published var channelAudienceSetting:
-        YouTubeChannelAudienceSetting = .notMadeForKids
+        YouTubeChannelAudienceSetting = .perVideo
     @Published var isLoadingYouTubeSetupOptions = false
     @Published private(set) var officialChannelSettingsVerified = false
+    @Published private(set) var channelAudienceAppliedToYouTube: Bool?
     @Published var opportunities: [YouTubeOpportunityCandidate] = []
     @Published var isWorking = false
     @Published var errorMessage: String?
@@ -123,9 +126,23 @@ final class BlackstockSession: ObservableObject {
         channelRegionCode = UserDefaults.standard.string(
             forKey: "blackstock.workspace.regionCode"
         ) ?? ""
-        selectedVideoCategoryID = UserDefaults.standard.string(
-            forKey: "blackstock.workspace.videoCategoryID"
-        ) ?? ""
+        channelCategoryID =
+            UserDefaults.standard.string(
+                forKey: "blackstock.workspace.channelCategoryID"
+            )
+            ?? UserDefaults.standard.string(
+                forKey: "blackstock.workspace.videoCategoryID"
+            )
+            ?? ""
+        if let rawTimeWindow =
+            UserDefaults.standard.string(
+                forKey: "blackstock.workspace.opportunityTimeWindow"
+            ),
+           let savedTimeWindow = OpportunityTimeWindow(
+                rawValue: rawTimeWindow
+           ) {
+            opportunityTimeWindow = savedTimeWindow
+        }
         if let rawAudience = UserDefaults.standard.string(
             forKey: "blackstock.workspace.channelAudience"
         ),
@@ -1698,8 +1715,10 @@ final class BlackstockSession: ObservableObject {
 
         if setup.selfDeclaredMadeForKids == true {
             channelAudienceSetting = .madeForKids
-        } else {
+        } else if setup.selfDeclaredMadeForKids == false {
             channelAudienceSetting = .notMadeForKids
+        } else {
+            channelAudienceSetting = .perVideo
         }
 
         youtubeVideoCategories = try await client.videoCategories(
@@ -1710,16 +1729,20 @@ final class BlackstockSession: ObservableObject {
             throw YouTubeChannelSetupError.invalidResponse
         }
 
-        let storedCategory = UserDefaults.standard.string(
-            forKey: "blackstock.workspace.videoCategoryID"
-        )
+        let storedCategory =
+            UserDefaults.standard.string(
+                forKey: "blackstock.workspace.channelCategoryID"
+            )
+            ?? UserDefaults.standard.string(
+                forKey: "blackstock.workspace.videoCategoryID"
+            )
         if let storedCategory,
            youtubeVideoCategories.contains(where: {
                 $0.id == storedCategory
            }) {
-            selectedVideoCategoryID = storedCategory
+            channelCategoryID = storedCategory
         } else {
-            selectedVideoCategoryID =
+            channelCategoryID =
                 youtubeVideoCategories.first?.id ?? ""
         }
 
@@ -1754,9 +1777,9 @@ final class BlackstockSession: ObservableObject {
             }
             youtubeVideoCategories = categories
             if !categories.contains(where: {
-                $0.id == selectedVideoCategoryID
+                $0.id == channelCategoryID
             }) {
-                selectedVideoCategoryID =
+                channelCategoryID =
                     categories.first?.id ?? ""
             }
             syncStructuredStrategyFields()
@@ -1793,7 +1816,7 @@ final class BlackstockSession: ObservableObject {
 
     private func syncStructuredStrategyFields() {
         guard let category = youtubeVideoCategories.first(
-            where: { $0.id == selectedVideoCategoryID }
+            where: { $0.id == channelCategoryID }
         ) else {
             return
         }
@@ -1821,7 +1844,7 @@ final class BlackstockSession: ObservableObject {
             return
         }
         guard youtubeVideoCategories.contains(where: {
-            $0.id == selectedVideoCategoryID
+            $0.id == channelCategoryID
         }) else {
             errorMessage = "Wähle eine YouTube-Kategorie aus."
             return
@@ -1837,7 +1860,7 @@ final class BlackstockSession: ObservableObject {
             let accessToken = try await channelSetupAccessToken(
                 targetChannelID: channel.id
             )
-            _ = try await YouTubeChannelSetupClient(
+            let result = try await YouTubeChannelSetupClient(
                 accessToken: accessToken
             ).applyAndVerify(
                 channelID: channel.id,
@@ -1847,13 +1870,15 @@ final class BlackstockSession: ObservableObject {
             )
 
             officialChannelSettingsVerified = true
+            channelAudienceAppliedToYouTube =
+                result.audienceAppliedToChannel
             UserDefaults.standard.set(
                 channelRegionCode,
                 forKey: "blackstock.workspace.regionCode"
             )
             UserDefaults.standard.set(
-                selectedVideoCategoryID,
-                forKey: "blackstock.workspace.videoCategoryID"
+                channelCategoryID,
+                forKey: "blackstock.workspace.channelCategoryID"
             )
             UserDefaults.standard.set(
                 channelAudienceSetting.rawValue,
@@ -1879,7 +1904,7 @@ final class BlackstockSession: ObservableObject {
             errorMessage = "Kein Zielkanal ausgewählt."
             return
         }
-        guard !selectedVideoCategoryID.isEmpty,
+        guard !channelCategoryID.isEmpty,
               !channelRegionCode.isEmpty,
               !contentLanguage.isEmpty else {
             errorMessage =
@@ -1935,30 +1960,33 @@ final class BlackstockSession: ObservableObject {
             let candidates =
                 try await YouTubeAuthorizedClient(
                     accessToken: accessToken
-                ).firstOpportunityCandidates(
-                    query: "",
-                    categoryID: selectedVideoCategoryID,
+                ).categoryOpportunityCandidates(
+                    categoryID: channelCategoryID,
+                    categoryTitle: primaryTopic,
                     regionCode: channelRegionCode,
                     relevanceLanguage: contentLanguage,
+                    timeWindow: opportunityTimeWindow,
                     maxResults: 12,
-                    order: .relevance
+                    order: .views
                 )
             guard !candidates.isEmpty else {
+                step = .topic
                 errorMessage =
-                    "YouTube hat für die ausgewählte Kategorie aktuell keine passenden Videos geliefert."
+                    "YouTube liefert für diese Kategorie und Region gerade keine Videos. Wähle eine andere Kategorie oder Region."
                 return
             }
 
             opportunities = candidates
             step = .opportunities
         } catch {
+            step = .topic
             errorMessage =
                 "Videos konnten nicht geladen werden: \(describe(error))"
         }
     }
 
     func reloadOpportunities(order: OpportunitySortMode) async {
-        if !selectedVideoCategoryID.isEmpty,
+        if !channelCategoryID.isEmpty,
            !channelRegionCode.isEmpty,
            !contentLanguage.isEmpty,
            let channelID =
@@ -1980,11 +2008,12 @@ final class BlackstockSession: ObservableObject {
                 opportunities =
                     try await YouTubeAuthorizedClient(
                         accessToken: accessToken
-                    ).firstOpportunityCandidates(
-                        query: "",
-                        categoryID: selectedVideoCategoryID,
+                    ).categoryOpportunityCandidates(
+                        categoryID: channelCategoryID,
+                        categoryTitle: primaryTopic,
                         regionCode: channelRegionCode,
                         relevanceLanguage: contentLanguage,
+                        timeWindow: opportunityTimeWindow,
                         maxResults: 12,
                         order: order
                     )
@@ -2004,15 +2033,15 @@ final class BlackstockSession: ObservableObject {
 
     func loadWorkspaceOpportunities(
         query: String,
-        order: OpportunitySortMode
+        order: OpportunitySortMode,
+        timeWindow: OpportunityTimeWindow? = nil
     ) async {
         let resolvedQuery = query.trimmingCharacters(
             in: .whitespacesAndNewlines
         )
-        guard !resolvedQuery.isEmpty else {
-            errorMessage = "Gib zuerst ein Thema für die Videosuche ein."
-            return
-        }
+        let resolvedTimeWindow =
+            timeWindow ?? opportunityTimeWindow
+
         guard let channelID = workspaceChannelID else {
             errorMessage = "Kein YouTube-Kanal ist verbunden."
             return
@@ -2033,19 +2062,59 @@ final class BlackstockSession: ObservableObject {
         defer { isWorking = false }
 
         do {
-            let candidates = try await YouTubeAuthorizedClient(
+            let client = YouTubeAuthorizedClient(
                 accessToken: accessToken
-            ).firstOpportunityCandidates(
-                query: resolvedQuery,
-                maxResults: 20,
-                order: order
             )
+            let candidates: [YouTubeOpportunityCandidate]
+
+            if resolvedQuery.isEmpty,
+               !channelCategoryID.isEmpty,
+               !channelRegionCode.isEmpty {
+                candidates = try await client
+                    .categoryOpportunityCandidates(
+                        categoryID: channelCategoryID,
+                        categoryTitle: primaryTopic,
+                        regionCode: channelRegionCode,
+                        relevanceLanguage: contentLanguage,
+                        timeWindow: resolvedTimeWindow,
+                        maxResults: 20,
+                        order: order
+                    )
+            } else {
+                guard !resolvedQuery.isEmpty else {
+                    errorMessage =
+                        "Wähle eine Kanal-Kategorie oder gib einen Suchbegriff ein."
+                    return
+                }
+                candidates = try await client
+                    .firstOpportunityCandidates(
+                        query: resolvedQuery,
+                        categoryID: channelCategoryID.isEmpty
+                            ? nil
+                            : channelCategoryID,
+                        regionCode: channelRegionCode.isEmpty
+                            ? nil
+                            : channelRegionCode,
+                        relevanceLanguage:
+                            contentLanguage.isEmpty
+                            ? nil
+                            : contentLanguage,
+                        publishedAfter:
+                            resolvedTimeWindow
+                                .publishedAfter(now: Date()),
+                        maxResults: 20,
+                        order: order
+                    )
+            }
+
             opportunities = candidates
             if candidates.isEmpty {
-                errorMessage = "YouTube hat für diesen Suchraum aktuell keine passenden Videos geliefert."
+                errorMessage =
+                    "YouTube hat für diese Kategorie, Region und diesen Zeitraum aktuell keine passenden Videos geliefert."
             }
         } catch {
-            errorMessage = "Videos konnten nicht geladen werden: \(describe(error))"
+            errorMessage =
+                "Videos konnten nicht geladen werden: \(describe(error))"
         }
     }
 
@@ -2139,8 +2208,12 @@ final class BlackstockSession: ObservableObject {
             forKey: "blackstock.workspace.regionCode"
         )
         UserDefaults.standard.set(
-            selectedVideoCategoryID,
-            forKey: "blackstock.workspace.videoCategoryID"
+            channelCategoryID,
+            forKey: "blackstock.workspace.channelCategoryID"
+        )
+        UserDefaults.standard.set(
+            opportunityTimeWindow.rawValue,
+            forKey: "blackstock.workspace.opportunityTimeWindow"
         )
         UserDefaults.standard.set(
             channelAudienceSetting.rawValue,
@@ -2164,8 +2237,12 @@ final class BlackstockSession: ObservableObject {
             forKey: "blackstock.workspace.regionCode"
         )
         UserDefaults.standard.set(
-            selectedVideoCategoryID,
-            forKey: "blackstock.workspace.videoCategoryID"
+            channelCategoryID,
+            forKey: "blackstock.workspace.channelCategoryID"
+        )
+        UserDefaults.standard.set(
+            opportunityTimeWindow.rawValue,
+            forKey: "blackstock.workspace.opportunityTimeWindow"
         )
         UserDefaults.standard.set(
             channelAudienceSetting.rawValue,
@@ -2358,16 +2435,24 @@ final class BlackstockSession: ObservableObject {
             forKey: "blackstock.workspace.regionCode"
         )
         UserDefaults.standard.removeObject(
+            forKey: "blackstock.workspace.channelCategoryID"
+        )
+        UserDefaults.standard.removeObject(
             forKey: "blackstock.workspace.videoCategoryID"
         )
         UserDefaults.standard.removeObject(
             forKey: "blackstock.workspace.channelAudience"
         )
+        UserDefaults.standard.removeObject(
+            forKey: "blackstock.workspace.opportunityTimeWindow"
+        )
         primaryTopic = ""
         contentLanguage = "de"
         channelRegionCode = ""
-        selectedVideoCategoryID = ""
-        channelAudienceSetting = .notMadeForKids
+        channelCategoryID = ""
+        opportunityTimeWindow = .last7Days
+        channelAudienceSetting = .perVideo
+        channelAudienceAppliedToYouTube = nil
         youtubeLanguages = []
         youtubeRegions = []
         youtubeVideoCategories = []

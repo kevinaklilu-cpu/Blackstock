@@ -8,7 +8,7 @@ struct OpportunityWorkspaceView: View {
     let onProjectCreated: () -> Void
 
     @State private var query = ""
-    @State private var sortMode: OpportunitySortMode = .relevance
+    @State private var sortMode: OpportunitySortMode = .views
     @State private var selectedOpportunityID: String?
     @State private var hasLoadedInitially = false
 
@@ -32,6 +32,20 @@ struct OpportunityWorkspaceView: View {
                 .onSubmit {
                     Task { await loadOpportunities() }
                 }
+
+                Picker(
+                    "Zeitraum",
+                    selection: $session.opportunityTimeWindow
+                ) {
+                    ForEach(
+                        OpportunityTimeWindow.allCases,
+                        id: \.self
+                    ) { window in
+                        Text(window.germanTitle).tag(window)
+                    }
+                }
+                .pickerStyle(.menu)
+                .frame(width: 120)
 
                 Picker("Sortierung", selection: $sortMode) {
                     ForEach(OpportunitySortMode.allCases, id: \.self) { mode in
@@ -60,9 +74,12 @@ struct OpportunityWorkspaceView: View {
                 .tint(BlackstockDesign.accent)
                 .disabled(
                     session.isWorking
-                    || query.trimmingCharacters(
-                        in: .whitespacesAndNewlines
-                    ).isEmpty
+                    || (
+                        query.trimmingCharacters(
+                            in: .whitespacesAndNewlines
+                        ).isEmpty
+                        && session.channelCategoryID.isEmpty
+                    )
                 )
             }
 
@@ -88,13 +105,13 @@ struct OpportunityWorkspaceView: View {
         .task {
             guard !hasLoadedInitially else { return }
             hasLoadedInitially = true
-            if query.isEmpty {
-                query = session.primaryTopic
-            }
             if session.opportunities.isEmpty,
-               !query.trimmingCharacters(
-                    in: .whitespacesAndNewlines
-               ).isEmpty {
+               (
+                    !session.channelCategoryID.isEmpty
+                    || !query.trimmingCharacters(
+                        in: .whitespacesAndNewlines
+                    ).isEmpty
+               ) {
                 await loadOpportunities()
             } else {
                 selectedOpportunityID =
@@ -102,12 +119,11 @@ struct OpportunityWorkspaceView: View {
             }
         }
         .onChange(of: sortMode) { _ in
-            guard hasLoadedInitially,
-                  !query.trimmingCharacters(
-                    in: .whitespacesAndNewlines
-                  ).isEmpty else {
-                return
-            }
+            guard hasLoadedInitially else { return }
+            Task { await loadOpportunities() }
+        }
+        .onChange(of: session.opportunityTimeWindow) { _ in
+            guard hasLoadedInitially else { return }
             Task { await loadOpportunities() }
         }
     }
@@ -117,7 +133,11 @@ struct OpportunityWorkspaceView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Videos")
                     .font(.largeTitle.bold())
-                Text("Finde ein Video und erstelle daraus einen Clip.")
+                Text(
+                    session.primaryTopic.isEmpty
+                        ? "Finde ein Video und erstelle daraus einen Clip."
+                        : "Kanal-Kategorie: \(session.primaryTopic) · Zeitraum: \(session.opportunityTimeWindow.germanTitle)"
+                )
                     .font(.title3)
                     .foregroundStyle(.secondary)
             }
@@ -133,7 +153,7 @@ struct OpportunityWorkspaceView: View {
                     .foregroundStyle(.secondary)
                 Text("Noch keine Videos")
                     .font(.headline)
-                Text("Suche oben nach einem Thema oder verwende deinen gespeicherten Kanal-Schwerpunkt.")
+                Text("Lade die Videos deiner Kanal-Kategorie oder suche zusätzlich nach einem Begriff.")
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: 560)
@@ -460,7 +480,8 @@ struct OpportunityWorkspaceView: View {
         selectedOpportunityID = nil
         await session.loadWorkspaceOpportunities(
             query: query,
-            order: sortMode
+            order: sortMode,
+            timeWindow: session.opportunityTimeWindow
         )
         selectedOpportunityID =
             session.opportunities.first?.id

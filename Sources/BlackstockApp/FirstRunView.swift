@@ -7,7 +7,7 @@ struct FirstRunView: View {
     @ObservedObject var session: BlackstockSession
     @State private var showOAuthImporter = false
     @State private var selectedOpportunityID: String?
-    @State private var opportunitySortMode: OpportunitySortMode = .relevance
+    @State private var opportunitySortMode: OpportunitySortMode = .views
 
     var body: some View {
         ZStack {
@@ -237,8 +237,8 @@ struct FirstRunView: View {
             }
 
             Picker(
-                "Standard-Video-Kategorie",
-                selection: $session.selectedVideoCategoryID
+                "Kanal-Kategorie",
+                selection: $session.channelCategoryID
             ) {
                 ForEach(session.youtubeVideoCategories) { category in
                     Text(category.title).tag(category.id)
@@ -246,6 +246,20 @@ struct FirstRunView: View {
             }
             .pickerStyle(.menu)
             .accessibilityLabel("YouTube-Video-Kategorie")
+
+            Picker(
+                "Trend-Zeitraum",
+                selection: $session.opportunityTimeWindow
+            ) {
+                ForEach(
+                    OpportunityTimeWindow.allCases,
+                    id: \.self
+                ) { window in
+                    Text(window.germanTitle).tag(window)
+                }
+            }
+            .pickerStyle(.menu)
+            .accessibilityLabel("Trend-Zeitraum")
 
             Picker(
                 "YouTube-Zielgruppe",
@@ -280,7 +294,7 @@ struct FirstRunView: View {
                 )
                 .font(.callout.weight(.semibold))
                 Text(
-                    "Region, Sprache und Kategorien werden direkt aus YouTube geladen. Land/Region, Standardsprache und die Kanal-Zielgruppe werden anschließend über die YouTube API im ausgewählten Kanal gesetzt."
+                    "Land/Region und Standardsprache werden als echte YouTube-Kanaleinstellungen übernommen. Die Kanal-Kategorie speichert Blackstock als festen Kanalstandard auf Basis der offiziellen YouTube-Video-Kategorien und nutzt sie für Trends, Suche und Uploads. Die Kinder-Zielgruppe wird, soweit YouTube sie kanalweit akzeptiert, am Kanal gesetzt – sonst sicher pro Video beim Upload."
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -314,7 +328,7 @@ struct FirstRunView: View {
                     || session.isLoadingYouTubeSetupOptions
                     || session.channelRegionCode.isEmpty
                     || session.contentLanguage.isEmpty
-                    || session.selectedVideoCategoryID.isEmpty
+                    || session.channelCategoryID.isEmpty
                 )
             }
         }
@@ -323,12 +337,28 @@ struct FirstRunView: View {
     private var language: some View {
         VStack(alignment: .leading, spacing: 14) {
             if session.officialChannelSettingsVerified {
-                Label(
-                    "YouTube-Kanaleinstellungen bestätigt",
-                    systemImage: "checkmark.seal.fill"
-                )
-                .font(.callout.weight(.semibold))
-                .foregroundStyle(.green)
+                VStack(alignment: .leading, spacing: 6) {
+                    Label(
+                        "YouTube-Kanaleinstellungen bestätigt",
+                        systemImage: "checkmark.seal.fill"
+                    )
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.green)
+
+                    if session.channelAudienceAppliedToYouTube == false {
+                        Text(
+                            "Die Zielgruppe konnte von YouTube nicht kanalweit bestätigt werden. Blackstock speichert deine Auswahl und setzt sie beim jeweiligen Video-Upload."
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    } else if session.channelAudienceAppliedToYouTube == nil {
+                        Text(
+                            "Die Zielgruppe wird für jedes Video einzeln festgelegt."
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
+                }
             }
 
             Toggle(
@@ -381,7 +411,9 @@ struct FirstRunView: View {
                 ProgressView()
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Kanal wird vorbereitet").font(.headline)
-                    Text("YouTube-Videos aus „\(session.primaryTopic)“ werden geladen.")
+                    Text(
+                        "YouTube-Videos aus „\(session.primaryTopic)“ · \(session.opportunityTimeWindow.germanTitle) werden geladen."
+                    )
                         .foregroundStyle(.secondary)
                 }
             }
@@ -404,6 +436,22 @@ struct FirstRunView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
+                Picker(
+                    "Zeitraum",
+                    selection: $session.opportunityTimeWindow
+                ) {
+                    ForEach(
+                        OpportunityTimeWindow.allCases,
+                        id: \.self
+                    ) { window in
+                        Text(window.germanTitle).tag(window)
+                    }
+                }
+                .labelsHidden()
+                .accessibilityLabel("Video-Zeitraum")
+                .pickerStyle(.menu)
+                .frame(maxWidth: 110)
+
                 Picker("Sortierung", selection: $opportunitySortMode) {
                     ForEach(OpportunitySortMode.allCases, id: \.self) { mode in
                         Text(mode.germanTitle).tag(mode)
@@ -533,6 +581,16 @@ struct FirstRunView: View {
                 selectedOpportunityID = session.opportunities.first?.id
             }
         }
+        .onChange(of: session.opportunityTimeWindow) { _ in
+            Task {
+                selectedOpportunityID = nil
+                await session.reloadOpportunities(
+                    order: opportunitySortMode
+                )
+                selectedOpportunityID =
+                    session.opportunities.first?.id
+            }
+        }
     }
 
     @ViewBuilder
@@ -655,7 +713,7 @@ struct FirstRunView: View {
         switch session.step {
         case .welcome: "Verknüpfe deinen YouTube-Kanal."
         case .channel: "Wähle den Kanal, mit dem du arbeiten willst."
-        case .topic: "Wähle offizielle YouTube-Parameter statt Freitext."
+        case .topic: "Lege den Kanal mit YouTube-Parametern und einer festen Blackstock-Kanal-Kategorie fest."
         case .language: "Bestätige die Nutzungsrechte für deinen Arbeitsbereich."
         case .preparing: "Blackstock lädt die benötigten Kanaldaten."
         case .opportunities: "Wähle ein Video für dein erstes Clip-Projekt."

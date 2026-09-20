@@ -109,7 +109,7 @@ struct PackagingReviewView: View {
         _categoryID = State(
             initialValue:
                 saved?.package.metadata.categoryID
-                ?? session.selectedVideoCategoryID
+                ?? session.channelCategoryID
         )
         _containsSyntheticMedia = State(
             initialValue:
@@ -306,7 +306,7 @@ struct PackagingReviewView: View {
         .task {
             await session.ensureYouTubePublishingOptionsLoaded()
             if categoryID.isEmpty {
-                categoryID = session.selectedVideoCategoryID
+                categoryID = session.channelCategoryID
             }
         }
         .onChange(of: session.activeProject?.stage) { stage in

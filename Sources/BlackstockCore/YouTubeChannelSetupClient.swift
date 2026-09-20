@@ -39,13 +39,16 @@ public struct YouTubeVideoCategory: Codable, Sendable, Equatable, Identifiable, 
 public enum YouTubeChannelAudienceSetting: String, Codable, Sendable, CaseIterable, Hashable {
     case madeForKids
     case notMadeForKids
+    case perVideo
 
-    public var selfDeclaredMadeForKids: Bool {
+    public var selfDeclaredMadeForKids: Bool? {
         switch self {
         case .madeForKids:
             return true
         case .notMadeForKids:
             return false
+        case .perVideo:
+            return nil
         }
     }
 
@@ -55,6 +58,8 @@ public enum YouTubeChannelAudienceSetting: String, Codable, Sendable, CaseIterab
             return "Ja, der Kanal ist speziell für Kinder"
         case .notMadeForKids:
             return "Nein, der Kanal ist nicht speziell für Kinder"
+        case .perVideo:
+            return "Für jedes Video einzeln festlegen"
         }
     }
 
@@ -64,7 +69,22 @@ public enum YouTubeChannelAudienceSetting: String, Codable, Sendable, CaseIterab
             return "Speziell für Kinder"
         case .notMadeForKids:
             return "Nicht speziell für Kinder"
+        case .perVideo:
+            return "Zielgruppe pro Video"
         }
+    }
+}
+
+public struct YouTubeChannelSetupApplyResult: Sendable, Equatable {
+    public let snapshot: YouTubeChannelSetupSnapshot
+    public let audienceAppliedToChannel: Bool?
+
+    public init(
+        snapshot: YouTubeChannelSetupSnapshot,
+        audienceAppliedToChannel: Bool?
+    ) {
+        self.snapshot = snapshot
+        self.audienceAppliedToChannel = audienceAppliedToChannel
     }
 }
 
@@ -339,7 +359,7 @@ public struct YouTubeChannelSetupClient: Sendable {
         defaultLanguage: String,
         audience: YouTubeChannelAudienceSetting,
         session: URLSession = .shared
-    ) async throws -> YouTubeChannelSetupSnapshot {
+    ) async throws -> YouTubeChannelSetupApplyResult {
         let before = try await currentChannelSetup(
             channelID: channelID,
             session: session
@@ -350,12 +370,23 @@ public struct YouTubeChannelSetupClient: Sendable {
             defaultLanguage: defaultLanguage,
             session: session
         )
-        try await updateAudience(
-            channelID: channelID,
-            selfDeclaredMadeForKids:
-                audience.selfDeclaredMadeForKids,
-            session: session
-        )
+
+        var audienceUpdateAttempted = false
+        if let declared = audience.selfDeclaredMadeForKids {
+            audienceUpdateAttempted = true
+            do {
+                try await updateAudience(
+                    channelID: channelID,
+                    selfDeclaredMadeForKids: declared,
+                    session: session
+                )
+            } catch {
+                // The public channel resource documents
+                // selfDeclaredMadeForKids, while channels.update
+                // has provider/account-specific behavior for the status
+                // part. Do not block onboarding on this optional write.
+            }
+        }
 
         let after = try await currentChannelSetup(
             channelID: channelID,
@@ -369,12 +400,22 @@ public struct YouTubeChannelSetupClient: Sendable {
             throw YouTubeChannelSetupError
                 .verificationFailed("Standardsprache")
         }
-        guard after.selfDeclaredMadeForKids
-            == audience.selfDeclaredMadeForKids else {
-            throw YouTubeChannelSetupError
-                .verificationFailed("Zielgruppe")
+
+        let audienceAppliedToChannel: Bool?
+        if let declared = audience.selfDeclaredMadeForKids {
+            let confirmed =
+                after.selfDeclaredMadeForKids == declared
+                || after.madeForKids == declared
+            audienceAppliedToChannel =
+                audienceUpdateAttempted ? confirmed : false
+        } else {
+            audienceAppliedToChannel = nil
         }
-        return after
+
+        return YouTubeChannelSetupApplyResult(
+            snapshot: after,
+            audienceAppliedToChannel: audienceAppliedToChannel
+        )
     }
 
     private func updateChannel(

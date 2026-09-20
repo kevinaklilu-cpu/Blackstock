@@ -506,6 +506,118 @@ final class GoogleOAuthAndYouTubeTests: XCTestCase {
         )
     }
 
+    func testChannelSetupDoesNotBlockWhenAudienceWriteIsRejected() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [OAuthURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+
+        OAuthURLProtocol.handler = { request in
+            let url = try XCTUnwrap(request.url)
+            let components = try XCTUnwrap(
+                URLComponents(
+                    url: url,
+                    resolvingAgainstBaseURL: false
+                )
+            )
+            let values = Dictionary(
+                uniqueKeysWithValues:
+                    (components.queryItems ?? []).map {
+                        ($0.name, $0.value ?? "")
+                    }
+            )
+
+            if request.httpMethod == "PUT",
+               values["part"] == "status" {
+                let response = HTTPURLResponse(
+                    url: url,
+                    statusCode: 400,
+                    httpVersion: nil,
+                    headerFields: [
+                        "Content-Type": "application/json"
+                    ]
+                )!
+                let data = Data(#"""
+                {"error":{"message":"Unsupported channel audience part"}}
+                """#.utf8)
+                return (response, data)
+            }
+
+            if request.httpMethod == "PUT" {
+                XCTAssertEqual(
+                    values["part"],
+                    "brandingSettings"
+                )
+                let response = HTTPURLResponse(
+                    url: url,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: [
+                        "Content-Type": "application/json"
+                    ]
+                )!
+                return (
+                    response,
+                    Data(#"{"id":"channel-1"}"#.utf8)
+                )
+            }
+
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: [
+                    "Content-Type": "application/json"
+                ]
+            )!
+            let data = Data(#"""
+            {
+              "items": [{
+                "id": "channel-1",
+                "brandingSettings": {
+                  "channel": {
+                    "description": "Keep",
+                    "keywords": "sports",
+                    "defaultLanguage": "de",
+                    "country": "DE"
+                  }
+                },
+                "status": {
+                  "madeForKids": false
+                }
+              }]
+            }
+            """#.utf8)
+            return (response, data)
+        }
+
+        let result = try await YouTubeChannelSetupClient(
+            accessToken: "access"
+        ).applyAndVerify(
+            channelID: "channel-1",
+            countryCode: "DE",
+            defaultLanguage: "de",
+            audience: .madeForKids,
+            session: session
+        )
+
+        XCTAssertEqual(
+            result.snapshot.countryCode,
+            "DE"
+        )
+        XCTAssertEqual(
+            result.snapshot.defaultLanguage,
+            "de"
+        )
+        XCTAssertEqual(
+            result.audienceAppliedToChannel,
+            false
+        )
+        XCTAssertNil(
+            YouTubeChannelAudienceSetting.perVideo
+                .selfDeclaredMadeForKids
+        )
+    }
+
     func testOpportunitySearchUsesStructuredYouTubeFiltersWithoutFreeText() async throws {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [OAuthURLProtocol.self]
@@ -562,6 +674,153 @@ final class GoogleOAuthAndYouTubeTests: XCTestCase {
             regionCode: "DE",
             relevanceLanguage: "de",
             session: session
+        )
+        XCTAssertTrue(candidates.isEmpty)
+    }
+
+    func testMostPopularCategoryUsesOfficialVideoChart() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [OAuthURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+
+        OAuthURLProtocol.handler = { request in
+            let url = try XCTUnwrap(request.url)
+            XCTAssertEqual(url.path, "/youtube/v3/videos")
+            let components = try XCTUnwrap(
+                URLComponents(
+                    url: url,
+                    resolvingAgainstBaseURL: false
+                )
+            )
+            let values = Dictionary(
+                uniqueKeysWithValues:
+                    (components.queryItems ?? []).map {
+                        ($0.name, $0.value ?? "")
+                    }
+            )
+            XCTAssertEqual(values["chart"], "mostPopular")
+            XCTAssertEqual(values["regionCode"], "DE")
+            XCTAssertEqual(values["videoCategoryId"], "17")
+            XCTAssertEqual(
+                values["part"],
+                "snippet,statistics,status"
+            )
+
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: [
+                    "Content-Type": "application/json"
+                ]
+            )!
+            let data = Data(#"""
+            {
+              "items": [{
+                "id": "sports-1",
+                "snippet": {
+                  "publishedAt": "2026-09-20T10:00:00Z",
+                  "channelId": "sports-channel",
+                  "title": "Sports highlight",
+                  "channelTitle": "Sports",
+                  "thumbnails": {}
+                },
+                "statistics": {
+                  "viewCount": "12345",
+                  "likeCount": "321",
+                  "commentCount": "45"
+                },
+                "status": {
+                  "embeddable": true
+                }
+              }]
+            }
+            """#.utf8)
+            return (response, data)
+        }
+
+        let candidates = try await YouTubeAuthorizedClient(
+            accessToken: "access"
+        ).categoryOpportunityCandidates(
+            categoryID: "17",
+            categoryTitle: "Sport",
+            regionCode: "DE",
+            relevanceLanguage: "de",
+            timeWindow: .allTime,
+            maxResults: 12,
+            order: .views,
+            session: session
+        )
+
+        XCTAssertEqual(candidates.count, 1)
+        XCTAssertEqual(candidates.first?.videoID, "sports-1")
+        XCTAssertEqual(
+            candidates.first?.metrics.viewCount,
+            12_345
+        )
+    }
+
+    func testPublishedAfterTimeWindowUsesViewCountSearch() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [OAuthURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+
+        OAuthURLProtocol.handler = { request in
+            let url = try XCTUnwrap(request.url)
+            XCTAssertEqual(url.path, "/youtube/v3/search")
+            let components = try XCTUnwrap(
+                URLComponents(
+                    url: url,
+                    resolvingAgainstBaseURL: false
+                )
+            )
+            let values = Dictionary(
+                uniqueKeysWithValues:
+                    (components.queryItems ?? []).map {
+                        ($0.name, $0.value ?? "")
+                    }
+            )
+            XCTAssertEqual(values["order"], "viewCount")
+            XCTAssertEqual(values["videoCategoryId"], "17")
+            XCTAssertEqual(values["regionCode"], "DE")
+            XCTAssertEqual(
+                values["publishedAfter"],
+                "2026-09-19T12:00:00Z"
+            )
+
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: [
+                    "Content-Type": "application/json"
+                ]
+            )!
+            return (
+                response,
+                Data(#"{"items":[]}"#.utf8)
+            )
+        }
+
+        let now = try XCTUnwrap(
+            ISO8601DateFormatter().date(
+                from: "2026-09-20T12:00:00Z"
+            )
+        )
+        let candidates = try await YouTubeAuthorizedClient(
+            accessToken: "access"
+        ).firstOpportunityCandidates(
+            query: "",
+            categoryID: "17",
+            regionCode: "DE",
+            relevanceLanguage: "de",
+            publishedAfter:
+                OpportunityTimeWindow.last24Hours
+                    .publishedAfter(now: now),
+            maxResults: 12,
+            order: .views,
+            session: session,
+            now: now
         )
         XCTAssertTrue(candidates.isEmpty)
     }

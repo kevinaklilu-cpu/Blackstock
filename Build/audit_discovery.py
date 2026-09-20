@@ -7,21 +7,27 @@ ROOT = Path(__file__).resolve().parents[1]
 REQUIRED = {
     "Sources/BlackstockApp/BlackstockSession.swift": [
         "YouTubeAuthorizedClient(",
-        "firstOpportunityCandidates(",
-        "categoryID: selectedVideoCategoryID",
+        "categoryOpportunityCandidates(",
+        "channelCategoryID",
         "regionCode: channelRegionCode",
         "relevanceLanguage: contentLanguage",
-        "order: .relevance",
+        "opportunityTimeWindow",
+        "order: .views",
         "reloadOpportunities(order:",
     ],
     "Sources/BlackstockCore/YouTubeAuthorizedClient.swift": [
         'name: "videoCategoryId"',
         'name: "regionCode"',
         'name: "relevanceLanguage"',
+        'name: "publishedAfter"',
+        'name: "chart", value: "mostPopular"',
+        "OpportunityTimeWindow",
     ],
     "Sources/BlackstockApp/FirstRunView.swift": [
         'Text("Videos")',
         "YouTube-Ergebnisse für deinen Kanal",
+        "Trend-Zeitraum",
+        "Video-Zeitraum",
         "Die Angaben stammen direkt von YouTube.",
         "Datenabruf:",
         "YouTubeEmbeddedPlayer(videoID:",
@@ -55,4 +61,4 @@ if errors:
         print(f"- {error}", file=sys.stderr)
     sys.exit(1)
 
-print("Discovery audit passed: structured YouTube category/region/language discovery, provider ordering, playback and missing-data honesty are enforced.")
+print("Discovery audit passed: channel-category discovery uses YouTube mostPopular or bounded publishedAfter windows with provider ordering, playback and missing-data honesty.")
