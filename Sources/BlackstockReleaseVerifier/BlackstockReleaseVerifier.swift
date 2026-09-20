@@ -363,7 +363,8 @@ private struct BlackstockReleaseVerifierMain {
                 arguments.verifiedPackageOutputURL {
             try persistVerifiedPackage(
                 from: packageURL,
-                to: verifiedPackageOutputURL
+                to: verifiedPackageOutputURL,
+                expectedSHA256: manifest.sha256
             )
         }
 
@@ -546,7 +547,8 @@ private struct BlackstockReleaseVerifierMain {
 
     private static func persistVerifiedPackage(
         from sourceURL: URL,
-        to destinationURL: URL
+        to destinationURL: URL,
+        expectedSHA256: String
     ) throws {
         let fileManager = FileManager.default
         try fileManager.createDirectory(
@@ -570,7 +572,7 @@ private struct BlackstockReleaseVerifierMain {
         )
         try UpdatePackageIntegrityVerifier().verify(
             fileURL: temporaryURL,
-            expectedSHA256: try sha256(of: sourceURL)
+            expectedSHA256: expectedSHA256
         )
 
         try? fileManager.removeItem(at: destinationURL)
