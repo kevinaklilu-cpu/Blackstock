@@ -59,6 +59,7 @@ checks = {
         "restoreEditedPreview(",
         "saveLocalClipCandidate(",
         "loadSavedClipSelection(",
+        "previewSavedClipSelection(",
         "applySavedClipSelection(",
         "removeSavedClipSelection(",
         "setBurnInCaptionsEnabled(",
