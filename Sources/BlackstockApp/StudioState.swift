@@ -1122,6 +1122,66 @@ final class StudioState: ObservableObject {
             segmentIDs: []
         )
         await applyLocalClipCandidate(candidate)
+        guard errorMessage == nil,
+              let clipTranscript =
+                selection.transcript else {
+            return
+        }
+
+        transcript = clipTranscript
+        transcriptStructure =
+            TranscriptStructureAnalyzer()
+            .analyze(
+                transcript: clipTranscript
+            )
+        retentionAdvisorAvailability =
+            LocalRetentionAdvisor()
+            .availability(
+                localeIdentifier:
+                    clipTranscript
+                        .localeIdentifier
+            )
+
+        if let projectID = activeProjectID {
+            do {
+                let store =
+                    try workspaceStore
+                    ?? makeWorkspaceStore()
+                workspaceStore = store
+                let directory =
+                    try store.captionDirectory(
+                        projectID: projectID
+                    )
+                let outputURL =
+                    directory
+                    .appendingPathComponent(
+                        "clip-"
+                        + selection.id
+                            .uuidString
+                    )
+                    .appendingPathExtension(
+                        "vtt"
+                    )
+                try WebVTTCaptionWriter()
+                    .write(
+                        transcript:
+                            clipTranscript,
+                        to: outputURL
+                    )
+                captionURL = outputURL
+            } catch {
+                errorMessage =
+                    "Clip wurde übernommen, aber die lokale Untertiteldatei konnte nicht gespeichert werden: "
+                    + error.localizedDescription
+                persistWorkspaceIfPossible()
+                return
+            }
+        }
+
+        persistWorkspaceIfPossible()
+        clipCandidateStatusMessage =
+            "Gespeicherter Clip wurde übernommen; sein lokales Transkript steht direkt für Untertitel und weitere Analyse bereit."
+        errorMessage = nil
     }
 
     func previewLocalClipCandidate(
@@ -1665,44 +1725,11 @@ final class StudioState: ObservableObject {
                 clipCandidateSourceTranscript else {
             return nil
         }
-        let ids = Set(candidate.segmentIDs)
-        let segments = source.segments
-            .filter {
-                ids.contains($0.id)
-            }
-            .map {
-                TranscriptSegment(
-                    id: $0.id,
-                    startSeconds: max(
-                        $0.startSeconds
-                        - candidate.sourceRange
-                            .startSeconds,
-                        0
-                    ),
-                    durationSeconds:
-                        $0.durationSeconds,
-                    text: $0.text,
-                    confidence:
-                        $0.confidence
-                )
-            }
-            .sorted {
-                $0.startSeconds
-                < $1.startSeconds
-            }
-
-        guard !segments.isEmpty else {
-            return nil
-        }
-        return LocalTranscript(
-            localeIdentifier:
-                source.localeIdentifier,
-            text: segments.map(\.text)
-                .joined(separator: " "),
-            segments: segments,
-            onDevice: source.onDevice,
-            createdAt: Date()
-        )
+        return ClipTranscriptProjector()
+            .project(
+                source: source,
+                candidate: candidate
+            )
     }
 
     private func makeWorkspaceStore() throws -> ProjectWorkspaceStore {
