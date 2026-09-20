@@ -118,7 +118,7 @@ public struct GoogleOAuthTokenRefresher: Sendable {
             "refresh_token": refreshToken,
             "grant_type": "refresh_token"
         ]
-        if let clientSecret = normalized(clientSecret) {
+        if let clientSecret = normalizedOAuthField(clientSecret) {
             fields["client_secret"] = clientSecret
         }
         request.httpBody = oauthFormBody(fields)
