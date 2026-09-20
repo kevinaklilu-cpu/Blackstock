@@ -362,7 +362,7 @@ def main():
         )
 
     report = {
-        "schemaVersion": 2,
+        "schemaVersion": 3,
         "ready": True,
         "verifiedAt": datetime.now(timezone.utc).isoformat().replace(
             "+00:00",
@@ -372,6 +372,14 @@ def main():
         "sourceBuild": release_current_build,
         "sourceAppSourceCommitSHA": updater_current_source_commit,
         "sourceAppExecutableSHA256": updater_current_executable_sha256,
+        "sourceAppPath": updater.get("currentAppPath"),
+        "sourceAppTeamID": updater.get("currentApplicationTeamID"),
+        "sourceInstallerReceiptPackageID": updater.get(
+            "currentInstallerReceiptPackageID"
+        ),
+        "sourceInstallerReceiptVersion": updater.get(
+            "currentInstallerReceiptVersion"
+        ),
         "version": release_version,
         "build": release_build,
         "installerTeamID": release_team_id,
@@ -380,6 +388,14 @@ def main():
         "packageSHA256": release.get("packageSHA256"),
         "sourceCommitSHA": release_source_commit,
         "executableSHA256": release_executable_sha256,
+        "installedAppPath": release.get("installedAppPath"),
+        "installedAppTeamID": updater.get("observedApplicationTeamID"),
+        "installerReceiptPackageID": updater.get(
+            "observedInstallerReceiptPackageID"
+        ),
+        "installerReceiptVersion": updater.get(
+            "observedInstallerReceiptVersion"
+        ),
         "captureEvidence": str(capture_path),
         "productionReleaseEvidence": str(release_path),
         "inAppUpdateEvidence": str(updater_path),
