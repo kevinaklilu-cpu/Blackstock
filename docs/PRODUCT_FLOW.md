@@ -121,7 +121,9 @@ Nach der lokalen On-Device-Transkription kann der Nutzer **„Sichtbare Captions
 Gespeicherte lokale Clip-Kandidaten können als eigene validierte MP4-Dateien gerendert werden. Danach stehen zwei getrennte Nutzeraktionen zur Verfügung:
 
 - **Exportieren …** kopiert alle bereits validiert gerenderten Clips in einen vom Nutzer gewählten Ordner. Falls für einen Clip ein lokales Transkript vorliegt, wird zusätzlich eine WebVTT-Datei erzeugt. Ein JSON-Manifest bindet Clip-ID, Quell-Zeitbereich, Dateiname und Render-SHA-256.
+- Gespeicherte Clips können einen eigenen Nutzer-Titel erhalten. Alte Projekte ohne Clip-Titel bleiben kompatibel.
 - **Für Packaging verwenden** übernimmt genau einen validierten gespeicherten Clip als aktuellen Packaging-/Review-Kandidaten. Der Clip wird dabei in den aktiven Schnittkontext geladen, damit Vorschau, Transkript, Audio-QC und Veröffentlichungspaket auf demselben Inhalt basieren.
+- Ein explizit vergebener Clip-Titel wird als Packaging-Titel vorgeschlagen. Bereits gespeicherte Packaging-Metadaten haben Vorrang und werden nicht still überschrieben.
 
 Batch-Export und Publishing bleiben bewusst getrennt: Export schreibt nur lokale Dateien. Eine externe Veröffentlichung erfordert weiterhin die normalen Review-, Rechte-, Kanal- und Bestätigungsgates.
 
