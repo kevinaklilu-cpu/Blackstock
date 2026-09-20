@@ -941,6 +941,21 @@ final class StudioState: ObservableObject {
         errorMessage = nil
     }
 
+    func previewSavedClipSelection(
+        _ selection: SavedClipSelection
+    ) async {
+        let candidate = LocalClipCandidate(
+            id: selection.id,
+            sourceRange: selection.sourceRange,
+            transcriptPreview:
+                selection.transcriptPreview,
+            wordCount: selection.wordCount,
+            averageConfidence: nil,
+            segmentIDs: []
+        )
+        await previewLocalClipCandidate(candidate)
+    }
+
     func applySavedClipSelection(
         _ selection: SavedClipSelection
     ) async {
