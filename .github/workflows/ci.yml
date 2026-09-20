@@ -64,9 +64,15 @@ jobs:
         run: |
           set -euo pipefail
           EVIDENCE="$RUNNER_TEMP/capture-hardware-smoke.json"
-          CAMERA="$RUNNER_TEMP/camera.mov"
-          MICROPHONE="$RUNNER_TEMP/microphone.m4a"
-          SCREEN="$RUNNER_TEMP/screen.mp4"
+          PROJECT_ID="00000000-0000-0000-0000-000000000101"
+          RECORDING_LAUNCH_ID="00000000-0000-0000-0000-000000000201"
+          PROJECT_ROOT="$HOME/Library/Application Support/Blackstock/Projects/$PROJECT_ID"
+          MEDIA_DIR="$PROJECT_ROOT/Media"
+          CAPTURE_DIR="$PROJECT_ROOT/Captures"
+          mkdir -p "$MEDIA_DIR" "$CAPTURE_DIR"
+          CAMERA="$MEDIA_DIR/00000000-0000-0000-0000-000000000401.mov"
+          MICROPHONE="$CAPTURE_DIR/00000000-0000-0000-0000-000000000402.m4a"
+          SCREEN="$MEDIA_DIR/00000000-0000-0000-0000-000000000403.mp4"
           printf x > "$CAMERA"
           printf x > "$MICROPHONE"
           printf x > "$SCREEN"
@@ -93,8 +99,8 @@ jobs:
               "durationSeconds": 5.2,
               "persistedToProject": true,
               "videoTrackPresent": true,
-              "projectID": "00000000-0000-0000-0000-000000000101",
-              "recordedLaunchID": "00000000-0000-0000-0000-000000000201",
+              "projectID": "$PROJECT_ID",
+              "recordedLaunchID": "$RECORDING_LAUNCH_ID",
               "persistedFilePath": "$CAMERA",
               "persistedFileSHA256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
             },
@@ -104,8 +110,8 @@ jobs:
               "durationSeconds": 5.1,
               "persistedToProject": true,
               "decodedSamples": 24000,
-              "projectID": "00000000-0000-0000-0000-000000000102",
-              "recordedLaunchID": "00000000-0000-0000-0000-000000000202",
+              "projectID": "$PROJECT_ID",
+              "recordedLaunchID": "$RECORDING_LAUNCH_ID",
               "persistedFilePath": "$MICROPHONE",
               "persistedFileSHA256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
             },
@@ -115,8 +121,8 @@ jobs:
               "durationSeconds": 5.4,
               "persistedToProject": true,
               "videoTrackPresent": true,
-              "projectID": "00000000-0000-0000-0000-000000000103",
-              "recordedLaunchID": "00000000-0000-0000-0000-000000000203",
+              "projectID": "$PROJECT_ID",
+              "recordedLaunchID": "$RECORDING_LAUNCH_ID",
               "persistedFilePath": "$SCREEN",
               "persistedFileSHA256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
             },
@@ -126,8 +132,8 @@ jobs:
               "durationSeconds": 5.4,
               "persistedToProject": true,
               "decodedSamples": 48000,
-              "projectID": "00000000-0000-0000-0000-000000000103",
-              "recordedLaunchID": "00000000-0000-0000-0000-000000000203",
+              "projectID": "$PROJECT_ID",
+              "recordedLaunchID": "$RECORDING_LAUNCH_ID",
               "persistedFilePath": "$SCREEN",
               "persistedFileSHA256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
             },
@@ -174,6 +180,21 @@ jobs:
           PY
           if python3 Build/validate_capture_hardware_smoke.py "$EVIDENCE"; then
             echo "Non-finite capture evidence was unexpectedly accepted." >&2
+            exit 1
+          fi
+
+          cp "$RUNNER_TEMP/capture-hardware-smoke-valid.json" "$EVIDENCE"
+          OUTSIDE="$RUNNER_TEMP/00000000-0000-0000-0000-000000000499.mov"
+          cp "$CAMERA" "$OUTSIDE"
+          python3 - "$EVIDENCE" "$OUTSIDE" <<'PY'
+          import json, sys
+          path, outside = sys.argv[1], sys.argv[2]
+          data = json.load(open(path))
+          data["camera"]["persistedFilePath"] = outside
+          json.dump(data, open(path, "w"))
+          PY
+          if python3 Build/validate_capture_hardware_smoke.py "$EVIDENCE"; then
+            echo "Off-project capture evidence path was unexpectedly accepted." >&2
             exit 1
           fi
 
@@ -337,21 +358,32 @@ jobs:
           set -euo pipefail
           ROOT="$RUNNER_TEMP/market-readiness"
           mkdir -p "$ROOT"
-          CAMERA="$ROOT/camera.mov"
-          MICROPHONE="$ROOT/microphone.m4a"
-          SCREEN="$ROOT/screen.mp4"
+          PROJECT_ID="00000000-0000-0000-0000-000000000101"
+          RECORDING_LAUNCH_ID="00000000-0000-0000-0000-000000000201"
+          PROJECT_ROOT="$HOME/Library/Application Support/Blackstock/Projects/$PROJECT_ID"
+          MEDIA_DIR="$PROJECT_ROOT/Media"
+          CAPTURE_DIR="$PROJECT_ROOT/Captures"
+          mkdir -p "$MEDIA_DIR" "$CAPTURE_DIR"
+          CAMERA="$MEDIA_DIR/00000000-0000-0000-0000-000000000401.mov"
+          MICROPHONE="$CAPTURE_DIR/00000000-0000-0000-0000-000000000402.m4a"
+          SCREEN="$MEDIA_DIR/00000000-0000-0000-0000-000000000403.mp4"
           printf x > "$CAMERA"
           printf x > "$MICROPHONE"
           printf x > "$SCREEN"
           HASH="$(shasum -a 256 "$CAMERA" | awk '{print $1}')"
 
-          python3 - "$ROOT" "$HASH" <<'PY'
+          python3 - "$ROOT" "$HASH" "$CAMERA" "$MICROPHONE" "$SCREEN" "$PROJECT_ID" "$RECORDING_LAUNCH_ID" <<'PY'
           import json
           import pathlib
           import sys
 
           root = pathlib.Path(sys.argv[1])
           capture_hash = sys.argv[2]
+          camera_path = pathlib.Path(sys.argv[3])
+          microphone_path = pathlib.Path(sys.argv[4])
+          screen_path = pathlib.Path(sys.argv[5])
+          project_id = sys.argv[6]
+          recording_launch_id = sys.argv[7]
           package_hash = "a" * 64
           executable_hash = "c" * 64
           source_commit = "1" * 40
@@ -377,9 +409,9 @@ jobs:
                   "durationSeconds": 5.2,
                   "persistedToProject": True,
                   "videoTrackPresent": True,
-                  "projectID": "00000000-0000-0000-0000-000000000101",
-                  "recordedLaunchID": "00000000-0000-0000-0000-000000000201",
-                  "persistedFilePath": str(root / "camera.mov"),
+                  "projectID": project_id,
+                  "recordedLaunchID": recording_launch_id,
+                  "persistedFilePath": str(camera_path),
                   "persistedFileSHA256": capture_hash,
               },
               "microphone": {
@@ -388,9 +420,9 @@ jobs:
                   "durationSeconds": 5.1,
                   "persistedToProject": True,
                   "decodedSamples": 24000,
-                  "projectID": "00000000-0000-0000-0000-000000000102",
-                  "recordedLaunchID": "00000000-0000-0000-0000-000000000202",
-                  "persistedFilePath": str(root / "microphone.m4a"),
+                  "projectID": project_id,
+                  "recordedLaunchID": recording_launch_id,
+                  "persistedFilePath": str(microphone_path),
                   "persistedFileSHA256": capture_hash,
               },
               "screen": {
@@ -399,9 +431,9 @@ jobs:
                   "durationSeconds": 5.4,
                   "persistedToProject": True,
                   "videoTrackPresent": True,
-                  "projectID": "00000000-0000-0000-0000-000000000103",
-                  "recordedLaunchID": "00000000-0000-0000-0000-000000000203",
-                  "persistedFilePath": str(root / "screen.mp4"),
+                  "projectID": project_id,
+                  "recordedLaunchID": recording_launch_id,
+                  "persistedFilePath": str(screen_path),
                   "persistedFileSHA256": capture_hash,
               },
               "systemAudio": {
@@ -410,9 +442,9 @@ jobs:
                   "durationSeconds": 5.4,
                   "persistedToProject": True,
                   "decodedSamples": 48000,
-                  "projectID": "00000000-0000-0000-0000-000000000103",
-                  "recordedLaunchID": "00000000-0000-0000-0000-000000000203",
-                  "persistedFilePath": str(root / "screen.mp4"),
+                  "projectID": project_id,
+                  "recordedLaunchID": recording_launch_id,
+                  "persistedFilePath": str(screen_path),
                   "persistedFileSHA256": capture_hash,
               },
               "deniedPermissionHardStopPassed": True,
