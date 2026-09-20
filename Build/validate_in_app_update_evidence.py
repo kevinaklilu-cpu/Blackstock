@@ -26,7 +26,7 @@ try:
 except Exception as error:
     fail(f"invalid JSON: {error}")
 
-if envelope.get("schemaVersion") != 5:
+if envelope.get("schemaVersion") != 6:
     fail("unsupported schemaVersion")
 
 value = envelope.get("value")
@@ -44,6 +44,7 @@ required = [
     "currentDeveloperIDApplicationVerified",
     "currentInstallerReceiptPackageID",
     "currentInstallerReceiptVersion",
+    "currentInstallerReceiptInstalledAt",
     "currentInstallerReceiptVerified",
     "manifestURL",
     "expectedInstallerTeamID",
@@ -66,6 +67,7 @@ required = [
     "observedDeveloperIDApplicationVerified",
     "observedInstallerReceiptPackageID",
     "observedInstallerReceiptVersion",
+    "observedInstallerReceiptInstalledAt",
     "observedInstallerReceiptVerified",
     "postUpdateLaunchVerifiedAt",
 ]
@@ -201,14 +203,16 @@ if value["observedInstallerReceiptVerified"] is not True:
     fail("observedInstallerReceiptVerified must be true")
 
 time_keys = [
+    "currentInstallerReceiptInstalledAt",
     "startedAt",
     "manifestVerifiedAt",
     "packageIntegrityVerifiedAt",
     "installerTeamVerifiedAt",
     "installerOpenedAt",
+    "observedInstallerReceiptInstalledAt",
     "postUpdateLaunchVerifiedAt",
 ]
-times = []
+timestamps = {}
 for key in time_keys:
     raw = value[key]
     if not isinstance(raw, (int, float)):
@@ -216,10 +220,37 @@ for key in time_keys:
     numeric = float(raw)
     if not math.isfinite(numeric):
         fail(f"{key} must be finite")
-    times.append(numeric)
+    timestamps[key] = numeric
 
-if any(later < earlier for earlier, later in zip(times, times[1:])):
+ordered_keys = [
+    "startedAt",
+    "manifestVerifiedAt",
+    "packageIntegrityVerifiedAt",
+    "installerTeamVerifiedAt",
+    "installerOpenedAt",
+    "postUpdateLaunchVerifiedAt",
+]
+ordered = [timestamps[key] for key in ordered_keys]
+if any(later < earlier for earlier, later in zip(ordered, ordered[1:])):
     fail("update evidence timestamps are not monotonic")
+
+if timestamps["currentInstallerReceiptInstalledAt"] > timestamps["startedAt"] + 1:
+    fail("current installer receipt must predate update start")
+if (
+    timestamps["observedInstallerReceiptInstalledAt"]
+    <= timestamps["currentInstallerReceiptInstalledAt"]
+):
+    fail("target installer receipt must be newer than source receipt")
+if (
+    timestamps["observedInstallerReceiptInstalledAt"]
+    < timestamps["installerOpenedAt"] - 1
+):
+    fail("target installer receipt must not predate installer handoff")
+if (
+    timestamps["observedInstallerReceiptInstalledAt"]
+    > timestamps["postUpdateLaunchVerifiedAt"] + 1
+):
+    fail("target installer receipt must not postdate verified target launch")
 
 print(
     "In-app update evidence is valid: an older Blackstock build accepted a "
