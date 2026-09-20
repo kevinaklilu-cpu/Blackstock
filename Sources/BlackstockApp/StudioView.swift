@@ -371,29 +371,64 @@ struct StudioView: View {
                             alignment: .leading
                         )
 
-                        Button {
-                            Task {
-                                await state
-                                    .applyLocalClipCandidate(
-                                        candidate
-                                    )
+                        HStack {
+                            Button {
+                                Task {
+                                    await state
+                                        .previewLocalClipCandidate(
+                                            candidate
+                                        )
+                                }
+                            } label: {
+                                Label(
+                                    state.previewedLocalClipCandidateID
+                                        == candidate.id
+                                        ? "Vorschau läuft"
+                                        : "Vorschau abspielen",
+                                    systemImage:
+                                        "play.circle"
+                                )
                             }
-                        } label: {
-                            Label(
-                                "Diesen Ausschnitt übernehmen",
-                                systemImage:
-                                    "checkmark.circle"
-                            )
+                            .buttonStyle(.bordered)
+
+                            Button {
+                                Task {
+                                    await state
+                                        .applyLocalClipCandidate(
+                                            candidate
+                                        )
+                                }
+                            } label: {
+                                Label(
+                                    "Diesen Ausschnitt übernehmen",
+                                    systemImage:
+                                        "checkmark.circle"
+                                )
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(!editingEnabled)
                         }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(!editingEnabled)
                     }
                     .padding(.vertical, 4)
                 }
             }
 
+            if state.previewedLocalClipCandidateID != nil {
+                Button {
+                    Task {
+                        await state.restoreEditedPreview()
+                    }
+                } label: {
+                    Label(
+                        "Zurück zur aktuellen Schnittvorschau",
+                        systemImage: "arrow.uturn.backward.circle"
+                    )
+                }
+                .buttonStyle(.bordered)
+            }
+
             if !state.localClipCandidates.isEmpty {
-                Text("Jeder übernommene Kandidat wird als normale non-destruktive Trim-Revision gespeichert und kann über Rückgängig wieder verlassen werden.")
+                Text("Eine Kandidaten-Vorschau verändert den EditGraph nicht. Erst „Diesen Ausschnitt übernehmen“ speichert eine non-destruktive Trim-Revision, die über Rückgängig wieder verlassen werden kann.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
