@@ -30,6 +30,8 @@ CONTRACTS = {
     ],
     "Sources/BlackstockCore/GoogleOAuthLifecycle.swift": [
         "Installed/desktop apps do not support Google's incremental authorization",
+        "case channelManagement",
+        "youtubeForceSSL",
         "granted.union(required)",
         "refresh_token",
     ],
@@ -88,7 +90,8 @@ TEST_CONTRACTS = {
         '"http://127.0.0.1:54321"',
     ],
     "Tests/BlackstockCoreTests/GoogleOAuthLifecycleTests.swift": [
-        "testReadOnlyFirstRunNeedsOnlyReadScope",
+        "testDiscoveryReadOnlyNeedsOnlyReadScope",
+        "testChannelManagementRequiresForceSSLScope",
         "testUploadReauthorizationRequestsUnionForInstalledApp",
         "testAlreadyAuthorizedCapabilityDoesNotRequestMoreScopes",
     ],

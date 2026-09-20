@@ -165,19 +165,65 @@ public struct YouTubeAuthorizedClient: Sendable {
 
     public func firstOpportunityCandidates(
         query: String,
+        categoryID: String? = nil,
+        regionCode: String? = nil,
+        relevanceLanguage: String? = nil,
         maxResults: Int = 12,
         order: OpportunitySortMode = .relevance,
         session: URLSession = .shared,
         now: Date = Date()
     ) async throws -> [YouTubeOpportunityCandidate] {
-        var search = URLComponents(string: "https://www.googleapis.com/youtube/v3/search")!
-        search.queryItems = [
+        var search = URLComponents(
+            string: "https://www.googleapis.com/youtube/v3/search"
+        )!
+        var queryItems: [URLQueryItem] = [
             .init(name: "part", value: "snippet"),
             .init(name: "type", value: "video"),
-            .init(name: "q", value: query),
-            .init(name: "maxResults", value: String(min(max(maxResults, 1), 25))),
-            .init(name: "order", value: order.youtubeOrderParameter)
+            .init(
+                name: "maxResults",
+                value: String(min(max(maxResults, 1), 25))
+            ),
+            .init(
+                name: "order",
+                value: order.youtubeOrderParameter
+            )
         ]
+        let trimmedQuery = query.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        if !trimmedQuery.isEmpty {
+            queryItems.append(
+                .init(name: "q", value: trimmedQuery)
+            )
+        }
+        if let categoryID,
+           !categoryID.trimmingCharacters(
+                in: .whitespacesAndNewlines
+           ).isEmpty {
+            queryItems.append(
+                .init(name: "videoCategoryId", value: categoryID)
+            )
+        }
+        if let regionCode,
+           !regionCode.trimmingCharacters(
+                in: .whitespacesAndNewlines
+           ).isEmpty {
+            queryItems.append(
+                .init(name: "regionCode", value: regionCode)
+            )
+        }
+        if let relevanceLanguage,
+           !relevanceLanguage.trimmingCharacters(
+                in: .whitespacesAndNewlines
+           ).isEmpty {
+            queryItems.append(
+                .init(
+                    name: "relevanceLanguage",
+                    value: relevanceLanguage
+                )
+            )
+        }
+        search.queryItems = queryItems
 
         let searchData = try await perform(search.url!, session: session)
         let searchResponse = try JSONDecoder.youtube.decode(SearchListResponse.self, from: searchData)
@@ -206,7 +252,9 @@ public struct YouTubeAuthorizedClient: Sendable {
                 channelTitle: item.snippet.channelTitle,
                 publishedAt: item.snippet.publishedAt,
                 thumbnailURL: item.snippet.thumbnails?.medium?.url ?? item.snippet.thumbnails?.defaultImage?.url,
-                query: query,
+                query: trimmedQuery.isEmpty
+                    ? "category:\(categoryID ?? "all")"
+                    : trimmedQuery,
                 retrievedAt: now,
                 embeddable: video?.status?.embeddable,
                 metrics: metrics

@@ -61,6 +61,15 @@ final class BlackstockSession: ObservableObject {
     @Published var strategyExcludedTopicsText = ""
     @Published var strategyObjective: StrategicObjective = .balanced
     @Published var contentLanguage = "de"
+    @Published var youtubeLanguages: [YouTubeI18nLanguage] = []
+    @Published var youtubeRegions: [YouTubeI18nRegion] = []
+    @Published var youtubeVideoCategories: [YouTubeVideoCategory] = []
+    @Published var channelRegionCode = ""
+    @Published var selectedVideoCategoryID = ""
+    @Published var channelAudienceSetting:
+        YouTubeChannelAudienceSetting = .notMadeForKids
+    @Published var isLoadingYouTubeSetupOptions = false
+    @Published private(set) var officialChannelSettingsVerified = false
     @Published var opportunities: [YouTubeOpportunityCandidate] = []
     @Published var isWorking = false
     @Published var errorMessage: String?
@@ -105,8 +114,26 @@ final class BlackstockSession: ObservableObject {
                 )
             }
         }
-        primaryTopic = UserDefaults.standard.string(forKey: "blackstock.workspace.primaryTopic") ?? ""
-        contentLanguage = UserDefaults.standard.string(forKey: "blackstock.workspace.contentLanguage") ?? "de"
+        primaryTopic = UserDefaults.standard.string(
+            forKey: "blackstock.workspace.primaryTopic"
+        ) ?? ""
+        contentLanguage = UserDefaults.standard.string(
+            forKey: "blackstock.workspace.contentLanguage"
+        ) ?? "de"
+        channelRegionCode = UserDefaults.standard.string(
+            forKey: "blackstock.workspace.regionCode"
+        ) ?? ""
+        selectedVideoCategoryID = UserDefaults.standard.string(
+            forKey: "blackstock.workspace.videoCategoryID"
+        ) ?? ""
+        if let rawAudience = UserDefaults.standard.string(
+            forKey: "blackstock.workspace.channelAudience"
+        ),
+           let audience = YouTubeChannelAudienceSetting(
+                rawValue: rawAudience
+           ) {
+            channelAudienceSetting = audience
+        }
         let storedRightsChannelID =
             activeProject?.targetChannelID
             ?? UserDefaults.standard.string(
@@ -474,23 +501,55 @@ final class BlackstockSession: ObservableObject {
         }
     }
 
-    func chooseChannel(_ id: String) {
-        guard channels.contains(where: { $0.id == id }) else { return }
+    func chooseChannel(_ id: String) async {
+        guard channels.contains(where: { $0.id == id }) else {
+            return
+        }
+
         selectedChannelID = id
+        isWorking = true
+        officialChannelSettingsVerified = false
+        defer { isWorking = false }
+
         do {
             if let tokenSet {
-                try BlackstockKeychain.write(tokenSet.accessToken, account: "youtube.\(id).accessToken")
-                if let refresh = tokenSet.refreshToken, !refresh.isEmpty {
-                    try BlackstockKeychain.write(refresh, account: "youtube.\(id).refreshToken")
+                try BlackstockKeychain.write(
+                    tokenSet.accessToken,
+                    account: "youtube.\(id).accessToken"
+                )
+                if let refresh = tokenSet.refreshToken,
+                   !refresh.isEmpty {
+                    try BlackstockKeychain.write(
+                        refresh,
+                        account: "youtube.\(id).refreshToken"
+                    )
                 }
                 if let scope = tokenSet.scope {
-                    try BlackstockKeychain.write(scope, account: "youtube.\(id).scopes")
+                    try BlackstockKeychain.write(
+                        scope,
+                        account: "youtube.\(id).scopes"
+                    )
                 }
                 try BlackstockKeychain.write(
                     effectiveClientID,
                     account: "youtube.\(id).oauthClientID"
                 )
             }
+
+            let accessToken =
+                tokenSet?.accessToken
+                ?? BlackstockKeychain.read(
+                    "youtube.\(id).accessToken"
+                )
+            guard !accessToken.isEmpty else {
+                throw PublishingSessionError.missingToken
+            }
+
+            try await loadYouTubeChannelSetupOptions(
+                channelID: id,
+                accessToken: accessToken
+            )
+
             workspaceRightsResponsibilityAccepted =
                 Self.loadStoredWorkspaceRightsAttestation(
                     channelID: id
@@ -498,7 +557,8 @@ final class BlackstockSession: ObservableObject {
             step = .topic
             errorMessage = nil
         } catch {
-            errorMessage = "Die autorisierte Sitzung konnte nicht sicher gespeichert werden: \(describe(error))"
+            errorMessage =
+                "Die YouTube-Kanaleinstellungen konnten nicht geladen werden: \(describe(error))"
         }
     }
 
@@ -1480,34 +1540,338 @@ final class BlackstockSession: ObservableObject {
         )
     }
 
-    func continueFromTopic() {
-        let value = primaryTopic.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty else {
-            errorMessage = "Gib zuerst ein Kanalthema ein."
+
+    private func channelSetupAccessToken(
+        targetChannelID: String
+    ) async throws -> String {
+        let storedScopes = BlackstockKeychain.read(
+            "youtube.\(targetChannelID).scopes"
+        )
+        let activeScopeString =
+            tokenSet?.scope ?? storedScopes
+        let plan = GoogleOAuthScopePlanner().plan(
+            capabilities: [
+                .discoveryReadOnly,
+                .channelManagement
+            ],
+            tokenScopeString: activeScopeString
+        )
+
+        if plan.state == .reauthorizationRequired {
+            let tokens = try await performOAuthAuthorization(
+                scopes: plan.scopesForAuthorization
+            )
+            guard let grantedScopeString = tokens.scope else {
+                throw PublishingSessionError.missingScopes
+            }
+            let granted =
+                GoogleOAuthScopePlanner.parseGrantedScopes(
+                    grantedScopeString
+                )
+            guard plan.scopesForAuthorization.isSubset(
+                of: granted
+            ) else {
+                throw PublishingSessionError.missingScopes
+            }
+
+            let identities = try await YouTubeAuthorizedClient(
+                accessToken: tokens.accessToken
+            ).myChannels()
+            guard identities.contains(where: {
+                $0.id == targetChannelID
+            }) else {
+                throw PublishingSessionError.missingToken
+            }
+
+            try BlackstockKeychain.write(
+                tokens.accessToken,
+                account:
+                    "youtube.\(targetChannelID).accessToken"
+            )
+            if let refresh = tokens.refreshToken,
+               !refresh.isEmpty {
+                try BlackstockKeychain.write(
+                    refresh,
+                    account:
+                        "youtube.\(targetChannelID).refreshToken"
+                )
+            }
+            try BlackstockKeychain.write(
+                grantedScopeString,
+                account: "youtube.\(targetChannelID).scopes"
+            )
+            try BlackstockKeychain.write(
+                effectiveClientID,
+                account:
+                    "youtube.\(targetChannelID).oauthClientID"
+            )
+            tokenSet = tokens
+            return tokens.accessToken
+        }
+
+        if let accessToken = tokenSet?.accessToken,
+           !accessToken.isEmpty {
+            return accessToken
+        }
+
+        return try await validatedReadOnlyAccessToken(
+            targetChannelID: targetChannelID
+        )
+    }
+
+    private func loadYouTubeChannelSetupOptions(
+        channelID: String,
+        accessToken: String
+    ) async throws {
+        isLoadingYouTubeSetupOptions = true
+        defer { isLoadingYouTubeSetupOptions = false }
+
+        let client = YouTubeChannelSetupClient(
+            accessToken: accessToken
+        )
+
+        async let languagesRequest =
+            client.supportedLanguages(
+                displayLanguage: "de"
+            )
+        async let regionsRequest =
+            client.supportedRegions(
+                displayLanguage: "de"
+            )
+        async let setupRequest =
+            client.currentChannelSetup(
+                channelID: channelID
+            )
+
+        let (languages, regions, setup) = try await (
+            languagesRequest,
+            regionsRequest,
+            setupRequest
+        )
+        guard !languages.isEmpty, !regions.isEmpty else {
+            throw YouTubeChannelSetupError.invalidResponse
+        }
+
+        youtubeLanguages = languages
+        youtubeRegions = regions
+
+        let storedRegion = UserDefaults.standard.string(
+            forKey: "blackstock.workspace.regionCode"
+        )
+        let localRegion = Locale.current.region?.identifier
+        let regionCandidates = [
+            setup.countryCode,
+            storedRegion,
+            localRegion,
+            "DE",
+            regions.first?.code
+        ].compactMap { $0 }
+        guard let region = regionCandidates.first(where: {
+            candidate in
+            regions.contains(where: {
+                $0.code == candidate
+            })
+        }) else {
+            throw YouTubeChannelSetupError.invalidResponse
+        }
+        channelRegionCode = region
+
+        let storedLanguage = UserDefaults.standard.string(
+            forKey: "blackstock.workspace.contentLanguage"
+        )
+        let languageCandidates = [
+            setup.defaultLanguage,
+            storedLanguage,
+            contentLanguage,
+            "de",
+            languages.first?.code
+        ].compactMap { $0 }
+        guard let language = languageCandidates.first(where: {
+            candidate in
+            languages.contains(where: {
+                $0.code == candidate
+            })
+        }) else {
+            throw YouTubeChannelSetupError.invalidResponse
+        }
+        contentLanguage = language
+
+        if setup.selfDeclaredMadeForKids == true {
+            channelAudienceSetting = .madeForKids
+        } else {
+            channelAudienceSetting = .notMadeForKids
+        }
+
+        youtubeVideoCategories = try await client.videoCategories(
+            regionCode: channelRegionCode,
+            languageCode: contentLanguage
+        )
+        guard !youtubeVideoCategories.isEmpty else {
+            throw YouTubeChannelSetupError.invalidResponse
+        }
+
+        let storedCategory = UserDefaults.standard.string(
+            forKey: "blackstock.workspace.videoCategoryID"
+        )
+        if let storedCategory,
+           youtubeVideoCategories.contains(where: {
+                $0.id == storedCategory
+           }) {
+            selectedVideoCategoryID = storedCategory
+        } else {
+            selectedVideoCategoryID =
+                youtubeVideoCategories.first?.id ?? ""
+        }
+
+        syncStructuredStrategyFields()
+    }
+
+    func refreshYouTubeVideoCategories() async {
+        guard let channelID =
+            selectedChannelID ?? workspaceChannelID,
+              !channelRegionCode.isEmpty,
+              !contentLanguage.isEmpty else {
             return
         }
 
-        let audience = strategyAudienceHypothesis
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !audience.isEmpty else {
-            errorMessage = "Gib zuerst deine Zielgruppe ein."
-            return
-        }
-
-        primaryTopic = value
-
-        if strategyContentPromise
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .isEmpty {
-            strategyContentPromise = value
-        }
-
-        if ChannelStrategyDraft.list(from: strategyPillarsText).isEmpty {
-            strategyPillarsText = value
-        }
-
+        isLoadingYouTubeSetupOptions = true
+        defer { isLoadingYouTubeSetupOptions = false }
         errorMessage = nil
-        step = .language
+
+        do {
+            let accessToken = try await channelSetupAccessToken(
+                targetChannelID: channelID
+            )
+            let categories =
+                try await YouTubeChannelSetupClient(
+                    accessToken: accessToken
+                ).videoCategories(
+                    regionCode: channelRegionCode,
+                    languageCode: contentLanguage
+                )
+            guard !categories.isEmpty else {
+                throw YouTubeChannelSetupError.invalidResponse
+            }
+            youtubeVideoCategories = categories
+            if !categories.contains(where: {
+                $0.id == selectedVideoCategoryID
+            }) {
+                selectedVideoCategoryID =
+                    categories.first?.id ?? ""
+            }
+            syncStructuredStrategyFields()
+        } catch {
+            errorMessage =
+                "YouTube-Kategorien konnten nicht aktualisiert werden: \(describe(error))"
+        }
+    }
+
+    func ensureYouTubePublishingOptionsLoaded() async {
+        guard youtubeVideoCategories.isEmpty,
+              let channelID = workspaceChannelID,
+              !channelRegionCode.isEmpty,
+              !contentLanguage.isEmpty else {
+            return
+        }
+
+        do {
+            let accessToken = try await validatedReadOnlyAccessToken(
+                targetChannelID: channelID
+            )
+            youtubeVideoCategories =
+                try await YouTubeChannelSetupClient(
+                    accessToken: accessToken
+                ).videoCategories(
+                    regionCode: channelRegionCode,
+                    languageCode: contentLanguage
+                )
+        } catch {
+            errorMessage =
+                "YouTube-Kategorien konnten nicht geladen werden: \(describe(error))"
+        }
+    }
+
+    private func syncStructuredStrategyFields() {
+        guard let category = youtubeVideoCategories.first(
+            where: { $0.id == selectedVideoCategoryID }
+        ) else {
+            return
+        }
+        primaryTopic = category.title
+        strategyAudienceHypothesis =
+            channelAudienceSetting.strategyLabel
+        strategyContentPromise =
+            "\(category.title) · \(channelAudienceSetting.strategyLabel)"
+        strategyPillarsText = category.title
+        strategyAdjacentTopicsText = ""
+        strategyExcludedTopicsText = ""
+    }
+
+    func continueFromTopic() async {
+        guard let channel = selectedChannel else {
+            errorMessage = "Wähle zuerst deinen YouTube-Kanal."
+            return
+        }
+        guard !channelRegionCode.isEmpty else {
+            errorMessage = "Wähle Land oder Region aus."
+            return
+        }
+        guard !contentLanguage.isEmpty else {
+            errorMessage = "Wähle die Content-Sprache aus."
+            return
+        }
+        guard youtubeVideoCategories.contains(where: {
+            $0.id == selectedVideoCategoryID
+        }) else {
+            errorMessage = "Wähle eine YouTube-Kategorie aus."
+            return
+        }
+
+        syncStructuredStrategyFields()
+        isWorking = true
+        officialChannelSettingsVerified = false
+        errorMessage = nil
+        defer { isWorking = false }
+
+        do {
+            let accessToken = try await channelSetupAccessToken(
+                targetChannelID: channel.id
+            )
+            _ = try await YouTubeChannelSetupClient(
+                accessToken: accessToken
+            ).applyAndVerify(
+                channelID: channel.id,
+                countryCode: channelRegionCode,
+                defaultLanguage: contentLanguage,
+                audience: channelAudienceSetting
+            )
+
+            officialChannelSettingsVerified = true
+            UserDefaults.standard.set(
+                channelRegionCode,
+                forKey: "blackstock.workspace.regionCode"
+            )
+            UserDefaults.standard.set(
+                selectedVideoCategoryID,
+                forKey: "blackstock.workspace.videoCategoryID"
+            )
+            UserDefaults.standard.set(
+                channelAudienceSetting.rawValue,
+                forKey: "blackstock.workspace.channelAudience"
+            )
+            UserDefaults.standard.set(
+                primaryTopic,
+                forKey: "blackstock.workspace.primaryTopic"
+            )
+            UserDefaults.standard.set(
+                contentLanguage,
+                forKey: "blackstock.workspace.contentLanguage"
+            )
+            step = .language
+        } catch {
+            errorMessage =
+                "YouTube konnte die Kanaleinstellungen nicht übernehmen: \(describe(error))"
+        }
     }
 
     func prepareChannelAndLoadOpportunities() async {
@@ -1515,8 +1879,17 @@ final class BlackstockSession: ObservableObject {
             errorMessage = "Kein Zielkanal ausgewählt."
             return
         }
+        guard !selectedVideoCategoryID.isEmpty,
+              !channelRegionCode.isEmpty,
+              !contentLanguage.isEmpty else {
+            errorMessage =
+                "Die YouTube-Kanaleinstellungen sind noch nicht vollständig."
+            return
+        }
+
+        syncStructuredStrategyFields()
         guard !primaryTopic.isEmpty else {
-            errorMessage = "Kein Kanalthema festgelegt."
+            errorMessage = "Keine YouTube-Kategorie ausgewählt."
             return
         }
 
@@ -1527,9 +1900,14 @@ final class BlackstockSession: ObservableObject {
         defer { isWorking = false }
 
         do {
-            let accessToken = tokenSet?.accessToken ?? BlackstockKeychain.read("youtube.\(channel.id).accessToken")
+            let accessToken =
+                tokenSet?.accessToken
+                ?? BlackstockKeychain.read(
+                    "youtube.\(channel.id).accessToken"
+                )
             guard !accessToken.isEmpty else {
-                errorMessage = "Die Google-Autorisierung ist nicht mehr verfügbar. Verbinde den Kanal erneut."
+                errorMessage =
+                    "Die Google-Autorisierung ist nicht mehr verfügbar. Verbinde den Kanal erneut."
                 step = .welcome
                 return
             }
@@ -1537,33 +1915,87 @@ final class BlackstockSession: ObservableObject {
             let strategy = try ChannelStrategyDraft(
                 primaryTopic: primaryTopic,
                 contentPromise: strategyContentPromise,
-                audienceHypothesis: strategyAudienceHypothesis,
+                audienceHypothesis:
+                    strategyAudienceHypothesis,
                 pillarsText: strategyPillarsText,
-                adjacentTopicsText: strategyAdjacentTopicsText,
-                excludedTopicsText: strategyExcludedTopicsText,
+                adjacentTopicsText:
+                    strategyAdjacentTopicsText,
+                excludedTopicsText:
+                    strategyExcludedTopicsText,
                 objective: strategyObjective
             ).makeStrategy(
                 channelID: channel.id,
                 contentLanguage: contentLanguage,
-                version: nextStrategyVersion(for: channel.id)
+                version: nextStrategyVersion(
+                    for: channel.id
+                )
             )
             try persist(strategy: strategy)
 
-            let candidates = try await YouTubeAuthorizedClient(accessToken: accessToken)
-                .firstOpportunityCandidates(query: primaryTopic, maxResults: 12, order: .relevance)
+            let candidates =
+                try await YouTubeAuthorizedClient(
+                    accessToken: accessToken
+                ).firstOpportunityCandidates(
+                    query: "",
+                    categoryID: selectedVideoCategoryID,
+                    regionCode: channelRegionCode,
+                    relevanceLanguage: contentLanguage,
+                    maxResults: 12,
+                    order: .relevance
+                )
             guard !candidates.isEmpty else {
-                errorMessage = "YouTube hat für dieses Thema aktuell keine passenden Videos geliefert."
+                errorMessage =
+                    "YouTube hat für die ausgewählte Kategorie aktuell keine passenden Videos geliefert."
                 return
             }
 
             opportunities = candidates
             step = .opportunities
         } catch {
-            errorMessage = "Videos konnten nicht geladen werden: \(describe(error))"
+            errorMessage =
+                "Videos konnten nicht geladen werden: \(describe(error))"
         }
     }
 
     func reloadOpportunities(order: OpportunitySortMode) async {
+        if !selectedVideoCategoryID.isEmpty,
+           !channelRegionCode.isEmpty,
+           !contentLanguage.isEmpty,
+           let channelID =
+                selectedChannelID ?? workspaceChannelID {
+            isWorking = true
+            defer { isWorking = false }
+            do {
+                let accessToken: String
+                if let currentAccessToken =
+                    tokenSet?.accessToken,
+                   !currentAccessToken.isEmpty {
+                    accessToken = currentAccessToken
+                } else {
+                    accessToken =
+                        try await validatedReadOnlyAccessToken(
+                            targetChannelID: channelID
+                        )
+                }
+                opportunities =
+                    try await YouTubeAuthorizedClient(
+                        accessToken: accessToken
+                    ).firstOpportunityCandidates(
+                        query: "",
+                        categoryID: selectedVideoCategoryID,
+                        regionCode: channelRegionCode,
+                        relevanceLanguage: contentLanguage,
+                        maxResults: 12,
+                        order: order
+                    )
+                errorMessage = nil
+            } catch {
+                errorMessage =
+                    "Videos konnten nicht geladen werden: \(describe(error))"
+            }
+            return
+        }
+
         await loadWorkspaceOpportunities(
             query: primaryTopic,
             order: order
@@ -1702,6 +2134,18 @@ final class BlackstockSession: ObservableObject {
             UserDefaults.standard.set(channelID, forKey: "blackstock.workspace.channelID")
             UserDefaults.standard.set(primaryTopic, forKey: "blackstock.workspace.primaryTopic")
             UserDefaults.standard.set(contentLanguage, forKey: "blackstock.workspace.contentLanguage")
+        UserDefaults.standard.set(
+            channelRegionCode,
+            forKey: "blackstock.workspace.regionCode"
+        )
+        UserDefaults.standard.set(
+            selectedVideoCategoryID,
+            forKey: "blackstock.workspace.videoCategoryID"
+        )
+        UserDefaults.standard.set(
+            channelAudienceSetting.rawValue,
+            forKey: "blackstock.workspace.channelAudience"
+        )
             UserDefaults.standard.set(true, forKey: "blackstock.firstRun.complete")
             onboardingComplete = true
             errorMessage = nil
@@ -1715,6 +2159,18 @@ final class BlackstockSession: ObservableObject {
         UserDefaults.standard.set(selectedChannelID, forKey: "blackstock.workspace.channelID")
         UserDefaults.standard.set(primaryTopic, forKey: "blackstock.workspace.primaryTopic")
         UserDefaults.standard.set(contentLanguage, forKey: "blackstock.workspace.contentLanguage")
+        UserDefaults.standard.set(
+            channelRegionCode,
+            forKey: "blackstock.workspace.regionCode"
+        )
+        UserDefaults.standard.set(
+            selectedVideoCategoryID,
+            forKey: "blackstock.workspace.videoCategoryID"
+        )
+        UserDefaults.standard.set(
+            channelAudienceSetting.rawValue,
+            forKey: "blackstock.workspace.channelAudience"
+        )
         UserDefaults.standard.set(true, forKey: "blackstock.firstRun.complete")
         onboardingComplete = true
     }
@@ -1898,8 +2354,24 @@ final class BlackstockSession: ObservableObject {
         UserDefaults.standard.removeObject(forKey: "blackstock.workspace.channelID")
         UserDefaults.standard.removeObject(forKey: "blackstock.workspace.primaryTopic")
         UserDefaults.standard.removeObject(forKey: "blackstock.workspace.contentLanguage")
+        UserDefaults.standard.removeObject(
+            forKey: "blackstock.workspace.regionCode"
+        )
+        UserDefaults.standard.removeObject(
+            forKey: "blackstock.workspace.videoCategoryID"
+        )
+        UserDefaults.standard.removeObject(
+            forKey: "blackstock.workspace.channelAudience"
+        )
         primaryTopic = ""
         contentLanguage = "de"
+        channelRegionCode = ""
+        selectedVideoCategoryID = ""
+        channelAudienceSetting = .notMadeForKids
+        youtubeLanguages = []
+        youtubeRegions = []
+        youtubeVideoCategories = []
+        officialChannelSettingsVerified = false
         step = .welcome
         channels = []
         selectedChannelID = nil

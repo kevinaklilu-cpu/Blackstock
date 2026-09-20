@@ -9,12 +9,19 @@ checks = {
     "Sources/BlackstockApp/FirstRunView.swift": [
         "session.connectGoogle(",
         "session.chooseChannel(",
+        "session.refreshYouTubeVideoCategories(",
+        "session.continueFromTopic(",
         "YouTubeEmbeddedPlayer(videoID:",
         "session.useOpportunityAsClip(",
     ],
     "Sources/BlackstockApp/BlackstockSession.swift": [
         "performOAuthAuthorization(",
         "YouTubeAuthorizedClient(",
+        "YouTubeChannelSetupClient(",
+        "applyAndVerify(",
+        "categoryID: selectedVideoCategoryID",
+        "regionCode: channelRegionCode",
+        "relevanceLanguage: contentLanguage",
         "firstOpportunityCandidates(",
         "productionIntentKind == .clipFromOpportunity",
         "? .production",
@@ -56,6 +63,8 @@ checks = {
     "Sources/BlackstockApp/PackagingReviewView.swift": [
         "session.authorizePublishing(",
         "session.publishPreparedReview(",
+        "categoryID: categoryID.isEmpty",
+        "containsSyntheticMedia",
         "showFinalPublishConfirmation",
         "stage == .published",
         "dismiss()",
@@ -104,6 +113,6 @@ if errors:
 
 print(
     "End-to-end flow audit passed: Google/channel -> playable YouTube video -> "
-    "clip project -> automatic highlights -> validated render -> publishing -> "
+    "structured YouTube setup -> clip project -> automatic highlights -> validated render -> publishing -> "
     "playable published video analysis remain connected."
 )

@@ -26,6 +26,7 @@ public struct YouTubeUploadMetadata: Codable, Sendable, Equatable {
     public let localizations: [String: YouTubeMetadataLocalization]
     public let privacyStatus: YouTubePrivacyStatus
     public let selfDeclaredMadeForKids: Bool
+    public let containsSyntheticMedia: Bool?
 
     public init(
         title: String,
@@ -36,7 +37,8 @@ public struct YouTubeUploadMetadata: Codable, Sendable, Equatable {
         defaultAudioLanguage: String? = nil,
         localizations: [String: YouTubeMetadataLocalization] = [:],
         privacyStatus: YouTubePrivacyStatus = .privateVideo,
-        selfDeclaredMadeForKids: Bool
+        selfDeclaredMadeForKids: Bool,
+        containsSyntheticMedia: Bool? = nil
     ) {
         self.title = title
         self.description = description
@@ -47,6 +49,7 @@ public struct YouTubeUploadMetadata: Codable, Sendable, Equatable {
         self.localizations = localizations
         self.privacyStatus = privacyStatus
         self.selfDeclaredMadeForKids = selfDeclaredMadeForKids
+        self.containsSyntheticMedia = containsSyntheticMedia
     }
 }
 
@@ -226,12 +229,20 @@ public struct YouTubeResumableUploader: Sendable {
             snippet["defaultAudioLanguage"] = defaultAudioLanguage
         }
 
+        var status: [String: Any] = [
+            "privacyStatus": metadata.privacyStatus.rawValue,
+            "selfDeclaredMadeForKids":
+                metadata.selfDeclaredMadeForKids
+        ]
+        if let containsSyntheticMedia =
+            metadata.containsSyntheticMedia {
+            status["containsSyntheticMedia"] =
+                containsSyntheticMedia
+        }
+
         var body: [String: Any] = [
             "snippet": snippet,
-            "status": [
-                "privacyStatus": metadata.privacyStatus.rawValue,
-                "selfDeclaredMadeForKids": metadata.selfDeclaredMadeForKids
-            ]
+            "status": status
         ]
         if !metadata.localizations.isEmpty {
             body["localizations"] = metadata.localizations.mapValues {

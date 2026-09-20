@@ -160,7 +160,9 @@ struct FirstRunView: View {
         VStack(alignment: .leading, spacing: 12) {
             ForEach(session.channels) { channel in
                 Button {
-                    session.chooseChannel(channel.id)
+                    Task {
+                        await session.chooseChannel(channel.id)
+                    }
                 } label: {
                     HStack(spacing: 12) {
                         AsyncImage(url: channel.avatarURL) { image in
@@ -191,87 +193,139 @@ struct FirstRunView: View {
     }
 
     private var topic: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            TextField(
-                "Thema, z. B. KI für Selbstständige",
-                text: $session.primaryTopic
-            )
-            .accessibilityLabel("Kanalthema")
-            .textFieldStyle(.roundedBorder)
-            .font(.title3)
-
-            TextField(
-                "Zielgruppe, z. B. Solo-Selbstständige",
-                text: $session.strategyAudienceHypothesis
-            )
-            .textFieldStyle(.roundedBorder)
-
-            DisclosureGroup("Weitere Angaben") {
-                VStack(alignment: .leading, spacing: 10) {
-                    TextField(
-                        "Content-Versprechen",
-                        text: $session.strategyContentPromise
-                    )
-                    .textFieldStyle(.roundedBorder)
-
-                    TextField(
-                        "Inhaltliche Säulen, durch Komma getrennt",
-                        text: $session.strategyPillarsText
-                    )
-                    .textFieldStyle(.roundedBorder)
-
-                    TextField(
-                        "Angrenzende Themen (optional)",
-                        text: $session.strategyAdjacentTopicsText
-                    )
-                    .textFieldStyle(.roundedBorder)
-
-                    TextField(
-                        "Ausgeschlossene Themen (optional)",
-                        text: $session.strategyExcludedTopicsText
-                    )
-                    .textFieldStyle(.roundedBorder)
-
-                    Picker(
-                        "Hauptziel",
-                        selection: $session.strategyObjective
-                    ) {
-                        Text("Ausgewogen").tag(StrategicObjective.balanced)
-                        Text("Reichweite").tag(StrategicObjective.reach)
-                        Text("Wiedergabezeit").tag(StrategicObjective.watchTime)
-                        Text("Abonnenten").tag(StrategicObjective.subscribers)
-                        Text("Umsatz").tag(StrategicObjective.revenue)
-                    }
-                    .pickerStyle(.menu)
+        VStack(alignment: .leading, spacing: 16) {
+            if session.isLoadingYouTubeSetupOptions {
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text("YouTube-Einstellungen werden geladen …")
+                        .foregroundStyle(.secondary)
                 }
-                .padding(.top, 10)
             }
 
-            Text("Thema und Zielgruppe reichen für den Start.")
+            Picker(
+                "Land / Region",
+                selection: $session.channelRegionCode
+            ) {
+                ForEach(session.youtubeRegions) { region in
+                    Text(region.name).tag(region.code)
+                }
+            }
+            .pickerStyle(.menu)
+            .onChange(of: session.channelRegionCode) { _ in
+                Task {
+                    await session
+                        .refreshYouTubeVideoCategories()
+                }
+            }
+
+            Picker(
+                "Content-Sprache",
+                selection: $session.contentLanguage
+            ) {
+                ForEach(session.youtubeLanguages) { language in
+                    Text(language.name).tag(language.code)
+                }
+            }
+            .pickerStyle(.menu)
+            .onChange(of: session.contentLanguage) { _ in
+                Task {
+                    await session
+                        .refreshYouTubeVideoCategories()
+                }
+            }
+
+            Picker(
+                "Standard-Video-Kategorie",
+                selection: $session.selectedVideoCategoryID
+            ) {
+                ForEach(session.youtubeVideoCategories) { category in
+                    Text(category.title).tag(category.id)
+                }
+            }
+            .pickerStyle(.menu)
+
+            Picker(
+                "YouTube-Zielgruppe",
+                selection: $session.channelAudienceSetting
+            ) {
+                ForEach(
+                    YouTubeChannelAudienceSetting.allCases,
+                    id: \.self
+                ) { audience in
+                    Text(audience.germanTitle).tag(audience)
+                }
+            }
+            .pickerStyle(.menu)
+
+            Picker(
+                "Hauptziel in Blackstock",
+                selection: $session.strategyObjective
+            ) {
+                Text("Ausgewogen").tag(StrategicObjective.balanced)
+                Text("Reichweite").tag(StrategicObjective.reach)
+                Text("Wiedergabezeit").tag(StrategicObjective.watchTime)
+                Text("Abonnenten").tag(StrategicObjective.subscribers)
+                Text("Umsatz").tag(StrategicObjective.revenue)
+            }
+            .pickerStyle(.menu)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Label(
+                    "YouTube-Parameter statt Freitext",
+                    systemImage: "checkmark.seal"
+                )
+                .font(.callout.weight(.semibold))
+                Text(
+                    "Region, Sprache und Kategorien werden direkt aus YouTube geladen. Land/Region, Standardsprache und die Kanal-Zielgruppe werden anschließend über die YouTube API im ausgewählten Kanal gesetzt."
+                )
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            }
+            .padding(12)
+            .background(
+                BlackstockDesign.mutedFill,
+                in: RoundedRectangle(cornerRadius: 12)
+            )
 
             HStack {
                 Spacer()
-                Button("Weiter") { session.continueFromTopic() }
-                    .buttonStyle(.borderedProminent)
+                Button {
+                    Task {
+                        await session.continueFromTopic()
+                    }
+                } label: {
+                    if session.isWorking {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Label(
+                            "YouTube-Einstellungen übernehmen",
+                            systemImage: "checkmark.circle"
+                        )
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(
+                    session.isWorking
+                    || session.isLoadingYouTubeSetupOptions
+                    || session.channelRegionCode.isEmpty
+                    || session.contentLanguage.isEmpty
+                    || session.selectedVideoCategoryID.isEmpty
+                )
             }
         }
     }
 
     private var language: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Picker("Primäre Content-Sprache", selection: $session.contentLanguage) {
-                Text("Deutsch").tag("de")
-                Text("Englisch").tag("en")
-                Text("Spanisch").tag("es")
-                Text("Französisch").tag("fr")
-                Text("Italienisch").tag("it")
-                Text("Portugiesisch").tag("pt")
+            if session.officialChannelSettingsVerified {
+                Label(
+                    "YouTube-Kanaleinstellungen bestätigt",
+                    systemImage: "checkmark.seal.fill"
+                )
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(.green)
             }
-            .pickerStyle(.menu)
-
-
 
             Toggle(
                 isOn: Binding(
@@ -303,11 +357,15 @@ struct FirstRunView: View {
             HStack {
                 Spacer()
                 Button("Kanal vorbereiten") {
-                    Task { await session.prepareChannelAndLoadOpportunities() }
+                    Task {
+                        await session
+                            .prepareChannelAndLoadOpportunities()
+                    }
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(
                     !session.workspaceRightsResponsibilityAccepted
+                    || !session.officialChannelSettingsVerified
                 )
             }
         }
@@ -319,7 +377,7 @@ struct FirstRunView: View {
                 ProgressView()
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Kanal wird vorbereitet").font(.headline)
-                    Text("Videos für „\(session.primaryTopic)“ werden geladen.")
+                    Text("YouTube-Videos aus „\(session.primaryTopic)“ werden geladen.")
                         .foregroundStyle(.secondary)
                 }
             }
@@ -571,8 +629,8 @@ struct FirstRunView: View {
         switch session.step {
         case .welcome: "1 · Google"
         case .channel: "2 · YouTube-Kanal"
-        case .topic: "3 · Kanalthema"
-        case .language: "4 · Content-Sprache"
+        case .topic: "3 · YouTube-Einstellungen"
+        case .language: "4 · Rechte"
         case .preparing: "5 · Vorbereitung"
         case .opportunities: "6 · Video"
         }
@@ -593,8 +651,8 @@ struct FirstRunView: View {
         switch session.step {
         case .welcome: "Verknüpfe deinen YouTube-Kanal."
         case .channel: "Wähle den Kanal, mit dem du arbeiten willst."
-        case .topic: "Beschreibe kurz Thema und Zielgruppe."
-        case .language: "Lege Content-Sprache fest und bestätige die Nutzungsrechte."
+        case .topic: "Wähle offizielle YouTube-Parameter statt Freitext."
+        case .language: "Bestätige die Nutzungsrechte für deinen Arbeitsbereich."
         case .preparing: "Blackstock lädt die benötigten Kanaldaten."
         case .opportunities: "Wähle ein Video für dein erstes Clip-Projekt."
         }

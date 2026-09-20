@@ -2,7 +2,7 @@ import XCTest
 @testable import BlackstockCore
 
 final class GoogleOAuthLifecycleTests: XCTestCase {
-    func testReadOnlyFirstRunNeedsOnlyReadScope() {
+    func testDiscoveryReadOnlyNeedsOnlyReadScope() {
         let plan = GoogleOAuthScopePlanner().plan(
             capabilities: [.discoveryReadOnly],
             tokenScopeString: nil
@@ -11,6 +11,33 @@ final class GoogleOAuthLifecycleTests: XCTestCase {
         XCTAssertEqual(plan.state, .reauthorizationRequired)
         XCTAssertEqual(plan.missingScopes, [.youtubeReadOnly])
         XCTAssertEqual(plan.scopesForAuthorization, [.youtubeReadOnly])
+    }
+
+    func testChannelManagementRequiresForceSSLScope() {
+        let plan = GoogleOAuthScopePlanner().plan(
+            capabilities: [
+                .discoveryReadOnly,
+                .channelManagement
+            ],
+            tokenScopeString:
+                GoogleOAuthScope.youtubeReadOnly.rawValue
+        )
+
+        XCTAssertEqual(
+            plan.state,
+            .reauthorizationRequired
+        )
+        XCTAssertEqual(
+            plan.missingScopes,
+            [.youtubeForceSSL]
+        )
+        XCTAssertEqual(
+            plan.scopesForAuthorization,
+            [
+                .youtubeReadOnly,
+                .youtubeForceSSL
+            ]
+        )
     }
 
     func testUploadReauthorizationRequestsUnionForInstalledApp() {

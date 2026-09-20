@@ -243,6 +243,329 @@ final class GoogleOAuthAndYouTubeTests: XCTestCase {
         }
     }
 
+    func testYouTubeSetupCatalogsUseProviderParameters() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [OAuthURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+
+        OAuthURLProtocol.handler = { request in
+            let url = try XCTUnwrap(request.url)
+            let components = try XCTUnwrap(
+                URLComponents(
+                    url: url,
+                    resolvingAgainstBaseURL: false
+                )
+            )
+            let values = Dictionary(
+                uniqueKeysWithValues:
+                    (components.queryItems ?? []).map {
+                        ($0.name, $0.value ?? "")
+                    }
+            )
+
+            let json: String
+            switch url.path {
+            case "/youtube/v3/i18nLanguages":
+                XCTAssertEqual(values["part"], "snippet")
+                XCTAssertEqual(values["hl"], "de")
+                json = #"""
+                {"items":[{"id":"de","snippet":{"hl":"de","name":"Deutsch"}}]}
+                """#
+            case "/youtube/v3/i18nRegions":
+                XCTAssertEqual(values["part"], "snippet")
+                XCTAssertEqual(values["hl"], "de")
+                json = #"""
+                {"items":[{"id":"DE","snippet":{"gl":"DE","name":"Deutschland"}}]}
+                """#
+            case "/youtube/v3/videoCategories":
+                XCTAssertEqual(values["part"], "snippet")
+                XCTAssertEqual(values["regionCode"], "DE")
+                XCTAssertEqual(values["hl"], "de")
+                json = #"""
+                {"items":[{"id":"28","snippet":{"title":"Wissenschaft & Technik","assignable":true}}]}
+                """#
+            default:
+                XCTFail("Unexpected YouTube path: \(url.path)")
+                json = #"{"items":[]}"#
+            }
+
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: [
+                    "Content-Type": "application/json"
+                ]
+            )!
+            return (response, Data(json.utf8))
+        }
+
+        let client = YouTubeChannelSetupClient(
+            accessToken: "access"
+        )
+        let languages = try await client.supportedLanguages(
+            displayLanguage: "de",
+            session: session
+        )
+        let regions = try await client.supportedRegions(
+            displayLanguage: "de",
+            session: session
+        )
+        let categories = try await client.videoCategories(
+            regionCode: "DE",
+            languageCode: "de",
+            session: session
+        )
+
+        XCTAssertEqual(languages.first?.code, "de")
+        XCTAssertEqual(regions.first?.code, "DE")
+        XCTAssertEqual(categories.first?.id, "28")
+        XCTAssertEqual(
+            categories.first?.title,
+            "Wissenschaft & Technik"
+        )
+    }
+
+    func testChannelBrandingUpdatePreservesExistingProviderFields() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [OAuthURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+
+        OAuthURLProtocol.handler = { request in
+            let url = try XCTUnwrap(request.url)
+            let components = try XCTUnwrap(
+                URLComponents(
+                    url: url,
+                    resolvingAgainstBaseURL: false
+                )
+            )
+            let values = Dictionary(
+                uniqueKeysWithValues:
+                    (components.queryItems ?? []).map {
+                        ($0.name, $0.value ?? "")
+                    }
+            )
+
+            if request.httpMethod == "GET" {
+                XCTAssertEqual(
+                    values["part"],
+                    "brandingSettings,status"
+                )
+                XCTAssertEqual(
+                    values["id"],
+                    "channel-1"
+                )
+                let response = HTTPURLResponse(
+                    url: url,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: [
+                        "Content-Type": "application/json"
+                    ]
+                )!
+                let data = Data(#"""
+                {
+                  "items": [{
+                    "id": "channel-1",
+                    "brandingSettings": {
+                      "channel": {
+                        "description": "Keep description",
+                        "keywords": "alpha beta",
+                        "defaultLanguage": "en",
+                        "country": "US",
+                        "trackingAnalyticsAccountId": "UA-1",
+                        "unsubscribedTrailer": "video-1"
+                      }
+                    },
+                    "status": {
+                      "madeForKids": false,
+                      "selfDeclaredMadeForKids": false
+                    }
+                  }]
+                }
+                """#.utf8)
+                return (response, data)
+            }
+
+            XCTAssertEqual(request.httpMethod, "PUT")
+            XCTAssertEqual(
+                values["part"],
+                "brandingSettings"
+            )
+            let body = try JSONSerialization.jsonObject(
+                with: OAuthURLProtocol.bodyData(from: request)
+            ) as? [String: Any]
+            XCTAssertEqual(
+                body?["id"] as? String,
+                "channel-1"
+            )
+            let branding = body?["brandingSettings"]
+                as? [String: Any]
+            let channel = branding?["channel"]
+                as? [String: Any]
+            XCTAssertEqual(
+                channel?["country"] as? String,
+                "DE"
+            )
+            XCTAssertEqual(
+                channel?["defaultLanguage"] as? String,
+                "de"
+            )
+            XCTAssertEqual(
+                channel?["description"] as? String,
+                "Keep description"
+            )
+            XCTAssertEqual(
+                channel?["keywords"] as? String,
+                "alpha beta"
+            )
+            XCTAssertEqual(
+                channel?["trackingAnalyticsAccountId"]
+                    as? String,
+                "UA-1"
+            )
+            XCTAssertEqual(
+                channel?["unsubscribedTrailer"] as? String,
+                "video-1"
+            )
+
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: [
+                    "Content-Type": "application/json"
+                ]
+            )!
+            return (response, Data(#"{"id":"channel-1"}"#.utf8))
+        }
+
+        let client = YouTubeChannelSetupClient(
+            accessToken: "access"
+        )
+        let snapshot = try await client.currentChannelSetup(
+            channelID: "channel-1",
+            session: session
+        )
+        try await client.updateBranding(
+            snapshot: snapshot,
+            countryCode: "DE",
+            defaultLanguage: "de",
+            session: session
+        )
+    }
+
+    func testChannelAudienceUpdateSendsOfficialMadeForKidsFlag() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [OAuthURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+
+        OAuthURLProtocol.handler = { request in
+            let url = try XCTUnwrap(request.url)
+            let components = try XCTUnwrap(
+                URLComponents(
+                    url: url,
+                    resolvingAgainstBaseURL: false
+                )
+            )
+            let values = Dictionary(
+                uniqueKeysWithValues:
+                    (components.queryItems ?? []).map {
+                        ($0.name, $0.value ?? "")
+                    }
+            )
+            XCTAssertEqual(request.httpMethod, "PUT")
+            XCTAssertEqual(values["part"], "status")
+
+            let body = try JSONSerialization.jsonObject(
+                with: OAuthURLProtocol.bodyData(from: request)
+            ) as? [String: Any]
+            let status = body?["status"] as? [String: Any]
+            XCTAssertEqual(
+                status?["selfDeclaredMadeForKids"] as? Bool,
+                true
+            )
+
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: [
+                    "Content-Type": "application/json"
+                ]
+            )!
+            return (response, Data(#"{"id":"channel-1"}"#.utf8))
+        }
+
+        try await YouTubeChannelSetupClient(
+            accessToken: "access"
+        ).updateAudience(
+            channelID: "channel-1",
+            selfDeclaredMadeForKids: true,
+            session: session
+        )
+    }
+
+    func testOpportunitySearchUsesStructuredYouTubeFiltersWithoutFreeText() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [OAuthURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+
+        OAuthURLProtocol.handler = { request in
+            let url = try XCTUnwrap(request.url)
+            XCTAssertEqual(
+                url.path,
+                "/youtube/v3/search"
+            )
+            let components = try XCTUnwrap(
+                URLComponents(
+                    url: url,
+                    resolvingAgainstBaseURL: false
+                )
+            )
+            let values = Dictionary(
+                uniqueKeysWithValues:
+                    (components.queryItems ?? []).map {
+                        ($0.name, $0.value ?? "")
+                    }
+            )
+            XCTAssertNil(values["q"])
+            XCTAssertEqual(
+                values["videoCategoryId"],
+                "28"
+            )
+            XCTAssertEqual(values["regionCode"], "DE")
+            XCTAssertEqual(
+                values["relevanceLanguage"],
+                "de"
+            )
+
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: [
+                    "Content-Type": "application/json"
+                ]
+            )!
+            return (
+                response,
+                Data(#"{"items":[]}"#.utf8)
+            )
+        }
+
+        let candidates = try await YouTubeAuthorizedClient(
+            accessToken: "access"
+        ).firstOpportunityCandidates(
+            query: "",
+            categoryID: "28",
+            regionCode: "DE",
+            relevanceLanguage: "de",
+            session: session
+        )
+        XCTAssertTrue(candidates.isEmpty)
+    }
+
     func testImportedOAuthClientIDOverridesBundledConfiguration() {
         XCTAssertEqual(
             OAuthClientConfiguration.preferredClientID(
@@ -305,7 +628,11 @@ private final class OAuthURLProtocol: URLProtocol {
     }
 
     override class func canInit(with request: URLRequest) -> Bool {
-        request.url?.host == "oauth2.googleapis.com"
+        guard let host = request.url?.host else {
+            return false
+        }
+        return host == "oauth2.googleapis.com"
+            || host == "www.googleapis.com"
     }
 
     override class func canonicalRequest(

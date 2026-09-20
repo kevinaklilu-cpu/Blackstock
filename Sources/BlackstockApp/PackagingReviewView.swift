@@ -22,6 +22,8 @@ struct PackagingReviewView: View {
     @State private var tags = ""
     @State private var privacyStatus: YouTubePrivacyStatus = .privateVideo
     @State private var madeForKids = false
+    @State private var categoryID = ""
+    @State private var containsSyntheticMedia = false
     @State private var thumbnailURL: URL?
     @State private var captionTracks: [PublishCaptionTrack] = []
     @State private var showThumbnailImporter = false
@@ -102,6 +104,16 @@ struct PackagingReviewView: View {
         _madeForKids = State(
             initialValue: saved?.package.metadata
                 .selfDeclaredMadeForKids
+                ?? (session.channelAudienceSetting == .madeForKids)
+        )
+        _categoryID = State(
+            initialValue:
+                saved?.package.metadata.categoryID
+                ?? session.selectedVideoCategoryID
+        )
+        _containsSyntheticMedia = State(
+            initialValue:
+                saved?.package.metadata.containsSyntheticMedia
                 ?? false
         )
         let savedThumbnailURL = saved?.package.thumbnail?.fileURL
@@ -208,12 +220,16 @@ struct PackagingReviewView: View {
                 title: title.trimmingCharacters(in: .whitespacesAndNewlines),
                 description: effectiveDescription,
                 tags: tagsArray,
-                categoryID: nil,
+                categoryID: categoryID.isEmpty
+                    ? nil
+                    : categoryID,
                 defaultLanguage: session.contentLanguage,
                 defaultAudioLanguage: transcript?.localeIdentifier
                     ?? session.contentLanguage,
                 privacyStatus: privacyStatus,
-                selfDeclaredMadeForKids: madeForKids
+                selfDeclaredMadeForKids: madeForKids,
+                containsSyntheticMedia:
+                    containsSyntheticMedia
             ),
             thumbnail: thumbnailURL.map {
                 PublishThumbnail(
@@ -286,6 +302,12 @@ struct PackagingReviewView: View {
             Text(
                 "Zielkanal: \(project.targetChannelID) · Sichtbarkeit: \(draftPackage.metadata.privacyStatus.rawValue). Diese Aktion erstellt bzw. setzt reale YouTube-Ressourcen."
             )
+        }
+        .task {
+            await session.ensureYouTubePublishingOptionsLoaded()
+            if categoryID.isEmpty {
+                categoryID = session.selectedVideoCategoryID
+            }
         }
         .onChange(of: session.activeProject?.stage) { stage in
             if stage == .published {
@@ -363,6 +385,26 @@ struct PackagingReviewView: View {
                 TextField("Tags, durch Kommas getrennt", text: $tags)
                     .textFieldStyle(.roundedBorder)
 
+                Picker(
+                    "YouTube-Kategorie",
+                    selection: $categoryID
+                ) {
+                    if !categoryID.isEmpty,
+                       !session.youtubeVideoCategories.contains(
+                            where: { $0.id == categoryID }
+                       ) {
+                        Text("Kategorie \(categoryID)")
+                            .tag(categoryID)
+                    }
+                    ForEach(
+                        session.youtubeVideoCategories
+                    ) { category in
+                        Text(category.title)
+                            .tag(category.id)
+                    }
+                }
+                .pickerStyle(.menu)
+
                 Picker("Sichtbarkeit", selection: $privacyStatus) {
                     Text("Privat").tag(YouTubePrivacyStatus.privateVideo)
                     if session.publicPublishingAllowed {
@@ -372,7 +414,26 @@ struct PackagingReviewView: View {
                 }
                 .pickerStyle(.segmented)
 
-                Toggle("Für Kinder erstellt", isOn: $madeForKids)
+                Picker(
+                    "YouTube-Zielgruppe",
+                    selection: $madeForKids
+                ) {
+                    Text("Nicht speziell für Kinder")
+                        .tag(false)
+                    Text("Speziell für Kinder")
+                        .tag(true)
+                }
+                .pickerStyle(.segmented)
+
+                Toggle(
+                    "Realistisch veränderte oder synthetische Inhalte",
+                    isOn: $containsSyntheticMedia
+                )
+                Text(
+                    "Diese Angabe wird beim Upload als YouTube-Kennzeichnung für veränderte oder synthetische Medien übertragen."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
             .padding(.vertical, 6)
             .disabled(reviewFrozen)

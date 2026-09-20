@@ -21,13 +21,23 @@ REQUIRED = {
         "testListParsingDropsEmptyValuesAndDuplicates",
     ],
     "Sources/BlackstockApp/FirstRunView.swift": [
-        "Content-Versprechen",
-        "Zielgruppe",
-        "Inhaltliche Säulen",
-        "Angrenzende Themen",
-        "Ausgeschlossene Themen",
-        "Hauptziel",
-        "Thema und Zielgruppe reichen für den Start.",
+        "Land / Region",
+        "Content-Sprache",
+        "Standard-Video-Kategorie",
+        "YouTube-Zielgruppe",
+        "Hauptziel in Blackstock",
+        "YouTube-Einstellungen übernehmen",
+        "refreshYouTubeVideoCategories",
+    ],
+    "Sources/BlackstockCore/YouTubeChannelSetupClient.swift": [
+        "supportedLanguages",
+        "supportedRegions",
+        "videoCategories",
+        "currentChannelSetup",
+        "updateBranding",
+        "updateAudience",
+        "applyAndVerify",
+        "selfDeclaredMadeForKids",
     ],
     "Sources/BlackstockApp/BlackstockSession.swift": [
         "ChannelStrategyDraft(",
@@ -35,6 +45,11 @@ REQUIRED = {
         "strategyAudienceHypothesis",
         "strategyPillarsText",
         "strategyObjective",
+        "selectedVideoCategoryID",
+        "channelRegionCode",
+        "channelAudienceSetting",
+        "YouTubeChannelSetupClient(",
+        "applyAndVerify(",
         "nextStrategyVersion(for:",
     ],
 }
@@ -50,9 +65,26 @@ for relative, markers in REQUIRED.items():
         if marker not in text:
             errors.append(f"{relative}: missing strategy contract: {marker}")
 
+first_run = (
+    ROOT / "Sources/BlackstockApp/FirstRunView.swift"
+).read_text(encoding="utf-8")
+for forbidden in [
+    'TextField("Thema',
+    'Zielgruppe, z. B.',
+    '"Content-Versprechen"',
+    '"Inhaltliche Säulen',
+    '"Angrenzende Themen',
+    '"Ausgeschlossene Themen',
+]:
+    if forbidden in first_run:
+        errors.append(
+            "First Run must use structured YouTube parameters, "
+            f"not strategic free text: {forbidden}"
+        )
+
 if errors:
     print("Strategy audit failed:", file=sys.stderr)
     for error in errors:
         print(f"- {error}", file=sys.stderr)
     sys.exit(1)
-print("Strategy audit passed: explicit complete versioned strategy is required.")
+print("Strategy audit passed: structured YouTube-backed setup feeds a complete versioned strategy without onboarding free text.")

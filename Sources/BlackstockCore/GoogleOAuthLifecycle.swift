@@ -2,6 +2,7 @@ import Foundation
 
 public enum GoogleOAuthCapability: String, Codable, Sendable {
     case discoveryReadOnly
+    case channelManagement
     case upload
     case packaging
     case analytics
@@ -11,6 +12,8 @@ public enum GoogleOAuthCapability: String, Codable, Sendable {
         switch self {
         case .discoveryReadOnly:
             return [.youtubeReadOnly]
+        case .channelManagement:
+            return [.youtubeForceSSL]
         case .upload:
             return [.youtubeUpload]
         case .packaging:
