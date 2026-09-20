@@ -447,8 +447,8 @@ struct StudioView: View {
                     }
                     Label(
                         state.isGeneratingClipCandidates
-                            ? "Lokale Clip-Analyse läuft …"
-                            : "Clip-Kandidaten lokal finden",
+                            ? "Clips werden gesucht …"
+                            : "Clips finden",
                         systemImage: "scissors.badge.ellipsis"
                     )
                 }
