@@ -92,7 +92,7 @@ TEST_CONTRACTS = {
     "Tests/BlackstockCoreTests/GoogleOAuthAndYouTubeTests.swift": [
         "testOAuthJSONRequiresDesktopInstalledClient",
         "testOAuthJSONRejectsMissingAndInvalidClientIDs",
-        "testOAuthJSONDoesNotExposeOrPersistClientSecret",
+        "testOAuthJSONParsesDesktopClientSecretForKeychainBackedExchange",
     ],
 }
 
