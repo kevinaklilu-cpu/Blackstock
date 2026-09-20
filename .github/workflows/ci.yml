@@ -514,6 +514,30 @@ jobs:
 
       - name: Production release workflow audit
         run: python3 Build/audit_production_release_workflows.py
+      - name: Release verifier immutable snapshot argument audit
+        run: |
+          set -euo pipefail
+          COMMON_ARGS=(
+            --manifest-url "https://updates.blackstock.app/update-manifest.json"
+            --public-key-base64 "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+            --installer-team-id "ABC123TEAM"
+            --current-version "0.9.0"
+            --current-build "90"
+          )
+
+          if swift run -c release BlackstockReleaseVerifier \
+            "${COMMON_ARGS[@]}" \
+            --verified-manifest-input "$RUNNER_TEMP/manifest.json"; then
+            echo "Release verifier unexpectedly accepted a manifest snapshot without its paired package." >&2
+            exit 1
+          fi
+
+          if swift run -c release BlackstockReleaseVerifier \
+            "${COMMON_ARGS[@]}" \
+            --verified-package-input "$RUNNER_TEMP/Blackstock.pkg"; then
+            echo "Release verifier unexpectedly accepted a package snapshot without its paired manifest." >&2
+            exit 1
+          fi
       - name: Production package configuration audit
         run: |
           set -euo pipefail
