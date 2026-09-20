@@ -7,6 +7,7 @@ public struct SavedClipSelection:
     Identifiable {
     public let id: UUID
     public let sourceRange: EditTimeRange
+    public let title: String?
     public let transcriptPreview: String
     public let wordCount: Int
     public let transcript: LocalTranscript?
@@ -16,6 +17,7 @@ public struct SavedClipSelection:
     public init(
         id: UUID = UUID(),
         sourceRange: EditTimeRange,
+        title: String? = nil,
         transcriptPreview: String,
         wordCount: Int,
         transcript: LocalTranscript? = nil,
@@ -24,6 +26,14 @@ public struct SavedClipSelection:
     ) {
         self.id = id
         self.sourceRange = sourceRange
+        let normalizedTitle = title?
+            .trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+        self.title =
+            normalizedTitle?.isEmpty == false
+            ? normalizedTitle
+            : nil
         self.transcriptPreview = transcriptPreview
         self.wordCount = max(wordCount, 0)
         self.transcript = transcript
@@ -37,10 +47,30 @@ public struct SavedClipSelection:
         SavedClipSelection(
             id: id,
             sourceRange: sourceRange,
+            title: title,
             transcriptPreview: transcriptPreview,
             wordCount: wordCount,
             transcript: transcript,
             renderArtifact: artifact,
+            savedAt: savedAt
+        )
+    }
+
+    public var displayTitle: String {
+        title ?? "Clip"
+    }
+
+    public func withTitle(
+        _ value: String?
+    ) -> SavedClipSelection {
+        SavedClipSelection(
+            id: id,
+            sourceRange: sourceRange,
+            title: value,
+            transcriptPreview: transcriptPreview,
+            wordCount: wordCount,
+            transcript: transcript,
+            renderArtifact: renderArtifact,
             savedAt: savedAt
         )
     }
