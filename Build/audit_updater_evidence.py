@@ -5,6 +5,15 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 
 requirements = {
+    "Sources/BlackstockCore/UpdateManifest.swift": [
+        "ProductionUpdateURLPolicy",
+        "ProductionUpdateURLPolicy.allows(",
+        "url.user == nil",
+        "url.password == nil",
+        "url.fragment == nil",
+        'host != "::1"',
+        '!host.hasSuffix(".local")',
+    ],
     "Sources/BlackstockCore/InAppUpdateEvidence.swift": [
         "InAppUpdateEvidenceStore",
         "current = 5",
@@ -35,6 +44,12 @@ requirements = {
         "postUpdateLaunchVerifiedAt",
         "isComplete",
     ],
+    "Tests/BlackstockCoreTests/UpdateManifestTests.swift": [
+        "testProductionUpdateURLPolicyRejectsUnsafeURLs",
+        "ProductionUpdateURLPolicy.allows(",
+        "https://[::1]/Blackstock.pkg",
+        "https://updates.blackstock.local/Blackstock.pkg",
+    ],
     "Tests/BlackstockCoreTests/InAppUpdateEvidenceTests.swift": [
         "testVerifiedUpdateCompletesOnlyAfterTargetBuildLaunch",
         "testPackageVerificationRejectsDifferentManifest",
@@ -49,9 +64,15 @@ requirements = {
     ],
     "Sources/BlackstockApp/BlackstockUpdateChecker.swift": [
         "BlackstockUpdateAudit.recordAvailableUpdate",
+        "ProductionUpdateURLPolicy.allows(",
+        "let finalURL = http.url",
+        "manifestURLMustUseHTTPS",
     ],
     "Sources/BlackstockApp/BlackstockUpdatePackageDownloader.swift": [
         "BlackstockUpdateAudit.recordVerifiedPackage",
+        "ProductionUpdateURLPolicy.allows(",
+        "let finalURL = http.url",
+        "packageURLMustUseHTTPS",
     ],
     "Sources/BlackstockApp/BlackstockApp.swift": [
         "BlackstockUpdateInstallationPreflight()",
