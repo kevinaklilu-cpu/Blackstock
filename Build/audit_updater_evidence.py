@@ -192,6 +192,12 @@ requirements = {
         "same installed app path",
         '"sourceInstallerReceiptInstalledAt"',
         '"installerReceiptInstalledAt"',
+        "TemporaryDirectory",
+        "write_snapshot(",
+        "require_source_unchanged(",
+        '"captureEvidenceSHA256"',
+        '"productionReleaseEvidenceSHA256"',
+        '"inAppUpdateEvidenceSHA256"',
     ],
     "docs/PRODUCTION_RELEASE_EVIDENCE.md": [
         "Echter Updater-E2E",
