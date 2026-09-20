@@ -112,7 +112,7 @@ final class StudioState: ObservableObject {
                 if let sourceVersion = loadResult.migratedFromSchemaVersion {
                     ledger.append(.init(
                         timestamp: Date(),
-                        actor: .blackstock,
+                        actor: .acceptedAIProposal,
                         stage: .editing,
                         action: "workspace-schema-migrated",
                         summary: "Projekt-Arbeitsbereich wurde lokal von Schema v\(sourceVersion) auf v\(WorkspaceSchema.current) migriert.",
