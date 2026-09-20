@@ -226,7 +226,7 @@ Zusätzlich muss auf einem sauberen Mac der tatsächliche Blackstock-App-Pfad ge
 12. Bundle-Version und Build müssen exakt der Manifest-Zielversion entsprechen;
 13. `BlackstockSourceCommitSHA` des gestarteten Bundles muss exakt dem signierten Manifest-Source-Commit entsprechen;
 14. der SHA-256 des nach dem Update tatsächlich gestarteten Blackstock-Executables wird als `observedInstalledExecutableSHA256` gespeichert und muss im finalen Market-Readiness-Verifier exakt dem veröffentlichten Release und dem Capture-Smoke entsprechen;
-15. die gestartete App muss als `Developer ID Application` signiert sein und dieselbe Apple-Team-ID tragen wie der verifizierte Installer;
+15. die gestartete App muss `codesign --verify --deep --strict` bestehen, als `Developer ID Application` signiert sein und dieselbe Apple-Team-ID tragen wie der verifizierte Installer;
 16. der macOS-Installer-Receipt `de.blackstock.app` muss vorhanden sein, auf `/` installiert sein und exakt die Zielversion ausweisen.
 
 Blackstock protokolliert diesen Pfad selbst lokal unter:
