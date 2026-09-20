@@ -21,7 +21,8 @@ else:
 
     for path in workflow_files:
         text = path.read_text(encoding="utf-8")
-        for line_number, line in enumerate(text.splitlines(), 1):
+        lines = text.splitlines()
+        for line_number, line in enumerate(lines, 1):
             match = USES_PATTERN.match(line)
             if not match:
                 continue
@@ -40,6 +41,30 @@ else:
                     f"external action is not pinned to a full commit SHA: {reference}"
                 )
 
+            if reference.startswith("actions/checkout@"):
+                base_indent = len(line) - len(line.lstrip())
+                block = []
+                for following in lines[line_number:]:
+                    stripped = following.lstrip()
+                    indent = len(following) - len(stripped)
+                    if (
+                        stripped.startswith("- ")
+                        and indent <= base_indent
+                    ):
+                        break
+                    block.append(following)
+                if not any(
+                    re.fullmatch(
+                        r"\s*persist-credentials:\s*false\s*",
+                        candidate,
+                    )
+                    for candidate in block
+                ):
+                    errors.append(
+                        f"{path.relative_to(ROOT)}:{line_number}: "
+                        "actions/checkout must set persist-credentials: false"
+                    )
+
 if errors:
     print("GitHub Actions supply-chain audit failed:", file=sys.stderr)
     for error in errors:
@@ -48,5 +73,6 @@ if errors:
 
 print(
     "GitHub Actions supply-chain audit passed: every external workflow "
-    "dependency is pinned to an immutable 40-character commit SHA."
+    "dependency is pinned to an immutable 40-character commit SHA and "
+    "checkout credentials are not persisted."
 )
