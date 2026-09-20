@@ -21,6 +21,9 @@ checks = {
         'Label("Projekte", systemImage: "tray.full")',
         "OpportunityWorkspaceView(",
         "ProjectLibraryView(",
+        "Shorts/Reels-Setup vorbereiten",
+        "captionVisualStyle",
+        "prepareShortFormSetup()",
     ],
     "Sources/BlackstockApp/WorkspaceProductViews.swift": [
         "struct OpportunityWorkspaceView",
@@ -36,6 +39,9 @@ checks = {
         '"blackstock.projects"',
         '"blackstock.projectSource.',
         "workspaceChannelID",
+        "setCaptionVisualStyle(",
+        "prepareShortFormSetup()",
+        "captionVisualStyle:",
     ],
     "Sources/BlackstockCore/LocalClipCandidateGenerator.swift": [
         "LocalClipCandidateGenerator",
