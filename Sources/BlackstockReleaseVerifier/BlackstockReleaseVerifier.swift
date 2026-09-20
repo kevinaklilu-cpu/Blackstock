@@ -54,6 +54,32 @@ private struct CommandResult {
     let output: String
 }
 
+private func isProductionHTTPSURL(
+    _ url: URL
+) -> Bool {
+    guard url.scheme?.lowercased() == "https",
+          var host = url.host?.lowercased(),
+          !host.isEmpty,
+          url.user == nil,
+          url.password == nil,
+          url.fragment == nil else {
+        return false
+    }
+    while host.hasSuffix(".") {
+        host.removeLast()
+    }
+    guard !host.isEmpty else {
+        return false
+    }
+    return host != "localhost"
+        && host != "::1"
+        && !host.hasPrefix("127.")
+        && !host.hasSuffix(".local")
+        && !host.hasSuffix(".invalid")
+        && !host.hasSuffix(".example")
+        && !host.hasSuffix(".test")
+}
+
 private struct ReleaseVerificationEvidence: Codable {
     let schemaVersion: Int
     let verifiedAt: Date
@@ -564,24 +590,6 @@ private struct BlackstockReleaseVerifierMain {
         }
     }
 
-    private static func isProductionHTTPSURL(
-        _ url: URL
-    ) -> Bool {
-        guard url.scheme?.lowercased() == "https",
-              let host = url.host?.lowercased(),
-              !host.isEmpty,
-              url.user == nil,
-              url.password == nil,
-              url.fragment == nil else {
-            return false
-        }
-        return host != "localhost"
-            && !host.hasPrefix("127.")
-            && !host.hasSuffix(".invalid")
-            && !host.hasSuffix(".example")
-            && !host.hasSuffix(".test")
-    }
-
     private static func persistVerifiedManifest(
         _ data: Data,
         to destinationURL: URL
@@ -743,7 +751,7 @@ private struct Arguments {
             values
         )
         guard let manifestURL = URL(string: manifestString),
-              manifestURL.scheme?.lowercased() == "https" else {
+              isProductionHTTPSURL(manifestURL) else {
             throw ReleaseVerifierError.invalidURL(
                 manifestString
             )
