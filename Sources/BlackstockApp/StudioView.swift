@@ -460,36 +460,68 @@ struct StudioView: View {
             Text("Clip-Vorschläge")
                 .font(.headline)
 
-            Text("Blackstock findet lokal passende Ausschnitte anhand von Sprache und Pausen. Du entscheidest, was übernommen wird.")
+            Text("Blackstock findet die stärksten Ausschnitte, bereitet Hochkantformat und Untertitel vor und rendert daraus fertige Clips. Du kannst jeden Schritt anschließend ändern.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            Button {
-                Task {
-                    await state.generateLocalClipCandidates(
-                        localeIdentifier:
-                            speechLocaleIdentifier
-                    )
-                }
-            } label: {
-                HStack {
-                    if state.isGeneratingClipCandidates {
-                        ProgressView()
-                            .controlSize(.small)
+            HStack(spacing: 10) {
+                Button {
+                    Task {
+                        await state.createAutomaticHighlights(
+                            localeIdentifier:
+                                speechLocaleIdentifier
+                        )
                     }
-                    Label(
-                        state.isGeneratingClipCandidates
-                            ? "Clips werden gesucht …"
-                            : "Clips finden",
-                        systemImage: "scissors.badge.ellipsis"
-                    )
+                } label: {
+                    HStack {
+                        if state.isCreatingAutomaticHighlights {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                        Label(
+                            state.isCreatingAutomaticHighlights
+                                ? "Highlights werden erstellt …"
+                                : "Highlights automatisch erstellen",
+                            systemImage: "sparkles.rectangle.stack"
+                        )
+                    }
                 }
+                .buttonStyle(.borderedProminent)
+                .tint(BlackstockDesign.accent)
+                .disabled(
+                    state.isCreatingAutomaticHighlights
+                    || state.isGeneratingClipCandidates
+                    || !editingEnabled
+                )
+
+                Button {
+                    Task {
+                        await state.generateLocalClipCandidates(
+                            localeIdentifier:
+                                speechLocaleIdentifier
+                        )
+                    }
+                } label: {
+                    HStack {
+                        if state.isGeneratingClipCandidates {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                        Label(
+                            state.isGeneratingClipCandidates
+                                ? "Clips werden gesucht …"
+                                : "Clips manuell prüfen",
+                            systemImage: "scissors"
+                        )
+                    }
+                }
+                .buttonStyle(.bordered)
+                .disabled(
+                    state.isCreatingAutomaticHighlights
+                    || state.isGeneratingClipCandidates
+                    || !editingEnabled
+                )
             }
-            .buttonStyle(.bordered)
-            .disabled(
-                state.isGeneratingClipCandidates
-                || !editingEnabled
-            )
 
             if let message =
                 state.clipCandidateStatusMessage {
