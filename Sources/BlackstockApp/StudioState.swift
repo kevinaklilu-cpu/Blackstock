@@ -38,6 +38,7 @@ final class StudioState: ObservableObject {
     @Published var isAnalyzingRetention = false
     @Published var storyboard: StoryboardPlan?
     @Published var supplementalCaptures: [SupplementalCaptureAsset] = []
+    @Published var supplementalAudioMixSettings: [SupplementalAudioMixSetting] = []
     @Published var localClipCandidates: [LocalClipCandidate] = []
     @Published var savedClipSelections: [SavedClipSelection] = []
     @Published var isGeneratingClipCandidates = false
@@ -128,6 +129,13 @@ final class StudioState: ObservableObject {
                 }
                 renderArtifact = snapshot.renderArtifact
                 supplementalCaptures = snapshot.supplementalCaptures ?? []
+                supplementalAudioMixSettings =
+                    snapshot.supplementalAudioMixSettings ?? []
+                supplementalAudioMixSettings.removeAll { setting in
+                    !supplementalCaptures.contains {
+                        $0.id == setting.captureID
+                    }
+                }
                 savedClipSelections =
                     (snapshot.savedClipSelections ?? [])
                     .map { selection in
@@ -504,6 +512,16 @@ final class StudioState: ObservableObject {
                 $0.id == capture.id
             }
             supplementalCaptures.append(capture)
+
+            if !supplementalAudioMixSettings.contains(
+                where: { $0.captureID == capture.id }
+            ) {
+                supplementalAudioMixSettings.append(
+                    SupplementalAudioMixSetting(
+                        captureID: capture.id
+                    )
+                )
+            }
 
             ledger.append(.init(
                 timestamp: Date(),
@@ -2052,6 +2070,90 @@ final class StudioState: ObservableObject {
         }
     }
 
+
+    func supplementalAudioSetting(
+        for captureID: UUID
+    ) -> SupplementalAudioMixSetting {
+        supplementalAudioMixSettings.first {
+            $0.captureID == captureID
+        } ?? SupplementalAudioMixSetting(
+            captureID: captureID
+        )
+    }
+
+    func setSupplementalAudioEnabled(
+        captureID: UUID,
+        enabled: Bool
+    ) {
+        updateSupplementalAudioMixSetting(
+            captureID: captureID
+        ) { setting in
+            setting.enabled = enabled
+        }
+
+        renderArtifact = nil
+        invalidateSavedClipRenders()
+        ledger.append(.init(
+            timestamp: Date(),
+            actor: .user,
+            stage: .editing,
+            action: enabled
+                ? "supplemental-audio-enabled"
+                : "supplemental-audio-disabled",
+            summary: enabled
+                ? "Zusätzliche Audiospur wurde für den nächsten finalen Render aktiviert."
+                : "Zusätzliche Audiospur wurde aus dem nächsten finalen Render entfernt.",
+            relatedSourceIDs: [captureID.uuidString],
+            reversible: false,
+            correlationID: correlationID
+        ))
+        persistWorkspaceIfPossible()
+    }
+
+    func setSupplementalAudioVolume(
+        captureID: UUID,
+        volume: Double
+    ) {
+        let clamped = min(max(volume, 0), 1)
+        updateSupplementalAudioMixSetting(
+            captureID: captureID
+        ) { setting in
+            setting.volume = clamped
+        }
+
+        renderArtifact = nil
+        invalidateSavedClipRenders()
+        ledger.append(.init(
+            timestamp: Date(),
+            actor: .user,
+            stage: .editing,
+            action: "supplemental-audio-volume-changed",
+            summary:
+                "Lautstärke der zusätzlichen Audiospur auf \(Int((clamped * 100).rounded())) % gesetzt.",
+            relatedSourceIDs: [captureID.uuidString],
+            reversible: false,
+            correlationID: correlationID
+        ))
+        persistWorkspaceIfPossible()
+    }
+
+    private func updateSupplementalAudioMixSetting(
+        captureID: UUID,
+        change: (inout SupplementalAudioMixSetting) -> Void
+    ) {
+        if let index = supplementalAudioMixSettings.firstIndex(
+            where: { $0.captureID == captureID }
+        ) {
+            change(&supplementalAudioMixSettings[index])
+        } else {
+            var setting = SupplementalAudioMixSetting(
+                captureID: captureID
+            )
+            change(&setting)
+            supplementalAudioMixSettings.append(setting)
+        }
+    }
+
     func render(projectID: UUID) async {
         guard let asset else {
             errorMessage = "Kein Produktionsmedium geladen."
@@ -2071,6 +2173,24 @@ final class StudioState: ObservableObject {
                 .appendingPathComponent("final")
                 .appendingPathExtension("mp4")
 
+            let supplementalAudio = supplementalAudioMixSettings
+                .filter { $0.enabled && $0.volume > 0 }
+                .compactMap { setting -> SupplementalAudioMixInput? in
+                    guard let capture = supplementalCaptures.first(
+                        where: {
+                            $0.id == setting.captureID
+                                && $0.mayBeUsedInProduction
+                        }
+                    ) else {
+                        return nil
+                    }
+                    return SupplementalAudioMixInput(
+                        captureID: capture.id,
+                        fileURL: capture.fileURL,
+                        volume: setting.volume
+                    )
+                }
+
             let artifact = try await LocalVideoRenderer().render(
                 projectID: projectID,
                 asset: asset,
@@ -2079,7 +2199,8 @@ final class StudioState: ObservableObject {
                 preset: renderPreset,
                 transcript: transcript,
                 burnInCaptions: burnInCaptionsEnabled,
-                captionStyle: captionVisualStyle
+                captionStyle: captionVisualStyle,
+                supplementalAudio: supplementalAudio
             )
             renderArtifact = artifact
             packagingSuggestedTitle = nil
@@ -2257,6 +2378,8 @@ final class StudioState: ObservableObject {
                     captionVisualStyle,
                 renderArtifact: renderArtifact,
                 supplementalCaptures: supplementalCaptures,
+                supplementalAudioMixSettings:
+                    supplementalAudioMixSettings,
                 savedClipSelections: savedClipSelections,
                 updatedAt: Date()
             )
