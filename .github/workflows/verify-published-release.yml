@@ -50,15 +50,21 @@ jobs:
           parsed = urlparse(url)
           if parsed.scheme.lower() != "https" or not parsed.hostname:
               raise SystemExit("manifest_url must be an absolute HTTPS URL")
-          host = parsed.hostname.lower()
+          host = parsed.hostname.rstrip(".").lower()
           if (
               host == "localhost"
+              or host == "::1"
               or host.startswith("127.")
+              or host.endswith(".local")
               or host.endswith(".invalid")
               or host.endswith(".example")
               or host.endswith(".test")
           ):
               raise SystemExit("manifest_url must use a real production host")
+          if parsed.username is not None or parsed.password is not None:
+              raise SystemExit("manifest_url must not contain embedded credentials")
+          if parsed.fragment:
+              raise SystemExit("manifest_url must not contain a fragment")
 
           version = os.environ["CURRENT_VERSION"].strip()
           if not re.fullmatch(r"\d+(?:\.\d+){0,3}", version):
