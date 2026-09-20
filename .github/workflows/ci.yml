@@ -313,11 +313,19 @@ jobs:
           EVIDENCE="$RUNNER_TEMP/in-app-update-evidence.json"
           cat > "$EVIDENCE" <<'JSON'
           {
-            "schemaVersion": 4,
+            "schemaVersion": 5,
             "value": {
               "id": "00000000-0000-0000-0000-000000000001",
               "currentVersion": "0.9.0",
               "currentBuild": 90,
+              "currentSourceCommitSHA": "2222222222222222222222222222222222222222",
+              "currentExecutableSHA256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "currentAppPath": "/Applications/Blackstock.app",
+              "currentApplicationTeamID": "ABC123TEAM",
+              "currentDeveloperIDApplicationVerified": true,
+              "currentInstallerReceiptPackageID": "de.blackstock.app",
+              "currentInstallerReceiptVersion": "0.9.0",
+              "currentInstallerReceiptVerified": true,
               "manifestURL": "https://updates.blackstock.app/update-manifest.json",
               "expectedInstallerTeamID": "ABC123TEAM",
               "startedAt": 810000000.0,
@@ -347,6 +355,20 @@ jobs:
           python3 Build/validate_in_app_update_evidence.py "$EVIDENCE"
           cp "$EVIDENCE" "$RUNNER_TEMP/in-app-update-evidence-valid.json"
 
+          cp "$RUNNER_TEMP/in-app-update-evidence-valid.json" "$EVIDENCE"
+          python3 - "$EVIDENCE" <<'PY'
+          import json, sys
+          path = sys.argv[1]
+          data = json.load(open(path))
+          data["value"]["currentAppPath"] = "/Users/test/Blackstock.app"
+          json.dump(data, open(path, "w"))
+          PY
+          if python3 Build/validate_in_app_update_evidence.py "$EVIDENCE"; then
+            echo "Non-production source app path was unexpectedly accepted." >&2
+            exit 1
+          fi
+
+          cp "$RUNNER_TEMP/in-app-update-evidence-valid.json" "$EVIDENCE"
           python3 - "$EVIDENCE" <<'PY'
           import json, sys
           path = sys.argv[1]
@@ -536,11 +558,19 @@ jobs:
           }
 
           updater = {
-              "schemaVersion": 4,
+              "schemaVersion": 5,
               "value": {
                   "id": "00000000-0000-0000-0000-000000000001",
                   "currentVersion": "0.9.0",
                   "currentBuild": 90,
+                  "currentSourceCommitSHA": "2" * 40,
+                  "currentExecutableSHA256": "b" * 64,
+                  "currentAppPath": "/Applications/Blackstock.app",
+                  "currentApplicationTeamID": "ABC123TEAM",
+                  "currentDeveloperIDApplicationVerified": True,
+                  "currentInstallerReceiptPackageID": "de.blackstock.app",
+                  "currentInstallerReceiptVersion": "0.9.0",
+                  "currentInstallerReceiptVerified": True,
                   "manifestURL": "https://updates.blackstock.app/update-manifest.json",
                   "expectedInstallerTeamID": "ABC123TEAM",
                   "startedAt": 810000000.0,
