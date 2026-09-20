@@ -29,6 +29,24 @@ else:
                 "because it can combine untrusted PR context with privileged workflow execution"
             )
 
+        if re.search(r"runs-on:\s*[^\n]*-latest\b", text):
+            errors.append(
+                f"{path.relative_to(ROOT)}: moving *-latest runner labels are forbidden"
+            )
+
+        if "runs-on: macos-26" in text:
+            if (
+                "DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer"
+                not in text
+            ):
+                errors.append(
+                    f"{path.relative_to(ROOT)}: macos-26 workflows must pin Xcode 26.6"
+                )
+            if "Pinned macOS toolchain guard" not in text:
+                errors.append(
+                    f"{path.relative_to(ROOT)}: macos-26 workflows must verify the pinned toolchain before execution"
+                )
+
         if "permissions:\n  contents: read" not in text:
             errors.append(
                 f"{path.relative_to(ROOT)}: workflow must declare top-level "
@@ -105,6 +123,6 @@ if errors:
 print(
     "GitHub Actions supply-chain audit passed: every external workflow "
     "dependency is pinned to an immutable 40-character commit SHA, "
-    "checkout credentials are not persisted, and workflow token permissions "
-    "remain read-only."
+    "checkout credentials are not persisted, runner/toolchain versions are "
+    "pinned, and workflow token permissions remain read-only."
 )
