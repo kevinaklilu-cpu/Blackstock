@@ -125,16 +125,31 @@ struct StudioView: View {
             source,
             approvedProvider: nil
         )
+        let isLinkFirstClip =
+            session.productionIntent(for: project.id)?.isLinkFirstClip == true
+        let remoteIngestRoute = ZeroCostProviderSelector().select(
+            capability: .remoteVideoIngest,
+            providers: [BuiltInProcessingProviders.opusClipAPI]
+        )
 
         return HStack(spacing: 12) {
             Image(systemName: source.provider == .youtube ? "play.rectangle" : "link")
                 .font(.title3)
                 .foregroundStyle(.secondary)
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Opportunity-Quelle")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 7) {
+                    Text("Opportunity-Quelle")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    if isLinkFirstClip {
+                        Label(
+                            "Clip-Vorhaben",
+                            systemImage: "scissors"
+                        )
+                        .font(.caption2.weight(.semibold))
+                    }
+                }
                 Text(source.pageURL.absoluteString)
                     .font(.callout.monospaced())
                     .lineLimit(1)
@@ -142,6 +157,25 @@ struct StudioView: View {
                 Text(resolution.explanation)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                if isLinkFirstClip && source.provider == .youtube {
+                    Text(remoteIngestRoute.explanation)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+
+                    if state.asset == nil && currentStage == .production {
+                        Button {
+                            showImporter = true
+                        } label: {
+                            Label(
+                                "Autorisiertes lokales Original wählen …",
+                                systemImage: "folder"
+                            )
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                }
             }
 
             Spacer()
