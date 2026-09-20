@@ -39,6 +39,7 @@ final class StudioState: ObservableObject {
     @Published var localClipCandidates: [LocalClipCandidate] = []
     @Published var isGeneratingClipCandidates = false
     @Published var clipCandidateStatusMessage: String?
+    @Published var previewedLocalClipCandidateID: UUID?
 
     private var correlationID = UUID()
     private var activeProjectID: UUID?
@@ -48,6 +49,7 @@ final class StudioState: ObservableObject {
         activeProjectID = projectID
         localClipCandidates = []
         clipCandidateStatusMessage = nil
+        previewedLocalClipCandidateID = nil
         isGeneratingClipCandidates = false
 
         do {
@@ -318,6 +320,7 @@ final class StudioState: ObservableObject {
             asset = imported
             localClipCandidates = []
             clipCandidateStatusMessage = nil
+            previewedLocalClipCandidateID = nil
             graph = EditGraph(createdAt: Date())
             ledger = ActivityLedger()
             correlationID = UUID()
@@ -800,6 +803,86 @@ final class StudioState: ObservableObject {
         }
     }
 
+    func previewLocalClipCandidate(
+        _ candidate: LocalClipCandidate
+    ) async {
+        guard let asset else {
+            errorMessage =
+                "Kein Produktionsmedium geladen."
+            return
+        }
+
+        let start = min(
+            max(candidate.sourceRange.startSeconds, 0),
+            asset.durationSeconds
+        )
+        let end = min(
+            max(candidate.sourceRange.endSeconds, start),
+            asset.durationSeconds
+        )
+        guard end - start > 0.05 else {
+            errorMessage =
+                "Der vorgeschlagene Clip-Bereich ist nicht mehr gültig."
+            return
+        }
+
+        do {
+            let source = AVURLAsset(
+                url: asset.sourceURL
+            )
+            let composition = AVMutableComposition()
+            let range = CMTimeRange(
+                start: CMTime(
+                    seconds: start,
+                    preferredTimescale: 600
+                ),
+                duration: CMTime(
+                    seconds: end - start,
+                    preferredTimescale: 600
+                )
+            )
+            try await composition.insertTimeRange(
+                range,
+                of: source,
+                at: .zero
+            )
+
+            player.pause()
+            player.replaceCurrentItem(
+                with: AVPlayerItem(
+                    asset: composition
+                )
+            )
+            await player.seek(to: .zero)
+            player.play()
+            previewedLocalClipCandidateID =
+                candidate.id
+            clipCandidateStatusMessage =
+                "Kandidaten-Vorschau läuft im Hauptplayer. Der EditGraph wurde nicht verändert."
+            errorMessage = nil
+        } catch {
+            previewedLocalClipCandidateID = nil
+            errorMessage =
+                "Clip-Kandidat konnte nicht vorgespielt werden: "
+                + error.localizedDescription
+        }
+    }
+
+    func restoreEditedPreview() async {
+        do {
+            player.pause()
+            try await rebuildPreview()
+            previewedLocalClipCandidateID = nil
+            clipCandidateStatusMessage =
+                "Aktuelle Schnittvorschau wiederhergestellt."
+            errorMessage = nil
+        } catch {
+            errorMessage =
+                "Schnittvorschau konnte nicht wiederhergestellt werden: "
+                + error.localizedDescription
+        }
+    }
+
     func applyLocalClipCandidate(
         _ candidate: LocalClipCandidate
     ) async {
@@ -839,6 +922,7 @@ final class StudioState: ObservableObject {
 
         trimStart = start
         trimEnd = end
+        previewedLocalClipCandidateID = nil
         lastUndoneRevisionID = nil
         renderArtifact = nil
         transcript = nil
