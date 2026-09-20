@@ -18,9 +18,11 @@ requirements = {
         "rightsConfirmed",
     ],
     "Sources/BlackstockCore/StudioWorkspaceSnapshot.swift": [
-        "public static let current = 4",
+        "public static let current = 5",
         "supplementalCaptures",
         "importSupplementalCapture",
+        "importSupplementalVideoCapture",
+        "supplementalVideoInsertSettings",
         'appendingPathComponent("Captures"',
     ],
     "Sources/BlackstockApp/CaptureCapabilityProbe.swift": [
@@ -69,12 +71,16 @@ requirements = {
         "supplementalCaptures",
         "importSupplementalCapture(",
         '"supplemental-capture-imported"',
+        "supplementalVideoInsertSettings",
+        "SupplementalVideoInsertInput",
     ],
     "Sources/BlackstockApp/StudioView.swift": [
         "if captureKind == .microphone",
         "state.importSupplementalCapture(",
         "state.importMovie(",
         '"Zusätzliche Aufnahmen"',
+        '"Als visuelle Einblendung verwenden"',
+        "setSupplementalVideoEnabled",
     ],
     "Tests/BlackstockCoreTests/CaptureCapabilityTests.swift": [
         "testAllCanonicalCaptureKindsAreRepresented",

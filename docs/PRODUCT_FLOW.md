@@ -120,6 +120,17 @@ Nach der lokalen On-Device-Transkription kann der Nutzer **„Sichtbare Captions
 - Aktivieren oder Deaktivieren invalidiert einen bestehenden Render, damit Packaging nie still ein Video mit einer anderen Caption-Konfiguration verwendet.
 - Alles läuft lokal; für Burn-in-Captions ist kein Cloud-Provider erforderlich.
 
+## Visuelle Zusatzaufnahmen
+
+Kamera- und Bildschirmaufnahmen können nach dem Hauptmedium als zusätzliche projektgebundene Produktionsmedien gespeichert werden, ohne den Hauptschnitt zu ersetzen.
+
+- Jede zusätzliche Videoaufnahme behält Rechte-Provenance und gemessene Dauer.
+- Der Nutzer kann sie als zeitgesteuerte visuelle Einblendung aktivieren und Zielstart, Quellstart sowie Dauer festlegen.
+- Die Einblendung ersetzt im gewählten Zeitfenster nur das Bild; der Hauptton des aktuellen Schnitts läuft weiter.
+- Bereiche werden deterministisch an Quell- und Ausgabedauer begrenzt; leere oder nicht nutzbare Bereiche werden nicht gerendert.
+- Der finale AVFoundation-Render führt die Einblendungen vor Caption-/Text-Burn-in aus, sodass sichtbare Captions und Text-Overlays darüber korrekt erhalten bleiben.
+- Änderungen an visuellen Einblendungen invalidieren veraltete Render- und Packaging-Artefakte.
+
 ## Multi-Clip-Ausgabe und Packaging
 
 Gespeicherte lokale Clip-Kandidaten können als eigene validierte MP4-Dateien gerendert werden. Danach stehen zwei getrennte Nutzeraktionen zur Verfügung:
