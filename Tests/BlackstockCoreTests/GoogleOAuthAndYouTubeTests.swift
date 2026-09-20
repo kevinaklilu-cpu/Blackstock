@@ -80,7 +80,7 @@ final class GoogleOAuthAndYouTubeTests: XCTestCase {
         }
     }
 
-    func testOAuthJSONDoesNotExposeOrPersistClientSecret() throws {
+    func testOAuthJSONParsesDesktopClientSecretForKeychainBackedExchange() throws {
         let data = Data(#"""
         {
           "installed": {
@@ -106,11 +106,9 @@ final class GoogleOAuthAndYouTubeTests: XCTestCase {
             ["http://localhost"]
         )
 
-        let reflected = String(
-            reflecting: config
-        )
-        XCTAssertFalse(
-            reflected.contains("must-not-be-retained")
+        XCTAssertEqual(
+            config.clientSecret,
+            "must-not-be-retained"
         )
     }
 
