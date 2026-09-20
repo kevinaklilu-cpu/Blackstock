@@ -1059,6 +1059,57 @@ struct StudioView: View {
                 Divider()
 
                 VStack(alignment: .leading, spacing: 10) {
+                    Text("Hauptton")
+                        .font(.headline)
+
+                    HStack {
+                        Text("Lautstärke")
+                        Spacer()
+                        Text(
+                            "\(Int((state.masterVolume * 100).rounded())) %"
+                        )
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                    }
+
+                    Slider(
+                        value: $state.masterVolume,
+                        in: 0...1,
+                        step: 0.05
+                    )
+                    .disabled(!editingEnabled)
+                    .accessibilityLabel("Lautstärke des Haupttons")
+                    .accessibilityValue(
+                        "\(Int((state.masterVolume * 100).rounded())) Prozent"
+                    )
+
+                    Button {
+                        Task {
+                            await state.applyMasterVolume()
+                        }
+                    } label: {
+                        Label(
+                            "Lautstärke anwenden",
+                            systemImage: "speaker.wave.2"
+                        )
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(
+                        !editingEnabled
+                        || abs(
+                            state.masterVolume
+                            - state.appliedMasterVolume
+                        ) < 0.001
+                    )
+
+                    Text("Die Änderung wird als non-destruktive EditGraph-Revision gespeichert. Zusatzspuren behalten ihre jeweils eigene Lautstärke; die finale Audio-QC misst den gesamten gerenderten Mix.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 10) {
                     Text("Render")
                         .font(.headline)
 
