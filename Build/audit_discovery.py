@@ -13,8 +13,8 @@ REQUIRED = {
         "reloadOpportunities(order:",
     ],
     "Sources/BlackstockApp/FirstRunView.swift": [
-        "Reale YouTube-Signale",
-        "Rohdaten von YouTube · keine abgeleiteten Scores",
+        'Text("Videos")',
+        'Text("YouTube-Daten")',
         "Blackstock ersetzt fehlende Werte nicht durch Schätzungen.",
         "Datenabruf:",
         "offiziellen Search-Order-Parameter",
