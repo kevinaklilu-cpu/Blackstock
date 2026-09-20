@@ -19,7 +19,6 @@ checks = {
         "performOAuthAuthorization(",
         "YouTubeAuthorizedClient(",
         "YouTubeChannelSetupClient(",
-        "applyAndVerify(",
         "channelCategoryID",
         "regionCode: channelRegionCode",
         "relevanceLanguage: contentLanguage",
@@ -132,6 +131,6 @@ if errors:
 
 print(
     "End-to-end flow audit passed: Google/channel -> playable YouTube video -> "
-    "structured YouTube setup -> clip project -> automatic highlights -> validated render -> publishing -> "
+    "local structured setup -> clip project -> automatic highlights -> validated render -> publishing -> "
     "playable published video analysis remain connected."
 )
