@@ -58,6 +58,8 @@ jobs:
         run: python3 Build/audit_research.py
       - name: Product journey audit
         run: python3 Build/audit_journey.py
+      - name: UI feature coverage audit
+        run: python3 Build/audit_ui_feature_coverage.py
       - name: Capture foundation audit
         run: python3 Build/audit_capture.py
       - name: Capture hardware evidence validator audit
