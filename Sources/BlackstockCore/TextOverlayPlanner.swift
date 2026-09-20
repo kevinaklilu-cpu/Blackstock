@@ -35,7 +35,19 @@ public struct TextOverlayPlanner: Sendable {
         let outputDuration = max(outputDurationSeconds, 0)
         guard outputDuration > 0 else { return [] }
 
-        return operations.compactMap { operation in
+        let lastStructuralEditIndex = operations.lastIndex {
+            $0.type == .trim || $0.type == .removeRange
+        }
+        let activeOperations: ArraySlice<EditOperation>
+        if let lastStructuralEditIndex {
+            activeOperations = operations[
+                operations.index(after: lastStructuralEditIndex)...
+            ]
+        } else {
+            activeOperations = operations[...]
+        }
+
+        return activeOperations.compactMap { operation in
             guard operation.type == .overlay,
                   let range = operation.timeRange else {
                 return nil
