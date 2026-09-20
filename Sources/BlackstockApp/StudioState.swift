@@ -1251,8 +1251,9 @@ final class StudioState: ObservableObject {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let firstSentence = normalized
             .split(
-                whereSeparator: { ".!?".contains($0) },
-                maxSplits: 1
+                maxSplits: 1,
+                omittingEmptySubsequences: true,
+                whereSeparator: { ".!?".contains($0) }
             )
             .first
             .map(String.init)?
