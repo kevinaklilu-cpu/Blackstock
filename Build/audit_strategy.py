@@ -22,12 +22,12 @@ REQUIRED = {
     ],
     "Sources/BlackstockApp/FirstRunView.swift": [
         "Content-Versprechen",
-        "Zielgruppen-Hypothese",
+        "Zielgruppe",
         "Inhaltliche Säulen",
         "Angrenzende Themen",
         "Ausgeschlossene Themen",
         "Hauptziel",
-        "Blackstock erfindet keine Zielgruppe",
+        "Thema und Zielgruppe reichen für den Start.",
     ],
     "Sources/BlackstockApp/BlackstockSession.swift": [
         "ChannelStrategyDraft(",
