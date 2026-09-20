@@ -20,6 +20,7 @@ struct StudioView: View {
     @State private var rightsEvidence = ""
     @State private var rightsConfirmed = false
     @State private var showPackagingReview = false
+    @State private var showClipExportFolderImporter = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -49,6 +50,18 @@ struct StudioView: View {
                 rightsConfirmed = false
                 rightsSelection = .owned
                 showRightsSheet = true
+            }
+        }
+        .fileImporter(
+            isPresented: $showClipExportFolderImporter,
+            allowedContentTypes: [.folder],
+            allowsMultipleSelection: false
+        ) { result in
+            if case .success(let urls) = result,
+               let directoryURL = urls.first {
+                state.exportRenderedSavedClips(
+                    to: directoryURL
+                )
             }
         }
         .sheet(isPresented: $showRightsSheet) {
@@ -484,6 +497,34 @@ struct StudioView: View {
                             || state.renderingSavedClipID != nil
                             || !editingEnabled
                         )
+
+                        Button {
+                            showClipExportFolderImporter = true
+                        } label: {
+                            HStack {
+                                if state.isExportingSavedClipBatch {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                }
+                                Label(
+                                    state.isExportingSavedClipBatch
+                                        ? "Exportiert …"
+                                        : "Exportieren …",
+                                    systemImage:
+                                        "square.and.arrow.up"
+                                )
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(
+                            state.isExportingSavedClipBatch
+                            || !state.savedClipSelections
+                                .contains {
+                                    $0.renderArtifact?
+                                        .hasCurrentTechnicalValidation
+                                        == true
+                                }
+                        )
                     }
 
                     ForEach(
@@ -673,6 +714,10 @@ struct StudioView: View {
                     }
 
                     Text("„In Timeline laden“ verändert nur die Auswahlregler. Erst „Als Trim setzen“ schreibt die gespeicherte Clip-Auswahl in den EditGraph.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+
+                    Text("„Exportieren …“ kopiert alle bereits validiert gerenderten Clips in deinen Zielordner. Vorhandene Clip-Transkripte werden als WebVTT mit ausgegeben; eine Blackstock-JSON-Datei bindet Dateinamen, Quell-Zeitbereiche und Render-SHA-256 zusammen.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
