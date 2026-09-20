@@ -24,10 +24,10 @@ checks = {
     ],
     "Sources/BlackstockApp/WorkspaceProductViews.swift": [
         "struct OpportunityWorkspaceView",
-        "Als neues Projekt übernehmen",
-        "Keine erfundenen Scores",
+        "Projekt starten",
+        'Text("Entdecken")',
         "struct ProjectLibraryView",
-        "Neue Chance finden",
+        'Button("Entdecken")',
         "session.projects",
     ],
     "Sources/BlackstockApp/BlackstockSession.swift": [
