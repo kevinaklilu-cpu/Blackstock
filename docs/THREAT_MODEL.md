@@ -74,7 +74,10 @@ Nicht als durch die App lösbar angenommen werden vollständige Kompromittierung
 ### Build- und Workflow-Supply-Chain
 
 - Externe GitHub Actions müssen in allen Workflow-Dateien auf vollständige 40-stellige Commit-SHAs gepinnt sein.
-- Canonical-CI führt `Build/audit_github_actions_supply_chain.py` aus und blockiert bewegliche Action-Tags sowie `docker://`-Actions.
+- `actions/checkout` muss `persist-credentials: false` verwenden; der Checkout hinterlegt damit keinen wiederverwendbaren Repository-Token in der lokalen Git-Konfiguration.
+- Jeder Workflow muss den `GITHUB_TOKEN` top-level auf `contents: read` begrenzen; Write-Berechtigungen werden vom Supply-Chain-Audit blockiert.
+- `pull_request_target` ist verboten, damit untrusted Pull-Request-Kontext nicht mit privilegierter Ausführung kombiniert wird.
+- Canonical-CI führt `Build/audit_github_actions_supply_chain.py` aus und blockiert bewegliche Action-Tags, `docker://`-Actions, persistierte Checkout-Credentials und schreibfähige Workflow-Tokens.
 - Die produktionskritischen Checkout- und Artifact-Actions sind auf verifizierte Release-Commits gepinnt.
 - Dependabot darf Aktualisierungen als überprüfbare Pull Requests vorschlagen; es ändert die Produktionskette nicht stillschweigend zur Laufzeit.
 
