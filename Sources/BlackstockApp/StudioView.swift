@@ -564,6 +564,21 @@ struct StudioView: View {
                     }
                     .pickerStyle(.menu)
 
+                    Button {
+                        state.prepareShortFormSetup()
+                    } label: {
+                        Label(
+                            "Shorts/Reels-Setup vorbereiten",
+                            systemImage: "rectangle.portrait.and.arrow.right"
+                        )
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(!editingEnabled)
+
+                    Text("Bereitet 9:16 und den kräftigen Untertitelstil vor. Wenn bereits ein lokales Transkript existiert, werden sichtbare Untertitel ebenfalls aktiviert. Erst „Ausschnitt anwenden“ schreibt den Reframe in den EditGraph.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
                             Text("Fokus horizontal")
