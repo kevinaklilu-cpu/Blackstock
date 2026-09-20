@@ -206,7 +206,7 @@ struct StudioView: View {
                 .foregroundStyle(.secondary)
             Text("Autorisiertes Produktionsvideo hinzufügen")
                 .font(.title2.bold())
-            Text("Nach deiner einmaligen Workspace-Erklärung übernimmt Blackstock Produktionsmedien ohne zusätzlichen Lizenz-Upload in die Bearbeitung und bindet Quelle und Projekt automatisch.")
+            Text("Nach deiner einmaligen Arbeitsbereich-Erklärung übernimmt Blackstock Produktionsmedien ohne zusätzlichen Lizenz-Upload in die Bearbeitung und bindet Quelle und Projekt automatisch.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: 520)
