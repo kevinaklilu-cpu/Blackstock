@@ -18,10 +18,16 @@ public struct DeterministicQualityEvidenceBuilder: Sendable {
         var evidence: [QualityEvidence] = []
         var findings: [QualityFinding] = []
 
+        let usesWorkspaceDeclaration =
+            asset.authorization == .userDeclaredResponsibility
         let rightsEvidence = QualityEvidence(
             source: "Rights Ledger",
             observedFact: asset.mayEnterProduction
-                ? "Produktionsmedium besitzt Rechtebestätigung und Nachweis."
+                ? (
+                    usesWorkspaceDeclaration
+                    ? "Produktionsmedium besitzt eine gespeicherte Nutzererklärung zur Nutzungsverantwortung und nachvollziehbare Quellen-Provenance."
+                    : "Produktionsmedium besitzt Rechtebestätigung und Nachweis."
+                )
                 : "Produktionsmedium besitzt keine ausreichende Rechtefreigabe.",
             reference: asset.id.uuidString,
             observedAt: reviewedAt
@@ -32,7 +38,11 @@ public struct DeterministicQualityEvidenceBuilder: Sendable {
                 area: .rightsAndPolicy,
                 severity: asset.mayEnterProduction ? .info : .blocker,
                 title: asset.mayEnterProduction
-                    ? "Rechte-Nachweis vorhanden"
+                    ? (
+                        usesWorkspaceDeclaration
+                        ? "Nutzungsverantwortung bestätigt"
+                        : "Rechte-Nachweis vorhanden"
+                    )
                     : "Rechte-Nachweis unvollständig",
                 explanation: rightsEvidence.observedFact,
                 recommendedAction: asset.mayEnterProduction
