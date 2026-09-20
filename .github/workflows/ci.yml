@@ -775,6 +775,40 @@ jobs:
           assert values.get("com.apple.security.device.camera") is True
           assert values.get("com.apple.security.device.audio-input") is True
           PY
+
+          APP_INFO="/Applications/Blackstock.app/Contents/Info.plist"
+          APP_BIN="/Applications/Blackstock.app/Contents/MacOS/Blackstock"
+          python3 - "$APP_INFO" "$RECEIPT" "$APP_BIN" "$RUNNER_TEMP/dist/installed-release-fingerprint.json" <<'PY'
+          import hashlib
+          import json
+          import plistlib
+          import pathlib
+          import platform
+          import sys
+
+          with open(sys.argv[1], "rb") as handle:
+              info = plistlib.load(handle)
+          with open(sys.argv[2], "rb") as handle:
+              receipt = plistlib.load(handle)
+
+          executable = pathlib.Path(sys.argv[3])
+          fingerprint = {
+              "schemaVersion": 1,
+              "runnerArchitecture": platform.machine(),
+              "bundleIdentifier": info["CFBundleIdentifier"],
+              "version": info["CFBundleShortVersionString"],
+              "build": info["CFBundleVersion"],
+              "sourceCommitSHA": info["BlackstockSourceCommitSHA"].lower(),
+              "executableSHA256": hashlib.sha256(executable.read_bytes()).hexdigest(),
+              "installerReceiptPackageID": receipt["pkgid"],
+              "installerReceiptVersion": receipt["pkg-version"],
+              "installerReceiptVolume": receipt["volume"],
+              "installerReceiptInstallLocation": receipt["install-location"],
+          }
+          pathlib.Path(sys.argv[4]).write_text(
+              json.dumps(fingerprint, indent=2, sort_keys=True) + "\n"
+          )
+          PY
       - name: Launch installed app on clean runner
         run: |
           set -euo pipefail
@@ -833,12 +867,24 @@ jobs:
           assert data["persistenceRoundTrip"] is True
           PY
 
+      - name: Upload Intel release identity evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: Blackstock-intel-release-identity
+          path: |
+            ${{ runner.temp }}/intel-installed-release-fingerprint.json
+            ${{ runner.temp }}/blackstock-intel-clean-machine-e2e.json
+            ${{ runner.temp }}/blackstock-intel-clean-machine-e2e.log
+          retention-days: 7
+          if-no-files-found: error
+
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: Blackstock-development-pkg
           path: |
             ${{ runner.temp }}/dist/Blackstock.pkg
             ${{ runner.temp }}/dist/Blackstock.pkg.sha256
+            ${{ runner.temp }}/dist/installed-release-fingerprint.json
           retention-days: 7
 
   intel-smoke:
@@ -865,6 +911,7 @@ jobs:
           cd "$RUNNER_TEMP/intel-package"
           test -s Blackstock.pkg
           test -s Blackstock.pkg.sha256
+          test -s installed-release-fingerprint.json
           EXPECTED_SHA="$(awk '{print $1}' Blackstock.pkg.sha256)"
           ACTUAL_SHA="$(shasum -a 256 Blackstock.pkg | awk '{print $1}')"
           test "$EXPECTED_SHA" = "$ACTUAL_SHA"
@@ -882,6 +929,80 @@ jobs:
           lipo -verify_arch arm64 x86_64 /Applications/Blackstock.app/Contents/Helpers/BlackstockE2ESmoke
           test "$(/usr/libexec/PlistBuddy -c 'Print :BlackstockSourceCommitSHA' /Applications/Blackstock.app/Contents/Info.plist)" = "${GITHUB_SHA}"
           codesign --verify --deep --strict --verbose=2 /Applications/Blackstock.app
+
+          RECEIPT="$RUNNER_TEMP/intel-installer-receipt.plist"
+          pkgutil --pkg-info-plist de.blackstock.app > "$RECEIPT"
+          APP_INFO="/Applications/Blackstock.app/Contents/Info.plist"
+          APP_BIN="/Applications/Blackstock.app/Contents/MacOS/Blackstock"
+          INTEL_FINGERPRINT="$RUNNER_TEMP/intel-installed-release-fingerprint.json"
+
+          python3 - "$APP_INFO" "$RECEIPT" "$APP_BIN" "$INTEL_FINGERPRINT" <<'PY'
+          import hashlib
+          import json
+          import plistlib
+          import pathlib
+          import platform
+          import sys
+
+          with open(sys.argv[1], "rb") as handle:
+              info = plistlib.load(handle)
+          with open(sys.argv[2], "rb") as handle:
+              receipt = plistlib.load(handle)
+
+          executable = pathlib.Path(sys.argv[3])
+          fingerprint = {
+              "schemaVersion": 1,
+              "runnerArchitecture": platform.machine(),
+              "bundleIdentifier": info["CFBundleIdentifier"],
+              "version": info["CFBundleShortVersionString"],
+              "build": info["CFBundleVersion"],
+              "sourceCommitSHA": info["BlackstockSourceCommitSHA"].lower(),
+              "executableSHA256": hashlib.sha256(executable.read_bytes()).hexdigest(),
+              "installerReceiptPackageID": receipt["pkgid"],
+              "installerReceiptVersion": receipt["pkg-version"],
+              "installerReceiptVolume": receipt["volume"],
+              "installerReceiptInstallLocation": receipt["install-location"],
+          }
+          pathlib.Path(sys.argv[4]).write_text(
+              json.dumps(fingerprint, indent=2, sort_keys=True) + "\n"
+          )
+          PY
+
+          python3 - "$RUNNER_TEMP/intel-package/installed-release-fingerprint.json" "$INTEL_FINGERPRINT" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          apple = json.loads(pathlib.Path(sys.argv[1]).read_text())
+          intel = json.loads(pathlib.Path(sys.argv[2]).read_text())
+
+          if apple.get("runnerArchitecture") != "arm64":
+              raise SystemExit("Apple-Silicon fingerprint did not originate from arm64")
+          if intel.get("runnerArchitecture") != "x86_64":
+              raise SystemExit("Intel fingerprint did not originate from x86_64")
+
+          identity_fields = [
+              "schemaVersion",
+              "bundleIdentifier",
+              "version",
+              "build",
+              "sourceCommitSHA",
+              "executableSHA256",
+              "installerReceiptPackageID",
+              "installerReceiptVersion",
+              "installerReceiptVolume",
+              "installerReceiptInstallLocation",
+          ]
+          mismatches = [
+              key for key in identity_fields
+              if apple.get(key) != intel.get(key)
+          ]
+          if mismatches:
+              raise SystemExit(
+                  "Cross-architecture installed release identity mismatch: "
+                  + ", ".join(mismatches)
+              )
+          PY
 
       - name: Launch installed app natively on Intel
         run: |
