@@ -11,6 +11,7 @@ public struct StudioWorkspaceSnapshot: Codable, Sendable, Equatable {
     public let transcript: LocalTranscript?
     public let captionURL: URL?
     public let burnInCaptionsEnabled: Bool?
+    public let captionVisualStyle: CaptionVisualStyle?
     public let renderArtifact: RenderArtifact?
     public let supplementalCaptures: [SupplementalCaptureAsset]?
     public let updatedAt: Date
@@ -26,6 +27,7 @@ public struct StudioWorkspaceSnapshot: Codable, Sendable, Equatable {
         transcript: LocalTranscript?,
         captionURL: URL?,
         burnInCaptionsEnabled: Bool? = nil,
+        captionVisualStyle: CaptionVisualStyle? = nil,
         renderArtifact: RenderArtifact?,
         supplementalCaptures: [SupplementalCaptureAsset] = [],
         updatedAt: Date
@@ -41,6 +43,8 @@ public struct StudioWorkspaceSnapshot: Codable, Sendable, Equatable {
         self.captionURL = captionURL
         self.burnInCaptionsEnabled =
             burnInCaptionsEnabled
+        self.captionVisualStyle =
+            captionVisualStyle
         self.renderArtifact = renderArtifact
         self.supplementalCaptures = supplementalCaptures
         self.updatedAt = updatedAt
