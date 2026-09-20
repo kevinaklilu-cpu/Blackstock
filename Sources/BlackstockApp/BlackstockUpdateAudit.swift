@@ -79,6 +79,17 @@ enum BlackstockUpdateAudit {
             return
         }
 
+        let installedAppPath = bundle.bundleURL
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+            .path
+        let signing = applicationSigningMetadata(
+            bundleURL: bundle.bundleURL
+        )
+        let receipt = installerReceiptMetadata(
+            expectedVersion: installed.version
+        )
+
         do {
             _ = try productionStore()
                 .recordPostUpdateLaunchIfMatching(
@@ -90,6 +101,18 @@ enum BlackstockUpdateAudit {
                         installed.sourceCommitSHA,
                     installedExecutableSHA256:
                         executableSHA256,
+                    installedAppPath:
+                        installedAppPath,
+                    applicationTeamID:
+                        signing.teamID,
+                    developerIDApplicationVerified:
+                        signing.verified,
+                    installerReceiptPackageID:
+                        receipt.packageID,
+                    installerReceiptVersion:
+                        receipt.version,
+                    installerReceiptVerified:
+                        receipt.verified,
                     now: now
                 )
         } catch {
@@ -153,6 +176,121 @@ enum BlackstockUpdateAudit {
         return hasher.finalize().map {
             String(format: "%02x", $0)
         }.joined()
+    }
+
+    private static func applicationSigningMetadata(
+        bundleURL: URL
+    ) -> (
+        teamID: String,
+        verified: Bool
+    ) {
+        let process = Process()
+        process.executableURL = URL(
+            fileURLWithPath: "/usr/bin/codesign"
+        )
+        process.arguments = [
+            "--display",
+            "--verbose=4",
+            bundleURL.path
+        ]
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+            guard process.terminationStatus == 0 else {
+                return ("", false)
+            }
+            let output = String(
+                decoding: pipe.fileHandleForReading
+                    .readDataToEndOfFile(),
+                as: UTF8.self
+            )
+            let prefix = "TeamIdentifier="
+            guard let line = output
+                    .split(whereSeparator: { $0.isNewline })
+                    .map(String.init)
+                    .first(where: {
+                        $0.hasPrefix(prefix)
+                    }) else {
+                return ("", false)
+            }
+            let teamID = String(
+                line.dropFirst(prefix.count)
+            ).trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+            return (
+                teamID,
+                output.contains(
+                    "Authority=Developer ID Application"
+                )
+            )
+        } catch {
+            return ("", false)
+        }
+    }
+
+    private static func installerReceiptMetadata(
+        expectedVersion: String
+    ) -> (
+        packageID: String,
+        version: String,
+        verified: Bool
+    ) {
+        let expectedPackageID = "de.blackstock.app"
+        let process = Process()
+        process.executableURL = URL(
+            fileURLWithPath: "/usr/sbin/pkgutil"
+        )
+        process.arguments = [
+            "--pkg-info-plist",
+            expectedPackageID
+        ]
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+            guard process.terminationStatus == 0 else {
+                return ("", "", false)
+            }
+            let data = pipe.fileHandleForReading
+                .readDataToEndOfFile()
+            guard let plist =
+                    try PropertyListSerialization
+                        .propertyList(
+                            from: data,
+                            options: [],
+                            format: nil
+                        ) as? [String: Any],
+                  let packageID =
+                    plist["pkgid"] as? String,
+                  let version =
+                    plist["pkg-version"] as? String else {
+                return ("", "", false)
+            }
+
+            let volume = plist["volume"] as? String
+            let installLocation =
+                plist["install-location"] as? String
+            return (
+                packageID,
+                version,
+                packageID == expectedPackageID
+                    && version == expectedVersion
+                    && volume == "/"
+                    && installLocation == "/"
+            )
+        } catch {
+            return ("", "", false)
+        }
     }
 
     private static func installedVersion(
