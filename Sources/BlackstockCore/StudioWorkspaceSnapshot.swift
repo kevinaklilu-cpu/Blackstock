@@ -14,6 +14,7 @@ public struct StudioWorkspaceSnapshot: Codable, Sendable, Equatable {
     public let captionVisualStyle: CaptionVisualStyle?
     public let renderArtifact: RenderArtifact?
     public let supplementalCaptures: [SupplementalCaptureAsset]?
+    public let savedClipSelections: [SavedClipSelection]?
     public let updatedAt: Date
 
     public init(
@@ -30,6 +31,7 @@ public struct StudioWorkspaceSnapshot: Codable, Sendable, Equatable {
         captionVisualStyle: CaptionVisualStyle? = nil,
         renderArtifact: RenderArtifact?,
         supplementalCaptures: [SupplementalCaptureAsset] = [],
+        savedClipSelections: [SavedClipSelection] = [],
         updatedAt: Date
     ) {
         self.projectID = projectID
@@ -47,6 +49,7 @@ public struct StudioWorkspaceSnapshot: Codable, Sendable, Equatable {
             captionVisualStyle
         self.renderArtifact = renderArtifact
         self.supplementalCaptures = supplementalCaptures
+        self.savedClipSelections = savedClipSelections
         self.updatedAt = updatedAt
     }
 }
