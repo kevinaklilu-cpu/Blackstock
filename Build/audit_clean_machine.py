@@ -54,6 +54,13 @@ requirements = {
         "Launch installed app natively on Intel",
         "Run installed creator-loop E2E natively on Intel",
         "blackstock-intel-clean-machine-e2e.json",
+        "installed-release-fingerprint.json",
+        "intel-installed-release-fingerprint.json",
+        "Cross-architecture installed release identity mismatch",
+        '"executableSHA256"',
+        '"installerReceiptPackageID"',
+        '"installerReceiptVersion"',
+        '"runnerArchitecture"',
     ],
 }
 
