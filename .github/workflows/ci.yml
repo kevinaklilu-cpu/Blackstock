@@ -635,6 +635,15 @@ jobs:
           test "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["captureEvidenceSHA256"])' "$ROOT/market-readiness.json")" = "$CAPTURE_EVIDENCE_SHA"
           test "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["productionReleaseEvidenceSHA256"])' "$ROOT/market-readiness.json")" = "$RELEASE_EVIDENCE_SHA"
           test "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["inAppUpdateEvidenceSHA256"])' "$ROOT/market-readiness.json")" = "$UPDATER_EVIDENCE_SHA"
+
+          if python3 Build/verify_market_readiness.py \
+            --capture-evidence "$ROOT/capture.json" \
+            --production-release-evidence "$ROOT/release.json" \
+            --in-app-update-evidence "$ROOT/updater.json" \
+            --output "$ROOT/capture.json"; then
+            echo "Market readiness unexpectedly allowed output to overwrite capture evidence." >&2
+            exit 1
+          fi
           grep -q '"sourceAppPath": "/Applications/Blackstock.app"' "$ROOT/market-readiness.json"
           grep -q '"installedAppPath": "/Applications/Blackstock.app"' "$ROOT/market-readiness.json"
           grep -q '"sourceInstallerReceiptVersion": "0.9.0"' "$ROOT/market-readiness.json"
