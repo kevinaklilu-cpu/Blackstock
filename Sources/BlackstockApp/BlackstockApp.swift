@@ -373,7 +373,7 @@ private struct OverviewView: View {
                                 BlackstockStage.canonicalProgressCount
                             )
                         )
-                        .accessibilityLabel("Fortschritt im kanonischen Blackstock-Projektpfad")
+                        .accessibilityLabel("Projektfortschritt")
                         .accessibilityValue(
                             "Schritt \(project.stage.canonicalProgressPosition) von \(BlackstockStage.canonicalProgressCount)"
                         )
@@ -752,7 +752,7 @@ private struct ResearchAnalysisJourneyView: View {
     var body: some View {
         GroupBox(
             project.stage == .research
-                ? "Recherchebelege"
+                ? "Recherche"
                 : "Analyse & Produktionsentscheidung"
         ) {
             VStack(alignment: .leading, spacing: 12) {
@@ -760,11 +760,11 @@ private struct ResearchAnalysisJourneyView: View {
                     for: project.id
                 )?.isLinkFirstClip == true {
                     Label(
-                        "Clip-Vorhaben aus Opportunity",
+                        "Clip-Projekt",
                         systemImage: "scissors"
                     )
                     .font(.headline)
-                    Text("Der ausgewählte Quelllink bleibt an dieses Projekt gebunden. Research und Analyse werden trotzdem vollständig abgeschlossen, bevor Blackstock ein Produktionsmedium übernimmt.")
+                    Text("Das ausgewählte Video bleibt mit diesem Projekt verknüpft.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Divider()
@@ -799,7 +799,7 @@ private struct ResearchAnalysisJourneyView: View {
             projectID: project.id
         ) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Eingefrorene Provider-Fakten")
+                Text("Videodaten")
                     .font(.headline)
                 ForEach(
                     Array(record.providerFacts.enumerated()),
@@ -834,7 +834,7 @@ private struct ResearchAnalysisJourneyView: View {
                         .stroke(Color.secondary.opacity(0.25))
                 )
 
-            Text("Provider-Fakten werden nicht überschrieben. Deine eigene Einordnung wird separat gespeichert.")
+            Text("Die Angaben zum Video bleiben unverändert; deine Notizen werden separat gespeichert.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -852,7 +852,7 @@ private struct ResearchAnalysisJourneyView: View {
             .buttonStyle(.borderedProminent)
         } else {
             Label(
-                "Gebundene Recherchebelege fehlen. Das Projekt kann nicht fortgesetzt werden.",
+                "Gebundene Recherche fehlen. Das Projekt kann nicht fortgesetzt werden.",
                 systemImage: "exclamationmark.triangle"
             )
             .foregroundStyle(.red)
@@ -865,7 +865,7 @@ private struct ResearchAnalysisJourneyView: View {
             projectID: project.id
         ), research.isComplete {
             VStack(alignment: .leading, spacing: 5) {
-                Text("Belegte Recherche")
+                Text("Recherche")
                     .font(.headline)
                 Text(research.researchQuestion)
                     .font(.callout.weight(.semibold))
@@ -920,7 +920,7 @@ private struct ResearchAnalysisJourneyView: View {
             .buttonStyle(.borderedProminent)
         } else {
             Label(
-                "Vollständige Recherchebelege fehlen. Analyse ist gesperrt.",
+                "Vollständige Recherche fehlen. Analyse ist gesperrt.",
                 systemImage: "lock.fill"
             )
         }
@@ -1277,7 +1277,7 @@ private struct SettingsView: View {
 
                         Label(
                             evidence.deniedPermissionHardStopPassed
-                                ? "Verweigerte Berechtigungen: Hard-Stop belegt"
+                                ? "Berechtigungen korrekt behandelt"
                                 : "Verweigerte Berechtigungen noch nicht vollständig getestet",
                             systemImage:
                                 evidence.deniedPermissionHardStopPassed
@@ -1288,8 +1288,8 @@ private struct SettingsView: View {
 
                         Label(
                             evidence.temporaryCleanupPassed
-                                ? "Temporäre Capture-Dateien: Cleanup belegt"
-                                : "Temporärer Cleanup noch nicht für alle Pfade belegt",
+                                ? "Temporäre Aufnahmedateien bereinigt"
+                                : "Bereinigung noch nicht vollständig geprüft",
                             systemImage:
                                 evidence.temporaryCleanupPassed
                                 ? "trash.slash.fill"
@@ -1299,8 +1299,8 @@ private struct SettingsView: View {
 
                         Label(
                             evidence.appRestartPersistencePassed
-                                ? "Projektpersistenz nach App-Neustart belegt"
-                                : "App-Neustart-Persistenz noch nicht belegt",
+                                ? "Projekt bleibt nach Neustart erhalten"
+                                : "Neustart-Verhalten noch nicht vollständig geprüft",
                             systemImage:
                                 evidence.appRestartPersistencePassed
                                 ? "arrow.clockwise.circle.fill"
@@ -1322,7 +1322,7 @@ private struct SettingsView: View {
                                     )
                             } label: {
                                 Label(
-                                    "Evidenzdatei im Finder zeigen",
+                                    "Diagnosedatei im Finder zeigen",
                                     systemImage: "folder"
                                 )
                             }
