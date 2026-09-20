@@ -39,6 +39,7 @@ final class StudioState: ObservableObject {
     @Published var storyboard: StoryboardPlan?
     @Published var supplementalCaptures: [SupplementalCaptureAsset] = []
     @Published var localClipCandidates: [LocalClipCandidate] = []
+    @Published var savedClipSelections: [SavedClipSelection] = []
     @Published var isGeneratingClipCandidates = false
     @Published var clipCandidateStatusMessage: String?
     @Published var previewedLocalClipCandidateID: UUID?
@@ -103,6 +104,8 @@ final class StudioState: ObservableObject {
                 }
                 renderArtifact = snapshot.renderArtifact
                 supplementalCaptures = snapshot.supplementalCaptures ?? []
+                savedClipSelections =
+                    snapshot.savedClipSelections ?? []
 
                 if let reframe = graph.currentOperations
                     .last(where: { $0.type == .reframe })?
@@ -170,6 +173,7 @@ final class StudioState: ObservableObject {
             }
 
             supplementalCaptures = []
+            savedClipSelections = []
             burnInCaptionsEnabled = false
             captionVisualStyle = .clear
             loadStoryboard(projectID: projectID)
@@ -332,6 +336,7 @@ final class StudioState: ObservableObject {
 
             asset = imported
             localClipCandidates = []
+            savedClipSelections = []
             clipCandidateStatusMessage = nil
             previewedLocalClipCandidateID = nil
             graph = EditGraph(createdAt: Date())
@@ -852,6 +857,88 @@ final class StudioState: ObservableObject {
                 "Lokale Clip-Analyse fehlgeschlagen: "
                 + error.localizedDescription
         }
+    }
+
+    func saveLocalClipCandidate(
+        _ candidate: LocalClipCandidate
+    ) {
+        let duplicate = savedClipSelections.contains {
+            abs(
+                $0.sourceRange.startSeconds
+                - candidate.sourceRange.startSeconds
+            ) < 0.05
+            && abs(
+                $0.sourceRange.durationSeconds
+                - candidate.sourceRange.durationSeconds
+            ) < 0.05
+        }
+        guard !duplicate else {
+            clipCandidateStatusMessage =
+                "Dieser Clip-Kandidat ist bereits in deiner Clip-Liste."
+            return
+        }
+
+        let saved = SavedClipSelection(
+            candidate: candidate
+        )
+        savedClipSelections.append(saved)
+        ledger.append(.init(
+            timestamp: Date(),
+            actor: .user,
+            stage: .editing,
+            action: "clip-selection-saved",
+            summary:
+                "Clip-Auswahl gespeichert: \(format(saved.sourceRange.startSeconds)) bis \(format(saved.sourceRange.endSeconds)).",
+            relatedSourceIDs: [saved.id.uuidString],
+            reversible: false,
+            correlationID: correlationID
+        ))
+        persistWorkspaceIfPossible()
+        clipCandidateStatusMessage =
+            "Clip-Kandidat wurde in der projektgebundenen Clip-Liste gespeichert."
+        errorMessage = nil
+    }
+
+    func removeSavedClipSelection(
+        _ selection: SavedClipSelection
+    ) {
+        savedClipSelections.removeAll {
+            $0.id == selection.id
+        }
+        persistWorkspaceIfPossible()
+        clipCandidateStatusMessage =
+            "Gespeicherte Clip-Auswahl entfernt."
+        errorMessage = nil
+    }
+
+    func loadSavedClipSelection(
+        _ selection: SavedClipSelection
+    ) {
+        guard let asset else {
+            errorMessage =
+                "Kein Produktionsmedium geladen."
+            return
+        }
+
+        let start = min(
+            max(selection.sourceRange.startSeconds, 0),
+            asset.durationSeconds
+        )
+        let end = min(
+            max(selection.sourceRange.endSeconds, start),
+            asset.durationSeconds
+        )
+        guard end - start > 0.05 else {
+            errorMessage =
+                "Die gespeicherte Clip-Auswahl ist nicht mehr gültig."
+            return
+        }
+
+        trimStart = start
+        trimEnd = end
+        clipCandidateStatusMessage =
+            "Gespeicherte Clip-Auswahl in die Timeline geladen. Erst „Als Trim setzen“ verändert den EditGraph."
+        errorMessage = nil
     }
 
     func previewLocalClipCandidate(
@@ -1414,6 +1501,7 @@ final class StudioState: ObservableObject {
                     captionVisualStyle,
                 renderArtifact: renderArtifact,
                 supplementalCaptures: supplementalCaptures,
+                savedClipSelections: savedClipSelections,
                 updatedAt: Date()
             )
             try store.save(snapshot)
