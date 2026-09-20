@@ -963,10 +963,6 @@ private struct SettingsView: View {
             GroupBox("Google / YouTube") {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("OAuth-Konfiguration: \(session.oauthConfigurationSource)")
-                    Text("Entwickler-Secrets und API-Key-Felder werden normalen Nutzern nicht angeboten.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
                     HStack(spacing: 10) {
                         Button {
                             showOAuthImporter = true
@@ -990,7 +986,7 @@ private struct SettingsView: View {
                         )
                     }
 
-                    Text("Blackstock übernimmt ausschließlich die Desktop-Client-ID. Ein Client Secret wird weder benötigt noch gespeichert. Wechselt die effektive Client-ID, werden vorhandene YouTube-Tokens und Scopes sofort aus dem macOS-Keychain entfernt und Google muss erneut autorisiert werden.")
+                    Text("Die Desktop-OAuth-Konfiguration wird lokal im macOS-Schlüsselbund gespeichert. Bei einem Client-Wechsel wird Google neu autorisiert.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
@@ -1009,7 +1005,7 @@ private struct SettingsView: View {
                         showCredentialRemovalConfirmation = true
                     }
 
-                    Text("Entfernt lokal gespeicherte YouTube-Zugriffs-, Refresh- und Scope-Daten aus dem macOS-Keychain. Die OAuth-Client-Konfiguration und deine Projektdateien bleiben erhalten.")
+                    Text("Entfernt die lokale YouTube-Anmeldung. Projekte bleiben erhalten.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
@@ -1042,7 +1038,7 @@ private struct SettingsView: View {
                     }
                     .disabled(isRevokingGoogleAccess)
 
-                    Text("Widerruft die aktuell verwendete Google-OAuth-Berechtigung beim Provider und entfernt anschließend die lokalen YouTube-Zugangsdaten.")
+                    Text("Widerruft den Google-Zugriff und entfernt die lokale Anmeldung.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
