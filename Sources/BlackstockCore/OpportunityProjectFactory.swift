@@ -29,6 +29,7 @@ public struct OpportunityProjectFactory: Sendable {
         opportunity: YouTubeOpportunityCandidate,
         targetChannelID: String,
         strategyVersion: Int,
+        initialStage: BlackstockStage = .research,
         now: Date = Date()
     ) throws -> OpportunityProjectSeed {
         let channel = targetChannelID.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -44,7 +45,7 @@ public struct OpportunityProjectFactory: Sendable {
         let project = BlackstockProject(
             title: opportunity.title,
             targetChannelID: channel,
-            stage: .research,
+            stage: initialStage,
             strategyVersion: max(strategyVersion, 1),
             createdAt: now,
             updatedAt: now
