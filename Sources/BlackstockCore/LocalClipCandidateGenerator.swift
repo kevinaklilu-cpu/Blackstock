@@ -120,6 +120,7 @@ public struct LocalClipCandidateGenerator: Sendable {
                         from: chunk,
                         sourceDurationSeconds: sourceDuration,
                         minimumDurationSeconds: minimumDuration,
+                        maximumDurationSeconds: maximumDuration,
                         to: &candidates
                     )
                     chunk = [segment]
@@ -132,6 +133,7 @@ public struct LocalClipCandidateGenerator: Sendable {
                 from: chunk,
                 sourceDurationSeconds: sourceDuration,
                 minimumDurationSeconds: minimumDuration,
+                maximumDurationSeconds: maximumDuration,
                 to: &candidates
             )
 
@@ -149,6 +151,7 @@ public struct LocalClipCandidateGenerator: Sendable {
         from segments: [TranscriptSegment],
         sourceDurationSeconds: Double,
         minimumDurationSeconds: Double,
+        maximumDurationSeconds: Double,
         to candidates: inout [LocalClipCandidate]
     ) {
         guard let first = segments.first,
@@ -156,16 +159,67 @@ public struct LocalClipCandidateGenerator: Sendable {
             return
         }
 
-        let rawStart = max(first.startSeconds - 0.35, 0)
-        let rawEnd = min(
+        let speechStart = max(
+            first.startSeconds,
+            0
+        )
+        let speechEnd = min(
             last.startSeconds
-                + max(last.durationSeconds, 0)
-                + 0.35,
+                + max(last.durationSeconds, 0),
             sourceDurationSeconds
         )
-        let duration = max(rawEnd - rawStart, 0)
+        let speechDuration = max(
+            speechEnd - speechStart,
+            0
+        )
+        guard speechDuration > 0 else {
+            return
+        }
 
-        guard duration >= minimumDurationSeconds else {
+        let maximumDuration = max(
+            maximumDurationSeconds,
+            minimumDurationSeconds
+        )
+        let boundedSpeechEnd = min(
+            speechEnd,
+            speechStart + maximumDuration
+        )
+        let boundedSpeechDuration = max(
+            boundedSpeechEnd - speechStart,
+            0
+        )
+
+        let availablePadding = max(
+            maximumDuration
+                - boundedSpeechDuration,
+            0
+        )
+        let leadingPadding = min(
+            0.35,
+            speechStart,
+            availablePadding / 2
+        )
+        let trailingPadding = min(
+            0.35,
+            max(
+                sourceDurationSeconds
+                    - boundedSpeechEnd,
+                0
+            ),
+            availablePadding
+                - leadingPadding
+        )
+        let rawStart =
+            speechStart - leadingPadding
+        let rawEnd =
+            boundedSpeechEnd + trailingPadding
+        let duration = max(
+            rawEnd - rawStart,
+            0
+        )
+
+        guard duration >= minimumDurationSeconds,
+              duration <= maximumDuration + 0.000_001 else {
             return
         }
 
