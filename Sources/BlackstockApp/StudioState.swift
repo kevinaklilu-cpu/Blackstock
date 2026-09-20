@@ -2068,6 +2068,79 @@ final class StudioState: ObservableObject {
         }
     }
 
+    func updateCaptionSegment(
+        id: UUID,
+        text: String,
+        startSeconds: Double,
+        durationSeconds: Double
+    ) {
+        guard let currentTranscript = transcript else {
+            errorMessage = "Erstelle zuerst lokale Untertitel."
+            return
+        }
+        guard let captionURL else {
+            errorMessage = "Die lokale Untertiteldatei fehlt."
+            return
+        }
+
+        do {
+            let edited = try LocalTranscriptEditor()
+                .updatingSegment(
+                    in: currentTranscript,
+                    id: id,
+                    text: text,
+                    startSeconds: startSeconds,
+                    durationSeconds: durationSeconds,
+                    outputDurationSeconds:
+                        currentOutputDurationSeconds
+                )
+
+            try WebVTTCaptionWriter().write(
+                transcript: edited,
+                to: captionURL
+            )
+
+            transcript = edited
+            transcriptStructure =
+                TranscriptStructureAnalyzer().analyze(
+                    transcript: edited
+                )
+            retentionAdvisory = nil
+            retentionAdvisorAvailability =
+                LocalRetentionAdvisor().availability(
+                    localeIdentifier:
+                        edited.localeIdentifier
+                )
+            localClipCandidates = []
+            previewedLocalClipCandidateID = nil
+            clipCandidateStatusMessage =
+                "Untertitel wurden manuell geändert. Lokale Clip-Kandidaten können bei Bedarf neu erzeugt werden."
+            renderArtifact = nil
+            invalidateSavedClipRenders()
+            audioTechnicalAssessment = nil
+            audioSignalAssessment = nil
+            audioLoudnessAssessment = nil
+
+            ledger.append(.init(
+                timestamp: Date(),
+                actor: .user,
+                stage: .editing,
+                action: "caption-segment-edited",
+                summary:
+                    "Untertitelsegment manuell korrigiert und WebVTT neu geschrieben.",
+                relatedSourceIDs: [id.uuidString],
+                reversible: false,
+                correlationID: correlationID
+            ))
+            persistWorkspaceIfPossible()
+            errorMessage = nil
+        } catch {
+            errorMessage =
+                "Untertitel konnte nicht gespeichert werden: "
+                + error.localizedDescription
+        }
+    }
+
     func invalidateSavedClipRenders() {
         var changed = false
         savedClipSelections = savedClipSelections.map {
