@@ -4,7 +4,7 @@ import json
 import math
 import re
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from uuid import UUID
 
@@ -35,6 +35,7 @@ required_root = [
     "installedFromPackage",
     "installerReceiptPackageID",
     "installerReceiptVersion",
+    "installerReceiptInstalledAt",
     "installerReceiptVerified",
     "applicationTeamID",
     "developerIDApplicationVerified",
@@ -54,13 +55,24 @@ for key in required_root:
     if key not in data:
         fail(f"missing field: {key}")
 
-if data["schemaVersion"] != 5:
+if data["schemaVersion"] != 6:
     fail("unsupported schemaVersion")
 
 try:
-    datetime.fromisoformat(str(data["testedAt"]).replace("Z", "+00:00"))
+    tested_at = datetime.fromisoformat(
+        str(data["testedAt"]).replace("Z", "+00:00")
+    )
 except ValueError:
     fail("testedAt must be ISO-8601")
+
+try:
+    installer_receipt_installed_at = datetime.fromisoformat(
+        str(data["installerReceiptInstalledAt"]).replace("Z", "+00:00")
+    )
+except ValueError:
+    fail("installerReceiptInstalledAt must be ISO-8601")
+if installer_receipt_installed_at > tested_at + timedelta(seconds=1):
+    fail("installerReceiptInstalledAt must not postdate testedAt")
 
 for key in ["blackstockVersion", "blackstockBuild", "macOSVersion", "hardwareModel"]:
     value = str(data[key]).strip()
