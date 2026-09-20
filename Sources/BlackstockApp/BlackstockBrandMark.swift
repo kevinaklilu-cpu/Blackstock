@@ -25,16 +25,15 @@ struct BlackstockBrandMark: View {
                 lineWidth: max(width * 0.025, 1)
             )
 
-            Text("B")
+            Image(systemName: "play.fill")
                 .font(
                     .system(
-                        size: width * 0.47,
-                        weight: .heavy,
-                        design: .default
+                        size: width * 0.36,
+                        weight: .black
                     )
                 )
                 .foregroundStyle(.white)
-                .offset(y: -width * 0.012)
+                .offset(x: width * 0.025)
         }
         .frame(width: width, height: height)
         .accessibilityHidden(true)
