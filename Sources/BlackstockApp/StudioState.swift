@@ -22,6 +22,7 @@ final class StudioState: ObservableObject {
     @Published var transcript: LocalTranscript?
     @Published var captionURL: URL?
     @Published var burnInCaptionsEnabled = false
+    @Published var captionVisualStyle: CaptionVisualStyle = .clear
     @Published var speechAuthorizationState: LocalSpeechAuthorizationState = .notDetermined
     @Published var audioTechnicalAssessment: AudioTechnicalAssessment?
     @Published var audioSignalAssessment: AudioSignalAssessment?
@@ -94,6 +95,9 @@ final class StudioState: ObservableObject {
                 burnInCaptionsEnabled =
                     snapshot.burnInCaptionsEnabled
                     ?? false
+                captionVisualStyle =
+                    snapshot.captionVisualStyle
+                    ?? .clear
                 if transcript == nil {
                     burnInCaptionsEnabled = false
                 }
@@ -167,6 +171,7 @@ final class StudioState: ObservableObject {
 
             supplementalCaptures = []
             burnInCaptionsEnabled = false
+            captionVisualStyle = .clear
             loadStoryboard(projectID: projectID)
             persistWorkspaceIfPossible()
         } catch {
@@ -339,6 +344,7 @@ final class StudioState: ObservableObject {
             transcript = nil
             captionURL = nil
             burnInCaptionsEnabled = false
+            captionVisualStyle = .clear
             transcriptStructure = nil
             retentionAdvisory = nil
             retentionAdvisorAvailability = nil
@@ -1114,6 +1120,33 @@ final class StudioState: ObservableObject {
         errorMessage = nil
     }
 
+    func setCaptionVisualStyle(
+        _ style: CaptionVisualStyle
+    ) {
+        guard captionVisualStyle != style else {
+            return
+        }
+
+        captionVisualStyle = style
+        if burnInCaptionsEnabled {
+            renderArtifact = nil
+        }
+
+        ledger.append(.init(
+            timestamp: Date(),
+            actor: .user,
+            stage: .editing,
+            action: "caption-visual-style-changed",
+            summary:
+                "Untertitelstil auf „\(style.germanTitle)“ geändert.",
+            reversible: false,
+            correlationID: correlationID
+        ))
+
+        persistWorkspaceIfPossible()
+        errorMessage = nil
+    }
+
     func analyzeRetentionLocally() async {
         guard let transcript,
               let transcriptStructure else {
@@ -1185,7 +1218,8 @@ final class StudioState: ObservableObject {
                 outputURL: outputURL,
                 preset: renderPreset,
                 transcript: transcript,
-                burnInCaptions: burnInCaptionsEnabled
+                burnInCaptions: burnInCaptionsEnabled,
+                captionStyle: captionVisualStyle
             )
             renderArtifact = artifact
             await refreshAudioInspection(
@@ -1344,6 +1378,8 @@ final class StudioState: ObservableObject {
                 captionURL: captionURL,
                 burnInCaptionsEnabled:
                     burnInCaptionsEnabled,
+                captionVisualStyle:
+                    captionVisualStyle,
                 renderArtifact: renderArtifact,
                 supplementalCaptures: supplementalCaptures,
                 updatedAt: Date()
