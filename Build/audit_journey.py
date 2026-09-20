@@ -21,9 +21,6 @@ checks = {
         'Label("Projekte", systemImage: "tray.full")',
         "OpportunityWorkspaceView(",
         "ProjectLibraryView(",
-        "Shorts/Reels-Setup vorbereiten",
-        "captionVisualStyle",
-        "prepareShortFormSetup()",
     ],
     "Sources/BlackstockApp/WorkspaceProductViews.swift": [
         "struct OpportunityWorkspaceView",
@@ -39,9 +36,6 @@ checks = {
         '"blackstock.projects"',
         '"blackstock.projectSource.',
         "workspaceChannelID",
-        "setCaptionVisualStyle(",
-        "prepareShortFormSetup()",
-        "captionVisualStyle:",
     ],
     "Sources/BlackstockCore/LocalClipCandidateGenerator.swift": [
         "LocalClipCandidateGenerator",
@@ -64,6 +58,9 @@ checks = {
         "previewLocalClipCandidate(",
         "restoreEditedPreview(",
         "setBurnInCaptionsEnabled(",
+        "setCaptionVisualStyle(",
+        "prepareShortFormSetup()",
+        "captionVisualStyle:",
         "burnInCaptions: burnInCaptionsEnabled",
     ],
     "Sources/BlackstockApp/StudioView.swift": [
@@ -74,6 +71,8 @@ checks = {
         "Zurück zur aktuellen Schnittvorschau",
         "keine Erfolgs-, Qualitäts- oder Viralitätsnote",
         "Sichtbare Untertitel ins Video rendern",
+        "Untertitelstil",
+        "Shorts/Reels-Setup vorbereiten",
         "captionPreviewOverlay",
     ],
     "Sources/BlackstockCore/LocalCaptionBurnInRenderer.swift": [
