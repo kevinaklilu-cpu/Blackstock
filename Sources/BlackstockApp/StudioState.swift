@@ -717,6 +717,7 @@ final class StudioState: ObservableObject {
         }
 
         renderArtifact = nil
+        invalidateSavedClipRenders()
         ledger.append(.init(
             timestamp: Date(),
             actor: .user,
@@ -754,6 +755,7 @@ final class StudioState: ObservableObject {
         let revision = graph.apply(operation, actor: .user)
         lastUndoneRevisionID = nil
         renderArtifact = nil
+        invalidateSavedClipRenders()
         audioTechnicalAssessment = nil
         audioSignalAssessment = nil
         audioLoudnessAssessment = nil
@@ -914,6 +916,11 @@ final class StudioState: ObservableObject {
     func removeSavedClipSelection(
         _ selection: SavedClipSelection
     ) {
+        if let artifact = selection.renderArtifact {
+            try? FileManager.default.removeItem(
+                at: artifact.fileURL
+            )
+        }
         savedClipSelections.removeAll {
             $0.id == selection.id
         }
@@ -1382,6 +1389,20 @@ final class StudioState: ObservableObject {
         }
     }
 
+    func invalidateSavedClipRenders() {
+        var changed = false
+        savedClipSelections = savedClipSelections.map {
+            guard $0.renderArtifact != nil else {
+                return $0
+            }
+            changed = true
+            return $0.withRenderArtifact(nil)
+        }
+        if changed {
+            persistWorkspaceIfPossible()
+        }
+    }
+
     func setBurnInCaptionsEnabled(
         _ enabled: Bool
     ) {
@@ -1396,6 +1417,7 @@ final class StudioState: ObservableObject {
 
         burnInCaptionsEnabled = enabled
         renderArtifact = nil
+        invalidateSavedClipRenders()
 
         ledger.append(.init(
             timestamp: Date(),
@@ -1426,6 +1448,7 @@ final class StudioState: ObservableObject {
         if burnInCaptionsEnabled {
             renderArtifact = nil
         }
+        invalidateSavedClipRenders()
 
         ledger.append(.init(
             timestamp: Date(),
