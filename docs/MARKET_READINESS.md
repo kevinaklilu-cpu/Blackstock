@@ -56,8 +56,9 @@ Der Verifier verlangt deshalb:
 - identischen SHA-256 des Release-Pakets,
 - identischen Git-Source-Commit-SHA zwischen Capture-Hardware-Evidenz, signiertem Produktionsrelease, installierter App und In-App-Updater-Evidenz,
 - identischen SHA-256 des tatsächlich installierten Blackstock-Executables zwischen Capture-Smoke, veröffentlichtem Release und nach dem In-App-Update gestarteter App,
-- identische Apple-Team-ID zwischen der tatsächlich signierten Capture-App, dem Produktionsrelease und dem In-App-Updater,
-- Produktions-App unter `/Applications/Blackstock.app`.
+- identische Apple-Team-ID zwischen der tatsächlich signierten Capture-App, dem Produktionsrelease, der vom Updater erwarteten Team-ID und der nach dem Update tatsächlich gestarteten Developer-ID-App,
+- identischen Installer-Receipt `de.blackstock.app` samt Zielversion zwischen Capture-Smoke und Post-Update-Start,
+- identischen installierten App-Pfad `/Applications/Blackstock.app` zwischen Published-Release-Verifikation und echtem Updater-E2E.
 
 Damit kann zum Beispiel kein erfolgreicher Hardware-Smoke von Build 100 mit einem signierten Build 101 oder einem Update-Paket eines anderen Hashes kombiniert werden.
 
@@ -106,7 +107,11 @@ Blackstock selbst protokolliert den tatsächlichen App-Pfad:
 3. verifiziertes Paket,
 4. verifiziertes Installer-Team,
 5. Übergabe an den macOS-Installer,
-6. anschließend gestartete exakte Zielversion, Ziel-Build und der im Manifest signierte Source-Commit.
+6. anschließend gestartete exakte Zielversion, Ziel-Build und der im Manifest signierte Source-Commit,
+7. SHA-256 des tatsächlich gestarteten Executables,
+8. exakter Bundle-Pfad `/Applications/Blackstock.app`,
+9. tatsächliche `Developer ID Application`-Team-ID,
+10. passender macOS-Installer-Receipt `de.blackstock.app` für exakt die Zielversion.
 
 ## CI-Regel
 
