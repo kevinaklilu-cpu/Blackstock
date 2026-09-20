@@ -380,6 +380,9 @@ def main():
         "sourceInstallerReceiptVersion": updater.get(
             "currentInstallerReceiptVersion"
         ),
+        "sourceInstallerReceiptInstalledAt": updater.get(
+            "currentInstallerReceiptInstalledAt"
+        ),
         "version": release_version,
         "build": release_build,
         "installerTeamID": release_team_id,
@@ -395,6 +398,9 @@ def main():
         ),
         "installerReceiptVersion": updater.get(
             "observedInstallerReceiptVersion"
+        ),
+        "installerReceiptInstalledAt": updater.get(
+            "observedInstallerReceiptInstalledAt"
         ),
         "captureEvidence": str(capture_path),
         "productionReleaseEvidence": str(release_path),
