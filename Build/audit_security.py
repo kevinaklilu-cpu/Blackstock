@@ -6,11 +6,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 CONTRACTS = {
     "Sources/BlackstockCore/GoogleOAuth.swift": [
-        'code_challenge_method", value: "S256"',
+        '"code_challenge_method"',
+        '"S256"',
         'SecRandomCopyBytes',
         '.init(name: "state", value: state)',
         'https://oauth2.googleapis.com/token',
         '"code_verifier": verifier',
+        "GoogleOAuthTokenEndpointError",
     ],
     "Sources/BlackstockApp/LoopbackOAuthServer.swift": [
         'host: "127.0.0.1"',
@@ -37,6 +39,8 @@ CONTRACTS = {
         "parseGoogleDesktopJSON",
         "unsupportedClientType",
         'hasSuffix(".apps.googleusercontent.com")',
+        "clientSecret",
+        'case clientSecret = "client_secret"',
     ],
     "Sources/BlackstockCore/OAuthClientBindingPolicy.swift": [
         "requiresCredentialInvalidation",
@@ -48,6 +52,8 @@ CONTRACTS = {
         'withPrefix: "youtube."',
         "OAuthClientBindingPolicy()",
         'account: "google.oauth.importedClientID"',
+        'account: "google.oauth.importedClientSecret"',
+        "effectiveClientSecret",
         "clearOAuthRuntimeAuthorizationState",
     ],
     "Sources/BlackstockCore/UpdateManifest.swift": [
@@ -92,7 +98,8 @@ TEST_CONTRACTS = {
     "Tests/BlackstockCoreTests/GoogleOAuthAndYouTubeTests.swift": [
         "testOAuthJSONRequiresDesktopInstalledClient",
         "testOAuthJSONRejectsMissingAndInvalidClientIDs",
-        "testOAuthJSONDoesNotExposeOrPersistClientSecret",
+        "testOAuthJSONParsesDesktopClientSecretForTokenExchange",
+        "testOAuthFormEncodingKeepsPKCEAndRedirectValuesValid",
     ],
 }
 
