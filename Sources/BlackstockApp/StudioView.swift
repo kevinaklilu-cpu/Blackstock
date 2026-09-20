@@ -130,17 +130,34 @@ struct StudioView: View {
         )
         let isLinkFirstClip =
             session.productionIntent(for: project.id)?.isLinkFirstClip == true
+        let hasBoundAuthorizedMedia =
+            state.asset?.originSource?.id == source.id
+            && state.asset?.mayEnterProduction == true
+        let clipPreparation =
+            OpportunityClipPreparationPlanner().snapshot(
+                source: source,
+                resolution: resolution,
+                hasBoundAuthorizedMedia: hasBoundAuthorizedMedia,
+                isGeneratingClips:
+                    state.isGeneratingClipCandidates,
+                clipCount: state.localClipCandidates.count
+            )
         let remoteIngestRoute = ZeroCostProviderSelector().select(
             capability: .remoteVideoIngest,
             providers: [BuiltInProcessingProviders.opusClipAPI]
         )
 
         return HStack(spacing: 12) {
-            Image(systemName: source.provider == .youtube ? "play.rectangle" : "link")
+            Image(
+                systemName:
+                    source.provider == .youtube
+                    ? "play.rectangle"
+                    : "link"
+            )
                 .font(.title3)
                 .foregroundStyle(.secondary)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 7) {
                     Text("Opportunity-Quelle")
                         .font(.caption.weight(.semibold))
@@ -153,49 +170,124 @@ struct StudioView: View {
                         .font(.caption2.weight(.semibold))
                     }
                 }
-                Text(source.pageURL.absoluteString)
-                    .font(.callout.monospaced())
-                    .lineLimit(1)
-                    .textSelection(.enabled)
-                Text(
-                    state.asset?.originSource?.id == source.id
-                        ? "Die Produktionsdatei ist automatisch mit dieser Opportunity verknüpft."
-                        : resolution.explanation
-                )
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
 
-                if isLinkFirstClip && source.provider == .youtube {
-                    Text(remoteIngestRoute.explanation)
-                        .font(.caption2)
+                Text(
+                    source.provider == .youtube
+                    ? "YouTube-Video "
+                        + (source.externalID ?? "")
+                    : "Produktionsquelle verbunden"
+                )
+                    .font(.callout.weight(.semibold))
+                    .lineLimit(1)
+
+                if isLinkFirstClip {
+                    Label(
+                        clipPreparation.status.germanTitle,
+                        systemImage:
+                            clipPreparationIcon(
+                                clipPreparation.status
+                            )
+                    )
+                    .font(.caption.weight(.semibold))
+
+                    Text(clipPreparation.explanation)
+                        .font(.caption)
                         .foregroundStyle(.secondary)
 
-                    if state.asset == nil && currentStage == .production {
+                    if !hasBoundAuthorizedMedia {
+                        Text(remoteIngestRoute.explanation)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if clipPreparation.status
+                            == .productionMediaRequired,
+                       currentStage == .production {
                         Button {
                             showImporter = true
                         } label: {
                             Label(
-                                "Autorisiertes lokales Original wählen …",
+                                "Produktionsvideo auswählen …",
                                 systemImage: "folder"
                             )
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                     }
+
+                    if clipPreparation.status
+                            == .localProcessingReady,
+                       currentStage == .editing {
+                        Button {
+                            Task {
+                                await state
+                                    .generateLocalClipCandidates(
+                                        localeIdentifier:
+                                            speechLocaleIdentifier
+                                    )
+                            }
+                        } label: {
+                            Label(
+                                "Lokale Clips erzeugen",
+                                systemImage: "scissors"
+                            )
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(
+                            state.isGeneratingClipCandidates
+                        )
+                    }
+                } else {
+                    Text(
+                        hasBoundAuthorizedMedia
+                            ? "Die Produktionsdatei ist automatisch mit dieser Opportunity verknüpft."
+                            : resolution.explanation
+                    )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
+
+                DisclosureGroup("Quell-Provenance") {
+                    Text(source.pageURL.absoluteString)
+                        .font(.caption2.monospaced())
+                        .textSelection(.enabled)
+                        .padding(.top, 3)
+                }
+                .font(.caption2)
             }
 
             Spacer()
 
-            if source.provider == .youtube, let videoID = source.externalID {
+            if source.provider == .youtube,
+               let videoID = source.externalID {
                 YouTubeEmbeddedPlayer(videoID: videoID)
                     .frame(width: 220, height: 124)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .clipShape(
+                        RoundedRectangle(cornerRadius: 10)
+                    )
             }
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 12)
         .background(Color.primary.opacity(0.018))
+    }
+
+    private func clipPreparationIcon(
+        _ status: OpportunityClipPreparationStatus
+    ) -> String {
+        switch status {
+        case .resolvingSource:
+            return "arrow.triangle.2.circlepath"
+        case .productionMediaRequired:
+            return "film.stack"
+        case .localProcessingReady:
+            return "checkmark.circle"
+        case .generatingClips:
+            return "waveform.badge.magnifyingglass"
+        case .clipsAvailable:
+            return "checkmark.seal"
+        }
     }
 
     private var emptyState: some View {
