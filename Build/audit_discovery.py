@@ -6,11 +6,18 @@ ROOT = Path(__file__).resolve().parents[1]
 
 REQUIRED = {
     "Sources/BlackstockApp/BlackstockSession.swift": [
-        "YouTubeAuthorizedClient(accessToken: accessToken)",
+        "YouTubeAuthorizedClient(",
         "firstOpportunityCandidates(",
-        "query: primaryTopic",
+        "categoryID: selectedVideoCategoryID",
+        "regionCode: channelRegionCode",
+        "relevanceLanguage: contentLanguage",
         "order: .relevance",
         "reloadOpportunities(order:",
+    ],
+    "Sources/BlackstockCore/YouTubeAuthorizedClient.swift": [
+        'name: "videoCategoryId"',
+        'name: "regionCode"',
+        'name: "relevanceLanguage"',
     ],
     "Sources/BlackstockApp/FirstRunView.swift": [
         'Text("Videos")',
@@ -48,4 +55,4 @@ if errors:
         print(f"- {error}", file=sys.stderr)
     sys.exit(1)
 
-print("Discovery audit passed: real YouTube videos, provider ordering, playback and missing-data honesty are enforced.")
+print("Discovery audit passed: structured YouTube category/region/language discovery, provider ordering, playback and missing-data honesty are enforced.")
