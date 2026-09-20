@@ -95,33 +95,40 @@ public struct GoogleOAuthTokenRefresher: Sendable {
     public func refresh(
         refreshToken: String,
         clientID: String,
+        clientSecret: String? = nil,
         session: URLSession = .shared
     ) async throws -> GoogleOAuthTokenSet {
-        var request = URLRequest(url: URL(string: "https://oauth2.googleapis.com/token")!)
+        var request = URLRequest(
+            url: URL(
+                string: "https://oauth2.googleapis.com/token"
+            )!
+        )
         request.httpMethod = "POST"
         request.setValue(
             "application/x-www-form-urlencoded",
             forHTTPHeaderField: "Content-Type"
         )
+        request.setValue(
+            "application/json",
+            forHTTPHeaderField: "Accept"
+        )
 
-        let fields = [
+        var fields = [
             "client_id": clientID,
             "refresh_token": refreshToken,
             "grant_type": "refresh_token"
         ]
-        request.httpBody = fields
-            .sorted { $0.key < $1.key }
-            .map { key, value in
-                "\(key.formEncodedForOAuth)=\(value.formEncodedForOAuth)"
-            }
-            .joined(separator: "&")
-            .data(using: .utf8)
+        if let clientSecret = normalized(clientSecret) {
+            fields["client_secret"] = clientSecret
+        }
+        request.httpBody = oauthFormBody(fields)
 
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse,
               200..<300 ~= http.statusCode else {
-            throw GoogleOAuthError.tokenExchangeFailed(
-                (response as? HTTPURLResponse)?.statusCode ?? -1
+            throw tokenEndpointError(
+                response: response,
+                data: data
             )
         }
 
@@ -136,11 +143,5 @@ public struct GoogleOAuthTokenRefresher: Sendable {
             tokenType: refreshed.tokenType,
             scope: refreshed.scope
         )
-    }
-}
-
-private extension String {
-    var formEncodedForOAuth: String {
-        addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? self
     }
 }
