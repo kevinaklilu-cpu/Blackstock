@@ -149,10 +149,10 @@ private struct WorkspaceShell: View {
                 selection = "Studio"
             case .overview:
                 selection = "Übersicht"
-            case .opportunities:
-                selection = "Chancen"
-            case .projects:
-                selection = "Projekte"
+            case .none:
+                if newStage == .discovery {
+                    selection = "Chancen"
+                }
             }
         }
         .onChange(of: commandPaletteRequest) { _ in
