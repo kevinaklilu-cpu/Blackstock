@@ -402,6 +402,20 @@ struct StudioView: View {
                             .buttonStyle(.bordered)
 
                             Button {
+                                state.saveLocalClipCandidate(
+                                    candidate
+                                )
+                            } label: {
+                                Label(
+                                    "In Clip-Liste speichern",
+                                    systemImage:
+                                        "tray.and.arrow.down"
+                                )
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(!editingEnabled)
+
+                            Button {
                                 Task {
                                     await state
                                         .applyLocalClipCandidate(
@@ -420,6 +434,115 @@ struct StudioView: View {
                         }
                     }
                     .padding(.vertical, 4)
+                }
+            }
+
+            if !state.savedClipSelections.isEmpty {
+                Divider()
+
+                VStack(
+                    alignment: .leading,
+                    spacing: 8
+                ) {
+                    HStack {
+                        Text("Gespeicherte Clips")
+                            .font(
+                                .subheadline.weight(
+                                    .semibold
+                                )
+                            )
+                        Spacer()
+                        Text(
+                            "\(state.savedClipSelections.count)"
+                        )
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                    }
+
+                    ForEach(
+                        state.savedClipSelections
+                    ) { selection in
+                        VStack(
+                            alignment: .leading,
+                            spacing: 6
+                        ) {
+                            HStack {
+                                Text(
+                                    timeLabel(
+                                        selection.sourceRange
+                                            .startSeconds
+                                    )
+                                    + " – "
+                                    + timeLabel(
+                                        selection.sourceRange
+                                            .endSeconds
+                                    )
+                                )
+                                .font(
+                                    .caption.weight(
+                                        .semibold
+                                    )
+                                    .monospacedDigit()
+                                )
+
+                                Spacer()
+
+                                Text(
+                                    "\(selection.wordCount) Wörter"
+                                )
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            }
+
+                            Text(
+                                selection.transcriptPreview
+                            )
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(3)
+
+                            HStack {
+                                Button {
+                                    state.loadSavedClipSelection(
+                                        selection
+                                    )
+                                } label: {
+                                    Label(
+                                        "In Timeline laden",
+                                        systemImage:
+                                            "slider.horizontal.3"
+                                    )
+                                }
+                                .buttonStyle(.bordered)
+                                .disabled(!editingEnabled)
+
+                                Button(
+                                    role: .destructive
+                                ) {
+                                    state.removeSavedClipSelection(
+                                        selection
+                                    )
+                                } label: {
+                                    Label(
+                                        "Entfernen",
+                                        systemImage: "trash"
+                                    )
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                        }
+                        .padding(8)
+                        .background(
+                            Color.primary.opacity(0.025),
+                            in: RoundedRectangle(
+                                cornerRadius: 10
+                            )
+                        )
+                    }
+
+                    Text("„In Timeline laden“ verändert nur die Auswahlregler. Erst „Als Trim setzen“ schreibt die gespeicherte Clip-Auswahl in den EditGraph.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
             }
 
