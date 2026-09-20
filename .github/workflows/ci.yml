@@ -246,12 +246,12 @@ jobs:
           fi
 
           cp "$RUNNER_TEMP/release-evidence-valid.json" "$EVIDENCE"
-          printf '\n"poison": NaN\n' > "$RUNNER_TEMP/non-finite-release-fragment.txt"
           python3 - "$EVIDENCE" <<'PY'
-          import pathlib, sys
-          path = pathlib.Path(sys.argv[1])
-          text = path.read_text()
-          path.write_text(text[:-2] + ',\n  "poison": NaN\n}\n')
+          import json, sys
+          path = sys.argv[1]
+          data = json.load(open(path))
+          data["poison"] = float("nan")
+          json.dump(data, open(path, "w"))
           PY
           if python3 Build/validate_production_release_evidence.py "$EVIDENCE"; then
             echo "Non-finite production release evidence was unexpectedly accepted." >&2
@@ -572,6 +572,24 @@ jobs:
             --production-release-evidence "$ROOT/release.json" \
             --in-app-update-evidence "$ROOT/updater.json"; then
             echo "Executable mismatch was unexpectedly accepted." >&2
+            exit 1
+          fi
+
+          python3 - "$ROOT/updater.json" <<'PY'
+          import json
+          import sys
+          path = sys.argv[1]
+          data = json.load(open(path))
+          data["value"]["observedInstalledExecutableSHA256"] = "c" * 64
+          data["value"]["currentBuild"] = 89
+          json.dump(data, open(path, "w"))
+          PY
+
+          if python3 Build/verify_market_readiness.py \
+            --capture-evidence "$ROOT/capture.json" \
+            --production-release-evidence "$ROOT/release.json" \
+            --in-app-update-evidence "$ROOT/updater.json"; then
+            echo "Source update build mismatch was unexpectedly accepted." >&2
             exit 1
           fi
 
