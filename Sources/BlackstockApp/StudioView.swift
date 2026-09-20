@@ -258,6 +258,148 @@ struct StudioView: View {
         }
     }
 
+    private var localClipCandidatesSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Lokale Clip-Kandidaten")
+                .font(.headline)
+
+            Text("Blackstock analysiert das autorisierte Originalmedium lokal auf Sprachsegmente und gemessene Pausen. Die Vorschläge enthalten keine Erfolgs-, Qualitäts- oder Viralitätsnote und verändern den Schnitt erst nach deiner Auswahl.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Button {
+                Task {
+                    await state.generateLocalClipCandidates(
+                        localeIdentifier:
+                            speechLocaleIdentifier
+                    )
+                }
+            } label: {
+                HStack {
+                    if state.isGeneratingClipCandidates {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                    Label(
+                        state.isGeneratingClipCandidates
+                            ? "Lokale Clip-Analyse läuft …"
+                            : "Clip-Kandidaten lokal finden",
+                        systemImage: "scissors.badge.ellipsis"
+                    )
+                }
+            }
+            .buttonStyle(.bordered)
+            .disabled(
+                state.isGeneratingClipCandidates
+                || !editingEnabled
+            )
+
+            if let message =
+                state.clipCandidateStatusMessage {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            ForEach(
+                Array(
+                    state.localClipCandidates
+                        .enumerated()
+                ),
+                id: \.element.id
+            ) { index, candidate in
+                GroupBox(
+                    "Kandidat \(index + 1)"
+                ) {
+                    VStack(
+                        alignment: .leading,
+                        spacing: 8
+                    ) {
+                        HStack(spacing: 12) {
+                            Label(
+                                timeLabel(
+                                    candidate.sourceRange
+                                        .startSeconds
+                                )
+                                + " – "
+                                + timeLabel(
+                                    candidate.sourceRange
+                                        .endSeconds
+                                ),
+                                systemImage: "clock"
+                            )
+                            Label(
+                                timeLabel(
+                                    candidate.sourceRange
+                                        .durationSeconds
+                                ),
+                                systemImage:
+                                    "timer"
+                            )
+                            Label(
+                                "\(candidate.wordCount) Wörter",
+                                systemImage:
+                                    "text.word.spacing"
+                            )
+                        }
+                        .font(
+                            .caption.monospacedDigit()
+                        )
+                        .foregroundStyle(.secondary)
+
+                        if let confidence =
+                            candidate.averageConfidence {
+                            Text(
+                                "Mittlere Spracherkennungs-Konfidenz: "
+                                + String(
+                                    format: "%.0f%%",
+                                    Double(confidence)
+                                        * 100
+                                )
+                            )
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        }
+
+                        Text(
+                            candidate.transcriptPreview
+                        )
+                        .font(.caption)
+                        .textSelection(.enabled)
+                        .frame(
+                            maxWidth: .infinity,
+                            alignment: .leading
+                        )
+
+                        Button {
+                            Task {
+                                await state
+                                    .applyLocalClipCandidate(
+                                        candidate
+                                    )
+                            }
+                        } label: {
+                            Label(
+                                "Diesen Ausschnitt übernehmen",
+                                systemImage:
+                                    "checkmark.circle"
+                            )
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!editingEnabled)
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+
+            if !state.localClipCandidates.isEmpty {
+                Text("Jeder übernommene Kandidat wird als normale non-destruktive Trim-Revision gespeichert und kann über Rückgängig wieder verlassen werden.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
     private func timeline(_ asset: ProductionMediaAsset) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -359,6 +501,10 @@ struct StudioView: View {
                 Divider()
 
                 storyboardSection
+
+                Divider()
+
+                localClipCandidatesSection
 
                 Divider()
 
