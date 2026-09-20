@@ -11,7 +11,7 @@ final class UpdateManifestTests: XCTestCase {
         var manifest = BlackstockUpdateManifest(
             version: "1.2.3",
             build: 42,
-            packageURL: URL(string: "https://updates.example.com/Blackstock.pkg")!,
+            packageURL: URL(string: "https://updates.blackstock.app/Blackstock.pkg")!,
             sha256: String(repeating: "a", count: 64),
             sourceCommitSHA: sourceCommitSHA,
             publishedAt: publishedAt,
@@ -40,13 +40,45 @@ final class UpdateManifestTests: XCTestCase {
         )
     }
 
+    func testProductionUpdateURLPolicyRejectsUnsafeURLs() {
+        XCTAssertTrue(
+            ProductionUpdateURLPolicy.allows(
+                URL(
+                    string:
+                        "https://updates.blackstock.app/Blackstock.pkg"
+                )!
+            )
+        )
+
+        for raw in [
+            "http://updates.blackstock.app/Blackstock.pkg",
+            "https://localhost/Blackstock.pkg",
+            "https://localhost./Blackstock.pkg",
+            "https://[::1]/Blackstock.pkg",
+            "https://127.0.0.1/Blackstock.pkg",
+            "https://updates.blackstock.local/Blackstock.pkg",
+            "https://updates.blackstock.invalid/Blackstock.pkg",
+            "https://updates.blackstock.example/Blackstock.pkg",
+            "https://updates.blackstock.test/Blackstock.pkg",
+            "https://user:pass@updates.blackstock.app/Blackstock.pkg",
+            "https://updates.blackstock.app/Blackstock.pkg#fragment",
+        ] {
+            XCTAssertFalse(
+                ProductionUpdateURLPolicy.allows(
+                    URL(string: raw)!
+                ),
+                raw
+            )
+        }
+    }
+
     func testHTTPPackageURLIsRejectedEvenWithValidSignature() throws {
         let privateKey = Curve25519.Signing.PrivateKey()
         let publishedAt = Date(timeIntervalSince1970: 1_700_000_000)
         var manifest = BlackstockUpdateManifest(
             version: "1.2.3",
             build: 42,
-            packageURL: URL(string: "http://updates.example.com/Blackstock.pkg")!,
+            packageURL: URL(string: "http://updates.blackstock.app/Blackstock.pkg")!,
             sha256: String(repeating: "b", count: 64),
             sourceCommitSHA: sourceCommitSHA,
             publishedAt: publishedAt,
@@ -85,7 +117,7 @@ final class UpdateManifestTests: XCTestCase {
         let unsigned = BlackstockUpdateManifest(
             version: "1.2.3",
             build: 42,
-            packageURL: URL(string: "https://updates.example.com/Blackstock.pkg")!,
+            packageURL: URL(string: "https://updates.blackstock.app/Blackstock.pkg")!,
             sha256: String(repeating: "c", count: 64),
             sourceCommitSHA: sourceCommitSHA,
             publishedAt: publishedAt,
@@ -123,7 +155,7 @@ final class UpdateManifestTests: XCTestCase {
         let manifest = BlackstockUpdateManifest(
             version: "1.3.0",
             build: 1,
-            packageURL: URL(string: "https://updates.example.com/Blackstock.pkg")!,
+            packageURL: URL(string: "https://updates.blackstock.app/Blackstock.pkg")!,
             sha256: String(repeating: "d", count: 64),
             sourceCommitSHA: sourceCommitSHA,
             publishedAt: Date(timeIntervalSince1970: 1_700_000_000),
