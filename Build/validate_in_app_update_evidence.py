@@ -26,7 +26,7 @@ try:
 except Exception as error:
     fail(f"invalid JSON: {error}")
 
-if envelope.get("schemaVersion") != 3:
+if envelope.get("schemaVersion") != 4:
     fail("unsupported schemaVersion")
 
 value = envelope.get("value")
@@ -53,6 +53,12 @@ required = [
     "observedInstalledBuild",
     "observedInstalledSourceCommitSHA",
     "observedInstalledExecutableSHA256",
+    "observedInstalledAppPath",
+    "observedApplicationTeamID",
+    "observedDeveloperIDApplicationVerified",
+    "observedInstallerReceiptPackageID",
+    "observedInstallerReceiptVersion",
+    "observedInstallerReceiptVerified",
     "postUpdateLaunchVerifiedAt",
 ]
 for key in required:
@@ -139,6 +145,25 @@ observed_executable_sha256 = str(
 ).lower()
 if not re.fullmatch(r"[0-9a-f]{64}", observed_executable_sha256):
     fail("observedInstalledExecutableSHA256 must be a 64-character hexadecimal SHA-256")
+
+if str(value["observedInstalledAppPath"]).strip() != "/Applications/Blackstock.app":
+    fail("observedInstalledAppPath must be /Applications/Blackstock.app")
+
+observed_team = str(value["observedApplicationTeamID"]).strip()
+if not re.fullmatch(r"[A-Za-z0-9]+", observed_team):
+    fail("observedApplicationTeamID must be ASCII alphanumeric")
+if observed_team != team:
+    fail("observedApplicationTeamID must equal expectedInstallerTeamID")
+
+if value["observedDeveloperIDApplicationVerified"] is not True:
+    fail("observedDeveloperIDApplicationVerified must be true")
+
+if str(value["observedInstallerReceiptPackageID"]).strip() != "de.blackstock.app":
+    fail("observedInstallerReceiptPackageID must equal de.blackstock.app")
+if str(value["observedInstallerReceiptVersion"]).strip() != str(value["targetVersion"]):
+    fail("observedInstallerReceiptVersion must equal targetVersion")
+if value["observedInstallerReceiptVerified"] is not True:
+    fail("observedInstallerReceiptVerified must be true")
 
 time_keys = [
     "startedAt",
