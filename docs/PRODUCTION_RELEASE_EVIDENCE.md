@@ -36,7 +36,8 @@ Blackstock enthält zwei bewusst getrennte manuelle Workflows:
 2. **Blackstock Verify Published Release** (`.github/workflows/verify-published-release.yml`)
    - läuft erst **nach** Veröffentlichung von Manifest und Paket unter den realen HTTPS-URLs,
    - verifiziert Manifest-Signatur, Paket-Hash, Installer-Team und Notarisierungsstatus,
-   - installiert das verifizierte Paket auf einem frischen macOS-Runner,
+   - gibt die dabei geprüften Paketbytes über `--verified-package-output` aus,
+   - installiert exakt diese geprüfte Datei auf einem frischen macOS-Runner, ohne zweiten Manifest- oder Paketdownload,
    - verifiziert Developer ID Application, Gatekeeper sowie exakte Manifest-Version, -Build, **Source-Commit und Executable-SHA-256** der installierten App,
    - startet die installierte Produktions-App,
    - erzeugt `release-evidence.json`.
@@ -155,6 +156,7 @@ swift run -c release BlackstockReleaseVerifier \
   --installed-app "/Applications/Blackstock.app" \
   --notary-submission-id "$BLACKSTOCK_NOTARY_SUBMISSION_ID" \
   --notary-keychain-profile "$BLACKSTOCK_NOTARY_KEYCHAIN_PROFILE" \
+  --verified-package-output verified-Blackstock.pkg \
   --output release-evidence.json
 ```
 
@@ -167,6 +169,7 @@ Er prüft:
 - Manifest beschreibt gegenüber der Ausgangsversion tatsächlich ein Update.
 - Paket wird von der im Manifest angegebenen HTTPS-URL geladen.
 - Paket-SHA-256 entspricht exakt dem signierten Manifest.
+- Optional kann genau diese bereits geprüfte Paketdatei über `--verified-package-output` atomar für den anschließenden Installationsschritt persistiert werden; die persistierte Kopie wird erneut gegen denselben signierten Manifest-SHA-256 geprüft.
 - Der Source-Commit-SHA ist Teil des signierten Manifest-Payloads.
 - Paket ist ein Developer-ID-Installer des erwarteten Apple-Teams.
 - Stapled Notarization Ticket ist gültig.
