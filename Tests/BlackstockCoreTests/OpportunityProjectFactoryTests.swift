@@ -42,6 +42,37 @@ final class OpportunityProjectFactoryTests: XCTestCase {
         XCTAssertEqual(seed.opportunityID, candidate.id)
     }
 
+
+    func testClipProjectCanStartDirectlyInProduction() throws {
+        let candidate = YouTubeOpportunityCandidate(
+            videoID: "clip123",
+            title: "Clip source",
+            channelID: "source-channel",
+            channelTitle: "Quelle",
+            publishedAt: nil,
+            thumbnailURL: nil,
+            query: "test",
+            retrievedAt: Date(timeIntervalSince1970: 100),
+            embeddable: true,
+            metrics: .init(
+                viewCount: nil,
+                likeCount: nil,
+                commentCount: nil,
+                publishedAt: nil,
+                retrievedAt: Date(timeIntervalSince1970: 100)
+            )
+        )
+
+        let seed = try OpportunityProjectFactory().make(
+            opportunity: candidate,
+            targetChannelID: "target-channel",
+            strategyVersion: 1,
+            initialStage: .production
+        )
+
+        XCTAssertEqual(seed.project.stage, .production)
+    }
+
     func testMissingTargetChannelHardFailsProjectCreation() {
         let candidate = YouTubeOpportunityCandidate(
             videoID: "abc",
