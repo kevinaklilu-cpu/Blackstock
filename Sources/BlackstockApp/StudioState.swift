@@ -1362,6 +1362,53 @@ final class StudioState: ObservableObject {
         }
     }
 
+    func useSavedClipForPackaging(
+        _ selection: SavedClipSelection
+    ) async {
+        guard let artifact =
+                selection.renderArtifact,
+              artifact.hasCurrentTechnicalValidation,
+              FileManager.default.fileExists(
+                atPath: artifact.fileURL.path
+              ) else {
+            errorMessage =
+                "Dieser Clip besitzt noch keine aktuelle validierte Render-Datei."
+            return
+        }
+
+        await applySavedClipSelection(
+            selection
+        )
+        guard errorMessage == nil else {
+            return
+        }
+
+        renderArtifact = artifact
+        await refreshAudioInspection(
+            for: artifact.fileURL
+        )
+
+        ledger.append(.init(
+            timestamp: Date(),
+            actor: .user,
+            stage: .editing,
+            action:
+                "saved-clip-selected-for-packaging",
+            summary:
+                "Ein gespeicherter, technisch validierter Clip wurde als aktueller Kandidat für Packaging und Review ausgewählt.",
+            relatedSourceIDs: [
+                selection.id.uuidString,
+                artifact.id.uuidString
+            ],
+            reversible: false,
+            correlationID: correlationID
+        ))
+        persistWorkspaceIfPossible()
+        clipCandidateStatusMessage =
+            "Dieser Clip ist jetzt der aktuelle Packaging-Kandidat. Nutze „Veröffentlichungspaket & Prüfung“, um fortzufahren."
+        errorMessage = nil
+    }
+
     func previewSavedClipSelection(
         _ selection: SavedClipSelection
     ) async {
