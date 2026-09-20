@@ -42,6 +42,7 @@ struct StudioView: View {
                 emptyState
             }
         }
+        .background(BlackstockDesign.canvas)
         .fileImporter(
             isPresented: $showImporter,
             allowedContentTypes: [.movie],
@@ -99,32 +100,47 @@ struct StudioView: View {
     }
 
     private var header: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Editor")
+        HStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(project.title)
                     .font(.title2.bold())
-                Text("Video schneiden und gestalten")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                HStack(spacing: 8) {
+                    Label("Editor", systemImage: "scissors")
+                    Text("•")
+                    Text(currentStage.rawValue)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
             Spacer()
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(project.title)
-                    .font(.caption.weight(.semibold))
-                    .lineLimit(1)
-                Text("Zielkanal: \(project.targetChannelID)")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                Text("Status: \(currentStage.rawValue)")
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.secondary)
-            }
-            Button("Video importieren …") {
+
+            Button {
                 showImporter = true
+            } label: {
+                Label("Medien", systemImage: "plus")
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.bordered)
+
+            if state.renderArtifact != nil {
+                Button {
+                    if currentStage == .editing {
+                        if session.advanceActiveProject(to: .packaging) {
+                            showPackagingReview = true
+                        }
+                    } else {
+                        showPackagingReview = true
+                    }
+                } label: {
+                    Label("Veröffentlichen", systemImage: "arrow.up.circle.fill")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(BlackstockDesign.accent)
+            }
         }
-        .padding(18)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
+        .background(BlackstockDesign.raisedSurface)
     }
 
     private func sourceContext(_ source: MediaSourceReference) -> some View {
@@ -336,7 +352,7 @@ struct StudioView: View {
 
     private func editor(_ asset: ProductionMediaAsset) -> some View {
         HSplitView {
-            VStack(spacing: 12) {
+            VStack(spacing: 14) {
                 ZStack(alignment: .bottom) {
                     VideoPlayer(player: state.player)
                         .accessibilityLabel("Video-Vorschau des aktuellen Schnitts")
@@ -350,16 +366,26 @@ struct StudioView: View {
                         captionPreviewOverlay
                     }
                 }
-                .frame(minWidth: 620, minHeight: 360)
-                .background(.black)
+                .frame(minWidth: 680, minHeight: 390)
+                .background(BlackstockDesign.mediaSurface)
                 .clipShape(
-                    RoundedRectangle(cornerRadius: 12)
+                    RoundedRectangle(
+                        cornerRadius: BlackstockDesign.cornerRadius,
+                        style: .continuous
+                    )
+                )
+                .overlay(
+                    RoundedRectangle(
+                        cornerRadius: BlackstockDesign.cornerRadius,
+                        style: .continuous
+                    )
+                    .strokeBorder(BlackstockDesign.subtleBorder)
                 )
 
                 timeline(asset)
                     .frame(height: 112)
 
-                HStack {
+                HStack(spacing: 8) {
                     Button {
                         Task { await state.undo() }
                     } label: {
@@ -420,10 +446,12 @@ struct StudioView: View {
                 }
             }
             .padding(18)
-            .frame(minWidth: 700)
+            .frame(minWidth: 760)
+            .background(BlackstockDesign.canvas)
 
             inspector(asset)
-                .frame(minWidth: 300, idealWidth: 330, maxWidth: 380)
+                .frame(minWidth: 320, idealWidth: 350, maxWidth: 400)
+                .background(BlackstockDesign.raisedSurface)
         }
     }
 
