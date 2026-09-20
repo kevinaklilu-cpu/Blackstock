@@ -22,6 +22,30 @@ else:
     for path in workflow_files:
         text = path.read_text(encoding="utf-8")
         lines = text.splitlines()
+
+        if "pull_request_target:" in text:
+            errors.append(
+                f"{path.relative_to(ROOT)}: pull_request_target is forbidden "
+                "because it can combine untrusted PR context with privileged workflow execution"
+            )
+
+        if "permissions:\n  contents: read" not in text:
+            errors.append(
+                f"{path.relative_to(ROOT)}: workflow must declare top-level "
+                "permissions with contents: read"
+            )
+
+        for permission_line_number, permission_line in enumerate(lines, 1):
+            normalized = permission_line.strip().lower()
+            if normalized == "permissions: write-all" or re.fullmatch(
+                r"[a-z0-9_-]+:\s*write",
+                normalized,
+            ):
+                errors.append(
+                    f"{path.relative_to(ROOT)}:{permission_line_number}: "
+                    f"write-capable GITHUB_TOKEN permission is forbidden: "
+                    f"{permission_line.strip()}"
+                )
         for line_number, line in enumerate(lines, 1):
             match = USES_PATTERN.match(line)
             if not match:
@@ -73,6 +97,7 @@ if errors:
 
 print(
     "GitHub Actions supply-chain audit passed: every external workflow "
-    "dependency is pinned to an immutable 40-character commit SHA and "
-    "checkout credentials are not persisted."
+    "dependency is pinned to an immutable 40-character commit SHA, "
+    "checkout credentials are not persisted, and workflow token permissions "
+    "remain read-only."
 )
