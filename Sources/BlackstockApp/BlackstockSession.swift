@@ -1658,7 +1658,11 @@ final class BlackstockSession: ObservableObject {
             let seed = try OpportunityProjectFactory().make(
                 opportunity: opportunity,
                 targetChannelID: channelID,
-                strategyVersion: storedStrategyVersion(for: channelID)
+                strategyVersion: storedStrategyVersion(for: channelID),
+                initialStage:
+                    productionIntentKind == .clipFromOpportunity
+                    ? .production
+                    : .research
             )
             try Self.store(project: seed.project)
             try Self.store(
@@ -1673,20 +1677,22 @@ final class BlackstockSession: ObservableObject {
                     createdAt: Date()
                 )
             )
-            let providerFacts = Self.providerFacts(
-                for: opportunity
-            )
-            try researchDecisionStore().saveResearch(
-                ResearchEvidenceRecord(
-                    projectID: seed.project.id,
-                    opportunityID: opportunity.id,
-                    source: seed.source,
-                    researchQuestion: "",
-                    providerFacts: providerFacts,
-                    creatorNotes: "",
-                    createdAt: Date()
+            if productionIntentKind == .standardProject {
+                let providerFacts = Self.providerFacts(
+                    for: opportunity
                 )
-            )
+                try researchDecisionStore().saveResearch(
+                    ResearchEvidenceRecord(
+                        projectID: seed.project.id,
+                        opportunityID: opportunity.id,
+                        source: seed.source,
+                        researchQuestion: "",
+                        providerFacts: providerFacts,
+                        creatorNotes: "",
+                        createdAt: Date()
+                    )
+                )
+            }
             activeProject = seed.project
             activeOpportunitySource = seed.source
             lastPublishingResult = nil
