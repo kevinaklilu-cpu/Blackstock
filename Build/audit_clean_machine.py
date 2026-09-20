@@ -17,7 +17,7 @@ requirements = {
         "OpportunityClipPreparationPlanner()",
         "LocalClipCandidateGenerator()",
         "SupplementalVideoInsertInput(",
-        "LocalSupplementalVideoCompositor",
+        "supplementalVideo:",
         "LocalVideoRenderer()",
         "LocalAudioTechnicalInspector()",
         "LocalAudioSignalAnalyzer()",
