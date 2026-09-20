@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import hashlib
 import json
+import math
 import re
 import sys
 from datetime import datetime
@@ -19,7 +20,7 @@ if not path.is_file():
     fail(f"evidence file not found: {path}")
 
 try:
-    data = json.loads(path.read_text(encoding="utf-8"))
+    data = json.loads(path.read_text(encoding="utf-8"), parse_constant=lambda token: (_ for _ in ()).throw(ValueError(f"non-finite JSON number: {token}")))
 except Exception as error:
     fail(f"invalid JSON: {error}")
 
@@ -153,6 +154,8 @@ def validate_capture(name, require_video=False, require_samples=False):
         duration = float(item["durationSeconds"])
     except (TypeError, ValueError):
         fail(f"{name}.durationSeconds must be numeric")
+    if not math.isfinite(duration):
+        fail(f"{name}.durationSeconds must be finite")
     if duration < 5:
         fail(f"{name}.durationSeconds must be at least 5 seconds")
 
