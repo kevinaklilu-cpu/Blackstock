@@ -9,7 +9,7 @@ checks = {
         "if session.onboardingComplete",
         "FirstRunView(session: session)",
         "WorkspaceShell(",
-        "GroupBox(\"Aktiver Projektpfad\")",
+        "GroupBox(\"Aktives Projekt\")",
         "ResearchAnalysisJourneyView(",
         "session.completeResearch(",
         "session.completeAnalysis(",
