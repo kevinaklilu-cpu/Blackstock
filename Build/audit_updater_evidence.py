@@ -198,6 +198,9 @@ requirements = {
         '"captureEvidenceSHA256"',
         '"productionReleaseEvidenceSHA256"',
         '"inAppUpdateEvidenceSHA256"',
+        "market readiness output must not overwrite an evidence file",
+        "NamedTemporaryFile",
+        "temporary_output.replace(output_path)",
     ],
     "docs/PRODUCTION_RELEASE_EVIDENCE.md": [
         "Echter Updater-E2E",
