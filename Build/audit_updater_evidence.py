@@ -61,6 +61,13 @@ requirements = {
         "observedInstalledExecutableSHA256",
         "postUpdateLaunchVerifiedAt",
         "must use a real production host",
+        "must not contain embedded credentials",
+        "must not contain a fragment",
+        'host == "::1"',
+        'host.endswith(".local")',
+        "id must be a UUID",
+        "non-finite JSON number",
+        "must be finite",
     ],
     "Sources/BlackstockReleaseVerifier/BlackstockReleaseVerifier.swift": [
         "BLACKSTOCK_RELEASE_VERIFY_PASS",
