@@ -14,7 +14,7 @@ public enum InAppUpdateEvidenceError:
 }
 
 public enum InAppUpdateEvidenceSchema {
-    public static let current = 5
+    public static let current = 6
 }
 
 public struct InAppUpdateEvidence:
@@ -31,6 +31,7 @@ public struct InAppUpdateEvidence:
     public let currentDeveloperIDApplicationVerified: Bool
     public let currentInstallerReceiptPackageID: String
     public let currentInstallerReceiptVersion: String
+    public let currentInstallerReceiptInstalledAt: Date
     public let currentInstallerReceiptVerified: Bool
     public let manifestURL: URL
     public let expectedInstallerTeamID: String
@@ -54,6 +55,7 @@ public struct InAppUpdateEvidence:
     public var observedDeveloperIDApplicationVerified: Bool?
     public var observedInstallerReceiptPackageID: String?
     public var observedInstallerReceiptVersion: String?
+    public var observedInstallerReceiptInstalledAt: Date?
     public var observedInstallerReceiptVerified: Bool?
     public var postUpdateLaunchVerifiedAt: Date?
 
@@ -68,6 +70,7 @@ public struct InAppUpdateEvidence:
         currentDeveloperIDApplicationVerified: Bool,
         currentInstallerReceiptPackageID: String,
         currentInstallerReceiptVersion: String,
+        currentInstallerReceiptInstalledAt: Date,
         currentInstallerReceiptVerified: Bool,
         manifestURL: URL,
         expectedInstallerTeamID: String,
@@ -89,6 +92,8 @@ public struct InAppUpdateEvidence:
             currentInstallerReceiptPackageID
         self.currentInstallerReceiptVersion =
             currentInstallerReceiptVersion
+        self.currentInstallerReceiptInstalledAt =
+            currentInstallerReceiptInstalledAt
         self.currentInstallerReceiptVerified =
             currentInstallerReceiptVerified
         self.manifestURL = manifestURL
@@ -113,6 +118,7 @@ public struct InAppUpdateEvidence:
         observedDeveloperIDApplicationVerified = nil
         observedInstallerReceiptPackageID = nil
         observedInstallerReceiptVersion = nil
+        observedInstallerReceiptInstalledAt = nil
         observedInstallerReceiptVerified = nil
         postUpdateLaunchVerifiedAt = nil
     }
@@ -150,6 +156,8 @@ public struct InAppUpdateEvidence:
                 == "de.blackstock.app",
               currentInstallerReceiptVersion
                 == currentVersion,
+              currentInstallerReceiptInstalledAt
+                <= startedAt.addingTimeInterval(1),
               currentInstallerReceiptVerified,
               hasVerifiedPackage,
               installerOpenedAt != nil,
@@ -174,9 +182,17 @@ public struct InAppUpdateEvidence:
                 == "de.blackstock.app",
               observedInstallerReceiptVersion
                 == targetVersion,
+              let observedInstallerReceiptInstalledAt,
+              let installerOpenedAt,
+              observedInstallerReceiptInstalledAt
+                > currentInstallerReceiptInstalledAt,
+              observedInstallerReceiptInstalledAt
+                >= installerOpenedAt.addingTimeInterval(-1),
               observedInstallerReceiptVerified
                 == true,
-              postUpdateLaunchVerifiedAt != nil else {
+              let postUpdateLaunchVerifiedAt,
+              observedInstallerReceiptInstalledAt
+                <= postUpdateLaunchVerifiedAt.addingTimeInterval(1) else {
             return false
         }
         return true
@@ -208,6 +224,7 @@ public struct InAppUpdateEvidenceStore: Sendable {
         currentDeveloperIDApplicationVerified: Bool = false,
         currentInstallerReceiptPackageID: String = "",
         currentInstallerReceiptVersion: String = "",
+        currentInstallerReceiptInstalledAt: Date? = nil,
         currentInstallerReceiptVerified: Bool = false,
         manifestURL: URL,
         expectedInstallerTeamID: String,
@@ -225,6 +242,9 @@ public struct InAppUpdateEvidenceStore: Sendable {
               currentDeveloperIDApplicationVerified,
               currentInstallerReceiptPackageID == "de.blackstock.app",
               currentInstallerReceiptVersion == currentVersion,
+              let currentInstallerReceiptInstalledAt,
+              currentInstallerReceiptInstalledAt
+                <= now.addingTimeInterval(1),
               currentInstallerReceiptVerified else {
             throw InAppUpdateEvidenceError
                 .invalidCurrentAppProvenance
@@ -247,6 +267,8 @@ public struct InAppUpdateEvidenceStore: Sendable {
                 currentInstallerReceiptPackageID,
             currentInstallerReceiptVersion:
                 currentInstallerReceiptVersion,
+            currentInstallerReceiptInstalledAt:
+                currentInstallerReceiptInstalledAt,
             currentInstallerReceiptVerified:
                 currentInstallerReceiptVerified,
             manifestURL: manifestURL,
@@ -326,6 +348,7 @@ public struct InAppUpdateEvidenceStore: Sendable {
         developerIDApplicationVerified: Bool,
         installerReceiptPackageID: String,
         installerReceiptVersion: String,
+        installerReceiptInstalledAt: Date,
         installerReceiptVerified: Bool,
         now: Date = Date()
     ) throws -> InAppUpdateEvidence? {
@@ -353,6 +376,14 @@ public struct InAppUpdateEvidenceStore: Sendable {
                 == "de.blackstock.app",
               installerReceiptVersion
                 == installedVersion,
+              installerReceiptInstalledAt
+                > evidence.currentInstallerReceiptInstalledAt,
+              let installerOpenedAt =
+                evidence.installerOpenedAt,
+              installerReceiptInstalledAt
+                >= installerOpenedAt.addingTimeInterval(-1),
+              installerReceiptInstalledAt
+                <= now.addingTimeInterval(1),
               installerReceiptVerified
         else {
             return evidence
@@ -376,6 +407,8 @@ public struct InAppUpdateEvidenceStore: Sendable {
             installerReceiptPackageID
         evidence.observedInstallerReceiptVersion =
             installerReceiptVersion
+        evidence.observedInstallerReceiptInstalledAt =
+            installerReceiptInstalledAt
         evidence.observedInstallerReceiptVerified =
             installerReceiptVerified
         evidence.postUpdateLaunchVerifiedAt = now
