@@ -101,10 +101,9 @@ jobs:
           UPDATE_PRIVATE_KEY: ${{ secrets.BLACKSTOCK_UPDATE_PRIVATE_KEY_BASE64 }}
           UPDATE_PUBLIC_KEY: ${{ secrets.BLACKSTOCK_UPDATE_PUBLIC_KEY_BASE64 }}
           GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.BLACKSTOCK_GOOGLE_OAUTH_CLIENT_ID }}
-          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.BLACKSTOCK_GOOGLE_OAUTH_CLIENT_SECRET }}
         run: |
           set -euo pipefail
-          for name in             APP_CERT             APP_CERT_PASSWORD             INSTALLER_CERT             INSTALLER_CERT_PASSWORD             APP_IDENTITY             INSTALLER_IDENTITY             TEAM_ID             NOTARY_KEY             NOTARY_KEY_ID             NOTARY_ISSUER             UPDATE_PRIVATE_KEY             UPDATE_PUBLIC_KEY             GOOGLE_OAUTH_CLIENT_ID             GOOGLE_OAUTH_CLIENT_SECRET
+          for name in             APP_CERT             APP_CERT_PASSWORD             INSTALLER_CERT             INSTALLER_CERT_PASSWORD             APP_IDENTITY             INSTALLER_IDENTITY             TEAM_ID             NOTARY_KEY             NOTARY_KEY_ID             NOTARY_ISSUER             UPDATE_PRIVATE_KEY             UPDATE_PUBLIC_KEY             GOOGLE_OAUTH_CLIENT_ID
           do
             if [[ -z "${!name}" ]]; then
               echo "Missing required production secret: $name" >&2
@@ -198,7 +197,6 @@ jobs:
           BLACKSTOCK_BUILD: ${{ inputs.build }}
           BLACKSTOCK_SOURCE_COMMIT_SHA: ${{ github.sha }}
           BLACKSTOCK_GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.BLACKSTOCK_GOOGLE_OAUTH_CLIENT_ID }}
-          BLACKSTOCK_GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.BLACKSTOCK_GOOGLE_OAUTH_CLIENT_SECRET }}
           BLACKSTOCK_CODESIGN_IDENTITY: ${{ secrets.BLACKSTOCK_CODESIGN_IDENTITY }}
           BLACKSTOCK_INSTALLER_IDENTITY: ${{ secrets.BLACKSTOCK_INSTALLER_IDENTITY }}
           BLACKSTOCK_NOTARY_KEY_ID: ${{ secrets.BLACKSTOCK_NOTARY_KEY_ID }}
