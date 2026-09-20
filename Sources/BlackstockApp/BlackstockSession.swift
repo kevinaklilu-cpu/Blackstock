@@ -527,7 +527,7 @@ final class BlackstockSession: ObservableObject {
         guard let channelID =
             selectedChannelID ?? workspaceChannelID else {
             errorMessage =
-                "Wähle zuerst den YouTube-Arbeitsbereich."
+                "Wähle zuerst deinen YouTube-Kanal."
             return false
         }
 
@@ -706,7 +706,7 @@ final class BlackstockSession: ObservableObject {
         }
         guard let workspaceChannelID,
               workspaceChannelID == project.targetChannelID else {
-            errorMessage = "Arbeitsbereich- und Projekt-Zielkanal stimmen nicht überein."
+            errorMessage = "Der ausgewählte YouTube-Kanal passt nicht zu diesem Projekt."
             return
         }
         guard let preparation = loadPublishPreparation(
@@ -1552,14 +1552,14 @@ final class BlackstockSession: ObservableObject {
             let candidates = try await YouTubeAuthorizedClient(accessToken: accessToken)
                 .firstOpportunityCandidates(query: primaryTopic, maxResults: 12, order: .relevance)
             guard !candidates.isEmpty else {
-                errorMessage = "YouTube hat für diesen strategischen Suchraum aktuell keine Opportunity-Kandidaten geliefert."
+                errorMessage = "YouTube hat für dieses Thema aktuell keine passenden Videos geliefert."
                 return
             }
 
             opportunities = candidates
             step = .opportunities
         } catch {
-            errorMessage = "Die ersten Chancen konnten nicht aus realen YouTube-Daten erstellt werden: \(describe(error))"
+            errorMessage = "Videos konnten nicht geladen werden: \(describe(error))"
         }
     }
 
@@ -1578,11 +1578,11 @@ final class BlackstockSession: ObservableObject {
             in: .whitespacesAndNewlines
         )
         guard !resolvedQuery.isEmpty else {
-            errorMessage = "Gib zuerst einen konkreten Suchraum für neue Chancen ein."
+            errorMessage = "Gib zuerst ein Thema für die Videosuche ein."
             return
         }
         guard let channelID = workspaceChannelID else {
-            errorMessage = "Kein YouTube-Arbeitsbereich ist verbunden."
+            errorMessage = "Kein YouTube-Kanal ist verbunden."
             return
         }
 
@@ -1592,7 +1592,7 @@ final class BlackstockSession: ObservableObject {
                 "youtube.\(channelID).accessToken"
             )
         guard !accessToken.isEmpty else {
-            errorMessage = "Die Google-Autorisierung für den Arbeitsbereich ist nicht mehr verfügbar."
+            errorMessage = "Die Google-Verbindung für diesen Kanal ist nicht mehr verfügbar."
             return
         }
 
@@ -1613,7 +1613,7 @@ final class BlackstockSession: ObservableObject {
                 errorMessage = "YouTube hat für diesen Suchraum aktuell keine passenden Videos geliefert."
             }
         } catch {
-            errorMessage = "Neue Chancen konnten nicht aus realen YouTube-Daten geladen werden: \(describe(error))"
+            errorMessage = "Videos konnten nicht geladen werden: \(describe(error))"
         }
     }
 
@@ -1630,7 +1630,7 @@ final class BlackstockSession: ObservableObject {
         guard workspaceRightsAttestation?
             .permitsUserDirectedProduction == true else {
             errorMessage =
-                "Bestätige einmalig die Nutzungsverantwortung für diesen Arbeitsbereich, bevor du ein Video als Clip-Projekt übernimmst."
+                "Bestätige einmalig die Nutzungsrechte, bevor du einen Clip erstellst."
             return
         }
         useOpportunity(
@@ -1759,7 +1759,7 @@ final class BlackstockSession: ObservableObject {
             createdAt: Date()
         )
         guard completed.isComplete else {
-            errorMessage = "Recherche benötigt eine konkrete Frage, Provider-Fakten und eigene Notizen."
+            errorMessage = "Für die Recherche fehlen noch Frage und Notizen."
             return false
         }
 
@@ -1808,7 +1808,7 @@ final class BlackstockSession: ObservableObject {
         }
 
         guard decision == .pursue else {
-            errorMessage = "Opportunity wurde bewusst verworfen. Das Projekt bleibt in der Analyse und wechselt nicht in Produktion."
+            errorMessage = "Das Video wurde für dieses Projekt verworfen."
             return false
         }
         return advanceActiveProject(to: .production)
