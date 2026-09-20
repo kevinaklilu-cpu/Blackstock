@@ -18,7 +18,7 @@ checks = {
         "hasActiveProject: session.activeProject?.stage",
         'title: "Editor öffnen"',
         'Label("Videos", systemImage: "play.rectangle")',
-        'Label("Projekte", systemImage: "tray.full")',
+        'Label("Projekte", systemImage: "folder")',
         "OpportunityWorkspaceView(",
         "ProjectLibraryView(",
     ],
@@ -39,6 +39,10 @@ checks = {
         "initialStage:",
         "productionIntentKind == .clipFromOpportunity",
         "? .production",
+    ],
+    "Tests/BlackstockCoreTests/OpportunityProjectFactoryTests.swift": [
+        "testClipProjectCanStartDirectlyInProduction",
+        "initialStage: .production",
     ],
     "Sources/BlackstockCore/LocalClipCandidateGenerator.swift": [
         "LocalClipCandidateGenerator",
