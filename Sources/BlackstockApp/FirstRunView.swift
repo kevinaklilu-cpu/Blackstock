@@ -211,6 +211,7 @@ struct FirstRunView: View {
                 }
             }
             .pickerStyle(.menu)
+            .accessibilityLabel("YouTube-Region")
             .onChange(of: session.channelRegionCode) { _ in
                 Task {
                     await session
@@ -227,6 +228,7 @@ struct FirstRunView: View {
                 }
             }
             .pickerStyle(.menu)
+            .accessibilityLabel("YouTube-Content-Sprache")
             .onChange(of: session.contentLanguage) { _ in
                 Task {
                     await session
@@ -243,6 +245,7 @@ struct FirstRunView: View {
                 }
             }
             .pickerStyle(.menu)
+            .accessibilityLabel("YouTube-Video-Kategorie")
 
             Picker(
                 "YouTube-Zielgruppe",
@@ -256,6 +259,7 @@ struct FirstRunView: View {
                 }
             }
             .pickerStyle(.menu)
+            .accessibilityLabel("YouTube-Zielgruppe")
 
             Picker(
                 "Hauptziel in Blackstock",

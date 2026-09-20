@@ -7,7 +7,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 CRITICAL = {
     "Sources/BlackstockApp/FirstRunView.swift": [
-        'accessibilityLabel("Kanalthema")',
+        'accessibilityLabel("YouTube-Region")',
+        'accessibilityLabel("YouTube-Content-Sprache")',
+        'accessibilityLabel("YouTube-Video-Kategorie")',
+        'accessibilityLabel("YouTube-Zielgruppe")',
         'accessibilityLabel("Video-Sortierung")',
         'accessibilityLabel("YouTube-Vorschau:',
     ],
