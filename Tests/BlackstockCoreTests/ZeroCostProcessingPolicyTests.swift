@@ -87,6 +87,23 @@ final class ZeroCostProcessingPolicyTests: XCTestCase {
         XCTAssertEqual(route.providerID, "youtube.official")
     }
 
+    func testPaidProviderIsUnavailableUntilExplicitlyConfigured() {
+        let unconfigured = BuiltInProcessingProviders.opusClipAPI
+        let configured = BuiltInProcessingProviders.opusClipAPI(
+            configured: true,
+            lastVerifiedAt: Date()
+        )
+        let paidPolicy = ZeroCostProcessingPolicy(
+            allowFreeExternalProviders: true,
+            allowPaidProviders: true
+        )
+
+        XCTAssertFalse(unconfigured.available)
+        XCTAssertFalse(paidPolicy.permits(unconfigured))
+        XCTAssertTrue(configured.available)
+        XCTAssertTrue(paidPolicy.permits(configured))
+    }
+
     func testPaidProviderIsNotAutomaticFallback() {
         let route = ZeroCostProviderSelector().select(
             capability: .remoteVideoIngest,

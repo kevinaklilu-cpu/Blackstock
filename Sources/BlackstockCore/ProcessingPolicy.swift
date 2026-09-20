@@ -239,14 +239,31 @@ public enum BuiltInProcessingProviders {
         lastVerifiedAt: Date(timeIntervalSince1970: 1_789_776_000)
     )
 
-    public static let opusClipAPI = ProcessingProviderDescriptor(
-        id: "opusclip.api",
-        displayName: "OpusClip API",
-        capabilities: [.remoteVideoIngest, .clipping, .reframing, .captions],
-        costClass: .paid,
-        requiresPaymentMethod: true,
-        freeQuotaDescription: nil,
-        available: true,
-        lastVerifiedAt: Date(timeIntervalSince1970: 1_789_776_000)
+    public static func opusClipAPI(
+        configured: Bool,
+        lastVerifiedAt: Date
+    ) -> ProcessingProviderDescriptor {
+        ProcessingProviderDescriptor(
+            id: "opusclip.api",
+            displayName: "OpusClip API",
+            capabilities: [
+                .remoteVideoIngest,
+                .clipping,
+                .reframing,
+                .captions
+            ],
+            costClass: .paid,
+            requiresPaymentMethod: true,
+            freeQuotaDescription: nil,
+            available: configured,
+            lastVerifiedAt: lastVerifiedAt
+        )
+    }
+
+    public static let opusClipAPI = opusClipAPI(
+        configured: false,
+        lastVerifiedAt: Date(
+            timeIntervalSince1970: 1_789_776_000
+        )
     )
 }
