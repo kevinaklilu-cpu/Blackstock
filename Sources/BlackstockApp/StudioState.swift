@@ -101,7 +101,7 @@ final class StudioState: ObservableObject {
                 if loadResult.recoveredFromBackup {
                     ledger.append(.init(
                         timestamp: Date(),
-                        actor: .blackstock,
+                        actor: .acceptedAIProposal,
                         stage: .editing,
                         action: "workspace-recovered-from-backup",
                         summary: "Der primäre Projekt-Arbeitsbereich war nicht lesbar. Blackstock hat den letzten validierten lokalen Sicherungsstand geladen.",
