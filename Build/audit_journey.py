@@ -67,7 +67,7 @@ checks = {
         "Vorschau abspielen",
         "Zurück zur aktuellen Schnittvorschau",
         "keine Erfolgs-, Qualitäts- oder Viralitätsnote",
-        "Sichtbare Captions ins Video rendern",
+        "Sichtbare Untertitel ins Video rendern",
         "captionPreviewOverlay",
     ],
     "Sources/BlackstockCore/LocalCaptionBurnInRenderer.swift": [
