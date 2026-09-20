@@ -534,6 +534,34 @@ struct StudioView: View {
                             alignment: .leading,
                             spacing: 6
                         ) {
+                            TextField(
+                                "Clip-Name",
+                                text: Binding(
+                                    get: {
+                                        state.savedClipSelections
+                                            .first(
+                                                where: {
+                                                    $0.id
+                                                        == selection.id
+                                                }
+                                            )?
+                                            .title
+                                            ?? ""
+                                    },
+                                    set: { value in
+                                        state.renameSavedClipSelection(
+                                            id: selection.id,
+                                            title: value
+                                        )
+                                    }
+                                )
+                            )
+                            .textFieldStyle(.roundedBorder)
+                            .font(.subheadline.weight(.semibold))
+                            .accessibilityLabel(
+                                "Name des gespeicherten Clips"
+                            )
+
                             HStack {
                                 Text(
                                     timeLabel(
