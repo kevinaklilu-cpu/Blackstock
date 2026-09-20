@@ -608,6 +608,11 @@ jobs:
             --in-app-update-evidence "$ROOT/updater.json" \
             --output "$ROOT/market-readiness.json"
           grep -q '"ready": true' "$ROOT/market-readiness.json"
+          grep -q '"schemaVersion": 3' "$ROOT/market-readiness.json"
+          grep -q '"sourceAppPath": "/Applications/Blackstock.app"' "$ROOT/market-readiness.json"
+          grep -q '"installedAppPath": "/Applications/Blackstock.app"' "$ROOT/market-readiness.json"
+          grep -q '"sourceInstallerReceiptVersion": "0.9.0"' "$ROOT/market-readiness.json"
+          grep -q '"installerReceiptVersion": "1.0.0"' "$ROOT/market-readiness.json"
 
           python3 - "$ROOT/capture.json" <<'PY'
           import json
