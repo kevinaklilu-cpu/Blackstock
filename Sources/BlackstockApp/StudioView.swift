@@ -564,18 +564,31 @@ struct StudioView: View {
                     }
                     .pickerStyle(.menu)
 
-                    Button {
-                        state.prepareShortFormSetup()
+                    Menu {
+                        ForEach(
+                            CreatorOutputPreset.allCases,
+                            id: \.self
+                        ) { preset in
+                            Button {
+                                state.prepareOutputPreset(
+                                    preset
+                                )
+                            } label: {
+                                Text(
+                                    preset.germanTitle
+                                )
+                            }
+                        }
                     } label: {
                         Label(
-                            "Shorts/Reels-Setup vorbereiten",
-                            systemImage: "rectangle.portrait.and.arrow.right"
+                            "Ausgabe-Preset vorbereiten",
+                            systemImage: "rectangle.3.group"
                         )
                     }
-                    .buttonStyle(.bordered)
+                    .menuStyle(.borderlessButton)
                     .disabled(!editingEnabled)
 
-                    Text("Bereitet 9:16 und den kräftigen Untertitelstil vor. Wenn bereits ein lokales Transkript existiert, werden sichtbare Untertitel ebenfalls aktiviert. Erst „Ausschnitt anwenden“ schreibt die Formatänderung in den EditGraph.")
+                    Text("YouTube 16:9, Shorts/Reels 9:16 oder Social 1:1 stellen Format und passenden Untertitelstil vor. Erst „Ausschnitt anwenden“ schreibt die Formatänderung in den EditGraph.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
 
