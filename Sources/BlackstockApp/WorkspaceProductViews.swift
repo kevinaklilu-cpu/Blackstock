@@ -313,6 +313,28 @@ struct OpportunityWorkspaceView: View {
                 )
             }
 
+            if !session.workspaceRightsResponsibilityAccepted {
+                GroupBox("Einmalige Nutzungsverantwortung") {
+                    Toggle(
+                        isOn: Binding(
+                            get: {
+                                session.workspaceRightsResponsibilityAccepted
+                            },
+                            set: {
+                                _ = session
+                                    .setWorkspaceRightsResponsibilityAccepted(
+                                        $0
+                                    )
+                            }
+                        )
+                    ) {
+                        Text("Ich verwende Blackstock nur für Inhalte, die ich bearbeiten und veröffentlichen darf, und übernehme die Verantwortung dafür.")
+                            .font(.caption)
+                    }
+                    .toggleStyle(.switch)
+                }
+            }
+
             if let active = session.activeProject {
                 Label(
                     "Dein aktuelles Projekt „\(active.title)“ bleibt im Projektverlauf erhalten, wenn du eine neue Chance startest.",
@@ -350,6 +372,9 @@ struct OpportunityWorkspaceView: View {
                     )
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled(
+                    !session.workspaceRightsResponsibilityAccepted
+                )
             }
         }
     }
