@@ -48,6 +48,10 @@ private struct WorkspaceShell: View {
             List(selection: $selection) {
                 Label("Übersicht", systemImage: "rectangle.grid.2x2")
                     .tag("Übersicht")
+                Label("Chancen", systemImage: "sparkle.magnifyingglass")
+                    .tag("Chancen")
+                Label("Projekte", systemImage: "tray.full")
+                    .tag("Projekte")
                 if session.activeProject?.stage.journeyGuidance
                     .recommendedSurface == .studio {
                     Label("Studio", systemImage: "film.stack")
@@ -59,6 +63,31 @@ private struct WorkspaceShell: View {
             .navigationTitle("Blackstock")
         } detail: {
             switch selection {
+            case "Chancen":
+                OpportunityWorkspaceView(
+                    session: session,
+                    onProjectCreated: {
+                        selection = "Übersicht"
+                    }
+                )
+            case "Projekte":
+                ProjectLibraryView(
+                    session: session,
+                    onOpenProject: { project in
+                        guard session.selectProject(project.id)
+                        else {
+                            return
+                        }
+                        selection =
+                            project.stage.journeyGuidance
+                                .recommendedSurface == .studio
+                            ? "Studio"
+                            : "Übersicht"
+                    },
+                    onFindOpportunity: {
+                        selection = "Chancen"
+                    }
+                )
             case "Studio":
                 if let project = session.activeProject {
                     StudioView(
@@ -130,6 +159,22 @@ private struct CommandPaletteView: View {
                 subtitle: "Zum aktuellen Blackstock-Arbeitsbereich",
                 systemImage: "rectangle.grid.2x2",
                 destination: "Übersicht",
+                isDestructive: false
+            ),
+            .init(
+                id: "opportunities",
+                title: "Chancen öffnen",
+                subtitle: "Neue reale YouTube-Signale recherchieren",
+                systemImage: "sparkle.magnifyingglass",
+                destination: "Chancen",
+                isDestructive: false
+            ),
+            .init(
+                id: "projects",
+                title: "Projekte öffnen",
+                subtitle: "Zwischen laufenden und veröffentlichten Projekten wechseln",
+                systemImage: "tray.full",
+                destination: "Projekte",
                 isDestructive: false
             )
         ]
