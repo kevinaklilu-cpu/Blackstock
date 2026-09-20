@@ -322,19 +322,35 @@ struct OpportunityWorkspaceView: View {
                 .foregroundStyle(.secondary)
             }
 
-            Button {
-                let previousID = session.activeProject?.id
-                session.useOpportunity(item)
-                if session.activeProject?.id != previousID {
-                    onProjectCreated()
+            HStack(spacing: 10) {
+                Button {
+                    let previousID = session.activeProject?.id
+                    session.useOpportunity(item)
+                    if session.activeProject?.id != previousID {
+                        onProjectCreated()
+                    }
+                } label: {
+                    Label(
+                        "Als Projekt übernehmen",
+                        systemImage: "plus.rectangle.on.folder"
+                    )
                 }
-            } label: {
-                Label(
-                    "Als neues Projekt übernehmen",
-                    systemImage: "plus.rectangle.on.folder"
-                )
+                .buttonStyle(.bordered)
+
+                Button {
+                    let previousID = session.activeProject?.id
+                    session.useOpportunityAsClip(item)
+                    if session.activeProject?.id != previousID {
+                        onProjectCreated()
+                    }
+                } label: {
+                    Label(
+                        "Als Clip verwenden",
+                        systemImage: "scissors"
+                    )
+                }
+                .buttonStyle(.borderedProminent)
             }
-            .buttonStyle(.borderedProminent)
         }
     }
 
