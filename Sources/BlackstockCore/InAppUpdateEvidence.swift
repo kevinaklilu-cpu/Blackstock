@@ -13,7 +13,7 @@ public enum InAppUpdateEvidenceError:
 }
 
 public enum InAppUpdateEvidenceSchema {
-    public static let current = 3
+    public static let current = 4
 }
 
 public struct InAppUpdateEvidence:
@@ -40,6 +40,12 @@ public struct InAppUpdateEvidence:
     public var observedInstalledBuild: Int?
     public var observedInstalledSourceCommitSHA: String?
     public var observedInstalledExecutableSHA256: String?
+    public var observedInstalledAppPath: String?
+    public var observedApplicationTeamID: String?
+    public var observedDeveloperIDApplicationVerified: Bool?
+    public var observedInstallerReceiptPackageID: String?
+    public var observedInstallerReceiptVersion: String?
+    public var observedInstallerReceiptVerified: Bool?
     public var postUpdateLaunchVerifiedAt: Date?
 
     public init(
@@ -70,6 +76,12 @@ public struct InAppUpdateEvidence:
         observedInstalledBuild = nil
         observedInstalledSourceCommitSHA = nil
         observedInstalledExecutableSHA256 = nil
+        observedInstalledAppPath = nil
+        observedApplicationTeamID = nil
+        observedDeveloperIDApplicationVerified = nil
+        observedInstallerReceiptPackageID = nil
+        observedInstallerReceiptVersion = nil
+        observedInstallerReceiptVerified = nil
         postUpdateLaunchVerifiedAt = nil
     }
 
@@ -102,6 +114,18 @@ public struct InAppUpdateEvidence:
               observedInstalledExecutableSHA256.count == 64,
               observedInstalledExecutableSHA256
                 .allSatisfy({ $0.isHexDigit }),
+              observedInstalledAppPath
+                == "/Applications/Blackstock.app",
+              observedApplicationTeamID
+                == expectedInstallerTeamID,
+              observedDeveloperIDApplicationVerified
+                == true,
+              observedInstallerReceiptPackageID
+                == "de.blackstock.app",
+              observedInstallerReceiptVersion
+                == targetVersion,
+              observedInstallerReceiptVerified
+                == true,
               postUpdateLaunchVerifiedAt != nil else {
             return false
         }
@@ -206,6 +230,12 @@ public struct InAppUpdateEvidenceStore: Sendable {
         installedBuild: Int,
         installedSourceCommitSHA: String,
         installedExecutableSHA256: String,
+        installedAppPath: String,
+        applicationTeamID: String,
+        developerIDApplicationVerified: Bool,
+        installerReceiptPackageID: String,
+        installerReceiptVersion: String,
+        installerReceiptVerified: Bool,
         now: Date = Date()
     ) throws -> InAppUpdateEvidence? {
         guard var evidence = try load() else {
@@ -222,7 +252,17 @@ public struct InAppUpdateEvidenceStore: Sendable {
                 == installedSourceCommitSHA.lowercased(),
               installedExecutableSHA256.count == 64,
               installedExecutableSHA256
-                .allSatisfy({ $0.isHexDigit })
+                .allSatisfy({ $0.isHexDigit }),
+              installedAppPath
+                == "/Applications/Blackstock.app",
+              applicationTeamID
+                == evidence.expectedInstallerTeamID,
+              developerIDApplicationVerified,
+              installerReceiptPackageID
+                == "de.blackstock.app",
+              installerReceiptVersion
+                == installedVersion,
+              installerReceiptVerified
         else {
             return evidence
         }
@@ -235,6 +275,18 @@ public struct InAppUpdateEvidenceStore: Sendable {
             installedSourceCommitSHA.lowercased()
         evidence.observedInstalledExecutableSHA256 =
             installedExecutableSHA256.lowercased()
+        evidence.observedInstalledAppPath =
+            installedAppPath
+        evidence.observedApplicationTeamID =
+            applicationTeamID
+        evidence.observedDeveloperIDApplicationVerified =
+            developerIDApplicationVerified
+        evidence.observedInstallerReceiptPackageID =
+            installerReceiptPackageID
+        evidence.observedInstallerReceiptVersion =
+            installerReceiptVersion
+        evidence.observedInstallerReceiptVerified =
+            installerReceiptVerified
         evidence.postUpdateLaunchVerifiedAt = now
         try save(evidence)
         return evidence
