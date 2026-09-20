@@ -390,9 +390,9 @@ public actor LocalSupplementalVideoCompositor {
                         throwing:
                             LocalSupplementalVideoError
                             .exportFailed(
-                                session.error?
-                                    .localizedDescription
-                                    ?? "Video-Einblendung fehlgeschlagen."
+                                Self.errorDescription(
+                                    session.error
+                                )
                             )
                     )
                 default:
@@ -413,6 +413,46 @@ public actor LocalSupplementalVideoCompositor {
             throw LocalSupplementalVideoError
                 .missingOutput
         }
+    }
+
+    private static func errorDescription(
+        _ error: Error?
+    ) -> String {
+        guard let error else {
+            return "Video-Einblendung fehlgeschlagen."
+        }
+
+        let nsError = error as NSError
+        var parts = [
+            nsError.localizedDescription,
+            "Domain=\(nsError.domain)",
+            "Code=\(nsError.code)"
+        ]
+
+        if let reason = nsError.userInfo[
+            NSLocalizedFailureReasonErrorKey
+        ] as? String,
+           !reason.isEmpty {
+            parts.append("Grund=\(reason)")
+        }
+
+        if let underlying = nsError.userInfo[
+            NSUnderlyingErrorKey
+        ] as? NSError {
+            parts.append(
+                "UnderlyingDomain=\(underlying.domain)"
+            )
+            parts.append(
+                "UnderlyingCode=\(underlying.code)"
+            )
+            if !underlying.localizedDescription.isEmpty {
+                parts.append(
+                    "Underlying=\(underlying.localizedDescription)"
+                )
+            }
+        }
+
+        return parts.joined(separator: " | ")
     }
 
     private static func normalizedTransform(
