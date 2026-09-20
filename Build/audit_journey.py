@@ -24,6 +24,11 @@ checks = {
         "OpportunityWorkspaceView(",
         "ProjectLibraryView(",
     ],
+    "Sources/BlackstockApp/BlackstockBrandMark.swift": [
+        'Image(systemName: "play.fill")',
+        "BlackstockDesign.accent",
+        ".accessibilityHidden(true)",
+    ],
     "Sources/BlackstockApp/WorkspaceProductViews.swift": [
         "struct OpportunityWorkspaceView",
         "Neues Projekt",
