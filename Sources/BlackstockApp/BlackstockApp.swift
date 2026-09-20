@@ -142,6 +142,19 @@ private struct WorkspaceShell: View {
         .onChange(of: session.activeProject?.stage) { _ in
             routeToCurrentProject()
         }
+        .onChange(of: session.activeProject?.stage) { newStage in
+            guard let newStage else { return }
+            switch newStage.journeyGuidance.recommendedSurface {
+            case .studio:
+                selection = "Studio"
+            case .overview:
+                selection = "Übersicht"
+            case .opportunities:
+                selection = "Chancen"
+            case .projects:
+                selection = "Projekte"
+            }
+        }
         .onChange(of: commandPaletteRequest) { _ in
             showCommandPalette = true
         }
