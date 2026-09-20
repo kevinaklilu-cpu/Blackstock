@@ -32,8 +32,8 @@ REQUIRED = {
         "testMissingVideoIDIsRejected",
     ],
     "Sources/BlackstockApp/FirstRunView.swift": [
-        "keinen eigenen Opportunity- oder Virality-Score.",
-        "Blackstock ersetzt fehlende Werte nicht durch Schätzungen.",
+        "Die Angaben stammen direkt von YouTube.",
+        "Für dieses Video sind einige Angaben bei YouTube nicht verfügbar.",
         "Datenabruf:",
     ],
 }
