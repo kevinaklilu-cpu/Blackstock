@@ -12,15 +12,45 @@ enum BlackstockUpdateAudit {
         now: Date = Date()
     ) {
         guard let installed =
-                installedVersion(bundle: bundle) else {
+                installedVersion(bundle: bundle),
+              let executableURL = bundle.executableURL,
+              let executableSHA256 =
+                sha256(of: executableURL) else {
             return
         }
+
+        let installedAppPath = bundle.bundleURL
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+            .path
+        let signing = applicationSigningMetadata(
+            bundleURL: bundle.bundleURL
+        )
+        let receipt = installerReceiptMetadata(
+            expectedVersion: installed.version
+        )
 
         do {
             let store = try productionStore()
             _ = try store.begin(
                 currentVersion: installed.version,
                 currentBuild: installed.build,
+                currentSourceCommitSHA:
+                    installed.sourceCommitSHA,
+                currentExecutableSHA256:
+                    executableSHA256,
+                currentAppPath:
+                    installedAppPath,
+                currentApplicationTeamID:
+                    signing.teamID,
+                currentDeveloperIDApplicationVerified:
+                    signing.verified,
+                currentInstallerReceiptPackageID:
+                    receipt.packageID,
+                currentInstallerReceiptVersion:
+                    receipt.version,
+                currentInstallerReceiptVerified:
+                    receipt.verified,
                 manifestURL: manifestURL,
                 expectedInstallerTeamID:
                     installerTeamID,
