@@ -15,10 +15,9 @@ REQUIRED = {
     "Sources/BlackstockApp/FirstRunView.swift": [
         'Text("Videos")',
         "YouTube-Ergebnisse für deinen Kanal",
-        "Blackstock ersetzt fehlende Werte nicht durch Schätzungen.",
+        "Die Angaben stammen direkt von YouTube.",
         "Datenabruf:",
-        "offiziellen Search-Order-Parameter",
-        "keinen eigenen Opportunity- oder Virality-Score",
+        "YouTubeEmbeddedPlayer(videoID:",
     ],
     "Tests/BlackstockCoreTests/OpportunityTransparencyTests.swift": [
         "testMissingYouTubeSignalsStayMissingInsteadOfBeingEstimated",
@@ -49,4 +48,4 @@ if errors:
         print(f"- {error}", file=sys.stderr)
     sys.exit(1)
 
-print("Discovery audit passed: real YouTube signals, provider ordering and score-free transparency are enforced.")
+print("Discovery audit passed: real YouTube videos, provider ordering, playback and missing-data honesty are enforced.")
