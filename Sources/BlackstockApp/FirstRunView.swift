@@ -358,7 +358,8 @@ struct FirstRunView: View {
                     if selected.embeddable != false {
                         YouTubeEmbeddedPlayer(videoID: selected.videoID)
                             .accessibilityLabel("YouTube-Vorschau: \(selected.title)")
-                            .frame(minHeight: 260)
+                            .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                            .background(BlackstockDesign.mediaSurface)
                             .clipShape(RoundedRectangle(cornerRadius: 14))
                     } else {
                         ZStack {
@@ -369,7 +370,7 @@ struct FirstRunView: View {
                                     .font(.title)
                                 Text("YouTube-Vorschau hier nicht verfügbar.")
                                     .font(.callout.weight(.semibold))
-                                Text("Für eine automatische Verarbeitung braucht Blackstock eine freigegebene Ingest-Quelle für diesen Link.")
+                                Text("Dieses Video kann hier nicht eingebettet abgespielt werden.")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -386,7 +387,7 @@ struct FirstRunView: View {
                             .foregroundStyle(.secondary)
                     }
 
-                    signalStrip(selected)
+                    videoFacts(selected)
                 }
             }
 
@@ -421,16 +422,16 @@ struct FirstRunView: View {
                             .padding(8)
                             .background(
                                 selectedOpportunity?.id == item.id
-                                    ? Color.accentColor.opacity(0.10)
-                                    : Color.primary.opacity(0.03),
+                                    ? BlackstockDesign.selectedFill
+                                    : BlackstockDesign.surface,
                                 in: RoundedRectangle(cornerRadius: 12)
                             )
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12)
                                     .strokeBorder(
                                         selectedOpportunity?.id == item.id
-                                            ? Color.accentColor.opacity(0.35)
-                                            : Color.clear
+                                            ? BlackstockDesign.selectedBorder
+                                            : BlackstockDesign.subtleBorder
                                     )
                             )
                         }
@@ -473,7 +474,7 @@ struct FirstRunView: View {
     }
 
     @ViewBuilder
-    private func signalStrip(_ item: YouTubeOpportunityCandidate) -> some View {
+    private func videoFacts(_ item: YouTubeOpportunityCandidate) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 if let views = item.metrics.viewCount {
@@ -527,12 +528,12 @@ struct FirstRunView: View {
 
                 if !item.metrics.missingSignals.isEmpty {
                     Label(
-                        "Nicht verfügbar: " + item.metrics.missingSignals.joined(separator: ", ") + ". Blackstock ersetzt fehlende Werte nicht durch Schätzungen.",
+                        "Für dieses Video sind einige Angaben bei YouTube nicht verfügbar.",
                         systemImage: "info.circle"
                     )
                 }
 
-                Text("Blackstock zeigt hier nur von YouTube gelieferte Rohwerte. Die Reihenfolge wird über YouTubes offiziellen Search-Order-Parameter angefordert; Blackstock erzeugt daraus keinen eigenen Opportunity- oder Virality-Score.")
+                Text("Die Angaben stammen direkt von YouTube.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
