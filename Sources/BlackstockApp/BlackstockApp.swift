@@ -447,17 +447,26 @@ private struct OverviewView: View {
         project: BlackstockProject,
         record: PublishedVideoRecord
     ) -> some View {
-        GroupBox("Veröffentlichung → Analytics → Lernen") {
+        GroupBox("Videoanalyse") {
             VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(project.title)
-                            .font(.headline)
-                        Text("YouTube Video-ID: \(record.youtubeVideoID)")
-                            .font(.caption.monospaced())
-                            .textSelection(.enabled)
-                    }
-                    Spacer()
+                VStack(alignment: .leading, spacing: 10) {
+                    YouTubeEmbeddedPlayer(
+                        videoID: record.youtubeVideoID
+                    )
+                    .aspectRatio(
+                        16.0 / 9.0,
+                        contentMode: .fit
+                    )
+                    .background(BlackstockDesign.mediaSurface)
+                    .clipShape(
+                        RoundedRectangle(
+                            cornerRadius: BlackstockDesign.cornerRadius,
+                            style: .continuous
+                        )
+                    )
+
+                    Text(project.title)
+                        .font(.headline)
                 }
 
                 let due = GrowthObservationPlanner().duePlans(
@@ -483,8 +492,8 @@ private struct OverviewView: View {
                                 }
                                 Label(
                                     session.isCollectingAnalytics
-                                        ? "Analytics werden aktualisiert …"
-                                        : "Fällige Analytics aktualisieren",
+                                        ? "Daten werden aktualisiert …"
+                                        : "Daten aktualisieren",
                                     systemImage: "chart.line.uptrend.xyaxis"
                                 )
                             }
@@ -496,7 +505,7 @@ private struct OverviewView: View {
                         )
 
                         if due.isEmpty {
-                            Text("Aktuell kein Beobachtungsfenster fällig.")
+                            Text("Die aktuellen Daten sind bereits geladen.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -513,8 +522,8 @@ private struct OverviewView: View {
                             }
                             Label(
                                 session.isAuthorizingAnalytics
-                                    ? "Analytics-Autorisierung läuft …"
-                                    : "YouTube Analytics aktivieren",
+                                    ? "YouTube wird verbunden …"
+                                    : "Videoanalyse verbinden",
                                 systemImage: "key"
                             )
                         }
@@ -525,7 +534,7 @@ private struct OverviewView: View {
 
                 if !due.isEmpty {
                     Text(
-                        "Fällig: "
+                        "Bereit für Aktualisierung: "
                         + due.map { $0.window.germanTitle }
                             .joined(separator: ", ")
                     )
@@ -533,7 +542,7 @@ private struct OverviewView: View {
                     .foregroundStyle(.secondary)
                 } else if let next {
                     Text(
-                        "Nächster geplanter Check: "
+                        "Nächste Aktualisierung: "
                         + next.formatted(
                             date: .abbreviated,
                             time: .shortened
@@ -546,7 +555,7 @@ private struct OverviewView: View {
                 if let learning = session.latestGrowthLearning {
                     Divider()
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Belegte Lernfakten")
+                        Text("Ergebnisse")
                             .font(.headline)
                         ForEach(
                             Array(learning.facts.enumerated()),
@@ -575,7 +584,7 @@ private struct OverviewView: View {
                         }
                     }
                 } else {
-                    Text("Noch keine vollständige YouTube-Analytics-Beobachtung gespeichert. Verzögerte Daten werden nicht als Nullwerte interpretiert.")
+                    Text("Noch keine YouTube-Analyse verfügbar. Daten können nach der Veröffentlichung zeitversetzt erscheinen.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -587,7 +596,7 @@ private struct OverviewView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("YouTube-Kommentare")
                                 .font(.headline)
-                            Text("Nur lesen · Hauptkommentare")
+                            Text("Kommentare zum veröffentlichten Video")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -607,7 +616,7 @@ private struct OverviewView: View {
                                 Label(
                                     session.isLoadingComments
                                         ? "Kommentare werden geladen …"
-                                        : "Kommentare aktualisieren",
+                                        : "Kommentare laden",
                                     systemImage: "bubble.left.and.bubble.right"
                                 )
                             }
