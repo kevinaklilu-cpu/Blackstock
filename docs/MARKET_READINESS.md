@@ -41,6 +41,8 @@ Alle Evidence-Dateien werden als striktes JSON behandelt. Nicht standardkonforme
 
 Anschließend bindet der Readiness-Verifier die Nachweise **untereinander**.
 
+Für die finale Prüfung werden die drei Evidence-Dateien jeweils genau einmal als Bytes eingelesen. Die Einzelvalidatoren arbeiten auf temporären byteidentischen Snapshots statt die ursprünglichen Dateien erneut zu öffnen. Nach Abschluss der Validatoren wird zusätzlich geprüft, dass sich keine Quelldatei während der Verifikation verändert hat. Der finale Report enthält den SHA-256 jeder tatsächlich geprüften Evidence-Datei.
+
 ## Cross-Binding
 
 Alle Nachweise müssen zu demselben Release gehören.
