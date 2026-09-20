@@ -31,7 +31,7 @@ jobs:
   build-sign-notarize:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Validate release inputs
         env:
@@ -281,7 +281,7 @@ jobs:
           xcrun stapler validate "$RUNNER_TEMP/dist/Blackstock.pkg"
 
       - name: Upload production release bundle
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: Blackstock-production-${{ inputs.version }}-${{ inputs.build }}
           path: |
