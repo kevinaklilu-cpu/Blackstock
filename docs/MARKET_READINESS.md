@@ -76,7 +76,7 @@ Die reale Capture-Evidenz wird von Blackstock selbst erzeugt. Sie enthält für 
 - gemeinsame Aufnahme-Launch-ID für alle vier kanonischen Capture-Pfade,
 - Source-Commit-SHA des installierten Blackstock-Bundles,
 - gültiger macOS-Installer-Receipt `de.blackstock.app` für exakt dieselbe App-Version,
-- tatsächliche `Developer ID Application`-Team-ID der laufenden App,
+- erfolgreiche `codesign --verify --deep --strict`-Prüfung der laufenden App plus tatsächliche `Developer ID Application`-Team-ID,
 - SHA-256 des tatsächlich laufenden Blackstock-Executables,
 - Restart-Launch-ID,
 - Hard-Stop-Nachweis bei verweigerter Berechtigung,
@@ -110,7 +110,7 @@ Blackstock selbst protokolliert den tatsächlichen App-Pfad:
 6. anschließend gestartete exakte Zielversion, Ziel-Build und der im Manifest signierte Source-Commit,
 7. SHA-256 des tatsächlich gestarteten Executables,
 8. exakter Bundle-Pfad `/Applications/Blackstock.app`,
-9. tatsächliche `Developer ID Application`-Team-ID,
+9. erfolgreiche `codesign --verify --deep --strict`-Prüfung plus tatsächliche `Developer ID Application`-Team-ID,
 10. passender macOS-Installer-Receipt `de.blackstock.app` für exakt die Zielversion.
 
 ## CI-Regel
