@@ -49,6 +49,8 @@ Der Verifier verlangt deshalb:
 
 - identische Ausgangsversion des Update-Pfads zwischen Published-Release-Verifikation und realem In-App-Update,
 - identischen Ausgangs-Build dieses Update-Pfads,
+- gemessenen Source-Commit und SHA-256 des tatsächlich gestarteten Quell-Executables der älteren Produktions-App,
+- Quell-App unter `/Applications/Blackstock.app` mit erfolgreicher `codesign --verify --deep --strict`-Prüfung, erwarteter Apple-Team-ID und passendem Installer-Receipt `de.blackstock.app`,
 - identische Blackstock-Zielversion,
 - identischen Ziel-Build,
 - identische Produktions-Manifest-URL,
@@ -102,7 +104,7 @@ Der Validator liest die persistierten Dateien erneut und prüft ihre SHA-256-Wer
 
 Blackstock selbst protokolliert den tatsächlichen App-Pfad:
 
-1. ältere installierte Produktionsversion,
+1. ältere installierte Produktionsversion einschließlich Source-Commit, Executable-SHA-256, kanonischem App-Pfad, Developer-ID-Team-ID und Installer-Receipt,
 2. akzeptiertes signiertes Manifest,
 3. verifiziertes Paket,
 4. verifiziertes Installer-Team,
