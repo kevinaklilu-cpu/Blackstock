@@ -337,7 +337,8 @@ final class StudioState: ObservableObject {
         projectID: UUID,
         authorization: ProductionMediaAuthorization,
         rightsEvidence: String,
-        rightsConfirmed: Bool
+        rightsConfirmed: Bool,
+        originSource: MediaSourceReference? = nil
     ) async {
         let evidence = rightsEvidence.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !evidence.isEmpty else {
@@ -385,6 +386,7 @@ final class StudioState: ObservableObject {
                     confirmedByUser: rightsConfirmed,
                     attestedAt: Date()
                 ),
+                originSource: originSource,
                 importedAt: Date()
             )
             guard imported.mayEnterProduction else {
