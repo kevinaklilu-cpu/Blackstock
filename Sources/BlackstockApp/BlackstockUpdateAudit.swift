@@ -49,6 +49,8 @@ enum BlackstockUpdateAudit {
                     receipt.packageID,
                 currentInstallerReceiptVersion:
                     receipt.version,
+                currentInstallerReceiptInstalledAt:
+                    receipt.installedAt,
                 currentInstallerReceiptVerified:
                     receipt.verified,
                 manifestURL: manifestURL,
@@ -141,6 +143,8 @@ enum BlackstockUpdateAudit {
                         receipt.packageID,
                     installerReceiptVersion:
                         receipt.version,
+                    installerReceiptInstalledAt:
+                        receipt.installedAt,
                     installerReceiptVerified:
                         receipt.verified,
                     now: now
@@ -294,6 +298,7 @@ enum BlackstockUpdateAudit {
     ) -> (
         packageID: String,
         version: String,
+        installedAt: Date,
         verified: Bool
     ) {
         let expectedPackageID = "de.blackstock.app"
@@ -314,7 +319,7 @@ enum BlackstockUpdateAudit {
             try process.run()
             process.waitUntilExit()
             guard process.terminationStatus == 0 else {
-                return ("", "", false)
+                return ("", "", .distantPast, false)
             }
             let data = pipe.fileHandleForReading
                 .readDataToEndOfFile()
@@ -329,22 +334,50 @@ enum BlackstockUpdateAudit {
                     plist["pkgid"] as? String,
                   let version =
                     plist["pkg-version"] as? String else {
-                return ("", "", false)
+                return ("", "", .distantPast, false)
             }
 
             let volume = plist["volume"] as? String
             let installLocation =
                 plist["install-location"] as? String
+            let installedAtSeconds: TimeInterval?
+            if let number =
+                    plist["install-time"] as? NSNumber {
+                installedAtSeconds =
+                    number.doubleValue
+            } else if let string =
+                        plist["install-time"] as? String,
+                      let parsed = TimeInterval(string) {
+                installedAtSeconds = parsed
+            } else {
+                installedAtSeconds = nil
+            }
+            let installedAt =
+                installedAtSeconds
+                    .flatMap { seconds in
+                        guard seconds.isFinite,
+                              seconds > 0 else {
+                            return nil
+                        }
+                        return Date(
+                            timeIntervalSince1970:
+                                seconds
+                        )
+                    }
+                    ?? .distantPast
+
             return (
                 packageID,
                 version,
+                installedAt,
                 packageID == expectedPackageID
                     && version == expectedVersion
                     && volume == "/"
                     && installLocation == "/"
+                    && installedAt != .distantPast
             )
         } catch {
-            return ("", "", false)
+            return ("", "", .distantPast, false)
         }
     }
 
