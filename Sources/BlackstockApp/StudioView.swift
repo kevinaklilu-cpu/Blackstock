@@ -968,7 +968,7 @@ struct StudioView: View {
                         )
                     }
 
-                    Text("„In Timeline laden“ verändert nur die Auswahlregler. Erst „Als Trim setzen“ schreibt die gespeicherte Clip-Auswahl in den EditGraph.")
+                    Text("„In Timeline laden“ übernimmt die Auswahl in die Schnittregler. Mit „Als Trim setzen“ wird der Schnitt angewendet.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
 
@@ -993,7 +993,7 @@ struct StudioView: View {
             }
 
             if !state.localClipCandidates.isEmpty {
-                Text("Eine Kandidaten-Vorschau verändert den EditGraph nicht. Erst „Diesen Ausschnitt übernehmen“ speichert eine non-destruktive Trim-Revision, die über Rückgängig wieder verlassen werden kann.")
+                Text("Die Vorschau verändert dein Video nicht. Mit „Diesen Ausschnitt übernehmen“ wird der Schnitt angewendet und bleibt rückgängig machbar.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -1063,7 +1063,7 @@ struct StudioView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Text("Trim und Entfernen bleiben non-destruktiv im EditGraph und können rückgängig gemacht werden.")
+            Text("Schnittänderungen bleiben rückgängig machbar.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
@@ -1145,7 +1145,7 @@ struct StudioView: View {
                     .menuStyle(.borderlessButton)
                     .disabled(!editingEnabled)
 
-                    Text("YouTube 16:9, Shorts/Reels 9:16 oder Social 1:1 stellen Format und passenden Untertitelstil vor. Erst „Ausschnitt anwenden“ schreibt die Formatänderung in den EditGraph.")
+                    Text("Wähle YouTube 16:9, Shorts/Reels 9:16 oder Social 1:1. Mit „Ausschnitt anwenden“ wird das Format übernommen.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
 
@@ -1215,7 +1215,7 @@ struct StudioView: View {
                         }
                     }
 
-                    Text("Vision darf nur die Regler vorpositionieren. Erst „Ausschnitt anwenden“ schreibt eine Änderung in den EditGraph; Vorschau und finales Rendering verwenden danach dieselbe Ausschnitt-Geometrie.")
+                    Text("Blackstock kann den Bildausschnitt vorschlagen. Mit „Ausschnitt anwenden“ übernimmst du ihn für Vorschau und Export.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -1266,7 +1266,7 @@ struct StudioView: View {
                         ) < 0.001
                     )
 
-                    Text("Die Änderung wird als non-destruktive EditGraph-Revision gespeichert. Zusatzspuren behalten ihre jeweils eigene Lautstärke; die finale Audio-QC misst den gesamten gerenderten Mix.")
+                    Text("Die Änderung bleibt rückgängig machbar. Zusatzspuren behalten ihre eigene Lautstärke; Blackstock prüft anschließend den fertigen Tonmix.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -1729,7 +1729,7 @@ struct StudioView: View {
                                     Text(advisory.text)
                                         .font(.caption)
                                         .textSelection(.enabled)
-                                    Text("Quelle: \(advisory.source) · keine Release-Evidenz")
+                                    Text("Quelle: \(advisory.source)")
                                         .font(.caption2)
                                         .foregroundStyle(.secondary)
                                 }
@@ -1738,7 +1738,7 @@ struct StudioView: View {
                             .font(.caption.weight(.semibold))
                         }
 
-                        Text("Blackstock misst die Struktur-Fakten deterministisch. Generative Hinweise sind optional, lokal und ersetzen keine Sichtprüfung oder echte Analytics.")
+                        Text("Blackstock analysiert die Videostruktur lokal. Vorschläge bleiben optional und können jederzeit geändert werden.")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -1935,7 +1935,7 @@ struct StudioView: View {
                     }
                 }
 
-                Text("Overlays sind non-destruktive EditGraph-Änderungen und können mit Rückgängig/Wiederholen entfernt oder wiederhergestellt werden.")
+                Text("Text-Overlays können jederzeit rückgängig gemacht oder wiederhergestellt werden.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -2892,11 +2892,11 @@ struct StudioView: View {
         case .packaging:
             return "Bearbeitung ist eingefroren; Metadaten, Vorschaubild, Untertitel und Prüfung folgen."
         case .review:
-            return "Alle Freigabeprüfungen müssen belegt sein, bevor die Veröffentlichung starten darf."
+            return "Prüfe die offenen Punkte, bevor du veröffentlichst."
         case .publishing:
             return "Externe Aktionen werden protokolliert und auf den Zielkanal begrenzt."
         case .published:
-            return "Die YouTube-Video-ID ist gespeichert; Analytics kann zurückgeführt werden."
+            return "Das veröffentlichte Video ist mit diesem Projekt verbunden."
         case .discovery, .research, .analysis:
             return "Dieses Projekt ist noch nicht bereit für den Editor."
         }
