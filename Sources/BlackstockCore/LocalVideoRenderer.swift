@@ -43,7 +43,8 @@ public actor LocalVideoRenderer {
         outputURL: URL,
         preset: LocalRenderPreset,
         transcript: LocalTranscript? = nil,
-        burnInCaptions: Bool = false
+        burnInCaptions: Bool = false,
+        captionStyle: CaptionVisualStyle = .clear
     ) async throws -> RenderArtifact {
         guard asset.mayEnterProduction else {
             throw LocalRenderError.unauthorizedMedia
@@ -230,7 +231,8 @@ public actor LocalVideoRenderer {
                     inputURL: exportOutputURL,
                     transcript: captionTranscript,
                     outputURL: outputURL,
-                    preset: preset
+                    preset: preset,
+                    style: captionStyle
                 )
         }
 
