@@ -2,7 +2,6 @@
 import Foundation
 @preconcurrency import AVFoundation
 import CryptoKit
-import CoreGraphics
 
 public enum LocalRenderPreset: String, Codable, Sendable, CaseIterable, Hashable {
     case hd1080
@@ -23,8 +22,6 @@ public enum LocalRenderError: Error, Sendable, Equatable {
     case unsupportedOutputType
     case missingVideoTrack
     case missingSupplementalAudioTrack(UUID)
-    case missingSupplementalVideoTrack(UUID)
-    case noUsableSupplementalVideo
     case emptyEditResult
     case reframePlanUnavailable
     case exportFailed(String)
@@ -110,9 +107,12 @@ public actor LocalVideoRenderer {
             || !textOverlays.isEmpty
         let hasSupplementalVideo =
             !supplementalVideo.isEmpty
+        let needsPostProcess =
+            hasCaptionPostProcess
+            || hasSupplementalVideo
 
         let exportOutputURL: URL
-        if hasCaptionPostProcess {
+        if needsPostProcess {
             exportOutputURL = FileManager.default
                 .temporaryDirectory
                 .appendingPathComponent(
@@ -123,10 +123,17 @@ public actor LocalVideoRenderer {
             exportOutputURL = outputURL
         }
 
+        var supplementalVideoOutputURL: URL?
         defer {
             if exportOutputURL != outputURL {
                 try? FileManager.default.removeItem(
                     at: exportOutputURL
+                )
+            }
+            if let supplementalVideoOutputURL,
+               supplementalVideoOutputURL != outputURL {
+                try? FileManager.default.removeItem(
+                    at: supplementalVideoOutputURL
                 )
             }
         }
@@ -222,342 +229,6 @@ public actor LocalVideoRenderer {
             audioMixParameters.append(parameters)
         }
 
-        let activeReframe = graph.currentOperations
-            .last(where: { $0.type == .reframe })?
-            .reframeSpec
-
-        let sourceVideoTracks = try await source.loadTracks(
-            withMediaType: .video
-        )
-        let compositionVideoTracks = composition.tracks(
-            withMediaType: .video
-        )
-        guard let sourceVideoTrack = sourceVideoTracks.first,
-              let baseCompositionVideoTrack =
-                compositionVideoTracks.first else {
-            throw LocalRenderError.missingVideoTrack
-        }
-
-        let sourceNaturalSize = try await sourceVideoTrack.load(
-            .naturalSize
-        )
-        let sourcePreferredTransform = try await sourceVideoTrack.load(
-            .preferredTransform
-        )
-
-        let baseRenderSize: CGSize
-        let baseTransform: CGAffineTransform
-        if let reframe = activeReframe {
-            let requestedRenderSize = preset.renderSize(
-                for: reframe.aspectRatio
-            )
-            guard let plan = ReframeTransformPlan.make(
-                naturalSize: sourceNaturalSize,
-                preferredTransform: sourcePreferredTransform,
-                spec: reframe,
-                renderSize: requestedRenderSize
-            ) else {
-                throw LocalRenderError.reframePlanUnavailable
-            }
-            baseRenderSize = CGSize(
-                width: plan.renderWidth,
-                height: plan.renderHeight
-            )
-            baseTransform = plan.transform
-        } else {
-            let bounds = CGRect(
-                origin: .zero,
-                size: sourceNaturalSize
-            ).applying(sourcePreferredTransform)
-            baseRenderSize = CGSize(
-                width: abs(bounds.width),
-                height: abs(bounds.height)
-            )
-            guard baseRenderSize.width > 0,
-                  baseRenderSize.height > 0 else {
-                throw LocalRenderError.reframePlanUnavailable
-            }
-            baseTransform = Self.normalizedVideoTransform(
-                naturalSize: sourceNaturalSize,
-                preferredTransform: sourcePreferredTransform,
-                renderSize: baseRenderSize
-            )
-        }
-
-        struct PreparedSupplementalVideo {
-            let order: Int
-            let track: AVMutableCompositionTrack
-            let timelineStartSeconds: Double
-            let timelineEndSeconds: Double
-            let transform: CGAffineTransform
-        }
-
-        var preparedSupplementalVideo:
-            [PreparedSupplementalVideo] = []
-        let compositionDurationSeconds = max(
-            CMTimeGetSeconds(composition.duration),
-            0
-        )
-
-        for (order, input) in supplementalVideo.enumerated() {
-            let supplementalAsset = AVURLAsset(
-                url: input.fileURL
-            )
-            let tracks = try await supplementalAsset.loadTracks(
-                withMediaType: .video
-            )
-            guard let sourceTrack = tracks.first else {
-                throw LocalRenderError
-                    .missingSupplementalVideoTrack(
-                        input.captureID
-                    )
-            }
-
-            let sourceTimeRange = try await sourceTrack.load(
-                .timeRange
-            )
-            let sourceDurationSeconds = max(
-                CMTimeGetSeconds(
-                    sourceTimeRange.duration
-                ),
-                0
-            )
-            let sourceStartOffset = min(
-                max(input.sourceStartSeconds, 0),
-                sourceDurationSeconds
-            )
-            let timelineStart = min(
-                max(input.timelineStartSeconds, 0),
-                compositionDurationSeconds
-            )
-            let requestedDuration = min(
-                max(input.durationSeconds, 0),
-                sourceDurationSeconds - sourceStartOffset,
-                compositionDurationSeconds - timelineStart
-            )
-            guard requestedDuration >= 0.05 else {
-                continue
-            }
-
-            let timelineStartTime = CMTime(
-                seconds: timelineStart,
-                preferredTimescale: 600
-            )
-            let durationTime = CMTime(
-                seconds: requestedDuration,
-                preferredTimescale: 600
-            )
-            let sourceStartTime = CMTimeAdd(
-                sourceTimeRange.start,
-                CMTime(
-                    seconds: sourceStartOffset,
-                    preferredTimescale: 600
-                )
-            )
-
-            guard let supplementalTrack =
-                    composition.addMutableTrack(
-                        withMediaType: .video,
-                        preferredTrackID:
-                            kCMPersistentTrackID_Invalid
-                    ) else {
-                throw LocalRenderError.exportFailed(
-                    "Zusätzliche Videospur konnte nicht angelegt werden."
-                )
-            }
-
-            do {
-                try supplementalTrack.insertTimeRange(
-                    CMTimeRange(
-                        start: sourceStartTime,
-                        duration: durationTime
-                    ),
-                    of: sourceTrack,
-                    at: timelineStartTime
-                )
-            } catch {
-                throw LocalRenderError.exportFailed(
-                    "B-Roll konnte nicht in den Haupt-Render übernommen werden: "
-                    + error.localizedDescription
-                )
-            }
-
-            let naturalSize = try await sourceTrack.load(
-                .naturalSize
-            )
-            let preferredTransform = try await sourceTrack.load(
-                .preferredTransform
-            )
-            let insertedStart = CMTimeGetSeconds(
-                timelineStartTime
-            )
-            let insertedEnd = CMTimeGetSeconds(
-                CMTimeAdd(
-                    timelineStartTime,
-                    durationTime
-                )
-            )
-            preparedSupplementalVideo.append(
-                PreparedSupplementalVideo(
-                    order: order,
-                    track: supplementalTrack,
-                    timelineStartSeconds:
-                        insertedStart,
-                    timelineEndSeconds:
-                        insertedEnd,
-                    transform:
-                        Self.aspectFillVideoTransform(
-                            naturalSize: naturalSize,
-                            preferredTransform:
-                                preferredTransform,
-                            renderSize: baseRenderSize
-                        )
-                )
-            )
-        }
-
-        let renderVideoComposition:
-            AVMutableVideoComposition?
-        if !preparedSupplementalVideo.isEmpty {
-            var boundaries = [
-                0.0,
-                compositionDurationSeconds
-            ]
-            for insert in preparedSupplementalVideo {
-                boundaries.append(
-                    insert.timelineStartSeconds
-                )
-                boundaries.append(
-                    insert.timelineEndSeconds
-                )
-            }
-            boundaries.sort()
-
-            var normalizedBoundaries: [Double] = []
-            for value in boundaries {
-                let clamped = min(
-                    max(value, 0),
-                    compositionDurationSeconds
-                )
-                if let last =
-                        normalizedBoundaries.last,
-                   abs(last - clamped) < 0.000_5 {
-                    continue
-                }
-                normalizedBoundaries.append(clamped)
-            }
-
-            var instructions:
-                [AVMutableVideoCompositionInstruction] = []
-            for index in 0..<(normalizedBoundaries.count - 1) {
-                let start =
-                    normalizedBoundaries[index]
-                let end =
-                    normalizedBoundaries[index + 1]
-                guard end - start >= 0.001 else {
-                    continue
-                }
-
-                let activeInsert =
-                    preparedSupplementalVideo
-                    .filter {
-                        $0.timelineStartSeconds
-                            <= start + 0.000_5
-                        && $0.timelineEndSeconds
-                            >= end - 0.000_5
-                    }
-                    .max { $0.order < $1.order }
-
-                let instruction =
-                    AVMutableVideoCompositionInstruction()
-                instruction.timeRange = CMTimeRange(
-                    start: CMTime(
-                        seconds: start,
-                        preferredTimescale: 600
-                    ),
-                    duration: CMTime(
-                        seconds: end - start,
-                        preferredTimescale: 600
-                    )
-                )
-
-                if let activeInsert {
-                    let layer =
-                        AVMutableVideoCompositionLayerInstruction(
-                            assetTrack:
-                                activeInsert.track
-                        )
-                    layer.setTransform(
-                        activeInsert.transform,
-                        at: .zero
-                    )
-                    instruction.layerInstructions = [
-                        layer
-                    ]
-                } else {
-                    let layer =
-                        AVMutableVideoCompositionLayerInstruction(
-                            assetTrack:
-                                baseCompositionVideoTrack
-                        )
-                    layer.setTransform(
-                        baseTransform,
-                        at: .zero
-                    )
-                    instruction.layerInstructions = [
-                        layer
-                    ]
-                }
-
-                instructions.append(instruction)
-            }
-
-            let videoComposition =
-                AVMutableVideoComposition()
-            videoComposition.instructions =
-                instructions
-            videoComposition.renderSize =
-                baseRenderSize
-            videoComposition.frameDuration =
-                CMTime(value: 1, timescale: 30)
-            renderVideoComposition =
-                videoComposition
-        } else if hasSupplementalVideo {
-            throw LocalRenderError
-                .noUsableSupplementalVideo
-        } else if activeReframe != nil {
-            let instruction =
-                AVMutableVideoCompositionInstruction()
-            instruction.timeRange = CMTimeRange(
-                start: .zero,
-                duration: composition.duration
-            )
-            let layer =
-                AVMutableVideoCompositionLayerInstruction(
-                    assetTrack:
-                        baseCompositionVideoTrack
-                )
-            layer.setTransform(
-                baseTransform,
-                at: .zero
-            )
-            instruction.layerInstructions = [layer]
-
-            let videoComposition =
-                AVMutableVideoComposition()
-            videoComposition.instructions = [
-                instruction
-            ]
-            videoComposition.renderSize =
-                baseRenderSize
-            videoComposition.frameDuration =
-                CMTime(value: 1, timescale: 30)
-            renderVideoComposition =
-                videoComposition
-        } else {
-            renderVideoComposition = nil
-        }
-
         guard let exporter = AVAssetExportSession(
             asset: composition,
             presetName: preset.avPresetName
@@ -571,9 +242,47 @@ public actor LocalVideoRenderer {
             exporter.audioMix = audioMix
         }
 
-        if let renderVideoComposition {
-            exporter.videoComposition =
-                renderVideoComposition
+        if let reframe = graph.currentOperations
+            .last(where: { $0.type == .reframe })?
+            .reframeSpec {
+            let sourceTracks = try await source.loadTracks(withMediaType: .video)
+            let compositionTracks = composition.tracks(withMediaType: .video)
+            guard let sourceTrack = sourceTracks.first,
+                  let compositionTrack = compositionTracks.first else {
+                throw LocalRenderError.missingVideoTrack
+            }
+
+            let naturalSize = try await sourceTrack.load(.naturalSize)
+            let preferredTransform = try await sourceTrack.load(.preferredTransform)
+            let renderSize = preset.renderSize(for: reframe.aspectRatio)
+
+            guard let plan = ReframeTransformPlan.make(
+                naturalSize: naturalSize,
+                preferredTransform: preferredTransform,
+                spec: reframe,
+                renderSize: renderSize
+            ) else {
+                throw LocalRenderError.reframePlanUnavailable
+            }
+
+            let duration = composition.duration
+            let instruction = AVMutableVideoCompositionInstruction()
+            instruction.timeRange = CMTimeRange(start: .zero, duration: duration)
+
+            let layer = AVMutableVideoCompositionLayerInstruction(
+                assetTrack: compositionTrack
+            )
+            layer.setTransform(plan.transform, at: .zero)
+            instruction.layerInstructions = [layer]
+
+            let videoComposition = AVMutableVideoComposition()
+            videoComposition.instructions = [instruction]
+            videoComposition.renderSize = CGSize(
+                width: plan.renderWidth,
+                height: plan.renderHeight
+            )
+            videoComposition.frameDuration = CMTime(value: 1, timescale: 30)
+            exporter.videoComposition = videoComposition
         }
 
         let supported = exporter.supportedFileTypes
@@ -622,10 +331,38 @@ public actor LocalVideoRenderer {
             throw LocalRenderError.missingOutput
         }
 
+        var postProcessInputURL = exportOutputURL
+
+        if hasSupplementalVideo {
+            let visualOutputURL: URL
+            if hasCaptionPostProcess {
+                visualOutputURL = FileManager.default
+                    .temporaryDirectory
+                    .appendingPathComponent(
+                        "blackstock-visual-inserts-\(UUID().uuidString)"
+                    )
+                    .appendingPathExtension("mp4")
+                supplementalVideoOutputURL =
+                    visualOutputURL
+            } else {
+                visualOutputURL = outputURL
+            }
+
+            try await LocalSupplementalVideoCompositor()
+                .render(
+                    inputURL: exportOutputURL,
+                    supplementalVideo:
+                        supplementalVideo,
+                    outputURL: visualOutputURL,
+                    preset: preset
+                )
+            postProcessInputURL = visualOutputURL
+        }
+
         if hasCaptionPostProcess {
             try await LocalCaptionBurnInRenderer()
                 .render(
-                    inputURL: exportOutputURL,
+                    inputURL: postProcessInputURL,
                     transcript: captionTranscript,
                     textOverlays: textOverlays,
                     outputURL: outputURL,
@@ -640,6 +377,9 @@ public actor LocalVideoRenderer {
             throw LocalRenderError.missingOutput
         }
 
+        let activeReframe = graph.currentOperations
+            .last(where: { $0.type == .reframe })?
+            .reframeSpec
         let expectedRenderSize = activeReframe.map {
             preset.renderSize(for: $0.aspectRatio)
         }
@@ -668,88 +408,6 @@ public actor LocalVideoRenderer {
             validated: true,
             createdAt: Date()
         )
-    }
-
-    private static func normalizedVideoTransform(
-        naturalSize: CGSize,
-        preferredTransform: CGAffineTransform,
-        renderSize: CGSize
-    ) -> CGAffineTransform {
-        let bounds = CGRect(
-            origin: .zero,
-            size: naturalSize
-        ).applying(preferredTransform)
-        let width = abs(bounds.width)
-        let height = abs(bounds.height)
-        var transform =
-            preferredTransform.concatenating(
-                CGAffineTransform(
-                    translationX: -bounds.minX,
-                    y: -bounds.minY
-                )
-            )
-        guard width > 0,
-              height > 0 else {
-            return transform
-        }
-        transform = transform.concatenating(
-            CGAffineTransform(
-                scaleX: renderSize.width / width,
-                y: renderSize.height / height
-            )
-        )
-        return transform
-    }
-
-    private static func aspectFillVideoTransform(
-        naturalSize: CGSize,
-        preferredTransform: CGAffineTransform,
-        renderSize: CGSize
-    ) -> CGAffineTransform {
-        let bounds = CGRect(
-            origin: .zero,
-            size: naturalSize
-        ).applying(preferredTransform)
-        let width = abs(bounds.width)
-        let height = abs(bounds.height)
-        guard width > 0,
-              height > 0,
-              renderSize.width > 0,
-              renderSize.height > 0 else {
-            return preferredTransform
-        }
-
-        let scale = max(
-            renderSize.width / width,
-            renderSize.height / height
-        )
-        let scaledWidth = width * scale
-        let scaledHeight = height * scale
-        let offsetX =
-            (renderSize.width - scaledWidth) / 2
-        let offsetY =
-            (renderSize.height - scaledHeight) / 2
-
-        var transform =
-            preferredTransform.concatenating(
-                CGAffineTransform(
-                    translationX: -bounds.minX,
-                    y: -bounds.minY
-                )
-            )
-        transform = transform.concatenating(
-            CGAffineTransform(
-                scaleX: scale,
-                y: scale
-            )
-        )
-        transform = transform.concatenating(
-            CGAffineTransform(
-                translationX: offsetX / scale,
-                y: offsetY / scale
-            )
-        )
-        return transform
     }
 }
 #endif

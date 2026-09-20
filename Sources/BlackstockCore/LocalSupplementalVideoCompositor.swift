@@ -2,6 +2,8 @@
 import Foundation
 @preconcurrency import AVFoundation
 import CoreGraphics
+import CoreImage
+import CoreVideo
 
 public enum LocalSupplementalVideoError:
     Error,
@@ -17,7 +19,7 @@ public enum LocalSupplementalVideoError:
     case missingOutput
 }
 
-private final class SupplementalVideoExportSessionBox:
+private final class SupplementalMuxExportSessionBox:
     @unchecked Sendable {
     let session: AVAssetExportSession
     init(_ session: AVAssetExportSession) {
@@ -26,6 +28,15 @@ private final class SupplementalVideoExportSessionBox:
 }
 
 public actor LocalSupplementalVideoCompositor {
+    private struct PreparedInsert {
+        let order: Int
+        let captureID: UUID
+        let generator: AVAssetImageGenerator
+        let sourceStartSeconds: Double
+        let timelineStartSeconds: Double
+        let timelineEndSeconds: Double
+    }
+
     public init() {}
 
     public func render(
@@ -35,123 +46,44 @@ public actor LocalSupplementalVideoCompositor {
         preset: LocalRenderPreset
     ) async throws {
         let baseAsset = AVURLAsset(url: inputURL)
-        let baseAssetDuration = try await baseAsset.load(.duration)
-        let baseVideoTracks = try await baseAsset.loadTracks(
+        let baseTracks = try await baseAsset.loadTracks(
             withMediaType: .video
         )
-        guard let baseVideoTrack = baseVideoTracks.first else {
+        guard let baseTrack = baseTracks.first else {
             throw LocalSupplementalVideoError
                 .missingBaseVideoTrack
         }
 
-        let baseVideoTimeRange = try await baseVideoTrack.load(
+        let baseTimeRange = try await baseTrack.load(
             .timeRange
         )
-        let baseDurationSeconds = min(
-            max(CMTimeGetSeconds(baseAssetDuration), 0),
-            max(CMTimeGetSeconds(baseVideoTimeRange.duration), 0)
+        let baseDurationSeconds = max(
+            CMTimeGetSeconds(baseTimeRange.duration),
+            0
         )
         guard baseDurationSeconds >= 0.05 else {
             throw LocalSupplementalVideoError
                 .missingBaseVideoTrack
         }
-        let baseDuration = CMTime(
-            seconds: baseDurationSeconds,
-            preferredTimescale: 600
-        )
 
-        let baseNaturalSize = try await baseVideoTrack.load(
+        let naturalSize = try await baseTrack.load(
             .naturalSize
         )
-        let basePreferredTransform = try await baseVideoTrack.load(
+        let preferredTransform = try await baseTrack.load(
             .preferredTransform
         )
-        let baseBounds = CGRect(
+        let transformedBounds = CGRect(
             origin: .zero,
-            size: baseNaturalSize
-        ).applying(basePreferredTransform)
+            size: naturalSize
+        ).applying(preferredTransform)
         let renderSize = CGSize(
-            width: abs(baseBounds.width),
-            height: abs(baseBounds.height)
+            width: abs(transformedBounds.width),
+            height: abs(transformedBounds.height)
         )
-        guard renderSize.width > 0,
-              renderSize.height > 0 else {
+        guard renderSize.width >= 2,
+              renderSize.height >= 2 else {
             throw LocalSupplementalVideoError
                 .invalidBaseVideoSize
-        }
-
-        let baseTransform = Self.normalizedTransform(
-            naturalSize: baseNaturalSize,
-            preferredTransform: basePreferredTransform,
-            renderSize: renderSize
-        )
-
-        let composition = AVMutableComposition()
-        guard let baseCompositionTrack =
-                composition.addMutableTrack(
-                    withMediaType: .video,
-                    preferredTrackID:
-                        kCMPersistentTrackID_Invalid
-                ) else {
-            throw LocalSupplementalVideoError
-                .missingBaseVideoTrack
-        }
-
-        try baseCompositionTrack.insertTimeRange(
-            CMTimeRange(
-                start: baseVideoTimeRange.start,
-                duration: baseDuration
-            ),
-            of: baseVideoTrack,
-            at: .zero
-        )
-
-        let baseAudioTracks = try await baseAsset.loadTracks(
-            withMediaType: .audio
-        )
-        for sourceAudioTrack in baseAudioTracks {
-            let sourceRange = try await sourceAudioTrack.load(
-                .timeRange
-            )
-            let audioDurationSeconds = min(
-                baseDurationSeconds,
-                max(
-                    CMTimeGetSeconds(sourceRange.duration),
-                    0
-                )
-            )
-            guard audioDurationSeconds >= 0.001 else {
-                continue
-            }
-            guard let audioTrack = composition.addMutableTrack(
-                withMediaType: .audio,
-                preferredTrackID:
-                    kCMPersistentTrackID_Invalid
-            ) else {
-                throw LocalSupplementalVideoError
-                    .exportFailed(
-                        "Basisaudiospur konnte nicht angelegt werden."
-                    )
-            }
-            try audioTrack.insertTimeRange(
-                CMTimeRange(
-                    start: sourceRange.start,
-                    duration: CMTime(
-                        seconds: audioDurationSeconds,
-                        preferredTimescale: 600
-                    )
-                ),
-                of: sourceAudioTrack,
-                at: .zero
-            )
-        }
-
-        struct PreparedInsert {
-            let order: Int
-            let track: AVMutableCompositionTrack
-            let timelineStartSeconds: Double
-            let timelineEndSeconds: Double
-            let transform: CGAffineTransform
         }
 
         var prepared: [PreparedInsert] = []
@@ -160,21 +92,21 @@ public actor LocalSupplementalVideoCompositor {
             let tracks = try await asset.loadTracks(
                 withMediaType: .video
             )
-            guard let sourceTrack = tracks.first else {
+            guard let track = tracks.first else {
                 throw LocalSupplementalVideoError
                     .missingSupplementalVideoTrack(
                         input.captureID
                     )
             }
 
-            let sourceRange = try await sourceTrack.load(
+            let sourceRange = try await track.load(
                 .timeRange
             )
             let sourceDurationSeconds = max(
                 CMTimeGetSeconds(sourceRange.duration),
                 0
             )
-            let sourceStartOffset = min(
+            let sourceStart = min(
                 max(input.sourceStartSeconds, 0),
                 sourceDurationSeconds
             )
@@ -182,184 +114,446 @@ public actor LocalSupplementalVideoCompositor {
                 max(input.timelineStartSeconds, 0),
                 baseDurationSeconds
             )
-            let durationSeconds = min(
+            let duration = min(
                 max(input.durationSeconds, 0),
-                sourceDurationSeconds - sourceStartOffset,
+                sourceDurationSeconds - sourceStart,
                 baseDurationSeconds - timelineStart
             )
-            guard durationSeconds >= 0.05 else {
+            guard duration >= 0.05 else {
                 continue
             }
 
-            guard let compositionTrack =
-                    composition.addMutableTrack(
-                        withMediaType: .video,
-                        preferredTrackID:
-                            kCMPersistentTrackID_Invalid
-                    ) else {
-                throw LocalSupplementalVideoError
-                    .exportFailed(
-                        "Zusätzliche Videospur konnte nicht angelegt werden."
-                    )
-            }
-
-            let sourceStart = CMTimeAdd(
-                sourceRange.start,
-                CMTime(
-                    seconds: sourceStartOffset,
-                    preferredTimescale: 600
-                )
+            let generator = AVAssetImageGenerator(
+                asset: asset
             )
-            do {
-                try compositionTrack.insertTimeRange(
-                    CMTimeRange(
-                        start: sourceStart,
-                        duration: CMTime(
-                            seconds: durationSeconds,
-                            preferredTimescale: 600
-                        )
-                    ),
-                    of: sourceTrack,
-                    at: CMTime(
-                        seconds: timelineStart,
-                        preferredTimescale: 600
-                    )
-                )
-            } catch {
-                throw LocalSupplementalVideoError
-                    .exportFailed(
-                        "B-Roll konnte nicht in die eigene Videospur eingesetzt werden: "
-                        + error.localizedDescription
-                    )
-            }
-
-            let naturalSize = try await sourceTrack.load(
-                .naturalSize
-            )
-            let preferredTransform = try await sourceTrack.load(
-                .preferredTransform
-            )
+            generator.appliesPreferredTrackTransform = true
+            generator.requestedTimeToleranceBefore =
+                CMTime(seconds: 1.0 / 120.0, preferredTimescale: 600)
+            generator.requestedTimeToleranceAfter =
+                CMTime(seconds: 1.0 / 120.0, preferredTimescale: 600)
 
             prepared.append(
                 PreparedInsert(
                     order: order,
-                    track: compositionTrack,
+                    captureID: input.captureID,
+                    generator: generator,
+                    sourceStartSeconds: sourceStart,
                     timelineStartSeconds: timelineStart,
                     timelineEndSeconds:
-                        timelineStart + durationSeconds,
-                    transform: Self.aspectFillTransform(
-                        naturalSize: naturalSize,
-                        preferredTransform:
-                            preferredTransform,
-                        renderSize: renderSize
-                    )
+                        timelineStart + duration
                 )
             )
         }
 
         guard !prepared.isEmpty else {
-            throw LocalSupplementalVideoError.noUsableInsert
+            throw LocalSupplementalVideoError
+                .noUsableInsert
         }
 
-        var boundaries: [Double] = [
-            0,
-            baseDurationSeconds
-        ]
-        for insert in prepared {
-            boundaries.append(
-                insert.timelineStartSeconds
+        let videoOnlyURL = FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(
+                "blackstock-software-composite-\(UUID().uuidString)"
             )
-            boundaries.append(
-                insert.timelineEndSeconds
+            .appendingPathExtension("mp4")
+        defer {
+            try? FileManager.default.removeItem(
+                at: videoOnlyURL
             )
         }
-        boundaries.sort()
 
-        var normalizedBoundaries: [Double] = []
-        for value in boundaries {
-            let clamped = min(
-                max(value, 0),
-                baseDurationSeconds
-            )
-            if let last = normalizedBoundaries.last,
-               abs(last - clamped) < 0.000_5 {
-                continue
-            }
-            normalizedBoundaries.append(clamped)
-        }
-
-        var instructions:
-            [AVMutableVideoCompositionInstruction] = []
-        for index in 0..<(normalizedBoundaries.count - 1) {
-            let start = normalizedBoundaries[index]
-            let end = normalizedBoundaries[index + 1]
-            guard end - start >= 0.001 else {
-                continue
-            }
-
-            let activeInsert = prepared
-                .filter {
-                    $0.timelineStartSeconds
-                        <= start + 0.000_5
-                    && $0.timelineEndSeconds
-                        >= end - 0.000_5
-                }
-                .max { $0.order < $1.order }
-
-            let instruction =
-                AVMutableVideoCompositionInstruction()
-            instruction.timeRange = CMTimeRange(
-                start: CMTime(
-                    seconds: start,
-                    preferredTimescale: 600
-                ),
-                duration: CMTime(
-                    seconds: end - start,
-                    preferredTimescale: 600
-                )
-            )
-
-            if let activeInsert {
-                let layer =
-                    AVMutableVideoCompositionLayerInstruction(
-                        assetTrack: activeInsert.track
-                    )
-                layer.setTransform(
-                    activeInsert.transform,
-                    at: instruction.timeRange.start
-                )
-                instruction.layerInstructions = [layer]
-            } else {
-                let layer =
-                    AVMutableVideoCompositionLayerInstruction(
-                        assetTrack: baseCompositionTrack
-                    )
-                layer.setTransform(
-                    baseTransform,
-                    at: instruction.timeRange.start
-                )
-                instruction.layerInstructions = [layer]
-            }
-
-            instructions.append(instruction)
-        }
-
-        let videoComposition = AVMutableVideoComposition()
-        videoComposition.instructions = instructions
-        videoComposition.renderSize = renderSize
-        videoComposition.frameDuration = CMTime(
-            value: 1,
-            timescale: 30
+        try await renderVideoFrames(
+            baseAsset: baseAsset,
+            baseTrack: baseTrack,
+            baseTimeRange: baseTimeRange,
+            basePreferredTransform: preferredTransform,
+            renderSize: renderSize,
+            prepared: prepared,
+            outputURL: videoOnlyURL,
+            preset: preset
         )
+
+        try await muxBaseAudio(
+            baseAsset: baseAsset,
+            videoURL: videoOnlyURL,
+            outputURL: outputURL
+        )
+
+        guard FileManager.default.fileExists(
+            atPath: outputURL.path
+        ) else {
+            throw LocalSupplementalVideoError
+                .missingOutput
+        }
+    }
+
+    private func renderVideoFrames(
+        baseAsset: AVURLAsset,
+        baseTrack: AVAssetTrack,
+        baseTimeRange: CMTimeRange,
+        basePreferredTransform: CGAffineTransform,
+        renderSize: CGSize,
+        prepared: [PreparedInsert],
+        outputURL: URL,
+        preset: LocalRenderPreset
+    ) async throws {
+        if FileManager.default.fileExists(
+            atPath: outputURL.path
+        ) {
+            try FileManager.default.removeItem(
+                at: outputURL
+            )
+        }
+
+        let reader = try AVAssetReader(
+            asset: baseAsset
+        )
+        let readerOutput = AVAssetReaderTrackOutput(
+            track: baseTrack,
+            outputSettings: [
+                kCVPixelBufferPixelFormatTypeKey as String:
+                    Int(kCVPixelFormatType_32BGRA)
+            ]
+        )
+        readerOutput.alwaysCopiesSampleData = false
+        guard reader.canAdd(readerOutput) else {
+            throw LocalSupplementalVideoError
+                .exportFailed(
+                    "Basisvideo konnte nicht für den Software-Compositor dekodiert werden."
+                )
+        }
+        reader.add(readerOutput)
+        reader.timeRange = baseTimeRange
+
+        let writer = try AVAssetWriter(
+            outputURL: outputURL,
+            fileType: .mp4
+        )
+        let width = max(
+            Int(renderSize.width.rounded()),
+            2
+        )
+        let height = max(
+            Int(renderSize.height.rounded()),
+            2
+        )
+
+        let bitRate: Int
+        switch preset {
+        case .hd1080:
+            bitRate = 12_000_000
+        case .uhd4K:
+            bitRate = 38_000_000
+        }
+
+        let writerInput = AVAssetWriterInput(
+            mediaType: .video,
+            outputSettings: [
+                AVVideoCodecKey:
+                    AVVideoCodecType.h264,
+                AVVideoWidthKey: width,
+                AVVideoHeightKey: height,
+                AVVideoCompressionPropertiesKey: [
+                    AVVideoAverageBitRateKey:
+                        bitRate,
+                    AVVideoProfileLevelKey:
+                        AVVideoProfileLevelH264HighAutoLevel
+                ]
+            ]
+        )
+        writerInput.expectsMediaDataInRealTime = false
+
+        let adaptor =
+            AVAssetWriterInputPixelBufferAdaptor(
+                assetWriterInput: writerInput,
+                sourcePixelBufferAttributes: [
+                    kCVPixelBufferPixelFormatTypeKey as String:
+                        Int(kCVPixelFormatType_32BGRA),
+                    kCVPixelBufferWidthKey as String:
+                        width,
+                    kCVPixelBufferHeightKey as String:
+                        height,
+                    kCVPixelBufferIOSurfacePropertiesKey as String:
+                        [:]
+                ]
+            )
+
+        guard writer.canAdd(writerInput) else {
+            throw LocalSupplementalVideoError
+                .exportFailed(
+                    "Videoencoder konnte nicht angelegt werden."
+                )
+        }
+        writer.add(writerInput)
+
+        guard writer.startWriting() else {
+            throw LocalSupplementalVideoError
+                .exportFailed(
+                    writer.error?.localizedDescription
+                    ?? "Videoencoder konnte nicht gestartet werden."
+                )
+        }
+        guard reader.startReading() else {
+            throw LocalSupplementalVideoError
+                .exportFailed(
+                    reader.error?.localizedDescription
+                    ?? "Videodecoder konnte nicht gestartet werden."
+                )
+        }
+        writer.startSession(atSourceTime: .zero)
+
+        let context = CIContext(
+            options: [
+                .useSoftwareRenderer: true
+            ]
+        )
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let outputRect = CGRect(
+            origin: .zero,
+            size: CGSize(
+                width: width,
+                height: height
+            )
+        )
+
+        var appendedFrameCount = 0
+
+        while reader.status == .reading,
+              let sample =
+                readerOutput.copyNextSampleBuffer() {
+            autoreleasepool {
+                _ = sample
+            }
+
+            guard let imageBuffer =
+                    CMSampleBufferGetImageBuffer(
+                        sample
+                    ) else {
+                continue
+            }
+
+            let sampleTime =
+                CMSampleBufferGetPresentationTimeStamp(
+                    sample
+                )
+            let relativeTime = CMTimeSubtract(
+                sampleTime,
+                baseTimeRange.start
+            )
+            let timelineSeconds = max(
+                CMTimeGetSeconds(relativeTime),
+                0
+            )
+
+            let image: CIImage
+            if let insert = prepared
+                .filter({
+                    $0.timelineStartSeconds
+                        <= timelineSeconds + 0.000_5
+                    && $0.timelineEndSeconds
+                        > timelineSeconds + 0.000_5
+                })
+                .max(by: {
+                    $0.order < $1.order
+                }) {
+                let sourceSeconds =
+                    insert.sourceStartSeconds
+                    + timelineSeconds
+                    - insert.timelineStartSeconds
+                do {
+                    let cgImage =
+                        try insert.generator.copyCGImage(
+                            at: CMTime(
+                                seconds: sourceSeconds,
+                                preferredTimescale: 600
+                            ),
+                            actualTime: nil
+                        )
+                    image = Self.aspectFill(
+                        CIImage(cgImage: cgImage),
+                        into: outputRect
+                    )
+                } catch {
+                    throw LocalSupplementalVideoError
+                        .exportFailed(
+                            "B-Roll-Frame für \(insert.captureID.uuidString) konnte nicht dekodiert werden: "
+                            + error.localizedDescription
+                        )
+                }
+            } else {
+                let baseImage = CIImage(
+                    cvPixelBuffer: imageBuffer
+                )
+                image = Self.fitBaseImage(
+                    baseImage,
+                    preferredTransform:
+                        basePreferredTransform,
+                    into: outputRect
+                )
+            }
+
+            while !writerInput.isReadyForMoreMediaData {
+                if writer.status == .failed
+                    || writer.status == .cancelled {
+                    throw LocalSupplementalVideoError
+                        .exportFailed(
+                            writer.error?
+                                .localizedDescription
+                            ?? "Software-Videoencoder wurde abgebrochen."
+                        )
+                }
+                try await Task.sleep(
+                    nanoseconds: 1_000_000
+                )
+            }
+
+            let pixelBuffer = try Self.makePixelBuffer(
+                adaptor: adaptor,
+                width: width,
+                height: height
+            )
+            context.render(
+                image,
+                to: pixelBuffer,
+                bounds: outputRect,
+                colorSpace: colorSpace
+            )
+
+            guard adaptor.append(
+                pixelBuffer,
+                withPresentationTime: relativeTime
+            ) else {
+                throw LocalSupplementalVideoError
+                    .exportFailed(
+                        writer.error?
+                            .localizedDescription
+                        ?? "Software-Compositor konnte einen Videoframe nicht schreiben."
+                    )
+            }
+            appendedFrameCount += 1
+        }
+
+        if reader.status == .failed {
+            throw LocalSupplementalVideoError
+                .exportFailed(
+                    reader.error?.localizedDescription
+                    ?? "Videodekodierung ist fehlgeschlagen."
+                )
+        }
+        guard appendedFrameCount > 0 else {
+            throw LocalSupplementalVideoError
+                .exportFailed(
+                    "Software-Compositor hat keine Videoframes erhalten."
+                )
+        }
+
+        writerInput.markAsFinished()
+        try await withCheckedThrowingContinuation {
+            (
+                continuation:
+                    CheckedContinuation<Void, Error>
+            ) in
+            writer.finishWriting {
+                if writer.status == .completed {
+                    continuation.resume()
+                } else {
+                    continuation.resume(
+                        throwing:
+                            LocalSupplementalVideoError
+                            .exportFailed(
+                                writer.error?
+                                    .localizedDescription
+                                ?? "Software-Compositor konnte die Videodatei nicht abschließen."
+                            )
+                    )
+                }
+            }
+        }
+    }
+
+    private func muxBaseAudio(
+        baseAsset: AVURLAsset,
+        videoURL: URL,
+        outputURL: URL
+    ) async throws {
+        let videoAsset = AVURLAsset(url: videoURL)
+        let videoTracks = try await videoAsset.loadTracks(
+            withMediaType: .video
+        )
+        guard let videoTrack = videoTracks.first else {
+            throw LocalSupplementalVideoError
+                .missingOutput
+        }
+
+        let composition = AVMutableComposition()
+        guard let compositionVideo =
+                composition.addMutableTrack(
+                    withMediaType: .video,
+                    preferredTrackID:
+                        kCMPersistentTrackID_Invalid
+                ) else {
+            throw LocalSupplementalVideoError
+                .exportFailed(
+                    "Gerenderte Videospur konnte nicht für das Muxing angelegt werden."
+                )
+        }
+        let videoRange = try await videoTrack.load(
+            .timeRange
+        )
+        try compositionVideo.insertTimeRange(
+            videoRange,
+            of: videoTrack,
+            at: .zero
+        )
+
+        let audioTracks = try await baseAsset.loadTracks(
+            withMediaType: .audio
+        )
+        for audioTrack in audioTracks {
+            guard let destination =
+                    composition.addMutableTrack(
+                        withMediaType: .audio,
+                        preferredTrackID:
+                            kCMPersistentTrackID_Invalid
+                    ) else {
+                throw LocalSupplementalVideoError
+                    .exportFailed(
+                        "Hauptton konnte nicht für das Muxing angelegt werden."
+                    )
+            }
+            let range = try await audioTrack.load(
+                .timeRange
+            )
+            let duration = CMTimeMinimum(
+                range.duration,
+                videoRange.duration
+            )
+            guard CMTimeCompare(
+                duration,
+                .zero
+            ) > 0 else {
+                continue
+            }
+            try destination.insertTimeRange(
+                CMTimeRange(
+                    start: range.start,
+                    duration: duration
+                ),
+                of: audioTrack,
+                at: .zero
+            )
+        }
 
         guard let exporter = AVAssetExportSession(
             asset: composition,
-            presetName: preset.avPresetName
+            presetName:
+                AVAssetExportPresetPassthrough
         ) else {
             throw LocalSupplementalVideoError
                 .exportSessionUnavailable
         }
-        guard exporter.supportedFileTypes.contains(.mp4) else {
+        guard exporter.supportedFileTypes
+            .contains(.mp4) else {
             throw LocalSupplementalVideoError
                 .unsupportedOutputType
         }
@@ -371,18 +565,20 @@ public actor LocalSupplementalVideoCompositor {
                 at: outputURL
             )
         }
+
         exporter.outputURL = outputURL
         exporter.outputFileType = .mp4
         exporter.shouldOptimizeForNetworkUse = true
-        exporter.videoComposition = videoComposition
 
         let box =
-            SupplementalVideoExportSessionBox(exporter)
+            SupplementalMuxExportSessionBox(exporter)
         try await withCheckedThrowingContinuation {
-            continuation in
+            (
+                continuation:
+                    CheckedContinuation<Void, Error>
+            ) in
             box.session.exportAsynchronously {
-                let session = box.session
-                switch session.status {
+                switch box.session.status {
                 case .completed:
                     continuation.resume()
                 case .failed, .cancelled:
@@ -390,9 +586,9 @@ public actor LocalSupplementalVideoCompositor {
                         throwing:
                             LocalSupplementalVideoError
                             .exportFailed(
-                                Self.errorDescription(
-                                    session.error
-                                )
+                                box.session.error?
+                                    .localizedDescription
+                                ?? "Video und Hauptton konnten nicht zusammengeführt werden."
                             )
                     )
                 default:
@@ -400,139 +596,136 @@ public actor LocalSupplementalVideoCompositor {
                         throwing:
                             LocalSupplementalVideoError
                             .exportFailed(
-                                "Video-Einblendung endete im Zustand \(session.status.rawValue)."
+                                "Audio/Video-Muxing endete im Zustand \(box.session.status.rawValue)."
                             )
                     )
                 }
             }
         }
-
-        guard FileManager.default.fileExists(
-            atPath: outputURL.path
-        ) else {
-            throw LocalSupplementalVideoError
-                .missingOutput
-        }
     }
 
-    private static func errorDescription(
-        _ error: Error?
-    ) -> String {
-        guard let error else {
-            return "Video-Einblendung fehlgeschlagen."
-        }
-
-        let nsError = error as NSError
-        var parts = [
-            nsError.localizedDescription,
-            "Domain=\(nsError.domain)",
-            "Code=\(nsError.code)"
-        ]
-
-        if let reason = nsError.userInfo[
-            NSLocalizedFailureReasonErrorKey
-        ] as? String,
-           !reason.isEmpty {
-            parts.append("Grund=\(reason)")
-        }
-
-        if let underlying = nsError.userInfo[
-            NSUnderlyingErrorKey
-        ] as? NSError {
-            parts.append(
-                "UnderlyingDomain=\(underlying.domain)"
+    private static func makePixelBuffer(
+        adaptor: AVAssetWriterInputPixelBufferAdaptor,
+        width: Int,
+        height: Int
+    ) throws -> CVPixelBuffer {
+        var buffer: CVPixelBuffer?
+        if let pool = adaptor.pixelBufferPool {
+            let result = CVPixelBufferPoolCreatePixelBuffer(
+                nil,
+                pool,
+                &buffer
             )
-            parts.append(
-                "UnderlyingCode=\(underlying.code)"
-            )
-            if !underlying.localizedDescription.isEmpty {
-                parts.append(
-                    "Underlying=\(underlying.localizedDescription)"
-                )
+            if result == kCVReturnSuccess,
+               let buffer {
+                return buffer
             }
         }
 
-        return parts.joined(separator: " | ")
+        let result = CVPixelBufferCreate(
+            nil,
+            width,
+            height,
+            kCVPixelFormatType_32BGRA,
+            [
+                kCVPixelBufferIOSurfacePropertiesKey:
+                    [:]
+            ] as CFDictionary,
+            &buffer
+        )
+        guard result == kCVReturnSuccess,
+              let buffer else {
+            throw LocalSupplementalVideoError
+                .exportFailed(
+                    "Software-Compositor konnte keinen Ausgabepuffer anlegen."
+                )
+        }
+        return buffer
     }
 
-    private static func normalizedTransform(
-        naturalSize: CGSize,
+    private static func fitBaseImage(
+        _ image: CIImage,
         preferredTransform: CGAffineTransform,
-        renderSize: CGSize
-    ) -> CGAffineTransform {
-        let bounds = CGRect(
-            origin: .zero,
-            size: naturalSize
-        ).applying(preferredTransform)
-        let width = abs(bounds.width)
-        let height = abs(bounds.height)
-        var transform = preferredTransform.concatenating(
-            CGAffineTransform(
-                translationX: -bounds.minX,
-                y: -bounds.minY
-            )
+        into outputRect: CGRect
+    ) -> CIImage {
+        let transformed = image.transformed(
+            by: preferredTransform
         )
-        guard width > 0,
-              height > 0 else {
-            return transform
+        let extent = transformed.extent
+        guard extent.width > 0,
+              extent.height > 0 else {
+            return transformed
         }
-        transform = transform.concatenating(
-            CGAffineTransform(
-                scaleX: renderSize.width / width,
-                y: renderSize.height / height
+
+        let translated = transformed.transformed(
+            by: CGAffineTransform(
+                translationX: -extent.minX,
+                y: -extent.minY
             )
         )
-        return transform
+        let normalizedExtent = translated.extent
+        let scaleX =
+            outputRect.width
+            / normalizedExtent.width
+        let scaleY =
+            outputRect.height
+            / normalizedExtent.height
+
+        return translated
+            .transformed(
+                by: CGAffineTransform(
+                    scaleX: scaleX,
+                    y: scaleY
+                )
+            )
+            .cropped(to: outputRect)
     }
 
-    private static func aspectFillTransform(
-        naturalSize: CGSize,
-        preferredTransform: CGAffineTransform,
-        renderSize: CGSize
-    ) -> CGAffineTransform {
-        let bounds = CGRect(
-            origin: .zero,
-            size: naturalSize
-        ).applying(preferredTransform)
-        let width = abs(bounds.width)
-        let height = abs(bounds.height)
-        guard width > 0,
-              height > 0,
-              renderSize.width > 0,
-              renderSize.height > 0 else {
-            return preferredTransform
+    private static func aspectFill(
+        _ image: CIImage,
+        into outputRect: CGRect
+    ) -> CIImage {
+        let extent = image.extent
+        guard extent.width > 0,
+              extent.height > 0 else {
+            return image
         }
 
+        let translated = image.transformed(
+            by: CGAffineTransform(
+                translationX: -extent.minX,
+                y: -extent.minY
+            )
+        )
+        let normalizedExtent = translated.extent
         let scale = max(
-            renderSize.width / width,
-            renderSize.height / height
+            outputRect.width
+                / normalizedExtent.width,
+            outputRect.height
+                / normalizedExtent.height
         )
-        let scaledWidth = width * scale
-        let scaledHeight = height * scale
-        let offsetX =
-            (renderSize.width - scaledWidth) / 2
-        let offsetY =
-            (renderSize.height - scaledHeight) / 2
-
-        var transform = preferredTransform.concatenating(
-            CGAffineTransform(
-                translationX: -bounds.minX,
-                y: -bounds.minY
-            )
-        )
-        transform = transform.concatenating(
-            CGAffineTransform(
+        let scaled = translated.transformed(
+            by: CGAffineTransform(
                 scaleX: scale,
                 y: scale
             )
         )
-        transform = transform.concatenating(
-            CGAffineTransform(
-                translationX: offsetX / scale,
-                y: offsetY / scale
+        let scaledExtent = scaled.extent
+        let offsetX =
+            (outputRect.width
+                - scaledExtent.width) / 2
+        let offsetY =
+            (outputRect.height
+                - scaledExtent.height) / 2
+
+        return scaled
+            .transformed(
+                by: CGAffineTransform(
+                    translationX: offsetX,
+                    y: offsetY
+                )
             )
-        )
-        return transform
+            .cropped(to: outputRect)
     }
 }
 #endif
