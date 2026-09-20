@@ -778,7 +778,7 @@ jobs:
 
           APP_INFO="/Applications/Blackstock.app/Contents/Info.plist"
           APP_BIN="/Applications/Blackstock.app/Contents/MacOS/Blackstock"
-          python3 - "$APP_INFO" "$RECEIPT" "$APP_BIN" "$RUNNER_TEMP/dist/installed-release-fingerprint.json" <<'PY'
+          python3 - "$APP_INFO" "$RECEIPT" "$APP_BIN" "$RUNNER_TEMP/dist/Blackstock.pkg" "$RUNNER_TEMP/dist/installed-release-fingerprint.json" <<'PY'
           import hashlib
           import json
           import plistlib
@@ -792,6 +792,7 @@ jobs:
               receipt = plistlib.load(handle)
 
           executable = pathlib.Path(sys.argv[3])
+          package = pathlib.Path(sys.argv[4])
           fingerprint = {
               "schemaVersion": 1,
               "runnerArchitecture": platform.machine(),
@@ -799,13 +800,14 @@ jobs:
               "version": info["CFBundleShortVersionString"],
               "build": info["CFBundleVersion"],
               "sourceCommitSHA": info["BlackstockSourceCommitSHA"].lower(),
+              "packageSHA256": hashlib.sha256(package.read_bytes()).hexdigest(),
               "executableSHA256": hashlib.sha256(executable.read_bytes()).hexdigest(),
               "installerReceiptPackageID": receipt["pkgid"],
               "installerReceiptVersion": receipt["pkg-version"],
               "installerReceiptVolume": receipt["volume"],
               "installerReceiptInstallLocation": receipt["install-location"],
           }
-          pathlib.Path(sys.argv[4]).write_text(
+          pathlib.Path(sys.argv[5]).write_text(
               json.dumps(fingerprint, indent=2, sort_keys=True) + "\n"
           )
           PY
@@ -936,7 +938,7 @@ jobs:
           APP_BIN="/Applications/Blackstock.app/Contents/MacOS/Blackstock"
           INTEL_FINGERPRINT="$RUNNER_TEMP/intel-installed-release-fingerprint.json"
 
-          python3 - "$APP_INFO" "$RECEIPT" "$APP_BIN" "$INTEL_FINGERPRINT" <<'PY'
+          python3 - "$APP_INFO" "$RECEIPT" "$APP_BIN" "$RUNNER_TEMP/intel-package/Blackstock.pkg" "$INTEL_FINGERPRINT" <<'PY'
           import hashlib
           import json
           import plistlib
@@ -950,6 +952,7 @@ jobs:
               receipt = plistlib.load(handle)
 
           executable = pathlib.Path(sys.argv[3])
+          package = pathlib.Path(sys.argv[4])
           fingerprint = {
               "schemaVersion": 1,
               "runnerArchitecture": platform.machine(),
@@ -957,13 +960,14 @@ jobs:
               "version": info["CFBundleShortVersionString"],
               "build": info["CFBundleVersion"],
               "sourceCommitSHA": info["BlackstockSourceCommitSHA"].lower(),
+              "packageSHA256": hashlib.sha256(package.read_bytes()).hexdigest(),
               "executableSHA256": hashlib.sha256(executable.read_bytes()).hexdigest(),
               "installerReceiptPackageID": receipt["pkgid"],
               "installerReceiptVersion": receipt["pkg-version"],
               "installerReceiptVolume": receipt["volume"],
               "installerReceiptInstallLocation": receipt["install-location"],
           }
-          pathlib.Path(sys.argv[4]).write_text(
+          pathlib.Path(sys.argv[5]).write_text(
               json.dumps(fingerprint, indent=2, sort_keys=True) + "\n"
           )
           PY
@@ -981,12 +985,28 @@ jobs:
           if intel.get("runnerArchitecture") != "x86_64":
               raise SystemExit("Intel fingerprint did not originate from x86_64")
 
+          package_path = pathlib.Path(
+              "$RUNNER_TEMP/intel-package/Blackstock.pkg"
+          )
+          downloaded_package_sha = __import__("hashlib").sha256(
+              package_path.read_bytes()
+          ).hexdigest()
+          if apple.get("packageSHA256") != downloaded_package_sha:
+              raise SystemExit(
+                  "Apple-Silicon fingerprint is not bound to the downloaded package"
+              )
+          if intel.get("packageSHA256") != downloaded_package_sha:
+              raise SystemExit(
+                  "Intel fingerprint is not bound to the downloaded package"
+              )
+
           identity_fields = [
               "schemaVersion",
               "bundleIdentifier",
               "version",
               "build",
               "sourceCommitSHA",
+              "packageSHA256",
               "executableSHA256",
               "installerReceiptPackageID",
               "installerReceiptVersion",
