@@ -217,7 +217,8 @@ if guidance_path.is_file():
 app_path = ROOT / "Sources/BlackstockApp/BlackstockApp.swift"
 if app_path.is_file():
     app = app_path.read_text(encoding="utf-8")
-    if 'if session.activeProject?.stage.journeyGuidance\n                    .recommendedSurface == .studio' not in app:
+    compact_app = " ".join(app.split())
+    if "if session.activeProject?.stage.journeyGuidance .recommendedSurface == .studio" not in compact_app:
         errors.append("Studio navigation must remain capability/stage gated")
     if 'project.stage == .research\n                || project.stage == .analysis' not in app:
         errors.append("Research and analysis must expose guided overview UI")
