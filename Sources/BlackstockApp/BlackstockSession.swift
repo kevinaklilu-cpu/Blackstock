@@ -1803,95 +1803,10 @@ final class BlackstockSession: ObservableObject {
     private func channelSetupAccessToken(
         targetChannelID: String
     ) async throws -> String {
-        let storedScopes = BlackstockKeychain.read(
-            "youtube.\(targetChannelID).scopes"
-        )
-        let runtimeScope = tokenSet?.scope?
-            .trimmingCharacters(
-                in: .whitespacesAndNewlines
-            ) ?? ""
-        let activeScopeString: String
-        if !runtimeScope.isEmpty {
-            activeScopeString = runtimeScope
-        } else if !storedScopes.isEmpty {
-            activeScopeString = storedScopes
-        } else if tokenSet != nil {
-            activeScopeString = connectedOAuthScopeString
-        } else {
-            activeScopeString = ""
-        }
-        let plan = GoogleOAuthScopePlanner().plan(
-            capabilities: [
-                .discoveryReadOnly,
-                .channelManagement
-            ],
-            tokenScopeString: activeScopeString
-        )
-
-        if plan.state == .reauthorizationRequired {
-            let tokens = try await performOAuthAuthorization(
-                scopes: plan.scopesForAuthorization
-            )
-            guard let grantedScopeString = tokens.scope else {
-                throw PublishingSessionError.missingScopes
-            }
-            let granted =
-                GoogleOAuthScopePlanner.parseGrantedScopes(
-                    grantedScopeString
-                )
-            guard plan.scopesForAuthorization.isSubset(
-                of: granted
-            ) else {
-                throw PublishingSessionError.missingScopes
-            }
-
-            let identities = try await YouTubeAuthorizedClient(
-                accessToken: tokens.accessToken
-            ).myChannels()
-            guard identities.contains(where: {
-                $0.id == targetChannelID
-            }) else {
-                throw PublishingSessionError.missingToken
-            }
-
-            try BlackstockKeychain.write(
-                tokens.accessToken,
-                account:
-                    "youtube.\(targetChannelID).accessToken"
-            )
-            if let refresh = tokens.refreshToken,
-               !refresh.isEmpty {
-                try BlackstockKeychain.write(
-                    refresh,
-                    account:
-                        "youtube.\(targetChannelID).refreshToken"
-                )
-            }
-            try BlackstockKeychain.write(
-                grantedScopeString,
-                account: "youtube.\(targetChannelID).scopes"
-            )
-            try BlackstockKeychain.write(
-                effectiveClientID,
-                account:
-                    "youtube.\(targetChannelID).oauthClientID"
-            )
-            cacheRuntimeToken(
-                tokens,
-                fallbackScopeString: connectedOAuthScopeString
-            )
-            return tokens.accessToken
-        }
-
-        if let accessToken = validRuntimeAccessToken(
-            requiredScopes: [
-                .youtubeReadOnly,
-                .youtubeForceSSL
-            ]
-        ) {
-            return accessToken
-        }
-
+        // Setup/discovery must stay on the already granted read-only
+        // authorization. Asking for channel-management here caused a second
+        // browser login during onboarding even though the user had already
+        // connected Google.
         return try await validatedReadOnlyAccessToken(
             targetChannelID: targetChannelID
         )
@@ -2092,7 +2007,7 @@ final class BlackstockSession: ObservableObject {
     }
 
     func continueFromTopic() async {
-        guard let channel = selectedChannel else {
+        guard selectedChannel != nil else {
             errorMessage = "Wähle zuerst deinen YouTube-Kanal."
             return
         }
@@ -2107,7 +2022,7 @@ final class BlackstockSession: ObservableObject {
         guard youtubeVideoCategories.contains(where: {
             $0.id == channelCategoryID
         }) else {
-            errorMessage = "Wähle eine YouTube-Kategorie aus."
+            errorMessage = "Wähle eine Video-Kategorie aus."
             return
         }
 
@@ -2117,47 +2032,33 @@ final class BlackstockSession: ObservableObject {
         errorMessage = nil
         defer { isWorking = false }
 
-        do {
-            let accessToken = try await channelSetupAccessToken(
-                targetChannelID: channel.id
-            )
-            let result = try await YouTubeChannelSetupClient(
-                accessToken: accessToken
-            ).applyAndVerify(
-                channelID: channel.id,
-                countryCode: channelRegionCode,
-                defaultLanguage: contentLanguage,
-                audience: channelAudienceSetting
-            )
+        // These values define Blackstock's local discovery/publishing profile.
+        // They are intentionally not written back to the YouTube channel here.
+        // That keeps first-run read-only and prevents unnecessary reauthorization.
+        UserDefaults.standard.set(
+            channelRegionCode,
+            forKey: "blackstock.workspace.regionCode"
+        )
+        UserDefaults.standard.set(
+            channelCategoryID,
+            forKey: "blackstock.workspace.channelCategoryID"
+        )
+        UserDefaults.standard.set(
+            channelAudienceSetting.rawValue,
+            forKey: "blackstock.workspace.channelAudience"
+        )
+        UserDefaults.standard.set(
+            primaryTopic,
+            forKey: "blackstock.workspace.primaryTopic"
+        )
+        UserDefaults.standard.set(
+            contentLanguage,
+            forKey: "blackstock.workspace.contentLanguage"
+        )
 
-            officialChannelSettingsVerified = true
-            channelAudienceAppliedToYouTube =
-                result.audienceAppliedToChannel
-            UserDefaults.standard.set(
-                channelRegionCode,
-                forKey: "blackstock.workspace.regionCode"
-            )
-            UserDefaults.standard.set(
-                channelCategoryID,
-                forKey: "blackstock.workspace.channelCategoryID"
-            )
-            UserDefaults.standard.set(
-                channelAudienceSetting.rawValue,
-                forKey: "blackstock.workspace.channelAudience"
-            )
-            UserDefaults.standard.set(
-                primaryTopic,
-                forKey: "blackstock.workspace.primaryTopic"
-            )
-            UserDefaults.standard.set(
-                contentLanguage,
-                forKey: "blackstock.workspace.contentLanguage"
-            )
-            step = .language
-        } catch {
-            errorMessage =
-                "YouTube konnte die Kanaleinstellungen nicht übernehmen: \(describe(error))"
-        }
+        channelAudienceAppliedToYouTube = nil
+        officialChannelSettingsVerified = true
+        step = .language
     }
 
     func prepareChannelAndLoadOpportunities() async {

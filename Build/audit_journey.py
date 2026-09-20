@@ -19,7 +19,7 @@ checks = {
         'title: "Editor öffnen"',
         'Label("Entdecken", systemImage: "play.rectangle.fill")',
         'Label("Projekte", systemImage: "folder.fill")',
-        "BlackstockBrandMark(width: 40)",
+        "BlackstockBrandMark(width: 34)",
         ".navigationSplitViewColumnWidth(",
         "OpportunityWorkspaceView(",
         "ProjectLibraryView(",

@@ -197,7 +197,7 @@ struct FirstRunView: View {
             if session.isLoadingYouTubeSetupOptions {
                 HStack(spacing: 10) {
                     ProgressView()
-                    Text("YouTube-Einstellungen werden geladen …")
+                    Text("Kanalinformationen werden geladen …")
                         .foregroundStyle(.secondary)
                 }
             }
@@ -237,7 +237,7 @@ struct FirstRunView: View {
             }
 
             Picker(
-                "Kanal-Kategorie",
+                "Video-Kategorie",
                 selection: $session.channelCategoryID
             ) {
                 ForEach(session.youtubeVideoCategories) { category in
@@ -245,7 +245,7 @@ struct FirstRunView: View {
                 }
             }
             .pickerStyle(.menu)
-            .accessibilityLabel("YouTube-Video-Kategorie")
+            .accessibilityLabel("Video-Kategorie")
 
             Picker(
                 "Trend-Zeitraum",
@@ -288,7 +288,7 @@ struct FirstRunView: View {
             .pickerStyle(.menu)
 
             Text(
-                "Diese Auswahl wird als Standard für deinen Kanal verwendet."
+                "Diese Auswahl steuert Blackstock für Suche, Schnitt und Veröffentlichung. Dein YouTube-Kanal wird dabei nicht automatisch verändert."
             )
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -305,7 +305,7 @@ struct FirstRunView: View {
                             .controlSize(.small)
                     } else {
                         Label(
-                            "Einstellungen speichern",
+                            "Weiter",
                             systemImage: "checkmark.circle"
                         )
                     }
@@ -327,7 +327,7 @@ struct FirstRunView: View {
             if session.officialChannelSettingsVerified {
                 VStack(alignment: .leading, spacing: 6) {
                     Label(
-                        "Kanaleinstellungen gespeichert",
+                        "Blackstock-Profil gespeichert",
                         systemImage: "checkmark.seal.fill"
                     )
                     .font(.callout.weight(.semibold))
@@ -378,7 +378,7 @@ struct FirstRunView: View {
 
             HStack {
                 Spacer()
-                Button("Kanal vorbereiten") {
+                Button("Videos laden") {
                     Task {
                         await session
                             .prepareChannelAndLoadOpportunities()
@@ -387,7 +387,7 @@ struct FirstRunView: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(
                     !session.workspaceRightsResponsibilityAccepted
-                    || !session.officialChannelSettingsVerified
+                    
                 )
             }
         }

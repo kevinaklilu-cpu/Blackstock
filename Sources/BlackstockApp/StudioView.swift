@@ -401,12 +401,6 @@ struct StudioView: View {
                     .buttonStyle(.bordered)
                 }
 
-                Text(
-                    "Kamera, Mikrofon und Bildschirm sind für diesen Clip nicht erforderlich."
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
                 Spacer()
             }
             .frame(
@@ -438,7 +432,7 @@ struct StudioView: View {
                     Label(
                         showOptionalCapture
                             ? "Eigene Aufnahme ausblenden"
-                            : "Eigene Aufnahme verwenden",
+                            : "Optionale Aufnahme",
                         systemImage:
                             showOptionalCapture
                             ? "chevron.up"
