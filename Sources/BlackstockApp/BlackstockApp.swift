@@ -45,22 +45,62 @@ private struct WorkspaceShell: View {
 
     var body: some View {
         NavigationSplitView {
-            List(selection: $selection) {
-                Label("Übersicht", systemImage: "rectangle.grid.2x2")
-                    .tag("Übersicht")
-                Label("Chancen", systemImage: "sparkle.magnifyingglass")
-                    .tag("Chancen")
-                Label("Projekte", systemImage: "tray.full")
-                    .tag("Projekte")
-                if session.activeProject?.stage.journeyGuidance
-                    .recommendedSurface == .studio {
-                    Label("Studio", systemImage: "film.stack")
-                        .tag("Studio")
+            VStack(spacing: 0) {
+                HStack {
+                    BlackstockWordmark(
+                        markWidth: 34,
+                        markHeight: 24,
+                        font: .headline
+                    )
+                    Spacer()
                 }
-                Label("Einstellungen", systemImage: "gearshape")
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+
+                Divider()
+
+                List(selection: $selection) {
+                    Label(
+                        "Übersicht",
+                        systemImage: "rectangle.grid.2x2"
+                    )
+                    .tag("Übersicht")
+
+                    Label(
+                        "Entdecken",
+                        systemImage: "sparkle.magnifyingglass"
+                    )
+                    .tag("Chancen")
+
+                    Label(
+                        "Projekte",
+                        systemImage: "tray.full"
+                    )
+                    .tag("Projekte")
+
+                    if session.activeProject?.stage
+                        .journeyGuidance
+                        .recommendedSurface == .studio {
+                        Label(
+                            "Editor",
+                            systemImage: "film.stack"
+                        )
+                        .tag("Studio")
+                    }
+
+                    Label(
+                        "Einstellungen",
+                        systemImage: "gearshape"
+                    )
                     .tag("Einstellungen")
+                }
+                .listStyle(.sidebar)
             }
-            .navigationTitle("Blackstock")
+            .navigationSplitViewColumnWidth(
+                min: 190,
+                ideal: 220,
+                max: 260
+            )
         } detail: {
             switch selection {
             case "Chancen":
@@ -163,16 +203,16 @@ private struct CommandPaletteView: View {
             ),
             .init(
                 id: "opportunities",
-                title: "Chancen öffnen",
-                subtitle: "Neue reale YouTube-Signale recherchieren",
+                title: "Entdecken",
+                subtitle: "Videos und Themen finden",
                 systemImage: "sparkle.magnifyingglass",
                 destination: "Chancen",
                 isDestructive: false
             ),
             .init(
                 id: "projects",
-                title: "Projekte öffnen",
-                subtitle: "Zwischen laufenden und veröffentlichten Projekten wechseln",
+                title: "Projekte",
+                subtitle: "Projekte öffnen",
                 systemImage: "tray.full",
                 destination: "Projekte",
                 isDestructive: false
@@ -183,8 +223,8 @@ private struct CommandPaletteView: View {
             result.append(
                 .init(
                     id: "studio",
-                    title: "Studio öffnen",
-                    subtitle: "Aktives Projekt visuell bearbeiten",
+                    title: "Editor",
+                    subtitle: "Aktives Projekt bearbeiten",
                     systemImage: "film.stack",
                     destination: "Studio",
                     isDestructive: false
@@ -195,8 +235,8 @@ private struct CommandPaletteView: View {
         result.append(contentsOf: [
             .init(
                 id: "settings",
-                title: "Einstellungen öffnen",
-                subtitle: "Google-/YouTube- und App-Einstellungen",
+                title: "Einstellungen",
+                subtitle: "Google, YouTube und App",
                 systemImage: "gearshape",
                 destination: "Einstellungen",
                 isDestructive: false
