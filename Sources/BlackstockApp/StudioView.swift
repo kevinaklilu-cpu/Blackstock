@@ -457,6 +457,33 @@ struct StudioView: View {
                         )
                         .font(.caption.monospacedDigit())
                         .foregroundStyle(.secondary)
+
+                        Button {
+                            Task {
+                                await state
+                                    .renderAllSavedClipSelections()
+                            }
+                        } label: {
+                            HStack {
+                                if state.isRenderingSavedClipBatch {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                }
+                                Label(
+                                    state.isRenderingSavedClipBatch
+                                        ? "Alle werden erstellt …"
+                                        : "Alle erstellen",
+                                    systemImage:
+                                        "square.stack.3d.up"
+                                )
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(
+                            state.isRenderingSavedClipBatch
+                            || state.renderingSavedClipID != nil
+                            || !editingEnabled
+                        )
                     }
 
                     ForEach(
@@ -501,100 +528,111 @@ struct StudioView: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(3)
 
-                            HStack {
-                                Button {
-                                    Task {
-                                        await state
-                                            .previewSavedClipSelection(
-                                                selection
-                                            )
-                                    }
-                                } label: {
-                                    Label(
-                                        state.previewedLocalClipCandidateID
-                                            == selection.id
-                                            ? "Vorschau läuft"
-                                            : "Vorschau abspielen",
-                                        systemImage: "play.circle"
-                                    )
-                                }
-                                .buttonStyle(.bordered)
-
-                                Button {
-                                    state.loadSavedClipSelection(
-                                        selection
-                                    )
-                                } label: {
-                                    Label(
-                                        "In Timeline laden",
-                                        systemImage:
-                                            "slider.horizontal.3"
-                                    )
-                                }
-                                .buttonStyle(.bordered)
-                                .disabled(!editingEnabled)
-
-                                Button {
-                                    Task {
-                                        await state
-                                            .applySavedClipSelection(
-                                                selection
-                                            )
-                                    }
-                                } label: {
-                                    Label(
-                                        "Übernehmen",
-                                        systemImage:
-                                            "checkmark.circle"
-                                    )
-                                }
-                                .buttonStyle(
-                                    .borderedProminent
-                                )
-                                .disabled(!editingEnabled)
-
-                                Button {
-                                    Task {
-                                        await state
-                                            .renderSavedClipSelection(
-                                                selection
-                                            )
-                                    }
-                                } label: {
-                                    HStack {
-                                        if state.renderingSavedClipID
-                                            == selection.id {
-                                            ProgressView()
-                                                .controlSize(.small)
+                            VStack(
+                                alignment: .leading,
+                                spacing: 6
+                            ) {
+                                HStack {
+                                    Button {
+                                        Task {
+                                            await state
+                                                .previewSavedClipSelection(
+                                                    selection
+                                                )
                                         }
+                                    } label: {
                                         Label(
-                                            state.renderingSavedClipID
+                                            state.previewedLocalClipCandidateID
                                                 == selection.id
-                                                ? "Clip-Datei wird erstellt …"
-                                                : "Clip-Datei erstellen",
-                                            systemImage: "film"
+                                                ? "Vorschau läuft"
+                                                : "Vorschau",
+                                            systemImage: "play.circle"
                                         )
                                     }
-                                }
-                                .buttonStyle(.bordered)
-                                .disabled(
-                                    state.renderingSavedClipID != nil
-                                    || !editingEnabled
-                                )
+                                    .buttonStyle(.bordered)
 
-                                Button(
-                                    role: .destructive
-                                ) {
-                                    state.removeSavedClipSelection(
-                                        selection
+                                    Button {
+                                        Task {
+                                            await state
+                                                .applySavedClipSelection(
+                                                    selection
+                                                )
+                                        }
+                                    } label: {
+                                        Label(
+                                            "Übernehmen",
+                                            systemImage:
+                                                "checkmark.circle"
+                                        )
+                                    }
+                                    .buttonStyle(
+                                        .borderedProminent
                                     )
-                                } label: {
-                                    Label(
-                                        "Entfernen",
-                                        systemImage: "trash"
-                                    )
+                                    .disabled(!editingEnabled)
                                 }
-                                .buttonStyle(.bordered)
+
+                                HStack {
+                                    Button {
+                                        Task {
+                                            await state
+                                                .renderSavedClipSelection(
+                                                    selection
+                                                )
+                                        }
+                                    } label: {
+                                        HStack {
+                                            if state.renderingSavedClipID
+                                                == selection.id {
+                                                ProgressView()
+                                                    .controlSize(.small)
+                                            }
+                                            Label(
+                                                state.renderingSavedClipID
+                                                    == selection.id
+                                                    ? "Wird erstellt …"
+                                                    : "Datei erstellen",
+                                                systemImage: "film"
+                                            )
+                                        }
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .disabled(
+                                        state.renderingSavedClipID != nil
+                                        || state.isRenderingSavedClipBatch
+                                        || !editingEnabled
+                                    )
+
+                                    Menu {
+                                        Button {
+                                            state.loadSavedClipSelection(
+                                                selection
+                                            )
+                                        } label: {
+                                            Label(
+                                                "In Timeline laden",
+                                                systemImage:
+                                                    "slider.horizontal.3"
+                                            )
+                                        }
+
+                                        Button(
+                                            "Entfernen",
+                                            role: .destructive
+                                        ) {
+                                            state.removeSavedClipSelection(
+                                                selection
+                                            )
+                                        }
+                                    } label: {
+                                        Label(
+                                            "Mehr",
+                                            systemImage:
+                                                "ellipsis.circle"
+                                        )
+                                    }
+                                    .menuStyle(.borderlessButton)
+                                    .disabled(!editingEnabled)
+                                }
                             }
 
                             if let artifact =
