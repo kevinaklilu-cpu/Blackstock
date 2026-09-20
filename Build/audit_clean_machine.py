@@ -55,6 +55,15 @@ for relative, markers in requirements.items():
         if marker not in text:
             errors.append(f"{relative}: missing E2E contract marker: {marker}")
 
+ci = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+for job_marker in ["\n  test:\n", "\n  package:\n"]:
+    count = ci.count(job_marker)
+    if count != 1:
+        errors.append(
+            f"canonical CI must contain {job_marker.strip()!r} exactly once; "
+            f"found {count}"
+        )
+
 package = (ROOT / "Build/package.sh").read_text(encoding="utf-8")
 if 'INCLUDE_E2E_SMOKE="${BLACKSTOCK_INCLUDE_E2E_SMOKE:-0}"' not in package:
     errors.append("E2E helper must remain opt-in and absent from production packages by default")
