@@ -5,6 +5,8 @@ final class InAppUpdateEvidenceTests:
     XCTestCase {
     private let sourceCommitSHA =
         String(repeating: "1", count: 40)
+    private let currentSourceCommitSHA =
+        String(repeating: "2", count: 40)
 
     func testVerifiedUpdateCompletesOnlyAfterTargetBuildLaunch()
         throws {
@@ -33,6 +35,22 @@ final class InAppUpdateEvidenceTests:
         _ = try store.begin(
             currentVersion: "0.9.0",
             currentBuild: 90,
+            currentSourceCommitSHA:
+                currentSourceCommitSHA,
+            currentExecutableSHA256:
+                String(repeating: "b", count: 64),
+            currentAppPath:
+                "/Applications/Blackstock.app",
+            currentApplicationTeamID:
+                "ABC123TEAM",
+            currentDeveloperIDApplicationVerified:
+                true,
+            currentInstallerReceiptPackageID:
+                "de.blackstock.app",
+            currentInstallerReceiptVersion:
+                "0.9.0",
+            currentInstallerReceiptVerified:
+                true,
             manifestURL: URL(
                 string:
                     "https://updates.blackstock.app/update-manifest.json"
@@ -198,6 +216,22 @@ final class InAppUpdateEvidenceTests:
         _ = try store.begin(
             currentVersion: "0.9.0",
             currentBuild: 90,
+            currentSourceCommitSHA:
+                currentSourceCommitSHA,
+            currentExecutableSHA256:
+                String(repeating: "b", count: 64),
+            currentAppPath:
+                "/Applications/Blackstock.app",
+            currentApplicationTeamID:
+                "ABC123TEAM",
+            currentDeveloperIDApplicationVerified:
+                true,
+            currentInstallerReceiptPackageID:
+                "de.blackstock.app",
+            currentInstallerReceiptVersion:
+                "0.9.0",
+            currentInstallerReceiptVerified:
+                true,
             manifestURL: URL(
                 string:
                     "https://updates.blackstock.app/update-manifest.json"
@@ -234,6 +268,60 @@ final class InAppUpdateEvidenceTests:
         XCTAssertNil(result?.postUpdateLaunchVerifiedAt)
     }
 
+    func testBeginRejectsInvalidCurrentAppProvenance()
+        throws {
+        let root = FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(
+                UUID().uuidString,
+                isDirectory: true
+            )
+        defer {
+            try? FileManager.default
+                .removeItem(at: root)
+        }
+
+        let store = InAppUpdateEvidenceStore(
+            fileURL: root.appendingPathComponent(
+                "update-evidence.json"
+            )
+        )
+
+        XCTAssertThrowsError(
+            try store.begin(
+                currentVersion: "0.9.0",
+                currentBuild: 90,
+                currentSourceCommitSHA:
+                    currentSourceCommitSHA,
+                currentExecutableSHA256:
+                    String(repeating: "b", count: 64),
+                currentAppPath:
+                    "/Users/test/Blackstock.app",
+                currentApplicationTeamID:
+                    "ABC123TEAM",
+                currentDeveloperIDApplicationVerified:
+                    true,
+                currentInstallerReceiptPackageID:
+                    "de.blackstock.app",
+                currentInstallerReceiptVersion:
+                    "0.9.0",
+                currentInstallerReceiptVerified:
+                    true,
+                manifestURL: URL(
+                    string:
+                        "https://updates.blackstock.app/update-manifest.json"
+                )!,
+                expectedInstallerTeamID:
+                    "ABC123TEAM"
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? InAppUpdateEvidenceError,
+                .invalidCurrentAppProvenance
+            )
+        }
+    }
+
     func testPackageVerificationRejectsDifferentManifest()
         throws {
         let root = FileManager.default
@@ -265,6 +353,22 @@ final class InAppUpdateEvidenceTests:
         _ = try store.begin(
             currentVersion: "0.9.0",
             currentBuild: 90,
+            currentSourceCommitSHA:
+                currentSourceCommitSHA,
+            currentExecutableSHA256:
+                String(repeating: "b", count: 64),
+            currentAppPath:
+                "/Applications/Blackstock.app",
+            currentApplicationTeamID:
+                "ABC123TEAM",
+            currentDeveloperIDApplicationVerified:
+                true,
+            currentInstallerReceiptPackageID:
+                "de.blackstock.app",
+            currentInstallerReceiptVersion:
+                "0.9.0",
+            currentInstallerReceiptVerified:
+                true,
             manifestURL: URL(
                 string:
                     "https://updates.blackstock.app/update-manifest.json"
@@ -313,6 +417,22 @@ final class InAppUpdateEvidenceTests:
         _ = try store.begin(
             currentVersion: "0.9.0",
             currentBuild: 90,
+            currentSourceCommitSHA:
+                currentSourceCommitSHA,
+            currentExecutableSHA256:
+                String(repeating: "b", count: 64),
+            currentAppPath:
+                "/Applications/Blackstock.app",
+            currentApplicationTeamID:
+                "ABC123TEAM",
+            currentDeveloperIDApplicationVerified:
+                true,
+            currentInstallerReceiptPackageID:
+                "de.blackstock.app",
+            currentInstallerReceiptVersion:
+                "0.9.0",
+            currentInstallerReceiptVerified:
+                true,
             manifestURL: URL(
                 string:
                     "https://updates.blackstock.app/update-manifest.json"
@@ -368,6 +488,22 @@ final class InAppUpdateEvidenceTests:
         _ = try store.begin(
             currentVersion: "0.9.0",
             currentBuild: 90,
+            currentSourceCommitSHA:
+                currentSourceCommitSHA,
+            currentExecutableSHA256:
+                String(repeating: "b", count: 64),
+            currentAppPath:
+                "/Applications/Blackstock.app",
+            currentApplicationTeamID:
+                "ABC123TEAM",
+            currentDeveloperIDApplicationVerified:
+                true,
+            currentInstallerReceiptPackageID:
+                "de.blackstock.app",
+            currentInstallerReceiptVersion:
+                "0.9.0",
+            currentInstallerReceiptVerified:
+                true,
             manifestURL: URL(
                 string:
                     "https://updates.blackstock.app/update-manifest.json"
