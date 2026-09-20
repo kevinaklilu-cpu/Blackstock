@@ -23,10 +23,10 @@ REQUIRED = {
     "Sources/BlackstockApp/FirstRunView.swift": [
         "Land / Region",
         "Content-Sprache",
-        "Kanal-Kategorie",
+        "Video-Kategorie",
         "YouTube-Zielgruppe",
         "Hauptziel in Blackstock",
-        "Einstellungen speichern",
+        "Weiter",
         "Trend-Zeitraum",
         "refreshYouTubeVideoCategories",
     ],
@@ -50,7 +50,6 @@ REQUIRED = {
         "channelAudienceSetting",
         "opportunityTimeWindow",
         "YouTubeChannelSetupClient(",
-        "applyAndVerify(",
         "nextStrategyVersion(",
     ],
 }
@@ -69,6 +68,45 @@ for relative, markers in REQUIRED.items():
 first_run = (
     ROOT / "Sources/BlackstockApp/FirstRunView.swift"
 ).read_text(encoding="utf-8")
+session = (
+    ROOT / "Sources/BlackstockApp/BlackstockSession.swift"
+).read_text(encoding="utf-8")
+setup_start = session.find("private func channelSetupAccessToken(")
+setup_end = session.find(
+    "private func loadYouTubeChannelSetupOptions(",
+    setup_start,
+)
+if setup_start < 0 or setup_end < 0:
+    errors.append("Could not isolate onboarding token helper")
+else:
+    setup_block = session[setup_start:setup_end]
+    if "validatedReadOnlyAccessToken(" not in setup_block:
+        errors.append(
+            "Onboarding setup must reuse the existing read-only YouTube session"
+        )
+    if "channelManagement" in setup_block or "performOAuthAuthorization(" in setup_block:
+        errors.append(
+            "Onboarding setup must not trigger channel-management reauthorization"
+        )
+
+continue_start = session.find("func continueFromTopic() async")
+continue_end = session.find(
+    "func prepareChannelAndLoadOpportunities() async",
+    continue_start,
+)
+if continue_start < 0 or continue_end < 0:
+    errors.append("Could not isolate structured setup continuation")
+else:
+    continue_block = session[continue_start:continue_end]
+    if "applyAndVerify(" in continue_block:
+        errors.append(
+            "First-run preferences must not mutate the YouTube channel"
+        )
+    if 'forKey: "blackstock.workspace.regionCode"' not in continue_block:
+        errors.append(
+            "First-run preferences must persist the local Blackstock profile"
+        )
+
 for forbidden in [
     'TextField("Thema',
     'Zielgruppe, z. B.',
