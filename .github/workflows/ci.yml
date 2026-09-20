@@ -9,13 +9,16 @@ on:
 permissions:
   contents: read
 
+env:
+  DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+
 concurrency:
   group: blackstock-ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   test:
-    runs-on: macos-latest
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -665,7 +668,7 @@ jobs:
         run: swift build -c release
 
   package:
-    runs-on: macos-latest
+    runs-on: macos-26
     needs: test
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
