@@ -64,6 +64,7 @@ private struct CleanMachineE2EResult:
     let workspaceRightsDeclarationAccepted: Bool
     let opportunitySourceBound: Bool
     let localClipCandidateGenerated: Bool
+    let supplementalVideoRendered: Bool
     let rendered: Bool
     let renderValidated: Bool
     let audioTrackValidated: Bool
@@ -113,6 +114,22 @@ private struct CleanMachineScenario {
                 atPath: sourceURL.path
             ),
             "synthetic source missing"
+        )
+
+        let supplementalVideoURL = root
+            .appendingPathComponent(
+                "supplemental.mov"
+            )
+        try await SyntheticMediaFactory()
+            .createSourceMovie(
+                at: supplementalVideoURL,
+                durationSeconds: 2.5
+            )
+        try require(
+            FileManager.default.fileExists(
+                atPath: supplementalVideoURL.path
+            ),
+            "synthetic supplemental video missing"
         )
 
         let sourceAsset = AVURLAsset(
@@ -321,7 +338,16 @@ private struct CleanMachineScenario {
                 asset: asset,
                 graph: graph,
                 outputURL: renderURL,
-                preset: .hd1080
+                preset: .hd1080,
+                supplementalVideo: [
+                    SupplementalVideoInsertInput(
+                        captureID: UUID(),
+                        fileURL: supplementalVideoURL,
+                        timelineStartSeconds: 0.8,
+                        sourceStartSeconds: 0.2,
+                        durationSeconds: 1.4
+                    )
+                ]
             )
         try require(
             artifact.hasCurrentTechnicalValidation,
@@ -574,6 +600,10 @@ private struct CleanMachineScenario {
                 opportunitySourceBound,
             localClipCandidateGenerated:
                 !clipCandidates.isEmpty,
+            supplementalVideoRendered:
+                FileManager.default.fileExists(
+                    atPath: supplementalVideoURL.path
+                ),
             rendered: FileManager.default
                 .fileExists(
                     atPath: renderURL.path
