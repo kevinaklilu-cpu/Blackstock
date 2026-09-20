@@ -95,6 +95,7 @@ public struct GoogleOAuthTokenRefresher: Sendable {
     public func refresh(
         refreshToken: String,
         clientID: String,
+        clientSecret: String? = nil,
         session: URLSession = .shared
     ) async throws -> GoogleOAuthTokenSet {
         var request = URLRequest(url: URL(string: "https://oauth2.googleapis.com/token")!)
@@ -104,11 +105,15 @@ public struct GoogleOAuthTokenRefresher: Sendable {
             forHTTPHeaderField: "Content-Type"
         )
 
-        let fields = [
+        var fields = [
             "client_id": clientID,
             "refresh_token": refreshToken,
             "grant_type": "refresh_token"
         ]
+        if let clientSecret,
+           !clientSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            fields["client_secret"] = clientSecret
+        }
         request.httpBody = fields
             .sorted { $0.key < $1.key }
             .map { key, value in
@@ -121,7 +126,9 @@ public struct GoogleOAuthTokenRefresher: Sendable {
         guard let http = response as? HTTPURLResponse,
               200..<300 ~= http.statusCode else {
             throw GoogleOAuthError.tokenExchangeFailed(
-                (response as? HTTPURLResponse)?.statusCode ?? -1
+                (response as? HTTPURLResponse)?.statusCode ?? -1,
+                nil,
+                nil
             )
         }
 
