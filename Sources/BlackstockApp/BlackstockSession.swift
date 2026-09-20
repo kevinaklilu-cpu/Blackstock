@@ -1483,28 +1483,29 @@ final class BlackstockSession: ObservableObject {
     func continueFromTopic() {
         let value = primaryTopic.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else {
-            errorMessage = "Lege zuerst den strategischen Kanal-Schwerpunkt fest."
+            errorMessage = "Gib zuerst ein Kanalthema ein."
             return
         }
-        guard !strategyContentPromise.trimmingCharacters(
-            in: .whitespacesAndNewlines
-        ).isEmpty else {
-            errorMessage = "Beschreibe zuerst das konkrete Content-Versprechen des Kanals."
+
+        let audience = strategyAudienceHypothesis
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !audience.isEmpty else {
+            errorMessage = "Gib zuerst deine Zielgruppe ein."
             return
         }
-        guard !strategyAudienceHypothesis.trimmingCharacters(
-            in: .whitespacesAndNewlines
-        ).isEmpty else {
-            errorMessage = "Beschreibe zuerst die Zielgruppe, für die der Kanal Inhalte erstellt."
-            return
-        }
-        guard !ChannelStrategyDraft.list(
-            from: strategyPillarsText
-        ).isEmpty else {
-            errorMessage = "Lege mindestens eine inhaltliche Säule fest."
-            return
-        }
+
         primaryTopic = value
+
+        if strategyContentPromise
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty {
+            strategyContentPromise = value
+        }
+
+        if ChannelStrategyDraft.list(from: strategyPillarsText).isEmpty {
+            strategyPillarsText = value
+        }
+
         errorMessage = nil
         step = .language
     }
