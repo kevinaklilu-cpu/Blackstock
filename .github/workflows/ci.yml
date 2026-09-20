@@ -79,7 +79,7 @@ jobs:
 
           cat > "$EVIDENCE" <<JSON
           {
-            "schemaVersion": 5,
+            "schemaVersion": 6,
             "testedAt": "2026-09-19T20:00:00Z",
             "blackstockVersion": "1.0.0",
             "blackstockBuild": "100",
@@ -89,6 +89,7 @@ jobs:
             "installedFromPackage": true,
             "installerReceiptPackageID": "de.blackstock.app",
             "installerReceiptVersion": "1.0.0",
+            "installerReceiptInstalledAt": "2026-09-02T00:00:03Z",
             "installerReceiptVerified": true,
             "applicationTeamID": "ABC123TEAM",
             "developerIDApplicationVerified": true,
@@ -471,7 +472,7 @@ jobs:
           source_commit = "1" * 40
 
           capture = {
-              "schemaVersion": 5,
+              "schemaVersion": 6,
               "testedAt": "2026-09-19T20:00:00Z",
               "blackstockVersion": "1.0.0",
               "blackstockBuild": "100",
@@ -481,6 +482,7 @@ jobs:
               "installedFromPackage": True,
               "installerReceiptPackageID": "de.blackstock.app",
               "installerReceiptVersion": "1.0.0",
+              "installerReceiptInstalledAt": "2026-09-02T00:00:03Z",
               "installerReceiptVerified": True,
               "applicationTeamID": "ABC123TEAM",
               "developerIDApplicationVerified": True,
