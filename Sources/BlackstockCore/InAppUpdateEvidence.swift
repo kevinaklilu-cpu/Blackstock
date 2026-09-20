@@ -8,12 +8,13 @@ public enum InAppUpdateEvidenceError:
     case manifestMismatch
     case packageNotVerified
     case installerNotOpened
+    case invalidCurrentAppProvenance
     case invalidSchemaVersion(Int)
     case unsupportedFutureSchemaVersion(Int)
 }
 
 public enum InAppUpdateEvidenceSchema {
-    public static let current = 4
+    public static let current = 5
 }
 
 public struct InAppUpdateEvidence:
@@ -23,6 +24,14 @@ public struct InAppUpdateEvidence:
     public let id: UUID
     public let currentVersion: String
     public let currentBuild: Int
+    public let currentSourceCommitSHA: String
+    public let currentExecutableSHA256: String
+    public let currentAppPath: String
+    public let currentApplicationTeamID: String
+    public let currentDeveloperIDApplicationVerified: Bool
+    public let currentInstallerReceiptPackageID: String
+    public let currentInstallerReceiptVersion: String
+    public let currentInstallerReceiptVerified: Bool
     public let manifestURL: URL
     public let expectedInstallerTeamID: String
     public let startedAt: Date
@@ -52,6 +61,14 @@ public struct InAppUpdateEvidence:
         id: UUID = UUID(),
         currentVersion: String,
         currentBuild: Int,
+        currentSourceCommitSHA: String,
+        currentExecutableSHA256: String,
+        currentAppPath: String,
+        currentApplicationTeamID: String,
+        currentDeveloperIDApplicationVerified: Bool,
+        currentInstallerReceiptPackageID: String,
+        currentInstallerReceiptVersion: String,
+        currentInstallerReceiptVerified: Bool,
         manifestURL: URL,
         expectedInstallerTeamID: String,
         startedAt: Date
@@ -59,6 +76,21 @@ public struct InAppUpdateEvidence:
         self.id = id
         self.currentVersion = currentVersion
         self.currentBuild = currentBuild
+        self.currentSourceCommitSHA =
+            currentSourceCommitSHA.lowercased()
+        self.currentExecutableSHA256 =
+            currentExecutableSHA256.lowercased()
+        self.currentAppPath = currentAppPath
+        self.currentApplicationTeamID =
+            currentApplicationTeamID
+        self.currentDeveloperIDApplicationVerified =
+            currentDeveloperIDApplicationVerified
+        self.currentInstallerReceiptPackageID =
+            currentInstallerReceiptPackageID
+        self.currentInstallerReceiptVersion =
+            currentInstallerReceiptVersion
+        self.currentInstallerReceiptVerified =
+            currentInstallerReceiptVerified
         self.manifestURL = manifestURL
         self.expectedInstallerTeamID =
             expectedInstallerTeamID
@@ -101,7 +133,25 @@ public struct InAppUpdateEvidence:
     }
 
     public var isComplete: Bool {
-        guard hasVerifiedPackage,
+        guard currentBuild > 0,
+              !currentVersion.isEmpty,
+              currentSourceCommitSHA.count == 40,
+              currentSourceCommitSHA
+                .allSatisfy({ $0.isHexDigit }),
+              currentExecutableSHA256.count == 64,
+              currentExecutableSHA256
+                .allSatisfy({ $0.isHexDigit }),
+              currentAppPath
+                == "/Applications/Blackstock.app",
+              currentApplicationTeamID
+                == expectedInstallerTeamID,
+              currentDeveloperIDApplicationVerified,
+              currentInstallerReceiptPackageID
+                == "de.blackstock.app",
+              currentInstallerReceiptVersion
+                == currentVersion,
+              currentInstallerReceiptVerified,
+              hasVerifiedPackage,
               installerOpenedAt != nil,
               let targetVersion,
               let targetBuild,
@@ -151,13 +201,54 @@ public struct InAppUpdateEvidenceStore: Sendable {
     public func begin(
         currentVersion: String,
         currentBuild: Int,
+        currentSourceCommitSHA: String = "",
+        currentExecutableSHA256: String = "",
+        currentAppPath: String = "",
+        currentApplicationTeamID: String = "",
+        currentDeveloperIDApplicationVerified: Bool = false,
+        currentInstallerReceiptPackageID: String = "",
+        currentInstallerReceiptVersion: String = "",
+        currentInstallerReceiptVerified: Bool = false,
         manifestURL: URL,
         expectedInstallerTeamID: String,
         now: Date = Date()
     ) throws -> InAppUpdateEvidence {
+        guard currentBuild > 0,
+              !currentVersion.isEmpty,
+              currentSourceCommitSHA.count == 40,
+              currentSourceCommitSHA.allSatisfy({ $0.isHexDigit }),
+              currentExecutableSHA256.count == 64,
+              currentExecutableSHA256.allSatisfy({ $0.isHexDigit }),
+              currentAppPath == "/Applications/Blackstock.app",
+              !currentApplicationTeamID.isEmpty,
+              currentApplicationTeamID == expectedInstallerTeamID,
+              currentDeveloperIDApplicationVerified,
+              currentInstallerReceiptPackageID == "de.blackstock.app",
+              currentInstallerReceiptVersion == currentVersion,
+              currentInstallerReceiptVerified else {
+            throw InAppUpdateEvidenceError
+                .invalidCurrentAppProvenance
+        }
+
         let evidence = InAppUpdateEvidence(
             currentVersion: currentVersion,
             currentBuild: currentBuild,
+            currentSourceCommitSHA:
+                currentSourceCommitSHA,
+            currentExecutableSHA256:
+                currentExecutableSHA256,
+            currentAppPath:
+                currentAppPath,
+            currentApplicationTeamID:
+                currentApplicationTeamID,
+            currentDeveloperIDApplicationVerified:
+                currentDeveloperIDApplicationVerified,
+            currentInstallerReceiptPackageID:
+                currentInstallerReceiptPackageID,
+            currentInstallerReceiptVersion:
+                currentInstallerReceiptVersion,
+            currentInstallerReceiptVerified:
+                currentInstallerReceiptVerified,
             manifestURL: manifestURL,
             expectedInstallerTeamID:
                 expectedInstallerTeamID,
