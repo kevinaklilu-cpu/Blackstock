@@ -83,7 +83,9 @@ struct StudioView: View {
                     audioTechnicalAssessment: state.audioTechnicalAssessment,
                     audioSignalAssessment: state.audioSignalAssessment,
                     audioLoudnessAssessment: state.audioLoudnessAssessment,
-                    storyboard: state.storyboard
+                    storyboard: state.storyboard,
+                    suggestedTitle:
+                        state.packagingSuggestedTitle
                 )
             }
         }
