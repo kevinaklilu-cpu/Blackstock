@@ -127,13 +127,14 @@ jobs:
         run: |
           set -euo pipefail
           BIN_DIR="$(swift build -c release --show-bin-path)"
-          "$BIN_DIR/BlackstockReleaseVerifier"             --manifest-url "${{ inputs.manifest_url }}"             --public-key-base64 "$PUBLIC_KEY"             --installer-team-id "$TEAM_ID"             --current-version "${{ inputs.current_version }}"             --current-build "${{ inputs.current_build }}"             --notary-submission-id "${{ inputs.notary_submission_id }}"             --notary-key "$BLACKSTOCK_NOTARY_KEY_PATH"             --notary-key-id "$NOTARY_KEY_ID"             --notary-issuer "$NOTARY_ISSUER"             --verified-package-output "$RUNNER_TEMP/Blackstock-production.pkg"             --output "$RUNNER_TEMP/preinstall-release-evidence.json"
+          "$BIN_DIR/BlackstockReleaseVerifier"             --manifest-url "${{ inputs.manifest_url }}"             --public-key-base64 "$PUBLIC_KEY"             --installer-team-id "$TEAM_ID"             --current-version "${{ inputs.current_version }}"             --current-build "${{ inputs.current_build }}"             --notary-submission-id "${{ inputs.notary_submission_id }}"             --notary-key "$BLACKSTOCK_NOTARY_KEY_PATH"             --notary-key-id "$NOTARY_KEY_ID"             --notary-issuer "$NOTARY_ISSUER"             --verified-manifest-output "$RUNNER_TEMP/verified-update-manifest.json"             --verified-package-output "$RUNNER_TEMP/Blackstock-production.pkg"             --output "$RUNNER_TEMP/preinstall-release-evidence.json"
           grep -q '"manifestSignatureVerified" : true'             "$RUNNER_TEMP/preinstall-release-evidence.json"
           grep -q '"packageHashVerified" : true'             "$RUNNER_TEMP/preinstall-release-evidence.json"
 
       - name: Install exact package verified by release verifier
         run: |
           set -euo pipefail
+          test -s "$RUNNER_TEMP/verified-update-manifest.json"
           test -s "$RUNNER_TEMP/Blackstock-production.pkg"
           sudo rm -rf /Applications/Blackstock.app
           sudo installer             -pkg "$RUNNER_TEMP/Blackstock-production.pkg"             -target /
@@ -149,9 +150,48 @@ jobs:
         run: |
           set -euo pipefail
           BIN_DIR="$(swift build -c release --show-bin-path)"
-          "$BIN_DIR/BlackstockReleaseVerifier"             --manifest-url "${{ inputs.manifest_url }}"             --public-key-base64 "$PUBLIC_KEY"             --installer-team-id "$TEAM_ID"             --current-version "${{ inputs.current_version }}"             --current-build "${{ inputs.current_build }}"             --installed-app "/Applications/Blackstock.app"             --notary-submission-id "${{ inputs.notary_submission_id }}"             --notary-key "$BLACKSTOCK_NOTARY_KEY_PATH"             --notary-key-id "$NOTARY_KEY_ID"             --notary-issuer "$NOTARY_ISSUER"             --output "$RUNNER_TEMP/release-evidence.json"
+          "$BIN_DIR/BlackstockReleaseVerifier"             --manifest-url "${{ inputs.manifest_url }}"             --public-key-base64 "$PUBLIC_KEY"             --installer-team-id "$TEAM_ID"             --current-version "${{ inputs.current_version }}"             --current-build "${{ inputs.current_build }}"             --verified-manifest-input "$RUNNER_TEMP/verified-update-manifest.json"             --verified-package-input "$RUNNER_TEMP/Blackstock-production.pkg"             --installed-app "/Applications/Blackstock.app"             --notary-submission-id "${{ inputs.notary_submission_id }}"             --notary-key "$BLACKSTOCK_NOTARY_KEY_PATH"             --notary-key-id "$NOTARY_KEY_ID"             --notary-issuer "$NOTARY_ISSUER"             --output "$RUNNER_TEMP/release-evidence.json"
 
           python3 Build/validate_production_release_evidence.py             "$RUNNER_TEMP/release-evidence.json"
+
+          python3 - "$RUNNER_TEMP/preinstall-release-evidence.json" "$RUNNER_TEMP/release-evidence.json" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          pre = json.loads(pathlib.Path(sys.argv[1]).read_text())
+          final = json.loads(pathlib.Path(sys.argv[2]).read_text())
+
+          bound_fields = [
+              "manifestURL",
+              "packageURL",
+              "currentVersion",
+              "currentBuild",
+              "targetVersion",
+              "targetBuild",
+              "packageSHA256",
+              "sourceCommitSHA",
+              "installerTeamID",
+              "manifestSignatureVerified",
+              "updateAvailabilityVerified",
+              "packageHashVerified",
+              "developerIDInstallerVerified",
+              "staplerValidated",
+              "gatekeeperInstallerAccepted",
+              "notarySubmissionID",
+              "notaryStatus",
+          ]
+          mismatches = [
+              key
+              for key in bound_fields
+              if pre.get(key) != final.get(key)
+          ]
+          if mismatches:
+              raise SystemExit(
+                  "post-install evidence diverged from pre-install verified snapshot: "
+                  + ", ".join(mismatches)
+              )
+          PY
 
       - name: Launch verified production app
         run: |
@@ -189,6 +229,7 @@ jobs:
           path: |
             ${{ runner.temp }}/release-evidence.json
             ${{ runner.temp }}/preinstall-release-evidence.json
+            ${{ runner.temp }}/verified-update-manifest.json
             ${{ runner.temp }}/production-app-launch.log
           retention-days: 30
           if-no-files-found: error
