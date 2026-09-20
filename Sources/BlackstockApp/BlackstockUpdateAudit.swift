@@ -352,19 +352,16 @@ enum BlackstockUpdateAudit {
             } else {
                 installedAtSeconds = nil
             }
-            let installedAt =
-                installedAtSeconds
-                    .flatMap { seconds in
-                        guard seconds.isFinite,
-                              seconds > 0 else {
-                            return nil
-                        }
-                        return Date(
-                            timeIntervalSince1970:
-                                seconds
-                        )
-                    }
-                    ?? .distantPast
+            let installedAt: Date
+            if let seconds = installedAtSeconds,
+               seconds.isFinite,
+               seconds > 0 {
+                installedAt = Date(
+                    timeIntervalSince1970: seconds
+                )
+            } else {
+                installedAt = Date.distantPast
+            }
 
             return (
                 packageID,
@@ -374,7 +371,7 @@ enum BlackstockUpdateAudit {
                     && version == expectedVersion
                     && volume == "/"
                     && installLocation == "/"
-                    && installedAt != .distantPast
+                    && installedAt != Date.distantPast
             )
         } catch {
             return ("", "", .distantPast, false)
