@@ -295,7 +295,8 @@ enum BlackstockCaptureHardwareAudit {
 
             guard resolvedFileURL
                     .deletingLastPathComponent()
-                    == expectedDirectory,
+                    .path
+                    == expectedDirectory.path,
                   UUID(
                     uuidString: resolvedFileURL
                         .deletingPathExtension()
