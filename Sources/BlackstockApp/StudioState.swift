@@ -52,6 +52,7 @@ final class StudioState: ObservableObject {
     @Published var overlayStart: Double = 0
     @Published var overlayEnd: Double = 3
     @Published var overlayVerticalPosition: Double = 0.18
+    @Published var masterVolume: Double = 1
 
     var currentOutputDurationSeconds: Double {
         guard let asset else { return 0 }
@@ -79,6 +80,7 @@ final class StudioState: ObservableObject {
         overlayStart = 0
         overlayEnd = 3
         overlayVerticalPosition = 0.18
+        masterVolume = 1
 
         do {
             let store = try makeWorkspaceStore()
@@ -90,6 +92,9 @@ final class StudioState: ObservableObject {
             if let snapshot = loadResult.snapshot {
                 asset = snapshot.mediaAsset
                 graph = snapshot.editGraph
+                masterVolume = EditAudioPlanner().masterVolume(
+                    operations: graph.currentOperations
+                )
                 ledger = snapshot.activityLedger
                 if loadResult.recoveredFromBackup {
                     ledger.append(.init(
@@ -693,6 +698,7 @@ final class StudioState: ObservableObject {
             correlationID: correlationID
         ))
 
+        masterVolume = appliedMasterVolume
         await refreshPreviewAfterHistoryChange()
         persistWorkspaceIfPossible()
     }
@@ -723,6 +729,7 @@ final class StudioState: ObservableObject {
             correlationID: correlationID
         ))
 
+        masterVolume = appliedMasterVolume
         await refreshPreviewAfterHistoryChange()
         persistWorkspaceIfPossible()
     }
@@ -871,6 +878,62 @@ final class StudioState: ObservableObject {
 
     func prepareShortFormSetup() {
         prepareOutputPreset(.shortVertical)
+    }
+
+    var appliedMasterVolume: Double {
+        EditAudioPlanner().masterVolume(
+            operations: graph.currentOperations
+        )
+    }
+
+    func applyMasterVolume() async {
+        guard asset != nil else {
+            errorMessage = "Kein Produktionsmedium geladen."
+            return
+        }
+
+        let volume = min(max(masterVolume, 0), 1)
+        let before = graph.headID
+        let operation = EditOperation(
+            type: .volume,
+            value: volume,
+            createdAt: Date()
+        )
+        let revision = graph.apply(
+            operation,
+            actor: .user
+        )
+
+        masterVolume = volume
+        lastUndoneRevisionID = nil
+        renderArtifact = nil
+        invalidateSavedClipRenders()
+        audioTechnicalAssessment = nil
+        audioSignalAssessment = nil
+        audioLoudnessAssessment = nil
+
+        ledger.append(.init(
+            timestamp: Date(),
+            actor: .user,
+            stage: .editing,
+            action: "master-volume-applied",
+            summary:
+                "Hauptton auf \(Int((volume * 100).rounded())) % gesetzt.",
+            beforeRevisionID: before,
+            afterRevisionID: revision.id,
+            reversible: true,
+            correlationID: correlationID
+        ))
+
+        do {
+            try await rebuildPreview()
+            persistWorkspaceIfPossible()
+            errorMessage = nil
+        } catch {
+            errorMessage =
+                "Audio-Vorschau konnte nicht aktualisiert werden: "
+                + error.localizedDescription
+        }
     }
 
     func applyReframe() async {
@@ -2319,6 +2382,7 @@ final class StudioState: ObservableObject {
         }
 
         player.replaceCurrentItem(with: item)
+        player.volume = Float(appliedMasterVolume)
         await player.seek(to: .zero)
     }
 
