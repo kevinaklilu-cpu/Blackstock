@@ -43,7 +43,9 @@ final class StudioState: ObservableObject {
     @Published var isGeneratingClipCandidates = false
     @Published var clipCandidateStatusMessage: String?
     @Published var previewedLocalClipCandidateID: UUID?
+    @Published var renderingSavedClipID: UUID?
 
+    private var clipCandidateSourceTranscript: LocalTranscript?
     private var correlationID = UUID()
     private var activeProjectID: UUID?
     private var workspaceStore: ProjectWorkspaceStore?
@@ -53,6 +55,8 @@ final class StudioState: ObservableObject {
         localClipCandidates = []
         clipCandidateStatusMessage = nil
         previewedLocalClipCandidateID = nil
+        renderingSavedClipID = nil
+        clipCandidateSourceTranscript = nil
         isGeneratingClipCandidates = false
 
         do {
@@ -337,6 +341,7 @@ final class StudioState: ObservableObject {
             asset = imported
             localClipCandidates = []
             savedClipSelections = []
+            clipCandidateSourceTranscript = nil
             clipCandidateStatusMessage = nil
             previewedLocalClipCandidateID = nil
             graph = EditGraph(createdAt: Date())
@@ -819,6 +824,9 @@ final class StudioState: ObservableObject {
                     localeIdentifier: localeIdentifier
                 )
 
+            clipCandidateSourceTranscript =
+                sourceTranscript
+
             let candidates = LocalClipCandidateGenerator()
                 .generate(
                     transcript: sourceTranscript,
@@ -879,7 +887,11 @@ final class StudioState: ObservableObject {
         }
 
         let saved = SavedClipSelection(
-            candidate: candidate
+            candidate: candidate,
+            transcript:
+                clipTranscript(
+                    for: candidate
+                )
         )
         savedClipSelections.append(saved)
         ledger.append(.init(
@@ -939,6 +951,140 @@ final class StudioState: ObservableObject {
         clipCandidateStatusMessage =
             "Gespeicherte Clip-Auswahl in die Timeline geladen. Erst „Als Trim setzen“ verändert den EditGraph."
         errorMessage = nil
+    }
+
+    func renderSavedClipSelection(
+        _ selection: SavedClipSelection
+    ) async {
+        guard let asset,
+              let projectID = activeProjectID else {
+            errorMessage =
+                "Kein Produktionsmedium oder Projekt geladen."
+            return
+        }
+        guard renderingSavedClipID == nil else {
+            errorMessage =
+                "Es wird bereits ein gespeicherter Clip gerendert."
+            return
+        }
+
+        renderingSavedClipID = selection.id
+        defer { renderingSavedClipID = nil }
+
+        do {
+            var clipGraph = EditGraph(
+                createdAt: Date()
+            )
+            _ = clipGraph.apply(
+                EditOperation(
+                    type: .trim,
+                    timeRange: selection.sourceRange,
+                    createdAt: Date()
+                ),
+                actor: .user
+            )
+
+            if let reframe = graph.currentOperations
+                .last(
+                    where: {
+                        $0.type == .reframe
+                    }
+                )?
+                .reframeSpec {
+                _ = clipGraph.apply(
+                    EditOperation(
+                        type: .reframe,
+                        reframeSpec: reframe,
+                        createdAt: Date()
+                    ),
+                    actor: .user
+                )
+            }
+
+            let store =
+                try workspaceStore
+                ?? makeWorkspaceStore()
+            workspaceStore = store
+            let clipsDirectory =
+                try store.renderDirectory(
+                    projectID: projectID
+                )
+                .appendingPathComponent(
+                    "Clips",
+                    isDirectory: true
+                )
+            try FileManager.default
+                .createDirectory(
+                    at: clipsDirectory,
+                    withIntermediateDirectories:
+                        true
+                )
+            let outputURL =
+                clipsDirectory
+                .appendingPathComponent(
+                    selection.id.uuidString
+                )
+                .appendingPathExtension("mp4")
+
+            let artifact =
+                try await LocalVideoRenderer()
+                .render(
+                    projectID: projectID,
+                    asset: asset,
+                    graph: clipGraph,
+                    outputURL: outputURL,
+                    preset: renderPreset,
+                    transcript:
+                        selection.transcript,
+                    burnInCaptions:
+                        burnInCaptionsEnabled
+                        && selection.transcript
+                            != nil,
+                    captionStyle:
+                        captionVisualStyle
+                )
+
+            guard let index =
+                savedClipSelections
+                .firstIndex(
+                    where: {
+                        $0.id == selection.id
+                    }
+                ) else {
+                throw CocoaError(
+                    .fileNoSuchFile
+                )
+            }
+            savedClipSelections[index] =
+                savedClipSelections[index]
+                .withRenderArtifact(
+                    artifact
+                )
+
+            ledger.append(.init(
+                timestamp: Date(),
+                actor: .blackstock,
+                stage: .editing,
+                action:
+                    "saved-clip-render-created",
+                summary:
+                    "Gespeicherter Clip wurde als eigene validierte MP4-Datei gerendert.",
+                relatedSourceIDs: [
+                    selection.id.uuidString,
+                    artifact.id.uuidString
+                ],
+                reversible: false,
+                correlationID: correlationID
+            ))
+            persistWorkspaceIfPossible()
+            clipCandidateStatusMessage =
+                "Clip-Datei ist fertig und projektbezogen gespeichert."
+            errorMessage = nil
+        } catch {
+            errorMessage =
+                "Gespeicherter Clip konnte nicht gerendert werden: "
+                + error.localizedDescription
+        }
     }
 
     func previewSavedClipSelection(
@@ -1487,6 +1633,53 @@ final class StudioState: ObservableObject {
 
         player.replaceCurrentItem(with: item)
         await player.seek(to: .zero)
+    }
+
+    private func clipTranscript(
+        for candidate: LocalClipCandidate
+    ) -> LocalTranscript? {
+        guard let source =
+                clipCandidateSourceTranscript else {
+            return nil
+        }
+        let ids = Set(candidate.segmentIDs)
+        let segments = source.segments
+            .filter {
+                ids.contains($0.id)
+            }
+            .map {
+                TranscriptSegment(
+                    id: $0.id,
+                    startSeconds: max(
+                        $0.startSeconds
+                        - candidate.sourceRange
+                            .startSeconds,
+                        0
+                    ),
+                    durationSeconds:
+                        $0.durationSeconds,
+                    text: $0.text,
+                    confidence:
+                        $0.confidence
+                )
+            }
+            .sorted {
+                $0.startSeconds
+                < $1.startSeconds
+            }
+
+        guard !segments.isEmpty else {
+            return nil
+        }
+        return LocalTranscript(
+            localeIdentifier:
+                source.localeIdentifier,
+            text: segments.map(\.text)
+                .joined(separator: " "),
+            segments: segments,
+            onDevice: source.onDevice,
+            createdAt: Date()
+        )
     }
 
     private func makeWorkspaceStore() throws -> ProjectWorkspaceStore {
