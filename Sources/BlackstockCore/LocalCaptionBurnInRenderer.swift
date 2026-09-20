@@ -108,7 +108,8 @@ public actor LocalCaptionBurnInRenderer {
         inputURL: URL,
         transcript: LocalTranscript,
         outputURL: URL,
-        preset: LocalRenderPreset
+        preset: LocalRenderPreset,
+        style: CaptionVisualStyle = .clear
     ) async throws {
         let asset = AVURLAsset(url: inputURL)
         let duration = try await asset.load(.duration)
@@ -205,7 +206,8 @@ public actor LocalCaptionBurnInRenderer {
             overlayLayer.addSublayer(
                 Self.captionLayer(
                     cue: cue,
-                    renderSize: renderSize
+                    renderSize: renderSize,
+                    style: style
                 )
             )
         }
@@ -287,19 +289,20 @@ public actor LocalCaptionBurnInRenderer {
 
     private static func captionLayer(
         cue: CaptionBurnInCue,
-        renderSize: CGSize
+        renderSize: CGSize,
+        style: CaptionVisualStyle
     ) -> CALayer {
         let width =
-            renderSize.width * 0.84
+            renderSize.width * style.widthFactor
         let height =
             max(
-                renderSize.height * 0.12,
-                110
+                renderSize.height * style.heightFactor,
+                style.minimumRenderedHeight
             )
         let x =
             (renderSize.width - width) / 2
         let y =
-            renderSize.height * 0.075
+            renderSize.height * style.bottomOffsetFactor
 
         let layer = CATextLayer()
         layer.frame = CGRect(
@@ -316,26 +319,38 @@ public actor LocalCaptionBurnInRenderer {
             NSColor.white.cgColor
         layer.backgroundColor =
             NSColor.black
-                .withAlphaComponent(0.72)
+                .withAlphaComponent(
+                    style.backgroundOpacity
+                )
                 .cgColor
         layer.cornerRadius =
-            max(renderSize.height * 0.012, 12)
+            max(
+                renderSize.height
+                    * style.cornerRadiusFactor,
+                8
+            )
         layer.masksToBounds = true
         layer.contentsScale = 2
-        layer.font =
-            NSFont.boldSystemFont(
-                ofSize:
-                    max(
-                        renderSize.height * 0.037,
-                        34
-                    )
-            )
-        layer.fontSize =
-            max(
-                renderSize.height * 0.037,
-                34
-            )
-        layer.shadowOpacity = 0.35
+        let fontSize = max(
+            renderSize.height
+                * style.fontSizeFactor,
+            style.minimumRenderedFontSize
+        )
+        let fontWeight: NSFont.Weight
+        switch style.fontWeight {
+        case .semibold:
+            fontWeight = .semibold
+        case .bold:
+            fontWeight = .bold
+        case .heavy:
+            fontWeight = .heavy
+        }
+        layer.font = NSFont.systemFont(
+            ofSize: fontSize,
+            weight: fontWeight
+        )
+        layer.fontSize = fontSize
+        layer.shadowOpacity = style.shadowOpacity
         layer.shadowRadius = 3
         layer.shadowOffset = CGSize(
             width: 0,
