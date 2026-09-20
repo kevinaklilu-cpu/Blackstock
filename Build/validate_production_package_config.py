@@ -8,6 +8,7 @@ import sys
 from urllib.parse import urlparse
 
 FORBIDDEN_HOST_SUFFIXES = (
+    ".local",
     ".invalid",
     ".example",
     ".test",
