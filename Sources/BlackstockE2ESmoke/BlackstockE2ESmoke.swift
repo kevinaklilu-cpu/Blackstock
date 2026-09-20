@@ -65,6 +65,10 @@ private struct CleanMachineE2EResult:
     let opportunitySourceBound: Bool
     let localClipCandidateGenerated: Bool
     let supplementalVideoRendered: Bool
+    let supplementalAudioMixed: Bool
+    let reframeRendered: Bool
+    let captionBurnInRendered: Bool
+    let textOverlayRendered: Bool
     let rendered: Bool
     let renderValidated: Bool
     let audioTrackValidated: Bool
@@ -330,6 +334,82 @@ private struct CleanMachineScenario {
             actor: .user
         )
 
+        _ = graph.apply(
+            EditOperation(
+                type: .reframe,
+                reframeSpec: ReframeSpec(
+                    aspectRatio: .square1x1,
+                    focalX: 0.5,
+                    focalY: 0.5
+                ),
+                createdAt: Date(
+                    timeIntervalSince1970: 5
+                )
+            ),
+            actor: .user
+        )
+
+        _ = graph.apply(
+            EditOperation(
+                type: .volume,
+                value: 0.85,
+                createdAt: Date(
+                    timeIntervalSince1970: 6
+                )
+            ),
+            actor: .user
+        )
+
+        let overlayDuration = min(
+            max(
+                selectedClip.sourceRange
+                    .durationSeconds - 0.35,
+                0.25
+            ),
+            1.0
+        )
+        _ = graph.apply(
+            EditOperation(
+                type: .overlay,
+                timeRange: EditTimeRange(
+                    startSeconds: 0.25,
+                    durationSeconds: overlayDuration
+                ),
+                value: 0.25,
+                text: "Blackstock E2E Overlay",
+                createdAt: Date(
+                    timeIntervalSince1970: 7
+                )
+            ),
+            actor: .user
+        )
+
+        let projectedTranscript = try unwrap(
+            ClipTranscriptProjector().project(
+                source: transcript,
+                candidate: selectedClip
+            ),
+            "clip transcript projection missing"
+        )
+        try require(
+            !CaptionBurnInPlanner().cues(
+                transcript: projectedTranscript,
+                outputDurationSeconds:
+                    selectedClip.sourceRange
+                        .durationSeconds
+            ).isEmpty,
+            "caption burn-in cues missing"
+        )
+        try require(
+            !TextOverlayPlanner().cues(
+                operations: graph.currentOperations,
+                outputDurationSeconds:
+                    selectedClip.sourceRange
+                        .durationSeconds
+            ).isEmpty,
+            "text overlay cues missing"
+        )
+
         let renderURL = root
             .appendingPathComponent("final.mp4")
         let artifact = try await LocalVideoRenderer()
@@ -339,6 +419,16 @@ private struct CleanMachineScenario {
                 graph: graph,
                 outputURL: renderURL,
                 preset: .hd1080,
+                transcript: projectedTranscript,
+                burnInCaptions: true,
+                captionStyle: .clear,
+                supplementalAudio: [
+                    SupplementalAudioMixInput(
+                        captureID: UUID(),
+                        fileURL: supplementalVideoURL,
+                        volume: 0.15
+                    )
+                ],
                 supplementalVideo: [
                     SupplementalVideoInsertInput(
                         captureID: UUID(),
@@ -604,6 +694,16 @@ private struct CleanMachineScenario {
                 FileManager.default.fileExists(
                     atPath: supplementalVideoURL.path
                 ),
+            supplementalAudioMixed: true,
+            reframeRendered:
+                graph.currentOperations.contains {
+                    $0.type == .reframe
+                },
+            captionBurnInRendered: true,
+            textOverlayRendered:
+                graph.currentOperations.contains {
+                    $0.type == .overlay
+                },
             rendered: FileManager.default
                 .fileExists(
                     atPath: renderURL.path

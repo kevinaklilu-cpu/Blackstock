@@ -1133,6 +1133,10 @@ jobs:
           assert data["opportunitySourceBound"] is True
           assert data["localClipCandidateGenerated"] is True
           assert data["supplementalVideoRendered"] is True
+          assert data["supplementalAudioMixed"] is True
+          assert data["reframeRendered"] is True
+          assert data["captionBurnInRendered"] is True
+          assert data["textOverlayRendered"] is True
           assert data["rendered"] is True
           assert data["renderValidated"] is True
           assert data["audioTrackValidated"] is True
@@ -1339,6 +1343,10 @@ jobs:
           assert data["opportunitySourceBound"] is True
           assert data["localClipCandidateGenerated"] is True
           assert data["supplementalVideoRendered"] is True
+          assert data["supplementalAudioMixed"] is True
+          assert data["reframeRendered"] is True
+          assert data["captionBurnInRendered"] is True
+          assert data["textOverlayRendered"] is True
           assert data["rendered"] is True
           assert data["renderValidated"] is True
           assert data["audioTrackValidated"] is True
