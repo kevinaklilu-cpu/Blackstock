@@ -186,7 +186,7 @@ final class CaptureHardwareSmokeEvidenceTests:
         )
         XCTAssertEqual(
             object["schemaVersion"] as? Int,
-            5
+            6
         )
         XCTAssertEqual(
             object["blackstockSourceCommitSHA"] as? String,
@@ -199,6 +199,9 @@ final class CaptureHardwareSmokeEvidenceTests:
         XCTAssertEqual(
             object["installerReceiptVersion"] as? String,
             "1.0.0"
+        )
+        XCTAssertNotNil(
+            object["installerReceiptInstalledAt"] as? String
         )
         XCTAssertEqual(
             object["installerReceiptVerified"] as? Bool,
@@ -246,6 +249,11 @@ final class CaptureHardwareSmokeEvidenceTests:
             installerReceiptPackageID:
                 "de.blackstock.app",
             installerReceiptVersion: "1.0.0",
+            installerReceiptInstalledAt:
+                Date(
+                    timeIntervalSince1970:
+                        1_788_000_000
+                ),
             installerReceiptVerified: true,
             applicationTeamID: "ABC123TEAM",
             developerIDApplicationVerified: true,
