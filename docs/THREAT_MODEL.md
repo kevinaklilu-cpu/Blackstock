@@ -51,7 +51,7 @@ Nicht als durch die App lösbar angenommen werden vollständige Kompromittierung
 - OAuth-Token, Scopes und Client-Bindung werden im macOS-Keychain gespeichert.
 - Keychain-Einträge verwenden `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`.
 - Änderung der OAuth-Client-ID invalidiert die bestehende lokale Autorisierung.
-- Importierte Desktop-OAuth-Konfiguration persistiert kein `client_secret`.
+- Importierte Desktop-OAuth-Konfiguration persistiert ein optionales Desktop-`client_secret` ausschließlich im macOS-Keychain und nie in UserDefaults, Projektdateien oder Logs.
 
 ### Kanal- und Publishing-Sicherheit
 
