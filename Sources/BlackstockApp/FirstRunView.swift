@@ -348,7 +348,7 @@ struct FirstRunView: View {
                     }
                 }
                 .labelsHidden()
-                .accessibilityLabel("Opportunity-Sortierung")
+                .accessibilityLabel("Video-Sortierung")
                 .pickerStyle(.menu)
                 .frame(maxWidth: 160)
             }
@@ -387,7 +387,6 @@ struct FirstRunView: View {
                     }
 
                     signalStrip(selected)
-                    explanationPanel(selected)
                 }
             }
 
@@ -574,7 +573,7 @@ struct FirstRunView: View {
         case .topic: "3 · Kanalthema"
         case .language: "4 · Content-Sprache"
         case .preparing: "5 · Vorbereitung"
-        case .opportunities: "6 · Erste Chancen"
+        case .opportunities: "6 · Video"
         }
     }
 
