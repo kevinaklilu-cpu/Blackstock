@@ -575,7 +575,7 @@ struct StudioView: View {
                     .buttonStyle(.bordered)
                     .disabled(!editingEnabled)
 
-                    Text("Bereitet 9:16 und den kräftigen Untertitelstil vor. Wenn bereits ein lokales Transkript existiert, werden sichtbare Untertitel ebenfalls aktiviert. Erst „Ausschnitt anwenden“ schreibt den Reframe in den EditGraph.")
+                    Text("Bereitet 9:16 und den kräftigen Untertitelstil vor. Wenn bereits ein lokales Transkript existiert, werden sichtbare Untertitel ebenfalls aktiviert. Erst „Ausschnitt anwenden“ schreibt die Formatänderung in den EditGraph.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
 
