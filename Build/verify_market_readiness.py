@@ -434,6 +434,37 @@ def main():
             "capture and updater evidence use different installer receipt versions"
         )
 
+    try:
+        capture_receipt_installed_at = datetime.fromisoformat(
+            str(capture.get("installerReceiptInstalledAt", ""))
+                .replace("Z", "+00:00")
+        )
+        updater_receipt_reference_seconds = float(
+            updater.get("observedInstallerReceiptInstalledAt")
+        )
+        updater_receipt_installed_at = datetime.fromtimestamp(
+            updater_receipt_reference_seconds + 978_307_200,
+            tz=timezone.utc,
+        )
+    except (TypeError, ValueError, OverflowError):
+        fail("installer receipt installation timestamps are invalid")
+    if capture_receipt_installed_at.tzinfo is None:
+        fail("capture installer receipt installation timestamp must include timezone")
+    capture_receipt_installed_at = capture_receipt_installed_at.astimezone(
+        timezone.utc
+    )
+    receipt_delta = abs(
+        (
+            capture_receipt_installed_at
+            - updater_receipt_installed_at
+        ).total_seconds()
+    )
+    if receipt_delta > 1:
+        fail(
+            "capture and updater evidence do not refer to the same "
+            "installer receipt installation"
+        )
+
     report = {
         "schemaVersion": 3,
         "ready": True,
@@ -475,6 +506,10 @@ def main():
         "installerReceiptInstalledAt": updater.get(
             "observedInstallerReceiptInstalledAt"
         ),
+        "captureInstallerReceiptInstalledAt": capture.get(
+            "installerReceiptInstalledAt"
+        ),
+        "sameInstallationReceiptVerified": True,
         "captureEvidence": str(capture_path),
         "captureEvidenceSHA256": capture_sha256,
         "productionReleaseEvidence": str(release_path),
