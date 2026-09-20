@@ -18,7 +18,7 @@ struct OpportunityWorkspaceView: View {
 
             HStack(spacing: 10) {
                 TextField(
-                    "YouTube-Suchraum, z. B. KI für Selbstständige",
+                    "YouTube durchsuchen",
                     text: $query
                 )
                 .textFieldStyle(.roundedBorder)
@@ -44,7 +44,7 @@ struct OpportunityWorkspaceView: View {
                         Label(
                             session.isWorking
                                 ? "Lädt …"
-                                : "Chancen laden",
+                                : "Suchen",
                             systemImage: "magnifyingglass"
                         )
                     }
@@ -56,13 +56,6 @@ struct OpportunityWorkspaceView: View {
                         in: .whitespacesAndNewlines
                     ).isEmpty
                 )
-            }
-
-            if let channelID = session.workspaceChannelID {
-                Text("Arbeitsbereich-Kanal: \(channelID)")
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
             }
 
             if let error = session.errorMessage {
@@ -113,19 +106,13 @@ struct OpportunityWorkspaceView: View {
     private var header: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Chancen")
+                Text("Videos")
                     .font(.largeTitle.bold())
-                Text("Neue reale YouTube-Signale für deinen nächsten Content-Loop")
+                Text("Finde ein Video und erstelle daraus einen Clip.")
                     .font(.title3)
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Label(
-                "Keine erfundenen Scores",
-                systemImage: "checkmark.shield"
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
         }
     }
 
@@ -135,9 +122,9 @@ struct OpportunityWorkspaceView: View {
                 Image(systemName: "sparkle.magnifyingglass")
                     .font(.largeTitle)
                     .foregroundStyle(.secondary)
-                Text("Noch keine Chancen geladen")
+                Text("Noch keine Videos")
                     .font(.headline)
-                Text("Blackstock fragt reale YouTube-Suchergebnisse ab und zeigt nur Provider-Daten. Gib oben einen Suchraum ein oder verwende deinen gespeicherten Kanal-Schwerpunkt.")
+                Text("Suche oben nach einem Thema oder verwende deinen gespeicherten Kanal-Schwerpunkt.")
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: 560)
@@ -164,7 +151,7 @@ struct OpportunityWorkspaceView: View {
                     opportunityDetail(selectedOpportunity)
                         .padding(.leading, 18)
                 } else {
-                    Text("Wähle links eine Chance aus.")
+                    Text("Wähle links ein Video aus.")
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, minHeight: 280)
                 }
@@ -274,7 +261,7 @@ struct OpportunityWorkspaceView: View {
 
             signalStrip(item)
 
-            GroupBox("Provider-Kontext") {
+            GroupBox("Details") {
                 VStack(alignment: .leading, spacing: 7) {
                     Label(
                         "Suchanfrage: \(item.query)",
@@ -302,7 +289,7 @@ struct OpportunityWorkspaceView: View {
                         )
                     }
 
-                    Text("Blackstock zeigt YouTube-Rohdaten und die vom Provider angeforderte Sortierung. Daraus wird kein künstlicher Virality- oder Gewinner-Score erzeugt.")
+                    Text("Die angezeigten Werte stammen von YouTube.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -314,7 +301,7 @@ struct OpportunityWorkspaceView: View {
             }
 
             if !session.workspaceRightsResponsibilityAccepted {
-                GroupBox("Einmalige Nutzungsverantwortung") {
+                GroupBox("Nutzungsrechte") {
                     Toggle(
                         isOn: Binding(
                             get: {
@@ -328,7 +315,7 @@ struct OpportunityWorkspaceView: View {
                             }
                         )
                     ) {
-                        Text("Ich verwende Blackstock nur für Inhalte, die ich bearbeiten und veröffentlichen darf, und übernehme die Verantwortung dafür.")
+                        Text("Ich darf diesen Inhalt bearbeiten und veröffentlichen.")
                             .font(.caption)
                     }
                     .toggleStyle(.switch)
@@ -337,7 +324,7 @@ struct OpportunityWorkspaceView: View {
 
             if let active = session.activeProject {
                 Label(
-                    "Dein aktuelles Projekt „\(active.title)“ bleibt im Projektverlauf erhalten, wenn du eine neue Chance startest.",
+                    "„\(active.title)“ bleibt gespeichert, wenn du ein neues Projekt startest.",
                     systemImage: "tray.full"
                 )
                 .font(.caption)
@@ -353,7 +340,7 @@ struct OpportunityWorkspaceView: View {
                     }
                 } label: {
                     Label(
-                        "Als neues Projekt übernehmen",
+                        "Neues Projekt",
                         systemImage: "plus.rectangle.on.folder"
                     )
                 }
@@ -367,7 +354,7 @@ struct OpportunityWorkspaceView: View {
                     }
                 } label: {
                     Label(
-                        "Als Clip verwenden",
+                        "Clip erstellen",
                         systemImage: "scissors"
                     )
                 }
@@ -482,7 +469,7 @@ struct ProjectLibraryView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Projekte")
                         .font(.largeTitle.bold())
-                    Text("Dein fortlaufender Blackstock-Projektverlauf")
+                    Text("Deine gespeicherten Projekte")
                         .font(.title3)
                         .foregroundStyle(.secondary)
                 }
@@ -491,7 +478,7 @@ struct ProjectLibraryView: View {
                     onFindOpportunity()
                 } label: {
                     Label(
-                        "Neue Chance finden",
+                        "Video finden",
                         systemImage: "sparkle.magnifyingglass"
                     )
                 }
@@ -506,10 +493,10 @@ struct ProjectLibraryView: View {
                             .foregroundStyle(.secondary)
                         Text("Noch keine Projekte")
                             .font(.headline)
-                        Text("Starte über „Chancen“ einen belegten Content-Loop. Neue Projekte bleiben anschließend hier erhalten.")
+                        Text("Wähle unter „Videos“ ein Video aus und erstelle dein erstes Projekt.")
                             .multilineTextAlignment(.center)
                             .foregroundStyle(.secondary)
-                        Button("Zu Chancen") {
+                        Button("Zu Videos") {
                             onFindOpportunity()
                         }
                     }
