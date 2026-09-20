@@ -1003,6 +1003,8 @@ jobs:
           lipo /Applications/Blackstock.app/Contents/MacOS/Blackstock -verify_arch arm64 x86_64
           lipo /Applications/Blackstock.app/Contents/Helpers/BlackstockE2ESmoke -verify_arch arm64 x86_64
           plutil -lint /Applications/Blackstock.app/Contents/Info.plist
+          test -s /Applications/Blackstock.app/Contents/Resources/Blackstock.icns
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' /Applications/Blackstock.app/Contents/Info.plist)" = "Blackstock.icns"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' /Applications/Blackstock.app/Contents/Info.plist)" = "de.blackstock.app"
           test "$(/usr/libexec/PlistBuddy -c 'Print :BlackstockSourceCommitSHA' /Applications/Blackstock.app/Contents/Info.plist)" = "${GITHUB_SHA}"
           test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' /Applications/Blackstock.app/Contents/Info.plist)" = "13.0"
