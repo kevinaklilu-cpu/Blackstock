@@ -59,6 +59,7 @@ checks = {
         "restoreEditedPreview(",
         "setBurnInCaptionsEnabled(",
         "setCaptionVisualStyle(",
+        "prepareOutputPreset(",
         "prepareShortFormSetup()",
         "captionVisualStyle:",
         "burnInCaptions: burnInCaptionsEnabled",
@@ -72,7 +73,8 @@ checks = {
         "keine Erfolgs-, Qualitäts- oder Viralitätsnote",
         "Sichtbare Untertitel ins Video rendern",
         "Untertitelstil",
-        "Shorts/Reels-Setup vorbereiten",
+        "Ausgabe-Preset vorbereiten",
+        "YouTube 16:9, Shorts/Reels 9:16 oder Social 1:1",
         "captionPreviewOverlay",
     ],
     "Sources/BlackstockCore/LocalCaptionBurnInRenderer.swift": [
@@ -85,6 +87,18 @@ checks = {
         "testPlannerKeepsValidTranscriptTiming",
         "testPlannerClampsCaptionAtOutputEnd",
         "testPlannerDropsEmptyAndOutOfRangeSegments",
+    ],
+    "Sources/BlackstockCore/CreatorOutputPreset.swift": [
+        "CreatorOutputPreset",
+        "youtubeLandscape",
+        "shortVertical",
+        "squareSocial",
+        "prefersVisibleCaptions",
+    ],
+    "Tests/BlackstockCoreTests/CreatorOutputPresetTests.swift": [
+        "testLandscapePresetMapsToLandscapeAndClearCaptions",
+        "testShortPresetMapsToPortraitAndStrongCaptions",
+        "testSquarePresetMapsToSquareAndVisibleCaptions",
     ],
     "Sources/BlackstockCore/ProjectJourneyGuidance.swift": [
         "case .discovery:",
