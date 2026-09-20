@@ -45,22 +45,34 @@ private struct WorkspaceShell: View {
 
     var body: some View {
         NavigationSplitView {
-            List(selection: $selection) {
-                Label("Übersicht", systemImage: "rectangle.grid.2x2")
-                    .tag("Übersicht")
-                Label("Chancen", systemImage: "sparkle.magnifyingglass")
-                    .tag("Chancen")
-                Label("Projekte", systemImage: "tray.full")
-                    .tag("Projekte")
-                if session.activeProject?.stage.journeyGuidance
-                    .recommendedSurface == .studio {
-                    Label("Studio", systemImage: "film.stack")
-                        .tag("Studio")
+            VStack(spacing: 0) {
+                HStack(spacing: 10) {
+                    BlackstockBrandMark(width: 36)
+                    Text("Blackstock")
+                        .font(.headline)
+                    Spacer()
                 }
-                Label("Einstellungen", systemImage: "gearshape")
-                    .tag("Einstellungen")
+                .padding(.horizontal, 14)
+                .padding(.vertical, 14)
+
+                Divider()
+
+                List(selection: $selection) {
+                    Label("Start", systemImage: "house")
+                        .tag("Übersicht")
+                    Label("Videos", systemImage: "play.rectangle")
+                        .tag("Chancen")
+                    Label("Projekte", systemImage: "folder")
+                        .tag("Projekte")
+                    if session.activeProject?.stage.journeyGuidance
+                        .recommendedSurface == .studio {
+                        Label("Editor", systemImage: "scissors")
+                            .tag("Studio")
+                    }
+                    Label("Einstellungen", systemImage: "gearshape")
+                        .tag("Einstellungen")
+                }
             }
-            .navigationTitle("Blackstock")
         } detail: {
             switch selection {
             case "Chancen":
@@ -155,16 +167,16 @@ private struct CommandPaletteView: View {
         var result: [Command] = [
             .init(
                 id: "overview",
-                title: "Übersicht öffnen",
-                subtitle: "Zum aktuellen Blackstock-Arbeitsbereich",
+                title: "Start öffnen",
+                subtitle: "Zur Startseite",
                 systemImage: "rectangle.grid.2x2",
                 destination: "Übersicht",
                 isDestructive: false
             ),
             .init(
                 id: "opportunities",
-                title: "Chancen öffnen",
-                subtitle: "Neue reale YouTube-Signale recherchieren",
+                title: "Videos öffnen",
+                subtitle: "YouTube-Videos suchen",
                 systemImage: "sparkle.magnifyingglass",
                 destination: "Chancen",
                 isDestructive: false
@@ -172,7 +184,7 @@ private struct CommandPaletteView: View {
             .init(
                 id: "projects",
                 title: "Projekte öffnen",
-                subtitle: "Zwischen laufenden und veröffentlichten Projekten wechseln",
+                subtitle: "Gespeicherte Projekte",
                 systemImage: "tray.full",
                 destination: "Projekte",
                 isDestructive: false
@@ -183,8 +195,8 @@ private struct CommandPaletteView: View {
             result.append(
                 .init(
                     id: "studio",
-                    title: "Studio öffnen",
-                    subtitle: "Aktives Projekt visuell bearbeiten",
+                    title: "Editor öffnen",
+                    subtitle: "Aktuelles Projekt bearbeiten",
                     systemImage: "film.stack",
                     destination: "Studio",
                     isDestructive: false
@@ -196,15 +208,15 @@ private struct CommandPaletteView: View {
             .init(
                 id: "settings",
                 title: "Einstellungen öffnen",
-                subtitle: "Google-/YouTube- und App-Einstellungen",
+                subtitle: "Konto und App",
                 systemImage: "gearshape",
                 destination: "Einstellungen",
                 isDestructive: false
             ),
             .init(
                 id: "restart-first-run",
-                title: "Ersteinrichtung erneut starten",
-                subtitle: "Arbeitsbereich-Auswahl und Einrichtung erneut durchlaufen",
+                title: "Einrichtung zurücksetzen",
+                subtitle: "Google und Kanal neu einrichten",
                 systemImage: "arrow.counterclockwise",
                 destination: nil,
                 isDestructive: true
@@ -289,29 +301,16 @@ private struct OverviewView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Blackstock")
+            Text("Start")
                 .font(.largeTitle.bold())
-            Text("Creator-System für Recherche, Produktion, Veröffentlichung und Wachstum")
+            Text("Öffne dein aktuelles Projekt oder suche ein neues Video.")
                 .font(.title3)
-                .foregroundStyle(.secondary)
-
-            GroupBox("Produktstatus") {
-                HStack {
-                    Image(systemName: "hammer.fill")
-                    Text("NOCH NICHT MARKTREIF")
-                        .fontWeight(.semibold)
-                    Spacer()
-                }
-                .padding(.vertical, 6)
-            }
-
-            Text("Der First-Run nutzt reale Google-/YouTube-Autorisierung. Weitere Produktflächen bleiben unsichtbar, bis ihre Capability-Gates bestehen.")
                 .foregroundStyle(.secondary)
 
             if let project = session.activeProject {
                 let guidance = project.stage.journeyGuidance
 
-                GroupBox("Aktiver Projektpfad") {
+                GroupBox("Aktuelles Projekt") {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack(alignment: .firstTextBaseline) {
                             VStack(alignment: .leading, spacing: 2) {
@@ -349,7 +348,7 @@ private struct OverviewView: View {
                         Divider()
 
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Nächster sinnvoller Schritt")
+                            Text("Als Nächstes")
                                 .font(.caption.weight(.semibold))
                             Text(guidance.nextAction)
                                 .font(.callout)
@@ -360,7 +359,7 @@ private struct OverviewView: View {
                                 onOpenStudio()
                             } label: {
                                 Label(
-                                    "Im Studio fortfahren",
+                                    "Im Editor fortfahren",
                                     systemImage: "arrow.right.circle.fill"
                                 )
                             }
