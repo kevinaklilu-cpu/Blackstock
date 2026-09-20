@@ -1127,6 +1127,9 @@ jobs:
           import json, sys
           data = json.load(open(sys.argv[1]))
           assert data["generatedSource"] is True
+          assert data["workspaceRightsDeclarationAccepted"] is True
+          assert data["opportunitySourceBound"] is True
+          assert data["localClipCandidateGenerated"] is True
           assert data["rendered"] is True
           assert data["renderValidated"] is True
           assert data["audioTrackValidated"] is True
@@ -1329,6 +1332,9 @@ jobs:
 
           data = json.load(open(sys.argv[1]))
           assert data["generatedSource"] is True
+          assert data["workspaceRightsDeclarationAccepted"] is True
+          assert data["opportunitySourceBound"] is True
+          assert data["localClipCandidateGenerated"] is True
           assert data["rendered"] is True
           assert data["renderValidated"] is True
           assert data["audioTrackValidated"] is True

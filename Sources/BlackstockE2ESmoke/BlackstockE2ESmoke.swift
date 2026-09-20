@@ -61,6 +61,9 @@ private struct CleanMachineE2EResult:
     Codable,
     Sendable {
     let generatedSource: Bool
+    let workspaceRightsDeclarationAccepted: Bool
+    let opportunitySourceBound: Bool
+    let localClipCandidateGenerated: Bool
     let rendered: Bool
     let renderValidated: Bool
     let audioTrackValidated: Bool
@@ -139,27 +142,158 @@ private struct CleanMachineScenario {
                 timeIntervalSince1970: 1
             )
         )
+        let opportunitySource =
+            MediaSourceReference(
+                provider: .youtube,
+                pageURL: URL(
+                    string:
+                        "https://www.youtube.com/watch?v=e2e-opportunity-123"
+                )!,
+                externalID:
+                    "e2e-opportunity-123",
+                discoveredAt: Date(
+                    timeIntervalSince1970: 2
+                )
+            )
+        let workspaceRights =
+            WorkspaceRightsAttestation(
+                channelID:
+                    project.targetChannelID,
+                confirmedByUser: true,
+                attestedAt: Date(
+                    timeIntervalSince1970: 2
+                )
+            )
+        try require(
+            workspaceRights
+                .permitsUserDirectedProduction,
+            "workspace rights declaration rejected"
+        )
+
         let asset = ProductionMediaAsset(
             displayName: "source.mov",
             sourceURL: sourceURL,
             durationSeconds: sourceDurationSeconds,
-            authorization: .owned,
+            authorization:
+                .userDeclaredResponsibility,
             rightsEvidence: [
-                "CI-erzeugtes synthetisches Testmedium"
+                "Arbeitsbereich-Nutzererklärung "
+                    + workspaceRights
+                        .statementVersion,
+                "Automatisch gebunden an youtube: "
+                    + (
+                        opportunitySource
+                            .externalID
+                        ?? "unbekannt"
+                    )
             ],
             rightsAttestation: RightsAttestation(
                 confirmedByUser: true,
                 attestedAt: Date(
                     timeIntervalSince1970: 2
-                )
+                ),
+                statementVersion:
+                    workspaceRights
+                        .statementVersion
             ),
+            originSource: opportunitySource,
             importedAt: Date(
                 timeIntervalSince1970: 2
             )
         )
         try require(
             asset.mayEnterProduction,
-            "rights gate rejected test media"
+            "rights gate rejected workspace-declared test media"
+        )
+        let opportunitySourceBound =
+            asset.originSource?.id
+                == opportunitySource.id
+        try require(
+            opportunitySourceBound,
+            "production media lost opportunity provenance"
+        )
+
+        let resolution =
+            MediaSourceResolver().resolve(
+                opportunitySource,
+                approvedProvider: nil
+            )
+        let readyPreparation =
+            OpportunityClipPreparationPlanner()
+            .snapshot(
+                source: opportunitySource,
+                resolution: resolution,
+                hasBoundAuthorizedMedia: true,
+                isGeneratingClips: false,
+                clipCount: 0,
+                observedAt: Date(
+                    timeIntervalSince1970: 3
+                )
+            )
+        try require(
+            readyPreparation.status
+                == .localProcessingReady,
+            "bound opportunity did not become locally processable"
+        )
+
+        let transcript = LocalTranscript(
+            localeIdentifier: "de-DE",
+            text:
+                "Erster zusammenhängender Gedanke mit echten Zeitsegmenten. "
+                + "Der Gedanke wird im zweiten Segment fortgeführt.",
+            segments: [
+                TranscriptSegment(
+                    startSeconds: 0.2,
+                    durationSeconds: 1.2,
+                    text:
+                        "Erster zusammenhängender Gedanke mit echten Zeitsegmenten.",
+                    confidence: 0.94
+                ),
+                TranscriptSegment(
+                    startSeconds: 1.5,
+                    durationSeconds: 1.2,
+                    text:
+                        "Der Gedanke wird im zweiten Segment fortgeführt.",
+                    confidence: 0.91
+                )
+            ],
+            onDevice: true,
+            createdAt: Date(
+                timeIntervalSince1970: 3
+            )
+        )
+        let clipCandidates =
+            LocalClipCandidateGenerator()
+            .generate(
+                transcript: transcript,
+                sourceDurationSeconds:
+                    sourceDurationSeconds,
+                minimumDurationSeconds: 2,
+                maximumDurationSeconds: 3.6,
+                pauseBoundarySeconds: 2.5,
+                maximumCandidates: 4
+            )
+        let selectedClip = try unwrap(
+            clipCandidates.first,
+            "opportunity-bound local clip candidate missing"
+        )
+        let clipPreparation =
+            OpportunityClipPreparationPlanner()
+            .snapshot(
+                source: opportunitySource,
+                resolution: resolution,
+                hasBoundAuthorizedMedia: true,
+                isGeneratingClips: false,
+                clipCount:
+                    clipCandidates.count,
+                observedAt: Date(
+                    timeIntervalSince1970: 3
+                )
+            )
+        try require(
+            clipPreparation.status
+                == .clipsAvailable,
+            "local clip job did not expose available clips"
         )
 
         var graph = EditGraph(
@@ -170,10 +304,8 @@ private struct CleanMachineScenario {
         _ = graph.apply(
             EditOperation(
                 type: .trim,
-                timeRange: EditTimeRange(
-                    startSeconds: 0.2,
-                    durationSeconds: 3.5
-                ),
+                timeRange:
+                    selectedClip.sourceRange,
                 createdAt: Date(
                     timeIntervalSince1970: 4
                 )
@@ -435,6 +567,13 @@ private struct CleanMachineScenario {
 
         return CleanMachineE2EResult(
             generatedSource: true,
+            workspaceRightsDeclarationAccepted:
+                workspaceRights
+                    .permitsUserDirectedProduction,
+            opportunitySourceBound:
+                opportunitySourceBound,
+            localClipCandidateGenerated:
+                !clipCandidates.isEmpty,
             rendered: FileManager.default
                 .fileExists(
                     atPath: renderURL.path
