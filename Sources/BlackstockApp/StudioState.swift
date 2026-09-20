@@ -101,7 +101,7 @@ final class StudioState: ObservableObject {
                 if loadResult.recoveredFromBackup {
                     ledger.append(.init(
                         timestamp: Date(),
-                        actor: .acceptedAIProposal,
+                        actor: .blackstock,
                         stage: .editing,
                         action: "workspace-recovered-from-backup",
                         summary: "Der primäre Projekt-Arbeitsbereich war nicht lesbar. Blackstock hat den letzten validierten lokalen Sicherungsstand geladen.",
@@ -112,7 +112,7 @@ final class StudioState: ObservableObject {
                 if let sourceVersion = loadResult.migratedFromSchemaVersion {
                     ledger.append(.init(
                         timestamp: Date(),
-                        actor: .acceptedAIProposal,
+                        actor: .blackstock,
                         stage: .editing,
                         action: "workspace-schema-migrated",
                         summary: "Projekt-Arbeitsbereich wurde lokal von Schema v\(sourceVersion) auf v\(WorkspaceSchema.current) migriert.",
@@ -1211,7 +1211,7 @@ final class StudioState: ObservableObject {
         )
         let revision = graph.apply(
             reframe,
-            actor: .blackstock
+            actor: .acceptedAIProposal
         )
         lastUndoneRevisionID = nil
         renderArtifact = nil
