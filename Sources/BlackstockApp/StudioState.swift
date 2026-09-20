@@ -68,9 +68,28 @@ final class StudioState: ObservableObject {
     private var correlationID = UUID()
     private var activeProjectID: UUID?
     private var workspaceStore: ProjectWorkspaceStore?
+    private var processingStopRequested = false
+
+    func resumeProcessing() {
+        processingStopRequested = false
+        if clipCandidateStatusMessage == "Verarbeitung gestoppt." {
+            clipCandidateStatusMessage = nil
+        }
+    }
+
+    func requestStopProcessing() {
+        processingStopRequested = true
+        player.pause()
+        clipCandidateStatusMessage = "Verarbeitung gestoppt."
+    }
+
+    private var shouldStopProcessing: Bool {
+        processingStopRequested || Task.isCancelled
+    }
 
     func loadWorkspace(projectID: UUID) async {
         activeProjectID = projectID
+        processingStopRequested = false
         localClipCandidates = []
         clipCandidateStatusMessage = nil
         previewedLocalClipCandidateID = nil
@@ -1086,6 +1105,13 @@ final class StudioState: ObservableObject {
                     localeIdentifier: localeIdentifier
                 )
 
+            guard !shouldStopProcessing else {
+                localClipCandidates = []
+                clipCandidateStatusMessage =
+                    "Verarbeitung gestoppt."
+                return
+            }
+
             clipCandidateSourceTranscript =
                 sourceTranscript
 
@@ -1141,7 +1167,8 @@ final class StudioState: ObservableObject {
         await generateLocalClipCandidates(
             localeIdentifier: localeIdentifier
         )
-        guard errorMessage == nil,
+        guard !shouldStopProcessing,
+              errorMessage == nil,
               !localClipCandidates.isEmpty else {
             return
         }
@@ -1188,8 +1215,14 @@ final class StudioState: ObservableObject {
         }
         captionVisualStyle = .strong
 
+        guard !shouldStopProcessing else {
+            clipCandidateStatusMessage = "Verarbeitung gestoppt."
+            return
+        }
+
         await applyLocalClipCandidate(primary)
-        guard errorMessage == nil else { return }
+        guard !shouldStopProcessing,
+              errorMessage == nil else { return }
 
         if let firstSaved = savedClipSelections.first,
            let transcript = firstSaved.transcript {
@@ -1240,8 +1273,14 @@ final class StudioState: ObservableObject {
             return
         }
 
+        guard !shouldStopProcessing else {
+            clipCandidateStatusMessage = "Verarbeitung gestoppt."
+            return
+        }
+
         await renderAllSavedClipSelections()
-        guard errorMessage == nil else { return }
+        guard !shouldStopProcessing,
+              errorMessage == nil else { return }
 
         if let first = savedClipSelections.first,
            first.renderArtifact != nil {
@@ -1656,6 +1695,11 @@ final class StudioState: ObservableObject {
         var completed = 0
 
         for id in ids {
+            guard !shouldStopProcessing else {
+                clipCandidateStatusMessage =
+                    "Verarbeitung nach \(completed) fertigen Clips gestoppt."
+                return
+            }
             guard let selection =
                     savedClipSelections.first(
                         where: { $0.id == id }
@@ -1682,6 +1726,10 @@ final class StudioState: ObservableObject {
     func renderSavedClipSelection(
         _ selection: SavedClipSelection
     ) async {
+        guard !shouldStopProcessing else {
+            clipCandidateStatusMessage = "Verarbeitung gestoppt."
+            return
+        }
         guard let asset,
               let projectID = activeProjectID else {
             errorMessage =
@@ -1769,6 +1817,15 @@ final class StudioState: ObservableObject {
                     captionStyle:
                         captionVisualStyle
                 )
+
+            guard !shouldStopProcessing else {
+                try? FileManager.default.removeItem(
+                    at: artifact.fileURL
+                )
+                clipCandidateStatusMessage =
+                    "Verarbeitung gestoppt."
+                return
+            }
 
             guard let index =
                 savedClipSelections
@@ -2612,6 +2669,10 @@ final class StudioState: ObservableObject {
     }
 
     func render(projectID: UUID) async {
+        guard !shouldStopProcessing else {
+            errorMessage = "Verarbeitung wurde gestoppt."
+            return
+        }
         guard let asset else {
             errorMessage = "Kein Produktionsmedium geladen."
             return
@@ -2702,6 +2763,14 @@ final class StudioState: ObservableObject {
                 supplementalAudio: supplementalAudio,
                 supplementalVideo: supplementalVideo
             )
+            guard !shouldStopProcessing else {
+                try? FileManager.default.removeItem(
+                    at: artifact.fileURL
+                )
+                errorMessage = "Verarbeitung wurde gestoppt."
+                return
+            }
+
             renderArtifact = artifact
             player.replaceCurrentItem(
                 with: AVPlayerItem(url: artifact.fileURL)

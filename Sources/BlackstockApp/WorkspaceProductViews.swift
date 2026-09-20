@@ -1,4 +1,5 @@
 #if os(macOS)
+import AppKit
 import Foundation
 import SwiftUI
 import BlackstockCore
@@ -299,6 +300,20 @@ struct OpportunityWorkspaceView: View {
                 .frame(minHeight: 260)
             }
 
+            HStack {
+                Spacer()
+                Button("Auf YouTube ansehen") {
+                    if let url = URL(
+                        string:
+                            "https://www.youtube.com/watch?v="
+                            + item.videoID
+                    ) {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+                .buttonStyle(.link)
+            }
+
             Text(item.title)
                 .font(.title2.bold())
                 .textSelection(.enabled)
@@ -509,6 +524,9 @@ struct ProjectLibraryView: View {
     let onOpenProject: (BlackstockProject) -> Void
     let onFindOpportunity: () -> Void
 
+    @State private var projectPendingDeletion:
+        BlackstockProject?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top) {
@@ -562,6 +580,37 @@ struct ProjectLibraryView: View {
             Spacer(minLength: 0)
         }
         .padding(28)
+        .confirmationDialog(
+            "Projekt löschen?",
+            isPresented: Binding(
+                get: {
+                    projectPendingDeletion != nil
+                },
+                set: { presented in
+                    if !presented {
+                        projectPendingDeletion = nil
+                    }
+                }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let project = projectPendingDeletion {
+                Button(
+                    "„\(project.title)“ löschen",
+                    role: .destructive
+                ) {
+                    _ = session.deleteProject(project.id)
+                    projectPendingDeletion = nil
+                }
+            }
+            Button("Abbrechen", role: .cancel) {
+                projectPendingDeletion = nil
+            }
+        } message: {
+            Text(
+                "Das Projekt und seine lokalen Schnitt-, Render- und Analysedaten werden von diesem Mac entfernt. Bereits auf YouTube veröffentlichte Videos werden nicht gelöscht."
+            )
+        }
     }
 
     private func projectRow(
@@ -596,6 +645,19 @@ struct ProjectLibraryView: View {
                             in: Capsule()
                         )
                     }
+                    if project.isPaused {
+                        Label(
+                            "PAUSIERT",
+                            systemImage: "pause.fill"
+                        )
+                        .font(.caption2.weight(.bold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(
+                            Color.primary.opacity(0.07),
+                            in: Capsule()
+                        )
+                    }
                     if session.activeProject?.id == project.id {
                         Text("AKTIV")
                             .font(.caption2.weight(.bold))
@@ -611,6 +673,18 @@ struct ProjectLibraryView: View {
                 Text(project.stage.journeyGuidance.title)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
+
+                if let category =
+                    session.projectChannelCategoryTitle(
+                        for: project.id
+                    ) {
+                    Label(
+                        "Kanal-Kategorie: \(category)",
+                        systemImage: "tag"
+                    )
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                }
 
                 HStack(spacing: 12) {
                     Text(
@@ -630,33 +704,73 @@ struct ProjectLibraryView: View {
 
             Spacer()
 
-            VStack(alignment: .trailing, spacing: 6) {
+            VStack(alignment: .trailing, spacing: 8) {
                 Text(
                     "Schritt \(project.stage.canonicalProgressPosition)/\(BlackstockStage.canonicalProgressCount)"
                 )
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
 
-                if session.activeProject?.id == project.id {
-                    Button {
-                        onOpenProject(project)
-                    } label: {
-                        Label(
-                            "Fortfahren",
-                            systemImage: "arrow.right.circle"
-                        )
+                HStack(spacing: 8) {
+                    if session.activeProject?.id == project.id {
+                        Button {
+                            onOpenProject(project)
+                        } label: {
+                            Label(
+                                "Fortfahren",
+                                systemImage: "arrow.right.circle"
+                            )
+                        }
+                        .buttonStyle(.borderedProminent)
+                    } else {
+                        Button {
+                            onOpenProject(project)
+                        } label: {
+                            Label(
+                                "Öffnen",
+                                systemImage: "arrow.right.circle"
+                            )
+                        }
+                        .buttonStyle(.bordered)
                     }
-                    .buttonStyle(.borderedProminent)
-                } else {
-                    Button {
-                        onOpenProject(project)
+
+                    Menu {
+                        if project.stage != .published {
+                            Button {
+                                _ = session.setProjectPaused(
+                                    project.id,
+                                    paused: !project.isPaused
+                                )
+                            } label: {
+                                Label(
+                                    project.isPaused
+                                        ? "Projekt fortsetzen"
+                                        : "Projekt pausieren",
+                                    systemImage:
+                                        project.isPaused
+                                        ? "play.fill"
+                                        : "pause.fill"
+                                )
+                            }
+                        }
+
+                        Divider()
+
+                        Button(role: .destructive) {
+                            projectPendingDeletion = project
+                        } label: {
+                            Label(
+                                "Projekt löschen",
+                                systemImage: "trash"
+                            )
+                        }
                     } label: {
-                        Label(
-                            "Öffnen",
-                            systemImage: "arrow.right.circle"
-                        )
+                        Image(systemName: "ellipsis.circle")
                     }
-                    .buttonStyle(.bordered)
+                    .menuStyle(.borderlessButton)
+                    .accessibilityLabel(
+                        "Projektaktionen für \(project.title)"
+                    )
                 }
             }
         }

@@ -26,7 +26,7 @@ REQUIRED = {
         "Kanal-Kategorie",
         "YouTube-Zielgruppe",
         "Hauptziel in Blackstock",
-        "YouTube-Einstellungen übernehmen",
+        "Einstellungen speichern",
         "Trend-Zeitraum",
         "refreshYouTubeVideoCategories",
     ],

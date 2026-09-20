@@ -85,6 +85,22 @@ public struct ResearchDecisionStore: Sendable {
         self.rootURL = rootURL
     }
 
+    public func deleteProject(
+        projectID: UUID
+    ) throws {
+        let directory = rootURL.appendingPathComponent(
+            projectID.uuidString,
+            isDirectory: true
+        )
+        if FileManager.default.fileExists(
+            atPath: directory.path
+        ) {
+            try FileManager.default.removeItem(
+                at: directory
+            )
+        }
+    }
+
     public func saveResearch(_ record: ResearchEvidenceRecord) throws {
         try save(
             record,

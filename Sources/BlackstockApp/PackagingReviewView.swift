@@ -109,6 +109,9 @@ struct PackagingReviewView: View {
         _categoryID = State(
             initialValue:
                 saved?.package.metadata.categoryID
+                ?? session.projectChannelCategoryID(
+                    for: project.id
+                )
                 ?? session.channelCategoryID
         )
         _containsSyntheticMedia = State(
@@ -306,7 +309,15 @@ struct PackagingReviewView: View {
         .task {
             await session.ensureYouTubePublishingOptionsLoaded()
             if categoryID.isEmpty {
-                categoryID = session.channelCategoryID
+                categoryID =
+                    session.projectChannelCategoryID(
+                        for: project.id
+                    )
+                    ?? session.channelCategoryID
+            }
+            if thumbnailURL == nil,
+               persistedReview == nil {
+                await generateThumbnailFromRender()
             }
         }
         .onChange(of: session.activeProject?.stage) { stage in
@@ -386,7 +397,7 @@ struct PackagingReviewView: View {
                     .textFieldStyle(.roundedBorder)
 
                 Picker(
-                    "YouTube-Kategorie",
+                    "Kanal-Kategorie / YouTube-Kategorie",
                     selection: $categoryID
                 ) {
                     if !categoryID.isEmpty,

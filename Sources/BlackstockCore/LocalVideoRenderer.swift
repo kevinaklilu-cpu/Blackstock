@@ -303,27 +303,38 @@ public actor LocalVideoRenderer {
         exporter.shouldOptimizeForNetworkUse = true
 
         let exportBox = ExportSessionBox(exporter)
-        try await withCheckedThrowingContinuation { continuation in
-            exportBox.session.exportAsynchronously {
-                let session = exportBox.session
-                switch session.status {
-                case .completed:
-                    continuation.resume()
-                case .failed, .cancelled:
-                    continuation.resume(
-                        throwing: LocalRenderError.exportFailed(
-                            session.error?.localizedDescription ?? "Unbekannter Exportfehler"
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                exportBox.session.exportAsynchronously {
+                    let session = exportBox.session
+                    switch session.status {
+                    case .completed:
+                        continuation.resume()
+                    case .failed:
+                        continuation.resume(
+                            throwing: LocalRenderError.exportFailed(
+                                session.error?.localizedDescription
+                                    ?? "Unbekannter Exportfehler"
+                            )
                         )
-                    )
-                default:
-                    continuation.resume(
-                        throwing: LocalRenderError.exportFailed(
-                            "Export endete im Zustand \(session.status.rawValue)."
+                    case .cancelled:
+                        continuation.resume(
+                            throwing: CancellationError()
                         )
-                    )
+                    default:
+                        continuation.resume(
+                            throwing: LocalRenderError.exportFailed(
+                                "Export endete im Zustand \(session.status.rawValue)."
+                            )
+                        )
+                    }
                 }
             }
+        } onCancel: {
+            exportBox.session.cancelExport()
         }
+
+        try Task.checkCancellation()
 
         guard FileManager.default.fileExists(
             atPath: exportOutputURL.path

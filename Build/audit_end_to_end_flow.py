@@ -26,6 +26,10 @@ checks = {
         "opportunityTimeWindow",
         "categoryOpportunityCandidates(",
         "productionIntentKind == .clipFromOpportunity",
+        "channelCategoryTitle: primaryTopic",
+        "projectChannelCategoryID(",
+        "setProjectPaused(",
+        "deleteProject(",
         "? .production",
         "authorizePublishing()",
         "publishPreparedReview(",
@@ -34,6 +38,7 @@ checks = {
         "to: .published",
         "authorizeAnalytics()",
         "collectDueGrowthObservations(",
+        "collectChannelAnalytics(",
         "YouTubeAnalyticsClient(",
         "GrowthLearningEngine()",
     ],
@@ -41,6 +46,9 @@ checks = {
         "YouTubeEmbeddedPlayer(videoID:",
         "session.useOpportunityAsClip(",
         "Clip erstellen",
+        "Projekt pausieren",
+        "Projekt löschen",
+        "Auf YouTube ansehen",
     ],
     "Sources/BlackstockApp/StudioView.swift": [
         "state.createAutomaticHighlights(",
@@ -49,6 +57,8 @@ checks = {
         "state.render(projectID:",
         "state.renderAllSavedClipSelections(",
         "state.useSavedClipForPackaging(",
+        "state.requestStopProcessing(",
+        "Schnittquelle hinzufügen",
         "PackagingReviewView(",
     ],
     "Sources/BlackstockApp/StudioState.swift": [
@@ -67,6 +77,7 @@ checks = {
         "session.publishPreparedReview(",
         "categoryID: categoryID.isEmpty",
         "containsSyntheticMedia",
+        "generateThumbnailFromRender()",
         "showFinalPublishConfirmation",
         "stage == .published",
         "dismiss()",
@@ -76,6 +87,7 @@ checks = {
         "project.stage.journeyGuidance.recommendedSurface",
         "YouTubeEmbeddedPlayer(",
         "session.collectDueGrowthObservations(",
+        "session.collectChannelAnalytics(",
         "session.loadPublishedComments(",
     ],
     "Sources/BlackstockCore/YouTubePublishingCoordinator.swift": [
@@ -86,6 +98,11 @@ checks = {
     "Sources/BlackstockCore/YouTubeResumableUploader.swift": [
         "YouTubeResumableUploader",
         "remoteCommitted",
+    ],
+    "Sources/BlackstockCore/LocalVideoRenderer.swift": [
+        "withTaskCancellationHandler",
+        "cancelExport()",
+        "Task.checkCancellation()",
     ],
     "Sources/BlackstockCore/YouTubeAnalyticsClient.swift": [
         "averageViewDuration",

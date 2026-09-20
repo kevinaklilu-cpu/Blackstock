@@ -287,23 +287,11 @@ struct FirstRunView: View {
             }
             .pickerStyle(.menu)
 
-            VStack(alignment: .leading, spacing: 5) {
-                Label(
-                    "YouTube-Parameter statt Freitext",
-                    systemImage: "checkmark.seal"
-                )
-                .font(.callout.weight(.semibold))
-                Text(
-                    "Land/Region und Standardsprache werden als echte YouTube-Kanaleinstellungen übernommen. Die Kanal-Kategorie speichert Blackstock als festen Kanalstandard auf Basis der offiziellen YouTube-Video-Kategorien und nutzt sie für Trends, Suche und Uploads. Die Kinder-Zielgruppe wird, soweit YouTube sie kanalweit akzeptiert, am Kanal gesetzt – sonst sicher pro Video beim Upload."
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-            .padding(12)
-            .background(
-                BlackstockDesign.mutedFill,
-                in: RoundedRectangle(cornerRadius: 12)
+            Text(
+                "Diese Auswahl wird als Standard für deinen Blackstock-Kanal verwendet."
             )
+            .font(.caption)
+            .foregroundStyle(.secondary)
 
             HStack {
                 Spacer()
@@ -317,7 +305,7 @@ struct FirstRunView: View {
                             .controlSize(.small)
                     } else {
                         Label(
-                            "YouTube-Einstellungen übernehmen",
+                            "Einstellungen speichern",
                             systemImage: "checkmark.circle"
                         )
                     }

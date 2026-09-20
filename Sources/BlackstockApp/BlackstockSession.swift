@@ -87,6 +87,8 @@ final class BlackstockSession: ObservableObject {
     @Published var isAuthorizingAnalytics = false
     @Published var isCollectingAnalytics = false
     @Published private(set) var latestGrowthLearning: GrowthLearningRecord?
+    @Published private(set) var latestChannelAnalytics:
+        YouTubeAnalyticsSnapshot?
     @Published var isLoadingComments = false
     @Published private(set) var latestCommentPage: YouTubeCommentThreadPage?
     @Published private(set) var latestCommentsVideoID: String?
@@ -364,6 +366,7 @@ final class BlackstockSession: ObservableObject {
         analyticsAuthorizedChannelID = nil
         lastPublishingResult = nil
         latestGrowthLearning = nil
+        latestChannelAnalytics = nil
         latestCommentPage = nil
         latestCommentsVideoID = nil
         isLoadingComments = false
@@ -469,7 +472,12 @@ final class BlackstockSession: ObservableObject {
             let request = GoogleOAuthAuthorizationRequest(
                 clientID: effectiveClientID,
                 redirectURI: redirectURI,
-                scopes: [.youtubeReadOnly],
+                scopes: [
+                    .youtubeReadOnly,
+                    .youtubeUpload,
+                    .youtubeForceSSL,
+                    .analyticsReadOnly
+                ],
                 state: state,
                 pkce: pkce
             )
@@ -566,6 +574,24 @@ final class BlackstockSession: ObservableObject {
                 channelID: id,
                 accessToken: accessToken
             )
+
+            if let scopeString = tokenSet?.scope {
+                let granted =
+                    GoogleOAuthScopePlanner.parseGrantedScopes(
+                        scopeString
+                    )
+                let publishingScopes: Set<GoogleOAuthScope> = [
+                    .youtubeReadOnly,
+                    .youtubeUpload,
+                    .youtubeForceSSL
+                ]
+                if publishingScopes.isSubset(of: granted) {
+                    publishingAuthorizedChannelID = id
+                }
+                if granted.contains(.analyticsReadOnly) {
+                    analyticsAuthorizedChannelID = id
+                }
+            }
 
             workspaceRightsResponsibilityAccepted =
                 Self.loadStoredWorkspaceRightsAttestation(
@@ -774,6 +800,11 @@ final class BlackstockSession: ObservableObject {
         }
         guard var project = activeProject else {
             errorMessage = "Kein aktives Projekt vorhanden."
+            return
+        }
+        guard !project.isPaused else {
+            errorMessage =
+                "Das Projekt ist pausiert. Setze es vor dem Upload fort."
             return
         }
         guard let authorizedChannelID = publishingAuthorizedChannelID,
@@ -1113,6 +1144,70 @@ final class BlackstockSession: ObservableObject {
             }
         } catch {
             errorMessage = "Analytics konnten nicht aktualisiert werden: \(describe(error))"
+        }
+    }
+
+    func collectChannelAnalytics(
+        days: Int = 28,
+        now: Date = Date()
+    ) async {
+        guard let channelID = workspaceChannelID else {
+            errorMessage =
+                "Kein YouTube-Kanal für die Analyse ausgewählt."
+            return
+        }
+
+        isCollectingAnalytics = true
+        defer { isCollectingAnalytics = false }
+        errorMessage = nil
+
+        do {
+            let accessToken =
+                try await validatedAnalyticsAccessToken(
+                    targetChannelID: channelID
+                )
+            let calendar = Calendar(
+                identifier: .gregorian
+            )
+            let start = calendar.date(
+                byAdding: .day,
+                value: -max(days - 1, 0),
+                to: now
+            ) ?? now
+
+            let formatter = DateFormatter()
+            formatter.calendar = calendar
+            formatter.locale = Locale(
+                identifier: "en_US_POSIX"
+            )
+            formatter.timeZone = TimeZone(
+                secondsFromGMT: 0
+            )
+            formatter.dateFormat = "yyyy-MM-dd"
+
+            latestChannelAnalytics =
+                try await YouTubeAnalyticsClient(
+                    accessToken: accessToken,
+                    channelID: channelID
+                ).snapshot(
+                    startDate: formatter.string(
+                        from: start
+                    ),
+                    endDate: formatter.string(
+                        from: now
+                    ),
+                    videoID: nil,
+                    now: now
+                )
+        } catch YouTubeAnalyticsAPIError.missingRow {
+            latestChannelAnalytics = nil
+            errorMessage =
+                "YouTube Analytics hat für den Kanal in diesem Zeitraum noch keine Daten geliefert."
+        } catch {
+            latestChannelAnalytics = nil
+            errorMessage =
+                "Kanalanalyse konnte nicht aktualisiert werden: "
+                + describe(error)
         }
     }
 
@@ -2146,6 +2241,26 @@ final class BlackstockSession: ObservableObject {
         Self.loadStoredProductionIntent(projectID: projectID)
     }
 
+    func projectChannelCategoryID(
+        for projectID: UUID
+    ) -> String? {
+        productionIntent(for: projectID)?
+            .channelCategoryID
+            ?? (channelCategoryID.isEmpty
+                ? nil
+                : channelCategoryID)
+    }
+
+    func projectChannelCategoryTitle(
+        for projectID: UUID
+    ) -> String? {
+        productionIntent(for: projectID)?
+            .channelCategoryTitle
+            ?? (primaryTopic.isEmpty
+                ? nil
+                : primaryTopic)
+    }
+
     private func useOpportunity(
         _ opportunity: YouTubeOpportunityCandidate,
         productionIntentKind: ProjectProductionIntentKind
@@ -2175,6 +2290,10 @@ final class BlackstockSession: ObservableObject {
                     projectID: seed.project.id,
                     sourceID: seed.source.id,
                     kind: productionIntentKind,
+                    channelCategoryID: channelCategoryID,
+                    channelCategoryTitle: primaryTopic,
+                    regionCode: channelRegionCode,
+                    contentLanguage: contentLanguage,
                     createdAt: Date()
                 )
             )
@@ -2355,6 +2474,11 @@ final class BlackstockSession: ObservableObject {
             errorMessage = "Kein aktives Projekt vorhanden."
             return false
         }
+        guard !project.isPaused else {
+            errorMessage =
+                "Das Projekt ist pausiert. Setze es zuerst fort."
+            return false
+        }
         guard project.advance(to: destination, at: Date()) else {
             errorMessage = "Projekt kann nicht direkt von \(project.stage.rawValue) nach \(destination.rawValue) wechseln."
             return false
@@ -2367,6 +2491,90 @@ final class BlackstockSession: ObservableObject {
             return true
         } catch {
             errorMessage = "Projektstatus konnte nicht gespeichert werden: \(describe(error))"
+            return false
+        }
+    }
+
+    @discardableResult
+    func setProjectPaused(
+        _ projectID: UUID,
+        paused: Bool
+    ) -> Bool {
+        guard var project = projects.first(
+            where: { $0.id == projectID }
+        ) else {
+            errorMessage = "Projekt nicht gefunden."
+            return false
+        }
+
+        project.setPaused(paused, at: Date())
+        do {
+            try Self.store(project: project)
+            if activeProject?.id == projectID {
+                activeProject = project
+            }
+            errorMessage = nil
+            return true
+        } catch {
+            errorMessage =
+                "Projektstatus konnte nicht gespeichert werden: "
+                + describe(error)
+            return false
+        }
+    }
+
+    @discardableResult
+    func deleteProject(_ projectID: UUID) -> Bool {
+        let project = projects.first {
+            $0.id == projectID
+        }
+        guard project != nil else {
+            errorMessage = "Projekt nicht gefunden."
+            return false
+        }
+
+        do {
+            try projectWorkspaceStore()
+                .deleteProject(projectID: projectID)
+            try researchDecisionStore()
+                .deleteProject(projectID: projectID)
+            try growthRecordStore()
+                .deleteProject(projectID: projectID)
+
+            let projectKey = projectID.uuidString
+            let defaults = UserDefaults.standard
+            for key in defaults.dictionaryRepresentation().keys
+            where key.contains(projectKey) {
+                defaults.removeObject(forKey: key)
+            }
+
+            var catalog = Self.loadStoredProjects()
+            catalog.removeAll { $0.id == projectID }
+            try Self.storeProjects(catalog)
+
+            if activeProject?.id == projectID {
+                activeProject = nil
+                activeOpportunitySource = nil
+                publishingAuthorizedChannelID = nil
+                analyticsAuthorizedChannelID = nil
+                lastPublishingResult = nil
+                latestGrowthLearning = nil
+                latestCommentPage = nil
+                latestCommentsVideoID = nil
+                defaults.removeObject(
+                    forKey: "blackstock.activeProject"
+                )
+                defaults.removeObject(
+                    forKey: "blackstock.activeOpportunitySource"
+                )
+            }
+
+            errorMessage = nil
+            return true
+        } catch {
+            errorMessage =
+                "Projekt konnte nicht vollständig gelöscht werden: "
+                + describe(error)
             return false
         }
     }
@@ -2513,10 +2721,16 @@ final class BlackstockSession: ObservableObject {
             catalog.append(project)
         }
 
+        try storeProjects(catalog)
+    }
+
+    private static func storeProjects(
+        _ projects: [BlackstockProject]
+    ) throws {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         UserDefaults.standard.set(
-            try encoder.encode(catalog),
+            try encoder.encode(projects),
             forKey: "blackstock.projects"
         )
     }

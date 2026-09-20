@@ -7,6 +7,10 @@ final class ProjectProductionIntentTests: XCTestCase {
             projectID: UUID(),
             sourceID: UUID(),
             kind: .clipFromOpportunity,
+            channelCategoryID: "17",
+            channelCategoryTitle: "Sport",
+            regionCode: "DE",
+            contentLanguage: "de",
             createdAt: Date(timeIntervalSince1970: 1_790_000_000)
         )
 
@@ -23,6 +27,10 @@ final class ProjectProductionIntentTests: XCTestCase {
 
         XCTAssertEqual(decoded, record)
         XCTAssertTrue(decoded.isLinkFirstClip)
+        XCTAssertEqual(decoded.channelCategoryID, "17")
+        XCTAssertEqual(decoded.channelCategoryTitle, "Sport")
+        XCTAssertEqual(decoded.regionCode, "DE")
+        XCTAssertEqual(decoded.contentLanguage, "de")
     }
 
     func testStandardProjectIsNotMisrepresentedAsClipIntent() {

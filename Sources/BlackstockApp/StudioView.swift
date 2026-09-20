@@ -21,6 +21,7 @@ struct StudioView: View {
     @State private var rightsConfirmed = false
     @State private var showPackagingReview = false
     @State private var showClipExportFolderImporter = false
+    @State private var activeProcessingTask: Task<Void, Never>?
     @State private var selectedCaptionSegmentID: UUID?
     @State private var captionEditText = ""
     @State private var captionEditStartSeconds: Double = 0
@@ -77,6 +78,22 @@ struct StudioView: View {
         }
         .task(id: project.id) {
             await state.loadWorkspace(projectID: project.id)
+            if session.activeProject?.isPaused == true {
+                state.requestStopProcessing()
+            }
+        }
+        .onDisappear {
+            activeProcessingTask?.cancel()
+            activeProcessingTask = nil
+        }
+        .onChange(of: session.activeProject?.isPaused) { paused in
+            if paused == true {
+                activeProcessingTask?.cancel()
+                activeProcessingTask = nil
+                state.requestStopProcessing()
+            } else {
+                state.resumeProcessing()
+            }
         }
         .sheet(isPresented: $showPackagingReview) {
             if let asset = state.asset,
@@ -118,9 +135,41 @@ struct StudioView: View {
             Button {
                 showImporter = true
             } label: {
-                Label("Medien", systemImage: "plus")
+                Label("Medien hinzufügen", systemImage: "plus")
             }
             .buttonStyle(.bordered)
+
+            if currentStage != .published {
+                Button {
+                    if session.activeProject?.isPaused == true {
+                        if session.setProjectPaused(
+                            project.id,
+                            paused: false
+                        ) {
+                            state.resumeProcessing()
+                        }
+                    } else {
+                        activeProcessingTask?.cancel()
+                        activeProcessingTask = nil
+                        state.requestStopProcessing()
+                        _ = session.setProjectPaused(
+                            project.id,
+                            paused: true
+                        )
+                    }
+                } label: {
+                    Label(
+                        session.activeProject?.isPaused == true
+                            ? "Fortsetzen"
+                            : "Pausieren",
+                        systemImage:
+                            session.activeProject?.isPaused == true
+                            ? "play.fill"
+                            : "pause.fill"
+                    )
+                }
+                .buttonStyle(.bordered)
+            }
 
             if state.renderArtifact != nil {
                 Button {
@@ -162,11 +211,6 @@ struct StudioView: View {
                     state.isGeneratingClipCandidates,
                 clipCount: state.localClipCandidates.count
             )
-        let remoteIngestRoute = ZeroCostProviderSelector().select(
-            capability: .remoteVideoIngest,
-            providers: [BuiltInProcessingProviders.opusClipAPI]
-        )
-
         return HStack(spacing: 12) {
             Image(
                 systemName:
@@ -210,15 +254,13 @@ struct StudioView: View {
                     )
                     .font(.caption.weight(.semibold))
 
-                    Text(clipPreparation.explanation)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    if !hasBoundAuthorizedMedia {
-                        Text(remoteIngestRoute.explanation)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
+                    Text(
+                        hasBoundAuthorizedMedia
+                            ? "Schnittquelle bereit. Blackstock kann das Video jetzt automatisch analysieren und clippen."
+                            : "Video ausgewählt. Sobald die verarbeitbare Schnittquelle bereitsteht, startet Blackstock den automatischen Clip-Workflow."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
                     if clipPreparation.status
                             == .productionMediaRequired,
@@ -227,7 +269,7 @@ struct StudioView: View {
                             showImporter = true
                         } label: {
                             Label(
-                                "Video auswählen …",
+                                "Schnittquelle hinzufügen",
                                 systemImage: "folder"
                             )
                         }
@@ -281,11 +323,18 @@ struct StudioView: View {
 
             if source.provider == .youtube,
                let videoID = source.externalID {
-                YouTubeEmbeddedPlayer(videoID: videoID)
-                    .frame(width: 220, height: 124)
-                    .clipShape(
-                        RoundedRectangle(cornerRadius: 10)
-                    )
+                VStack(alignment: .trailing, spacing: 6) {
+                    YouTubeEmbeddedPlayer(videoID: videoID)
+                        .frame(width: 220, height: 124)
+                        .clipShape(
+                            RoundedRectangle(cornerRadius: 10)
+                        )
+                    Button("Auf YouTube ansehen") {
+                        NSWorkspace.shared.open(source.pageURL)
+                    }
+                    .buttonStyle(.link)
+                    .controlSize(.small)
+                }
             }
         }
         .padding(.horizontal, 18)
@@ -310,44 +359,122 @@ struct StudioView: View {
         }
     }
 
+    @ViewBuilder
     private var emptyState: some View {
-        VStack(spacing: 18) {
-            Spacer()
-            Image(systemName: "film.stack")
-                .font(.largeTitle)
+        if let source = opportunitySource,
+           session.productionIntent(
+                for: project.id
+           )?.isLinkFirstClip == true {
+            VStack(spacing: 18) {
+                Spacer()
+
+                if source.provider == .youtube,
+                   let videoID = source.externalID {
+                    YouTubeEmbeddedPlayer(videoID: videoID)
+                        .frame(maxWidth: 720)
+                        .aspectRatio(
+                            16.0 / 9.0,
+                            contentMode: .fit
+                        )
+                        .background(
+                            BlackstockDesign.mediaSurface
+                        )
+                        .clipShape(
+                            RoundedRectangle(
+                                cornerRadius:
+                                    BlackstockDesign.cornerRadius,
+                                style: .continuous
+                            )
+                        )
+                }
+
+                Text("Video ausgewählt")
+                    .font(.title2.bold())
+
+                Text(
+                    "Sobald die verarbeitbare Originaldatei für dieses Video bereitsteht, erstellt Blackstock automatisch Highlights, Hochkantformat und Captions."
+                )
+                .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
-            Text("Video hinzufügen")
-                .font(.title2.bold())
-            Text("Wähle eine Videodatei, die du verwenden darfst.")
+                .frame(maxWidth: 620)
+
+                HStack(spacing: 10) {
+                    Button {
+                        showImporter = true
+                    } label: {
+                        Label(
+                            "Schnittquelle hinzufügen",
+                            systemImage: "film.stack"
+                        )
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    Button("Auf YouTube ansehen") {
+                        NSWorkspace.shared.open(
+                            source.pageURL
+                        )
+                    }
+                    .buttonStyle(.bordered)
+                }
+
+                Text(
+                    "Kamera, Mikrofon und Bildschirm sind für diesen Clip nicht erforderlich."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+                Spacer()
+            }
+            .frame(
+                maxWidth: .infinity,
+                maxHeight: .infinity
+            )
+        } else {
+            VStack(spacing: 18) {
+                Spacer()
+                Image(systemName: "film.stack")
+                    .font(.largeTitle)
+                    .foregroundStyle(.secondary)
+                Text("Video hinzufügen")
+                    .font(.title2.bold())
+                Text(
+                    "Füge die Videodatei hinzu, die du bearbeiten möchtest."
+                )
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: 520)
-            Button("Video auswählen …") {
-                showImporter = true
-            }
-            .buttonStyle(.borderedProminent)
-
-            CaptureCapabilityPanel { url, kind in
-                pendingURL = url
-                pendingCaptureKind = kind
-                if session.workspaceRightsAttestation?
-                    .permitsUserDirectedProduction == true {
-                    importPendingMedia()
-                } else {
-                    rightsConfirmed = false
-                    showRightsSheet = true
+                Button("Video auswählen …") {
+                    showImporter = true
                 }
-            }
-            .frame(maxWidth: 620)
+                .buttonStyle(.borderedProminent)
 
-            if !state.supplementalCaptures.isEmpty {
-                supplementalCapturesSection
+                DisclosureGroup(
+                    "Optionale eigene Aufnahme"
+                ) {
+                    CaptureCapabilityPanel { url, kind in
+                        pendingURL = url
+                        pendingCaptureKind = kind
+                        if session.workspaceRightsAttestation?
+                            .permitsUserDirectedProduction
+                            == true {
+                            importPendingMedia()
+                        } else {
+                            rightsConfirmed = false
+                            showRightsSheet = true
+                        }
+                    }
                     .frame(maxWidth: 620)
-            }
+                    .padding(.top, 8)
+                }
+                .frame(maxWidth: 620)
 
-            Spacer()
+                Spacer()
+            }
+            .frame(
+                maxWidth: .infinity,
+                maxHeight: .infinity
+            )
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func editor(_ asset: ProductionMediaAsset) -> some View {
@@ -466,7 +593,7 @@ struct StudioView: View {
 
             HStack(spacing: 10) {
                 Button {
-                    Task {
+                    startProcessing {
                         await state.createAutomaticHighlights(
                             localeIdentifier:
                                 speechLocaleIdentifier
@@ -495,7 +622,7 @@ struct StudioView: View {
                 )
 
                 Button {
-                    Task {
+                    startProcessing {
                         await state.generateLocalClipCandidates(
                             localeIdentifier:
                                 speechLocaleIdentifier
@@ -1300,7 +1427,11 @@ struct StudioView: View {
                     .pickerStyle(.segmented)
 
                     Button {
-                        Task { await state.render(projectID: project.id) }
+                        startProcessing {
+                            await state.render(
+                                projectID: project.id
+                            )
+                        }
                     } label: {
                         HStack {
                             if state.isRendering {
@@ -2346,9 +2477,32 @@ struct StudioView: View {
                             )
                     }
                     if currentStage == .production {
-                        _ = session.advanceActiveProject(
-                            to: .preview
-                        )
+                        if session.productionIntent(
+                            for: project.id
+                        )?.isLinkFirstClip == true {
+                            guard session.advanceActiveProject(
+                                to: .preview
+                            ) else { return }
+                            guard session.advanceActiveProject(
+                                to: .storyboard
+                            ) else { return }
+                            state.loadStoryboard(
+                                projectID: project.id
+                            )
+                            guard session.advanceActiveProject(
+                                to: .editing
+                            ) else { return }
+
+                            state.resumeProcessing()
+                            await state.createAutomaticHighlights(
+                                localeIdentifier:
+                                    speechLocaleIdentifier
+                            )
+                        } else {
+                            _ = session.advanceActiveProject(
+                                to: .preview
+                            )
+                        }
                     }
                 }
             }
@@ -2587,20 +2741,26 @@ struct StudioView: View {
 
                 if state.asset != nil {
                     Divider()
-                    CaptureCapabilityPanel { url, kind in
-                        pendingURL = url
-                        pendingCaptureKind = kind
-                        if session.workspaceRightsAttestation?
-                            .permitsUserDirectedProduction == true {
-                            importPendingMedia()
-                        } else {
-                            rightsConfirmed = false
-                            showRightsSheet = true
+                    DisclosureGroup(
+                        "Optionale Aufnahme hinzufügen"
+                    ) {
+                        CaptureCapabilityPanel { url, kind in
+                            pendingURL = url
+                            pendingCaptureKind = kind
+                            if session.workspaceRightsAttestation?
+                                .permitsUserDirectedProduction
+                                == true {
+                                importPendingMedia()
+                            } else {
+                                rightsConfirmed = false
+                                showRightsSheet = true
+                            }
                         }
+                        .padding(.top, 8)
                     }
                 }
 
-                Text("Audio-Zusatzspuren werden lokal ab 0:00 gemischt. Kamera- und Bildschirmaufnahmen können zusätzlich als zeitgesteuerte visuelle Einblendung genutzt werden. Die technische Prüfung misst anschließend den tatsächlich gerenderten Export.")
+                Text("Zusätzliche Audio-, Kamera- oder Bildschirmspuren sind optional und werden nur verwendet, wenn du sie ausdrücklich hinzufügst.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -2845,6 +3005,18 @@ struct StudioView: View {
 
     private var editingEnabled: Bool {
         currentStage == .editing
+            && session.activeProject?.isPaused != true
+    }
+
+    private func startProcessing(
+        _ operation: @escaping @MainActor () async -> Void
+    ) {
+        activeProcessingTask?.cancel()
+        state.resumeProcessing()
+        activeProcessingTask = Task { @MainActor in
+            await operation()
+            activeProcessingTask = nil
+        }
     }
 
     private func stageTitle(_ stage: BlackstockStage) -> String {

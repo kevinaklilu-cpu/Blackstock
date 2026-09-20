@@ -48,14 +48,22 @@ private struct WorkspaceShell: View {
     var body: some View {
         NavigationSplitView {
             VStack(spacing: 0) {
-                HStack(spacing: 10) {
-                    BlackstockBrandMark(width: 36)
+                HStack(alignment: .center, spacing: 10) {
+                    BlackstockBrandMark(width: 34)
+                        .frame(width: 34, height: 24)
                     Text("Blackstock")
-                        .font(.headline)
-                    Spacer()
+                        .font(
+                            .system(
+                                size: 17,
+                                weight: .semibold,
+                                design: .rounded
+                            )
+                        )
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 16)
+                .frame(maxWidth: .infinity, minHeight: 48)
+                .padding(.horizontal, 14)
                 .background(BlackstockDesign.sidebar)
 
                 Divider()
@@ -449,7 +457,7 @@ private struct OverviewView: View {
         project: BlackstockProject,
         record: PublishedVideoRecord
     ) -> some View {
-        GroupBox("Videoanalyse") {
+        GroupBox("Kanal- & Videoanalyse") {
             VStack(alignment: .leading, spacing: 12) {
                 VStack(alignment: .leading, spacing: 10) {
                     YouTubeEmbeddedPlayer(
@@ -469,6 +477,18 @@ private struct OverviewView: View {
 
                     Text(project.title)
                         .font(.headline)
+
+                    if let category =
+                        session.projectChannelCategoryTitle(
+                            for: project.id
+                        ) {
+                        Label(
+                            "Kanal-Kategorie: \(category)",
+                            systemImage: "tag"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
                 }
 
                 let due = GrowthObservationPlanner().duePlans(
@@ -485,7 +505,10 @@ private struct OverviewView: View {
                     HStack {
                         Button {
                             Task {
-                                await session.collectDueGrowthObservations()
+                                await session
+                                    .collectDueGrowthObservations()
+                                await session
+                                    .collectChannelAnalytics()
                             }
                         } label: {
                             HStack {
@@ -495,7 +518,7 @@ private struct OverviewView: View {
                                 Label(
                                     session.isCollectingAnalytics
                                         ? "Daten werden aktualisiert …"
-                                        : "Daten aktualisieren",
+                                        : "Kanal & Video aktualisieren",
                                     systemImage: "chart.line.uptrend.xyaxis"
                                 )
                             }
@@ -503,7 +526,6 @@ private struct OverviewView: View {
                         .buttonStyle(.borderedProminent)
                         .disabled(
                             session.isCollectingAnalytics
-                            || due.isEmpty
                         )
 
                         if due.isEmpty {
@@ -552,6 +574,53 @@ private struct OverviewView: View {
                     )
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                }
+
+                if let channel =
+                    session.latestChannelAnalytics {
+                    Divider()
+                    VStack(
+                        alignment: .leading,
+                        spacing: 7
+                    ) {
+                        Text("Kanalanalyse · 28 Tage")
+                            .font(.headline)
+                        HStack(spacing: 16) {
+                            if let views = channel.views {
+                                Label(
+                                    "\(views) Views",
+                                    systemImage: "play.rectangle"
+                                )
+                            }
+                            if let minutes =
+                                channel.estimatedMinutesWatched {
+                                Label(
+                                    String(
+                                        format:
+                                            "%.0f Min. Wiedergabezeit",
+                                        minutes
+                                    ),
+                                    systemImage: "clock"
+                                )
+                            }
+                            if let net =
+                                channel.netSubscribers {
+                                Label(
+                                    "\(net >= 0 ? "+" : "")\(net) Abonnenten",
+                                    systemImage: "person.badge.plus"
+                                )
+                            }
+                        }
+                        .font(.caption)
+
+                        Text(
+                            channel.startDate
+                            + " – "
+                            + channel.endDate
+                        )
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                    }
                 }
 
                 if let learning = session.latestGrowthLearning {

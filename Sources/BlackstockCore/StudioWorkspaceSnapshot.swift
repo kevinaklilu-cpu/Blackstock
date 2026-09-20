@@ -376,6 +376,22 @@ public struct ProjectWorkspaceStore: Sendable {
         try data.write(to: primaryURL, options: [.atomic])
     }
 
+    public func deleteProject(
+        projectID: UUID
+    ) throws {
+        let directory = rootURL.appendingPathComponent(
+            projectID.uuidString,
+            isDirectory: true
+        )
+        if FileManager.default.fileExists(
+            atPath: directory.path
+        ) {
+            try FileManager.default.removeItem(
+                at: directory
+            )
+        }
+    }
+
     public func load(
         projectID: UUID
     ) throws -> StudioWorkspaceSnapshot? {

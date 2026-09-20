@@ -8,6 +8,7 @@ public struct BlackstockProject: Codable, Sendable, Equatable, Identifiable {
     public let strategyVersion: Int
     public let createdAt: Date
     public private(set) var updatedAt: Date
+    public private(set) var pausedAt: Date?
 
     public init(
         id: UUID = UUID(),
@@ -16,7 +17,8 @@ public struct BlackstockProject: Codable, Sendable, Equatable, Identifiable {
         stage: BlackstockStage = .production,
         strategyVersion: Int,
         createdAt: Date,
-        updatedAt: Date
+        updatedAt: Date,
+        pausedAt: Date? = nil
     ) {
         self.id = id
         self.title = title
@@ -25,10 +27,29 @@ public struct BlackstockProject: Codable, Sendable, Equatable, Identifiable {
         self.strategyVersion = strategyVersion
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.pausedAt = pausedAt
     }
 
-    public mutating func advance(to destination: BlackstockStage, at date: Date) -> Bool {
-        guard stage.canTransition(to: destination) else { return false }
+    public var isPaused: Bool {
+        pausedAt != nil
+    }
+
+    public mutating func setPaused(
+        _ paused: Bool,
+        at date: Date
+    ) {
+        pausedAt = paused ? date : nil
+        updatedAt = date
+    }
+
+    public mutating func advance(
+        to destination: BlackstockStage,
+        at date: Date
+    ) -> Bool {
+        guard !isPaused,
+              stage.canTransition(to: destination) else {
+            return false
+        }
         stage = destination
         updatedAt = date
         return true
