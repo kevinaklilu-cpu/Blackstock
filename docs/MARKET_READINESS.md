@@ -37,6 +37,8 @@ Danach werden die drei realen Evidenzdateien jeweils mit ihren eigenen fail-clos
 - `Build/validate_production_release_evidence.py`
 - `Build/validate_in_app_update_evidence.py`
 
+Alle Evidence-Dateien werden als striktes JSON behandelt. Nicht standardkonforme numerische Werte wie `NaN`, `Infinity` oder `-Infinity` werden abgelehnt; numerische Capture-Dauern und Updater-Zeitstempel müssen zusätzlich endlich sein. Produktions-Manifest- und Paket-URLs unterliegen auch in den Offline-Validatoren derselben Produktions-HTTPS-Regel wie der eigentliche Release-Pfad.
+
 Anschließend bindet der Readiness-Verifier die Nachweise **untereinander**.
 
 ## Cross-Binding
@@ -45,6 +47,8 @@ Alle Nachweise müssen zu demselben Release gehören.
 
 Der Verifier verlangt deshalb:
 
+- identische Ausgangsversion des Update-Pfads zwischen Published-Release-Verifikation und realem In-App-Update,
+- identischen Ausgangs-Build dieses Update-Pfads,
 - identische Blackstock-Zielversion,
 - identischen Ziel-Build,
 - identische Produktions-Manifest-URL,
