@@ -67,7 +67,7 @@ final class BlackstockSession: ObservableObject {
     @Published var channelRegionCode = ""
     @Published var channelCategoryID = ""
     @Published var opportunityTimeWindow:
-        OpportunityTimeWindow = .last7Days
+        OpportunityTimeWindow = .allTime
     @Published var channelAudienceSetting:
         YouTubeChannelAudienceSetting = .perVideo
     @Published var isLoadingYouTubeSetupOptions = false
@@ -96,7 +96,79 @@ final class BlackstockSession: ObservableObject {
     @Published private(set) var workspaceRightsResponsibilityAccepted: Bool
 
     private var tokenSet: GoogleOAuthTokenSet?
+    private var tokenExpiresAt: Date?
     private var cachedPublishingJournal: ExternalActionJournal?
+
+    private var connectedOAuthScopes: Set<GoogleOAuthScope> {
+        [
+            .youtubeReadOnly,
+            .youtubeUpload,
+            .youtubeForceSSL,
+            .analyticsReadOnly
+        ]
+    }
+
+    private var connectedOAuthScopeString: String {
+        connectedOAuthScopes
+            .map(\.rawValue)
+            .sorted()
+            .joined(separator: " ")
+    }
+
+    private func cacheRuntimeToken(
+        _ tokens: GoogleOAuthTokenSet,
+        fallbackScopeString: String? = nil,
+        now: Date = Date()
+    ) {
+        let returnedScope = tokens.scope?
+            .trimmingCharacters(
+                in: .whitespacesAndNewlines
+            ) ?? ""
+        let fallbackScope = fallbackScopeString?
+            .trimmingCharacters(
+                in: .whitespacesAndNewlines
+            ) ?? ""
+        let effectiveScope =
+            returnedScope.isEmpty
+            ? fallbackScope
+            : returnedScope
+
+        tokenSet = GoogleOAuthTokenSet(
+            accessToken: tokens.accessToken,
+            refreshToken: tokens.refreshToken,
+            expiresIn: tokens.expiresIn,
+            tokenType: tokens.tokenType,
+            scope: effectiveScope.isEmpty
+                ? nil
+                : effectiveScope
+        )
+        tokenExpiresAt = now.addingTimeInterval(
+            TimeInterval(
+                max(tokens.expiresIn - 120, 60)
+            )
+        )
+    }
+
+    private func validRuntimeAccessToken(
+        requiredScopes: Set<GoogleOAuthScope>,
+        now: Date = Date()
+    ) -> String? {
+        guard let tokenSet,
+              !tokenSet.accessToken.isEmpty,
+              let tokenExpiresAt,
+              tokenExpiresAt > now.addingTimeInterval(30) else {
+            return nil
+        }
+
+        let granted =
+            GoogleOAuthScopePlanner.parseGrantedScopes(
+                tokenSet.scope
+            )
+        guard requiredScopes.isSubset(of: granted) else {
+            return nil
+        }
+        return tokenSet.accessToken
+    }
 
     init() {
         BlackstockUpdateAudit.reconcilePostUpdateLaunch()
@@ -255,6 +327,7 @@ final class BlackstockSession: ObservableObject {
             withPrefix: "youtube."
         )
         tokenSet = nil
+        tokenExpiresAt = nil
         publishingAuthorizedChannelID = nil
         analyticsAuthorizedChannelID = nil
         lastPublishingResult = nil
@@ -472,12 +545,7 @@ final class BlackstockSession: ObservableObject {
             let request = GoogleOAuthAuthorizationRequest(
                 clientID: effectiveClientID,
                 redirectURI: redirectURI,
-                scopes: [
-                    .youtubeReadOnly,
-                    .youtubeUpload,
-                    .youtubeForceSSL,
-                    .analyticsReadOnly
-                ],
+                scopes: connectedOAuthScopes,
                 state: state,
                 pkce: pkce
             )
@@ -517,7 +585,10 @@ final class BlackstockSession: ObservableObject {
                 return
             }
 
-            tokenSet = tokens
+            cacheRuntimeToken(
+                tokens,
+                fallbackScopeString: connectedOAuthScopeString
+            )
             channels = identities
             selectedChannelID = nil
             step = .channel
@@ -549,12 +620,18 @@ final class BlackstockSession: ObservableObject {
                         account: "youtube.\(id).refreshToken"
                     )
                 }
-                if let scope = tokenSet.scope {
-                    try BlackstockKeychain.write(
-                        scope,
-                        account: "youtube.\(id).scopes"
-                    )
-                }
+                let returnedScope = tokenSet.scope?
+                    .trimmingCharacters(
+                        in: .whitespacesAndNewlines
+                    ) ?? ""
+                let persistedScope =
+                    returnedScope.isEmpty
+                    ? connectedOAuthScopeString
+                    : returnedScope
+                try BlackstockKeychain.write(
+                    persistedScope,
+                    account: "youtube.\(id).scopes"
+                )
                 try BlackstockKeychain.write(
                     effectiveClientID,
                     account: "youtube.\(id).oauthClientID"
@@ -781,7 +858,10 @@ final class BlackstockSession: ObservableObject {
                 account: "youtube.\(project.targetChannelID).oauthClientID"
             )
 
-            tokenSet = tokens
+            cacheRuntimeToken(
+                tokens,
+                fallbackScopeString: connectedOAuthScopeString
+            )
             publishingAuthorizedChannelID = project.targetChannelID
         } catch {
             publishingAuthorizedChannelID = nil
@@ -1042,7 +1122,10 @@ final class BlackstockSession: ObservableObject {
                 account: "youtube.\(project.targetChannelID).oauthClientID"
             )
 
-            tokenSet = tokens
+            cacheRuntimeToken(
+                tokens,
+                fallbackScopeString: connectedOAuthScopeString
+            )
             analyticsAuthorizedChannelID = project.targetChannelID
         } catch {
             analyticsAuthorizedChannelID = nil
@@ -1217,6 +1300,9 @@ final class BlackstockSession: ObservableObject {
         let storedScopes = BlackstockKeychain.read(
             "youtube.\(targetChannelID).scopes"
         )
+        let requiredScopes: Set<GoogleOAuthScope> = [
+            .youtubeReadOnly
+        ]
         let plan = GoogleOAuthScopePlanner().plan(
             capabilities: [.discoveryReadOnly],
             tokenScopeString: storedScopes
@@ -1224,20 +1310,35 @@ final class BlackstockSession: ObservableObject {
         guard plan.state == .alreadyAuthorized else {
             throw PublishingSessionError.missingScopes
         }
-        try validateStoredOAuthClient(for: targetChannelID)
+        try validateStoredOAuthClient(
+            for: targetChannelID
+        )
+
+        if let cached = validRuntimeAccessToken(
+            requiredScopes: requiredScopes
+        ) {
+            return cached
+        }
 
         let refreshToken = BlackstockKeychain.read(
             "youtube.\(targetChannelID).refreshToken"
         )
         if !refreshToken.isEmpty {
-            let refreshed = try await GoogleOAuthTokenRefresher().refresh(
-                refreshToken: refreshToken,
-                clientID: effectiveClientID,
-                clientSecret: effectiveClientSecret
+            let refreshed =
+                try await GoogleOAuthTokenRefresher()
+                    .refresh(
+                        refreshToken: refreshToken,
+                        clientID: effectiveClientID,
+                        clientSecret: effectiveClientSecret
+                    )
+            cacheRuntimeToken(
+                refreshed,
+                fallbackScopeString: storedScopes
             )
             try BlackstockKeychain.write(
                 refreshed.accessToken,
-                account: "youtube.\(targetChannelID).accessToken"
+                account:
+                    "youtube.\(targetChannelID).accessToken"
             )
             return refreshed.accessToken
         }
@@ -1322,27 +1423,49 @@ final class BlackstockSession: ObservableObject {
         let storedScopes = BlackstockKeychain.read(
             "youtube.\(targetChannelID).scopes"
         )
+        let requiredScopes: Set<GoogleOAuthScope> = [
+            .youtubeReadOnly,
+            .analyticsReadOnly
+        ]
         let plan = GoogleOAuthScopePlanner().plan(
-            capabilities: [.discoveryReadOnly, .analytics],
+            capabilities: [
+                .discoveryReadOnly,
+                .analytics
+            ],
             tokenScopeString: storedScopes
         )
         guard plan.state == .alreadyAuthorized else {
             throw PublishingSessionError.missingScopes
         }
-        try validateStoredOAuthClient(for: targetChannelID)
+        try validateStoredOAuthClient(
+            for: targetChannelID
+        )
+
+        if let cached = validRuntimeAccessToken(
+            requiredScopes: requiredScopes
+        ) {
+            return cached
+        }
 
         let refreshToken = BlackstockKeychain.read(
             "youtube.\(targetChannelID).refreshToken"
         )
         if !refreshToken.isEmpty {
-            let refreshed = try await GoogleOAuthTokenRefresher().refresh(
-                refreshToken: refreshToken,
-                clientID: effectiveClientID,
-                clientSecret: effectiveClientSecret
+            let refreshed =
+                try await GoogleOAuthTokenRefresher()
+                    .refresh(
+                        refreshToken: refreshToken,
+                        clientID: effectiveClientID,
+                        clientSecret: effectiveClientSecret
+                    )
+            cacheRuntimeToken(
+                refreshed,
+                fallbackScopeString: storedScopes
             )
             try BlackstockKeychain.write(
                 refreshed.accessToken,
-                account: "youtube.\(targetChannelID).accessToken"
+                account:
+                    "youtube.\(targetChannelID).accessToken"
             )
             return refreshed.accessToken
         }
@@ -1362,27 +1485,51 @@ final class BlackstockSession: ObservableObject {
         let storedScopes = BlackstockKeychain.read(
             "youtube.\(targetChannelID).scopes"
         )
+        let requiredScopes: Set<GoogleOAuthScope> = [
+            .youtubeReadOnly,
+            .youtubeUpload,
+            .youtubeForceSSL
+        ]
         let plan = GoogleOAuthScopePlanner().plan(
-            capabilities: [.discoveryReadOnly, .upload, .packaging],
+            capabilities: [
+                .discoveryReadOnly,
+                .upload,
+                .packaging
+            ],
             tokenScopeString: storedScopes
         )
         guard plan.state == .alreadyAuthorized else {
             throw PublishingSessionError.missingScopes
         }
-        try validateStoredOAuthClient(for: targetChannelID)
+        try validateStoredOAuthClient(
+            for: targetChannelID
+        )
+
+        if let cached = validRuntimeAccessToken(
+            requiredScopes: requiredScopes
+        ) {
+            return cached
+        }
 
         let refreshToken = BlackstockKeychain.read(
             "youtube.\(targetChannelID).refreshToken"
         )
         if !refreshToken.isEmpty {
-            let refreshed = try await GoogleOAuthTokenRefresher().refresh(
-                refreshToken: refreshToken,
-                clientID: effectiveClientID,
-                clientSecret: effectiveClientSecret
+            let refreshed =
+                try await GoogleOAuthTokenRefresher()
+                    .refresh(
+                        refreshToken: refreshToken,
+                        clientID: effectiveClientID,
+                        clientSecret: effectiveClientSecret
+                    )
+            cacheRuntimeToken(
+                refreshed,
+                fallbackScopeString: storedScopes
             )
             try BlackstockKeychain.write(
                 refreshed.accessToken,
-                account: "youtube.\(targetChannelID).accessToken"
+                account:
+                    "youtube.\(targetChannelID).accessToken"
             )
             return refreshed.accessToken
         }
@@ -1659,8 +1806,20 @@ final class BlackstockSession: ObservableObject {
         let storedScopes = BlackstockKeychain.read(
             "youtube.\(targetChannelID).scopes"
         )
-        let activeScopeString =
-            tokenSet?.scope ?? storedScopes
+        let runtimeScope = tokenSet?.scope?
+            .trimmingCharacters(
+                in: .whitespacesAndNewlines
+            ) ?? ""
+        let activeScopeString: String
+        if !runtimeScope.isEmpty {
+            activeScopeString = runtimeScope
+        } else if !storedScopes.isEmpty {
+            activeScopeString = storedScopes
+        } else if tokenSet != nil {
+            activeScopeString = connectedOAuthScopeString
+        } else {
+            activeScopeString = ""
+        }
         let plan = GoogleOAuthScopePlanner().plan(
             capabilities: [
                 .discoveryReadOnly,
@@ -1717,12 +1876,19 @@ final class BlackstockSession: ObservableObject {
                 account:
                     "youtube.\(targetChannelID).oauthClientID"
             )
-            tokenSet = tokens
+            cacheRuntimeToken(
+                tokens,
+                fallbackScopeString: connectedOAuthScopeString
+            )
             return tokens.accessToken
         }
 
-        if let accessToken = tokenSet?.accessToken,
-           !accessToken.isEmpty {
+        if let accessToken = validRuntimeAccessToken(
+            requiredScopes: [
+                .youtubeReadOnly,
+                .youtubeForceSSL
+            ]
+        ) {
             return accessToken
         }
 
@@ -2064,17 +2230,15 @@ final class BlackstockSession: ObservableObject {
                     maxResults: 12,
                     order: .views
                 )
-            guard !candidates.isEmpty else {
-                step = .topic
-                errorMessage =
-                    "YouTube liefert für diese Kategorie und Region gerade keine Videos. Wähle eine andere Kategorie oder Region."
-                return
-            }
-
             opportunities = candidates
             step = .opportunities
+
+            if candidates.isEmpty {
+                errorMessage =
+                    "Für diese Auswahl sind gerade keine Videos verfügbar. Ändere Kategorie, Region oder Zeitraum."
+            }
         } catch {
-            step = .topic
+            step = .opportunities
             errorMessage =
                 "Videos konnten nicht geladen werden: \(describe(error))"
         }
@@ -2658,7 +2822,7 @@ final class BlackstockSession: ObservableObject {
         contentLanguage = "de"
         channelRegionCode = ""
         channelCategoryID = ""
-        opportunityTimeWindow = .last7Days
+        opportunityTimeWindow = .allTime
         channelAudienceSetting = .perVideo
         channelAudienceAppliedToYouTube = nil
         youtubeLanguages = []
@@ -2857,6 +3021,7 @@ final class BlackstockSession: ObservableObject {
         clearChannelSelection: Bool
     ) {
         tokenSet = nil
+        tokenExpiresAt = nil
         publishingAuthorizedChannelID = nil
         analyticsAuthorizedChannelID = nil
         lastPublishingResult = nil

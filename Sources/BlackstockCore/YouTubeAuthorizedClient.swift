@@ -230,6 +230,10 @@ public struct YouTubeAuthorizedClient: Sendable {
             .init(
                 name: "order",
                 value: order.youtubeOrderParameter
+            ),
+            .init(
+                name: "videoEmbeddable",
+                value: "true"
             )
         ]
         let trimmedQuery = query.trimmingCharacters(
@@ -428,7 +432,8 @@ public struct YouTubeAuthorizedClient: Sendable {
         )
 
         return response.items.compactMap { video in
-            guard let snippet = video.snippet else {
+            guard video.status?.embeddable != false,
+                  let snippet = video.snippet else {
                 return nil
             }
             return YouTubeOpportunityCandidate(

@@ -5,34 +5,38 @@ struct BlackstockBrandMark: View {
     var width: CGFloat = 44
 
     private var height: CGFloat {
-        width * 0.68
+        width * 0.70
     }
 
     var body: some View {
         ZStack {
             RoundedRectangle(
-                cornerRadius: width * 0.22,
+                cornerRadius: width * 0.24,
                 style: .continuous
             )
-            .fill(Color(red: 1.0, green: 0.0, blue: 0.0))
+            .fill(BlackstockDesign.accent)
+
+            RoundedRectangle(
+                cornerRadius: width * 0.24,
+                style: .continuous
+            )
+            .strokeBorder(
+                Color.white.opacity(0.12),
+                lineWidth: max(width * 0.025, 1)
+            )
 
             Text("B")
                 .font(
                     .system(
-                        size: width * 0.48,
-                        weight: .black,
-                        design: .rounded
+                        size: width * 0.47,
+                        weight: .heavy,
+                        design: .default
                     )
                 )
                 .foregroundStyle(.white)
-                .offset(y: -width * 0.01)
+                .offset(y: -width * 0.012)
         }
         .frame(width: width, height: height)
-        .shadow(
-            color: Color.black.opacity(0.14),
-            radius: 1.5,
-            y: 1
-        )
         .accessibilityHidden(true)
     }
 }

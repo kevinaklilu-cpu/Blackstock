@@ -21,6 +21,7 @@ REQUIRED = {
         'name: "relevanceLanguage"',
         'name: "publishedAfter"',
         'name: "chart", value: "mostPopular"',
+        'name: "videoEmbeddable"',
         "OpportunityTimeWindow",
     ],
     "Sources/BlackstockApp/FirstRunView.swift": [
@@ -31,6 +32,16 @@ REQUIRED = {
         "Die Angaben stammen direkt von YouTube.",
         "Datenabruf:",
         "YouTubeEmbeddedPlayer(videoID:",
+    ],
+    "Sources/BlackstockApp/YouTubeEmbeddedPlayer.swift": [
+        "WKScriptMessageHandler",
+        "strict-origin-when-cross-origin",
+        "https://blackstock.app",
+        "onError",
+        "101",
+        "150",
+        "153",
+        "Auf YouTube ansehen",
     ],
     "Tests/BlackstockCoreTests/OpportunityTransparencyTests.swift": [
         "testMissingYouTubeSignalsStayMissingInsteadOfBeingEstimated",

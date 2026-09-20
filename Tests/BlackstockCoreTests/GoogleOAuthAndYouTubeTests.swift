@@ -651,6 +651,10 @@ final class GoogleOAuthAndYouTubeTests: XCTestCase {
                 values["relevanceLanguage"],
                 "de"
             )
+            XCTAssertEqual(
+                values["videoEmbeddable"],
+                "true"
+            )
 
             let response = HTTPURLResponse(
                 url: url,

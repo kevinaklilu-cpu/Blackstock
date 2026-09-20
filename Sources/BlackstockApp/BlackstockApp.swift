@@ -49,21 +49,17 @@ private struct WorkspaceShell: View {
         NavigationSplitView {
             VStack(spacing: 0) {
                 HStack(alignment: .center, spacing: 10) {
-                    BlackstockBrandMark(width: 34)
-                        .frame(width: 34, height: 24)
+                    BlackstockBrandMark(width: 40)
+
                     Text("Blackstock")
-                        .font(
-                            .system(
-                                size: 17,
-                                weight: .semibold,
-                                design: .rounded
-                            )
-                        )
+                        .font(.title3.weight(.bold))
                         .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+
                     Spacer(minLength: 0)
                 }
-                .frame(maxWidth: .infinity, minHeight: 48)
-                .padding(.horizontal, 14)
+                .frame(maxWidth: .infinity, minHeight: 62)
+                .padding(.horizontal, 16)
                 .background(BlackstockDesign.sidebar)
 
                 Divider()
@@ -71,9 +67,9 @@ private struct WorkspaceShell: View {
                 List(selection: $selection) {
                     Label("Start", systemImage: "house")
                         .tag("Übersicht")
-                    Label("Videos", systemImage: "play.rectangle")
+                    Label("Entdecken", systemImage: "play.rectangle.fill")
                         .tag("Chancen")
-                    Label("Projekte", systemImage: "folder")
+                    Label("Projekte", systemImage: "folder.fill")
                         .tag("Projekte")
                     if session.activeProject?.stage.journeyGuidance
                         .recommendedSurface == .studio {
@@ -88,6 +84,11 @@ private struct WorkspaceShell: View {
                 .background(BlackstockDesign.sidebar)
             }
             .background(BlackstockDesign.sidebar)
+            .navigationSplitViewColumnWidth(
+                min: 190,
+                ideal: 220,
+                max: 260
+            )
         } detail: {
             switch selection {
             case "Chancen":

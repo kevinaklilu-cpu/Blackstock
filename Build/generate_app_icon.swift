@@ -39,20 +39,23 @@ func render(size: Int, scale: Int, name: String) throws {
     NSRect(x: 0, y: 0, width: size, height: size).fill()
 
     let rect = NSRect(
-        x: CGFloat(size) * 0.10,
-        y: CGFloat(size) * 0.22,
-        width: CGFloat(size) * 0.80,
-        height: CGFloat(size) * 0.56
+        x: CGFloat(size) * 0.085,
+        y: CGFloat(size) * 0.215,
+        width: CGFloat(size) * 0.83,
+        height: CGFloat(size) * 0.58
     )
     let path = NSBezierPath(
         roundedRect: rect,
-        xRadius: CGFloat(size) * 0.14,
-        yRadius: CGFloat(size) * 0.14
+        xRadius: CGFloat(size) * 0.145,
+        yRadius: CGFloat(size) * 0.145
     )
     NSColor(red: 1, green: 0, blue: 0, alpha: 1).setFill()
     path.fill()
 
-    let font = NSFont.systemFont(ofSize: CGFloat(size) * 0.34, weight: .black)
+    let font = NSFont.systemFont(
+        ofSize: CGFloat(size) * 0.35,
+        weight: .heavy
+    )
     let attrs: [NSAttributedString.Key: Any] = [
         .font: font,
         .foregroundColor: NSColor.white

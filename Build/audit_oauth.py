@@ -167,6 +167,6 @@ if errors:
 
 print(
     "OAuth audit passed: desktop JSON import, client-bound Keychain "
-    "credentials (including optional desktop secret in Keychain), PKCE/state, root loopback redirect and capability-based "
-    "reauthorization remain connected."
+    "credentials, PKCE/state, root loopback redirect and one-time connected "
+    "YouTube authorization remain connected."
 )

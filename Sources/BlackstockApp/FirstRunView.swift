@@ -262,7 +262,7 @@ struct FirstRunView: View {
             .accessibilityLabel("Trend-Zeitraum")
 
             Picker(
-                "YouTube-Zielgruppe",
+                "Zielgruppe",
                 selection: $session.channelAudienceSetting
             ) {
                 ForEach(
@@ -288,7 +288,7 @@ struct FirstRunView: View {
             .pickerStyle(.menu)
 
             Text(
-                "Diese Auswahl wird als Standard für deinen Blackstock-Kanal verwendet."
+                "Diese Auswahl wird als Standard für deinen Kanal verwendet."
             )
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -327,7 +327,7 @@ struct FirstRunView: View {
             if session.officialChannelSettingsVerified {
                 VStack(alignment: .leading, spacing: 6) {
                     Label(
-                        "YouTube-Kanaleinstellungen bestätigt",
+                        "Kanaleinstellungen gespeichert",
                         systemImage: "checkmark.seal.fill"
                     )
                     .font(.callout.weight(.semibold))
@@ -335,13 +335,13 @@ struct FirstRunView: View {
 
                     if session.channelAudienceAppliedToYouTube == false {
                         Text(
-                            "Die Zielgruppe konnte von YouTube nicht kanalweit bestätigt werden. Blackstock speichert deine Auswahl und setzt sie beim jeweiligen Video-Upload."
+                            "Die Zielgruppe ist als Standard gespeichert und wird beim Veröffentlichen übernommen."
                         )
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     } else if session.channelAudienceAppliedToYouTube == nil {
                         Text(
-                            "Die Zielgruppe wird für jedes Video einzeln festgelegt."
+                            "Die Zielgruppe wird beim Veröffentlichen für jedes Video festgelegt."
                         )
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -679,7 +679,7 @@ struct FirstRunView: View {
         switch session.step {
         case .welcome: "1 · Google"
         case .channel: "2 · YouTube-Kanal"
-        case .topic: "3 · YouTube-Einstellungen"
+        case .topic: "3 · Kanal"
         case .language: "4 · Rechte"
         case .preparing: "5 · Vorbereitung"
         case .opportunities: "6 · Video"
@@ -701,7 +701,7 @@ struct FirstRunView: View {
         switch session.step {
         case .welcome: "Verknüpfe deinen YouTube-Kanal."
         case .channel: "Wähle den Kanal, mit dem du arbeiten willst."
-        case .topic: "Lege den Kanal mit YouTube-Parametern und einer festen Blackstock-Kanal-Kategorie fest."
+        case .topic: "Wähle Region, Sprache, Kanal-Kategorie und Zielgruppe."
         case .language: "Bestätige die Nutzungsrechte für deinen Arbeitsbereich."
         case .preparing: "Blackstock lädt die benötigten Kanaldaten."
         case .opportunities: "Wähle ein Video für dein erstes Clip-Projekt."

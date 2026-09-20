@@ -1,4 +1,5 @@
 #if os(macOS)
+import AppKit
 import SwiftUI
 import AVFoundation
 import AVKit
@@ -12,8 +13,8 @@ struct StudioView: View {
     let contentLanguage: String
 
     @StateObject private var state = StudioState()
-    @State private var showImporter = false
     @State private var pendingURL: URL?
+    @State private var showOptionalCapture = false
     @State private var pendingCaptureKind: CaptureKind?
     @State private var showRightsSheet = false
     @State private var rightsSelection: ProductionMediaAuthorization = .owned
@@ -44,23 +45,6 @@ struct StudioView: View {
             }
         }
         .background(BlackstockDesign.canvas)
-        .fileImporter(
-            isPresented: $showImporter,
-            allowedContentTypes: [.movie],
-            allowsMultipleSelection: false
-        ) { result in
-            if case .success(let urls) = result, let url = urls.first {
-                pendingURL = url
-                pendingCaptureKind = nil
-                if session.workspaceRightsAttestation?
-                    .permitsUserDirectedProduction == true {
-                    importPendingMedia()
-                } else {
-                    rightsConfirmed = false
-                    showRightsSheet = true
-                }
-            }
-        }
         .fileImporter(
             isPresented: $showClipExportFolderImporter,
             allowedContentTypes: [.folder],
@@ -133,9 +117,9 @@ struct StudioView: View {
             Spacer()
 
             Button {
-                showImporter = true
+                presentVideoPicker()
             } label: {
-                Label("Medien hinzufügen", systemImage: "plus")
+                Label("Videodatei hinzufügen", systemImage: "plus")
             }
             .buttonStyle(.bordered)
 
@@ -266,7 +250,7 @@ struct StudioView: View {
                             == .productionMediaRequired,
                        currentStage == .production {
                         Button {
-                            showImporter = true
+                            presentVideoPicker()
                         } label: {
                             Label(
                                 "Schnittquelle hinzufügen",
@@ -400,7 +384,7 @@ struct StudioView: View {
 
                 HStack(spacing: 10) {
                     Button {
-                        showImporter = true
+                        presentVideoPicker()
                     } label: {
                         Label(
                             "Schnittquelle hinzufügen",
@@ -444,13 +428,27 @@ struct StudioView: View {
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: 520)
                 Button("Video auswählen …") {
-                    showImporter = true
+                    presentVideoPicker()
                 }
                 .buttonStyle(.borderedProminent)
 
-                DisclosureGroup(
-                    "Optionale eigene Aufnahme"
-                ) {
+                Button {
+                    showOptionalCapture.toggle()
+                } label: {
+                    Label(
+                        showOptionalCapture
+                            ? "Eigene Aufnahme ausblenden"
+                            : "Eigene Aufnahme verwenden",
+                        systemImage:
+                            showOptionalCapture
+                            ? "chevron.up"
+                            : "video.badge.plus"
+                    )
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+
+                if showOptionalCapture {
                     CaptureCapabilityPanel { url, kind in
                         pendingURL = url
                         pendingCaptureKind = kind
@@ -464,9 +462,8 @@ struct StudioView: View {
                         }
                     }
                     .frame(maxWidth: 620)
-                    .padding(.top, 8)
+                    .padding(.top, 4)
                 }
-                .frame(maxWidth: 620)
 
                 Spacer()
             }
@@ -2379,6 +2376,32 @@ struct StudioView: View {
         .frame(width: 520)
     }
 
+    private func presentVideoPicker() {
+        let panel = NSOpenPanel()
+        panel.title = "Videodatei auswählen"
+        panel.prompt = "Auswählen"
+        panel.allowedContentTypes = [.movie]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+
+        guard panel.runModal() == .OK,
+              let url = panel.url else {
+            return
+        }
+
+        pendingURL = url
+        pendingCaptureKind = nil
+
+        if session.workspaceRightsAttestation?
+            .permitsUserDirectedProduction == true {
+            importPendingMedia()
+        } else {
+            rightsConfirmed = false
+            showRightsSheet = true
+        }
+    }
+
     private func importPendingMedia() {
         guard let url = pendingURL,
               let attestation =
@@ -2741,9 +2764,23 @@ struct StudioView: View {
 
                 if state.asset != nil {
                     Divider()
-                    DisclosureGroup(
-                        "Optionale Aufnahme hinzufügen"
-                    ) {
+                    Button {
+                        showOptionalCapture.toggle()
+                    } label: {
+                        Label(
+                            showOptionalCapture
+                                ? "Aufnahme ausblenden"
+                                : "Eigene Aufnahme hinzufügen",
+                            systemImage:
+                                showOptionalCapture
+                                ? "chevron.up"
+                                : "video.badge.plus"
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+
+                    if showOptionalCapture {
                         CaptureCapabilityPanel { url, kind in
                             pendingURL = url
                             pendingCaptureKind = kind
