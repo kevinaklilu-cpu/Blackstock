@@ -313,7 +313,7 @@ jobs:
           EVIDENCE="$RUNNER_TEMP/in-app-update-evidence.json"
           cat > "$EVIDENCE" <<'JSON'
           {
-            "schemaVersion": 5,
+            "schemaVersion": 6,
             "value": {
               "id": "00000000-0000-0000-0000-000000000001",
               "currentVersion": "0.9.0",
@@ -325,6 +325,7 @@ jobs:
               "currentDeveloperIDApplicationVerified": true,
               "currentInstallerReceiptPackageID": "de.blackstock.app",
               "currentInstallerReceiptVersion": "0.9.0",
+              "currentInstallerReceiptInstalledAt": 809999000.0,
               "currentInstallerReceiptVerified": true,
               "manifestURL": "https://updates.blackstock.app/update-manifest.json",
               "expectedInstallerTeamID": "ABC123TEAM",
@@ -347,6 +348,7 @@ jobs:
               "observedDeveloperIDApplicationVerified": true,
               "observedInstallerReceiptPackageID": "de.blackstock.app",
               "observedInstallerReceiptVersion": "1.0.0",
+              "observedInstallerReceiptInstalledAt": 810000003.0,
               "observedInstallerReceiptVerified": true,
               "postUpdateLaunchVerifiedAt": 810000004.0
             }
@@ -417,6 +419,19 @@ jobs:
           PY
           if python3 Build/validate_in_app_update_evidence.py "$EVIDENCE"; then
             echo "Non-production post-update app path was unexpectedly accepted." >&2
+            exit 1
+          fi
+
+          cp "$RUNNER_TEMP/in-app-update-evidence-valid.json" "$EVIDENCE"
+          python3 - "$EVIDENCE" <<'PY'
+          import json, sys
+          path = sys.argv[1]
+          data = json.load(open(path))
+          data["value"]["observedInstallerReceiptInstalledAt"] = 810000001.0
+          json.dump(data, open(path, "w"))
+          PY
+          if python3 Build/validate_in_app_update_evidence.py "$EVIDENCE"; then
+            echo "Target installer receipt predating installer handoff was unexpectedly accepted." >&2
             exit 1
           fi
 
@@ -558,7 +573,7 @@ jobs:
           }
 
           updater = {
-              "schemaVersion": 5,
+              "schemaVersion": 6,
               "value": {
                   "id": "00000000-0000-0000-0000-000000000001",
                   "currentVersion": "0.9.0",
@@ -570,6 +585,7 @@ jobs:
                   "currentDeveloperIDApplicationVerified": True,
                   "currentInstallerReceiptPackageID": "de.blackstock.app",
                   "currentInstallerReceiptVersion": "0.9.0",
+                  "currentInstallerReceiptInstalledAt": 809999000.0,
                   "currentInstallerReceiptVerified": True,
                   "manifestURL": "https://updates.blackstock.app/update-manifest.json",
                   "expectedInstallerTeamID": "ABC123TEAM",
@@ -592,6 +608,7 @@ jobs:
                   "observedDeveloperIDApplicationVerified": True,
                   "observedInstallerReceiptPackageID": "de.blackstock.app",
                   "observedInstallerReceiptVersion": "1.0.0",
+                  "observedInstallerReceiptInstalledAt": 810000003.0,
                   "observedInstallerReceiptVerified": True,
                   "postUpdateLaunchVerifiedAt": 810000004.0,
               },
@@ -613,6 +630,8 @@ jobs:
           grep -q '"installedAppPath": "/Applications/Blackstock.app"' "$ROOT/market-readiness.json"
           grep -q '"sourceInstallerReceiptVersion": "0.9.0"' "$ROOT/market-readiness.json"
           grep -q '"installerReceiptVersion": "1.0.0"' "$ROOT/market-readiness.json"
+          grep -q '"sourceInstallerReceiptInstalledAt"' "$ROOT/market-readiness.json"
+          grep -q '"installerReceiptInstalledAt"' "$ROOT/market-readiness.json"
 
           python3 - "$ROOT/capture.json" <<'PY'
           import json
