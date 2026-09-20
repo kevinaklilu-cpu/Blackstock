@@ -1939,7 +1939,7 @@ struct StudioView: View {
                     kind: .microphone,
                     projectID: project.id,
                     rightsBasis:
-                        "Workspace-Nutzererklärung "
+                        "Arbeitsbereich-Nutzererklärung "
                         + attestation.statementVersion,
                     rightsEvidence: sourceEvidence,
                     rightsConfirmed: true
@@ -1968,7 +1968,7 @@ struct StudioView: View {
                     authorization:
                         .userDeclaredResponsibility,
                     rightsEvidence:
-                        "Workspace-Nutzererklärung "
+                        "Arbeitsbereich-Nutzererklärung "
                         + attestation.statementVersion
                         + ". "
                         + sourceEvidence,
@@ -2121,7 +2121,7 @@ struct StudioView: View {
         case .explicitlyAuthorized:
             return "Explizit autorisiert"
         case .userDeclaredResponsibility:
-            return "Workspace-Nutzererklärung"
+            return "Arbeitsbereich-Nutzererklärung"
         case .unknown:
             return "Unbekannt"
         case .prohibited:
