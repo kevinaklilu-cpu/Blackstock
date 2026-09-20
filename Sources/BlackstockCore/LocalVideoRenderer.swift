@@ -41,7 +41,9 @@ public actor LocalVideoRenderer {
         asset: ProductionMediaAsset,
         graph: EditGraph,
         outputURL: URL,
-        preset: LocalRenderPreset
+        preset: LocalRenderPreset,
+        transcript: LocalTranscript? = nil,
+        burnInCaptions: Bool = false
     ) async throws -> RenderArtifact {
         guard asset.mayEnterProduction else {
             throw LocalRenderError.unauthorizedMedia
@@ -72,6 +74,40 @@ public actor LocalVideoRenderer {
         )
         guard timeline.hasContent else {
             throw LocalRenderError.emptyEditResult
+        }
+
+        let captionTranscript: LocalTranscript?
+        if burnInCaptions,
+           let transcript,
+           transcript.segments.contains(
+                where: {
+                    !$0.text.trimmingCharacters(
+                        in: .whitespacesAndNewlines
+                    ).isEmpty
+                }
+           ) {
+            captionTranscript = transcript
+        } else {
+            captionTranscript = nil
+        }
+
+        let exportOutputURL: URL
+        if captionTranscript != nil {
+            exportOutputURL = FileManager.default
+                .temporaryDirectory
+                .appendingPathComponent(
+                    "blackstock-base-render-\(UUID().uuidString)"
+                )
+                .appendingPathExtension("mp4")
+        } else {
+            exportOutputURL = outputURL
+        }
+        defer {
+            if exportOutputURL != outputURL {
+                try? FileManager.default.removeItem(
+                    at: exportOutputURL
+                )
+            }
         }
 
         for sourceRange in timeline.sourceRanges {
@@ -147,11 +183,15 @@ public actor LocalVideoRenderer {
             throw LocalRenderError.unsupportedOutputType
         }
 
-        if FileManager.default.fileExists(atPath: outputURL.path) {
-            try FileManager.default.removeItem(at: outputURL)
+        if FileManager.default.fileExists(
+            atPath: exportOutputURL.path
+        ) {
+            try FileManager.default.removeItem(
+                at: exportOutputURL
+            )
         }
 
-        exporter.outputURL = outputURL
+        exporter.outputURL = exportOutputURL
         exporter.outputFileType = .mp4
         exporter.shouldOptimizeForNetworkUse = true
 
@@ -178,7 +218,25 @@ public actor LocalVideoRenderer {
             }
         }
 
-        guard FileManager.default.fileExists(atPath: outputURL.path) else {
+        guard FileManager.default.fileExists(
+            atPath: exportOutputURL.path
+        ) else {
+            throw LocalRenderError.missingOutput
+        }
+
+        if let captionTranscript {
+            try await LocalCaptionBurnInRenderer()
+                .render(
+                    inputURL: exportOutputURL,
+                    transcript: captionTranscript,
+                    outputURL: outputURL,
+                    preset: preset
+                )
+        }
+
+        guard FileManager.default.fileExists(
+            atPath: outputURL.path
+        ) else {
             throw LocalRenderError.missingOutput
         }
 
