@@ -73,9 +73,13 @@ Research-/Opportunity-Videos:
 - werden nicht als versteckte Produktionsdownloads behandelt.
 
 Produktionsmedien:
-- müssen lokal/autorisiert oder rechtlich belegbar erworben sein,
-- tragen Rechte-/Herkunftsnachweis,
+- werden als echte Videodatei in den Projekt-Workspace übernommen,
+- werden automatisch an die ausgewählte Opportunity-/Provider-Quelle gebunden,
+- tragen Provenance plus die einmalige Workspace-Nutzererklärung zur Nutzungsverantwortung,
+- verlangen danach keine erneute Lizenzdatei oder manuelle Rechte-Referenz pro Video,
 - werden nativ über AVFoundation verarbeitet.
+
+Blackstock erteilt oder verifiziert dabei keine Lizenz. Der Nutzer bestätigt einmalig auf Workspace-Ebene, nur Inhalte zu bearbeiten und zu veröffentlichen, die er verwenden darf, und übernimmt die Verantwortung für diese Nutzung. Fehlt diese Erklärung, bleibt der Produktions-/Clip-Pfad gesperrt.
 
 ## Studio
 
@@ -165,8 +169,8 @@ Regeln:
 Für Nutzer bleibt der Ablauf ohne Copy/Paste:
 1. Trend-/Opportunity-Video auswählen.
 2. Als Clip verwenden wählen.
-3. Rechte-/Nutzungsbestätigung prüfen.
-4. Blackstock übernimmt die bekannte Quell-URL intern.
+3. Die einmalige Workspace-Nutzererklärung muss vorhanden sein; pro Video gibt es keine erneute Lizenzmaske.
+4. Blackstock übernimmt Provider-ID/Quell-URL intern und bindet die spätere Produktionsdatei automatisch an dieselbe Opportunity.
 5. Der Media Source Resolver wählt einen zulässigen kostenlosen oder lokalen Verarbeitungspfad.
 6. Der Job zeigt nur reale Zustände: Quelle auflösen → Verarbeitung → Clips verfügbar / Fehler.
 7. Clips werden im Blackstock-Studio visuell geprüft und weiterbearbeitet.
