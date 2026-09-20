@@ -81,6 +81,10 @@ requirements = {
         "captureKind == .screen",
         "state.importSupplementalCapture(",
         "state.importMovie(",
+        '"Video auswählen …"',
+        "showOptionalCapture.toggle()",
+        "if showOptionalCapture {",
+        "CaptureCapabilityPanel",
         '"Zusätzliche Aufnahmen"',
         '"Als visuelle Einblendung verwenden"',
         "setSupplementalVideoEnabled",
@@ -211,6 +215,53 @@ for relative, markers in requirements.items():
             errors.append(
                 f"{relative}: missing capture contract marker: {marker}"
             )
+
+studio_view = (
+    ROOT / "Sources/BlackstockApp/StudioView.swift"
+).read_text(encoding="utf-8")
+picker_start = studio_view.find("private func presentVideoPicker()")
+picker_end = studio_view.find(
+    "private func importPendingMedia()",
+    picker_start,
+)
+if picker_start < 0 or picker_end < 0:
+    errors.append(
+        "StudioView must keep a dedicated local video-picker path"
+    )
+else:
+    picker_block = studio_view[picker_start:picker_end]
+    if "pendingCaptureKind = nil" not in picker_block:
+        errors.append(
+            "local video selection must remain explicitly separate from capture media"
+        )
+    if "requestAuthorization(" in picker_block:
+        errors.append(
+            "local video selection must never request camera, microphone or screen permissions"
+        )
+    if "CaptureCapabilityPanel" in picker_block:
+        errors.append(
+            "local video selection must not instantiate capture controls"
+        )
+
+capture_panel = (
+    ROOT / "Sources/BlackstockApp/CaptureCapabilityPanel.swift"
+).read_text(encoding="utf-8")
+task_start = capture_panel.find(".task {")
+task_end = capture_panel.find(".onChange(", task_start)
+if task_start < 0 or task_end < 0:
+    errors.append(
+        "CaptureCapabilityPanel must keep its passive status-inspection task"
+    )
+else:
+    passive_task = capture_panel[task_start:task_end]
+    if "inspect()" not in passive_task:
+        errors.append(
+            "CaptureCapabilityPanel task must only inspect current permission state"
+        )
+    if "requestAuthorization(" in passive_task:
+        errors.append(
+            "CaptureCapabilityPanel must never request privacy permissions automatically on appearance"
+        )
 
 package_script = (ROOT / "Build/package.sh").read_text(
     encoding="utf-8"
