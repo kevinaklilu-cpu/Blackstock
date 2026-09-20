@@ -9,6 +9,15 @@ final class StudioWorkspaceSnapshotTests: XCTestCase {
 
         let projectID = UUID()
         let store = ProjectWorkspaceStore(rootURL: root)
+        let savedClip = SavedClipSelection(
+            sourceRange: EditTimeRange(
+                startSeconds: 5,
+                durationSeconds: 20
+            ),
+            transcriptPreview: "Gespeicherter Clip",
+            wordCount: 3,
+            savedAt: Date(timeIntervalSince1970: 2.5)
+        )
         let snapshot = StudioWorkspaceSnapshot(
             projectID: projectID,
             mediaAsset: nil,
@@ -25,6 +34,7 @@ final class StudioWorkspaceSnapshotTests: XCTestCase {
             burnInCaptionsEnabled: true,
             captionVisualStyle: .strong,
             renderArtifact: nil,
+            savedClipSelections: [savedClip],
             updatedAt: Date(timeIntervalSince1970: 3)
         )
 
@@ -41,6 +51,10 @@ final class StudioWorkspaceSnapshotTests: XCTestCase {
         XCTAssertEqual(
             restored.burnInCaptionsEnabled,
             true
+        )
+        XCTAssertEqual(
+            restored.savedClipSelections,
+            [savedClip]
         )
     }
 
