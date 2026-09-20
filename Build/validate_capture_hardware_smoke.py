@@ -101,6 +101,14 @@ for key in [
     if data[key] is not True:
         fail(f"{key} must be true")
 
+projects_root = (
+    Path.home()
+    / "Library"
+    / "Application Support"
+    / "Blackstock"
+    / "Projects"
+).resolve()
+
 def validate_capture(name, require_video=False, require_samples=False):
     item = data.get(name)
     if not isinstance(item, dict):
@@ -127,7 +135,7 @@ def validate_capture(name, require_video=False, require_samples=False):
         fail(f"{name}.persistedToProject must be true")
 
     try:
-        UUID(str(item["projectID"]))
+        project_id = UUID(str(item["projectID"]))
         recording_launch = UUID(str(item["recordedLaunchID"]))
     except (ValueError, TypeError):
         fail(f"{name} projectID/recordedLaunchID must be UUIDs")
@@ -135,8 +143,34 @@ def validate_capture(name, require_video=False, require_samples=False):
     persisted_path = Path(str(item["persistedFilePath"]))
     if not persisted_path.is_absolute():
         fail(f"{name}.persistedFilePath must be absolute")
-    if not persisted_path.is_file():
+    try:
+        persisted_path = persisted_path.resolve(strict=True)
+    except (FileNotFoundError, OSError):
         fail(f"{name}.persistedFilePath must still exist")
+
+    expected_leaf = "Captures" if name == "microphone" else "Media"
+    project_directory = persisted_path.parent.parent
+    if persisted_path.parent.name != expected_leaf:
+        fail(
+            f"{name}.persistedFilePath must be inside the canonical "
+            f"{expected_leaf} project directory"
+        )
+    if project_directory.parent != projects_root:
+        fail(
+            f"{name}.persistedFilePath must be inside Blackstock's "
+            "Application Support project root"
+        )
+    try:
+        path_project_id = UUID(project_directory.name)
+        UUID(persisted_path.stem)
+    except (ValueError, TypeError):
+        fail(
+            f"{name}.persistedFilePath must use UUID project and asset names"
+        )
+    if path_project_id != project_id:
+        fail(
+            f"{name}.persistedFilePath project does not match projectID"
+        )
 
     expected_sha = str(item["persistedFileSHA256"]).lower()
     if not re.fullmatch(r"[0-9a-f]{64}", expected_sha):
@@ -170,27 +204,45 @@ def validate_capture(name, require_video=False, require_samples=False):
         if samples <= 0:
             fail(f"{name}.decodedSamples must be greater than zero")
 
-    return recording_launch, persisted_path
+    return project_id, recording_launch, persisted_path
 
-camera_launch, camera_path = validate_capture(
+camera_project, camera_launch, camera_path = validate_capture(
     "camera",
     require_video=True,
 )
-microphone_launch, microphone_path = validate_capture(
+microphone_project, microphone_launch, microphone_path = validate_capture(
     "microphone",
     require_samples=True,
 )
-screen_launch, screen_path = validate_capture(
+screen_project, screen_launch, screen_path = validate_capture(
     "screen",
     require_video=True,
 )
-system_audio_launch, system_audio_path = validate_capture(
+system_audio_project, system_audio_launch, system_audio_path = validate_capture(
     "systemAudio",
     require_samples=True,
 )
 
 if screen_path != system_audio_path:
     fail("screen and systemAudio must reference the same ScreenCaptureKit file")
+
+project_ids = {
+    camera_project,
+    microphone_project,
+    screen_project,
+    system_audio_project,
+}
+if len(project_ids) != 1:
+    fail("all four canonical capture paths must belong to the same project")
+
+recording_launches = {
+    camera_launch,
+    microphone_launch,
+    screen_launch,
+    system_audio_launch,
+}
+if len(recording_launches) != 1:
+    fail("all four canonical capture paths must come from the same recording launch")
 
 try:
     restart_launch = UUID(str(data["restartVerifiedLaunchID"]))
