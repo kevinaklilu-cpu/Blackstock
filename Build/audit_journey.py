@@ -44,6 +44,12 @@ checks = {
         "testClipProjectCanStartDirectlyInProduction",
         "initialStage: .production",
     ],
+    "Sources/BlackstockCore/LocalHighlightCandidateRanker.swift": [
+        "LocalHighlightCandidateRanker",
+        "targetDurationSeconds",
+        "speechDensity",
+        "durationFit",
+    ],
     "Sources/BlackstockCore/LocalClipCandidateGenerator.swift": [
         "LocalClipCandidateGenerator",
         "pauseBoundarySeconds",
@@ -59,6 +65,7 @@ checks = {
     ],
     "Sources/BlackstockApp/StudioState.swift": [
         "generateLocalClipCandidates(",
+        "createAutomaticHighlights(",
         "applyLocalClipCandidate(",
         "exportRenderedSavedClips(",
         "useSavedClipForPackaging(",
@@ -67,6 +74,7 @@ checks = {
         "renameSavedClipSelection(",
         "packagingSuggestedTitle",
         "local-clip-candidates-generated",
+        "automatic-highlights-prepared",
         "local-clip-candidate-applied",
         "previewLocalClipCandidate(",
         "restoreEditedPreview(",
@@ -86,7 +94,7 @@ checks = {
     ],
     "Sources/BlackstockApp/StudioView.swift": [
         "Clip-Vorschläge",
-        "Clips finden",
+        "Highlights automatisch erstellen",
         "Diesen Ausschnitt übernehmen",
         "Exportieren …",
         "Zum Veröffentlichen verwenden",
@@ -100,7 +108,7 @@ checks = {
         "In Timeline laden",
         "Übernehmen",
         "Zurück zur aktuellen Schnittvorschau",
-        "Blackstock findet lokal passende Ausschnitte anhand von Sprache und Pausen.",
+        "Blackstock findet die stärksten Ausschnitte",
         "Sichtbare Untertitel ins Video rendern",
         "Untertitelstil",
         "Ausgabe-Preset vorbereiten",
