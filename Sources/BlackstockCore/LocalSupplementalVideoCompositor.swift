@@ -186,13 +186,20 @@ public actor LocalSupplementalVideoCompositor {
                 insert.timelineEndSeconds
             )
         }
-        boundaries = Array(
-            Set(
-                boundaries.map {
-                    ($0 * 1_000).rounded() / 1_000
-                }
+        boundaries.sort()
+        var normalizedBoundaries: [Double] = []
+        for value in boundaries {
+            let clamped = min(
+                max(value, 0),
+                baseDurationSeconds
             )
-        ).sorted()
+            if let last = normalizedBoundaries.last,
+               abs(last - clamped) < 0.000_5 {
+                continue
+            }
+            normalizedBoundaries.append(clamped)
+        }
+        boundaries = normalizedBoundaries
 
         let composition = AVMutableComposition()
         guard let outputVideoTrack =
@@ -269,6 +276,7 @@ public actor LocalSupplementalVideoCompositor {
 
             let sourceTrack: AVAssetTrack
             let sourceStart: Double
+            let sourceEnd: Double
             let transform: CGAffineTransform
 
             if let activeInsert {
@@ -277,31 +285,67 @@ public actor LocalSupplementalVideoCompositor {
                     activeInsert.sourceStartSeconds
                     + start
                     - activeInsert.timelineStartSeconds
+                let sourceTimeRange = try await sourceTrack.load(
+                    .timeRange
+                )
+                sourceEnd =
+                    CMTimeGetSeconds(
+                        sourceTimeRange.start
+                    )
+                    + CMTimeGetSeconds(
+                        sourceTimeRange.duration
+                    )
                 transform = activeInsert.transform
             } else {
                 sourceTrack = baseVideoTrack
                 sourceStart =
                     baseVideoStartSeconds + start
+                sourceEnd =
+                    baseVideoStartSeconds
+                    + baseVideoDurationSeconds
                 transform = baseTransform
             }
 
-            try outputVideoTrack.insertTimeRange(
-                CMTimeRange(
-                    start: CMTime(
-                        seconds: sourceStart,
-                        preferredTimescale: 600
+            let safeDuration = min(
+                duration,
+                max(sourceEnd - sourceStart, 0)
+            )
+            guard safeDuration >= 0.001 else {
+                continue
+            }
+
+            do {
+                try outputVideoTrack.insertTimeRange(
+                    CMTimeRange(
+                        start: CMTime(
+                            seconds: sourceStart,
+                            preferredTimescale: 600
+                        ),
+                        duration: CMTime(
+                            seconds: safeDuration,
+                            preferredTimescale: 600
+                        )
                     ),
-                    duration: CMTime(
-                        seconds: duration,
+                    of: sourceTrack,
+                    at: CMTime(
+                        seconds: start,
                         preferredTimescale: 600
                     )
-                ),
-                of: sourceTrack,
-                at: CMTime(
-                    seconds: start,
-                    preferredTimescale: 600
                 )
-            )
+            } catch {
+                throw LocalSupplementalVideoError.exportFailed(
+                    "Videoabschnitt konnte nicht eingesetzt werden: Ziel "
+                    + String(format: "%.6f", start)
+                    + "–"
+                    + String(format: "%.6f", end)
+                    + " s, Quelle ab "
+                    + String(format: "%.6f", sourceStart)
+                    + " s, verfügbare Dauer "
+                    + String(format: "%.6f", max(sourceEnd - sourceStart, 0))
+                    + " s. "
+                    + error.localizedDescription
+                )
+            }
 
             let instruction =
                 AVMutableVideoCompositionInstruction()
