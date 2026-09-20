@@ -931,8 +931,7 @@ private struct SettingsView: View {
 
             GroupBox("Google / YouTube") {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("OAuth-Konfiguration: \(session.oauthConfigurationSource)")
-                    Text("Entwickler-Secrets und API-Key-Felder werden normalen Nutzern nicht angeboten.")
+                    Text(session.oauthConfigurationSource)
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
@@ -959,7 +958,7 @@ private struct SettingsView: View {
                         )
                     }
 
-                    Text("Blackstock übernimmt ausschließlich die Desktop-Client-ID. Ein Client Secret wird weder benötigt noch gespeichert. Wechselt die effektive Client-ID, werden vorhandene YouTube-Tokens und Scopes sofort aus dem macOS-Keychain entfernt und Google muss erneut autorisiert werden.")
+                    Text("Eine importierte Desktop-OAuth-Datei bleibt lokal. Client-ID, optionales Client-Secret und YouTube-Zugangsdaten werden sicher im macOS-Keychain verwendet.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
@@ -978,7 +977,7 @@ private struct SettingsView: View {
                         showCredentialRemovalConfirmation = true
                     }
 
-                    Text("Entfernt lokal gespeicherte YouTube-Zugriffs-, Refresh- und Scope-Daten aus dem macOS-Keychain. Die OAuth-Client-Konfiguration und deine Projektdateien bleiben erhalten.")
+                    Text("Meldet Blackstock auf diesem Mac von YouTube ab. Projekte bleiben erhalten.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
@@ -1011,7 +1010,7 @@ private struct SettingsView: View {
                     }
                     .disabled(isRevokingGoogleAccess)
 
-                    Text("Widerruft die aktuell verwendete Google-OAuth-Berechtigung beim Provider und entfernt anschließend die lokalen YouTube-Zugangsdaten.")
+                    Text("Entfernt die Google-Berechtigung und meldet Blackstock ab.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
@@ -1130,7 +1129,7 @@ private struct SettingsView: View {
                         .disabled(isCheckingForUpdates || isDownloadingUpdatePackage)
                     }
 
-                    Text("Blackstock akzeptiert nur HTTPS-Manifeste mit gültiger Ed25519-Signatur. Ein geladenes Paket muss zusätzlich exakt dem signierten SHA-256 entsprechen. Installation erfolgt nicht automatisch.")
+                    Text("Updates werden vor der Installation geprüft.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
@@ -1189,7 +1188,7 @@ private struct SettingsView: View {
                 .padding(.vertical, 6)
             }
 
-            GroupBox("Capture-Hardware-Evidenz") {
+            DisclosureGroup("Diagnose") {
                 VStack(alignment: .leading, spacing: 10) {
                     if let evidence =
                         BlackstockCaptureHardwareAudit.loadEvidence() {
@@ -1295,13 +1294,13 @@ private struct SettingsView: View {
 
                         Text(
                             evidence.isComplete
-                                ? "Die App-Evidenz erfüllt intern alle Capture-Hardware-Bedingungen. Das Release-Gate wird erst nach externer Validierung dieser Datei auf PASS gesetzt."
-                                : "Für Capture = PASS müssen alle vier realen Pfade mindestens fünf Sekunden technisch valide aufgezeichnet, projektgebunden, bereinigt und nach einem App-Neustart nachweisbar sein."
+                                ? "Kamera, Mikrofon, Bildschirm und Systemaudio wurden erfolgreich geprüft."
+                                : "Einige Aufnahmewege wurden auf diesem Mac noch nicht vollständig geprüft."
                         )
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     } else {
-                        Text("Noch keine Capture-Hardware-Evidenz vorhanden. Sie entsteht automatisch durch reale Aufnahmen und Berechtigungs-Hard-Stops in einem installierten Blackstock-Build.")
+                        Text("Noch keine vollständige Aufnahmediagnose vorhanden.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
