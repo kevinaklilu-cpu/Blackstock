@@ -1525,6 +1525,31 @@ final class BlackstockSession: ObservableObject {
     }
 
     func useOpportunity(_ opportunity: YouTubeOpportunityCandidate) {
+        useOpportunity(
+            opportunity,
+            productionIntentKind: .standardProject
+        )
+    }
+
+    func useOpportunityAsClip(
+        _ opportunity: YouTubeOpportunityCandidate
+    ) {
+        useOpportunity(
+            opportunity,
+            productionIntentKind: .clipFromOpportunity
+        )
+    }
+
+    func productionIntent(
+        for projectID: UUID
+    ) -> ProjectProductionIntent? {
+        Self.loadStoredProductionIntent(projectID: projectID)
+    }
+
+    private func useOpportunity(
+        _ opportunity: YouTubeOpportunityCandidate,
+        productionIntentKind: ProjectProductionIntentKind
+    ) {
         guard let channelID = selectedChannelID ?? workspaceChannelID else {
             errorMessage = "Kein Zielkanal ausgewählt."
             return
@@ -1540,6 +1565,14 @@ final class BlackstockSession: ObservableObject {
             try Self.store(
                 source: seed.source,
                 projectID: seed.project.id
+            )
+            try Self.store(
+                productionIntent: ProjectProductionIntent(
+                    projectID: seed.project.id,
+                    sourceID: seed.source.id,
+                    kind: productionIntentKind,
+                    createdAt: Date()
+                )
             )
             let providerFacts = Self.providerFacts(
                 for: opportunity
@@ -1862,6 +1895,34 @@ final class BlackstockSession: ObservableObject {
         decoder.dateDecodingStrategy = .iso8601
         return try? decoder.decode(
             MediaSourceReference.self,
+            from: data
+        )
+    }
+
+    private static func store(
+        productionIntent: ProjectProductionIntent
+    ) throws {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(productionIntent)
+        UserDefaults.standard.set(
+            data,
+            forKey: "blackstock.projectProductionIntent.\(productionIntent.projectID.uuidString)"
+        )
+    }
+
+    private static func loadStoredProductionIntent(
+        projectID: UUID
+    ) -> ProjectProductionIntent? {
+        guard let data = UserDefaults.standard.data(
+            forKey: "blackstock.projectProductionIntent.\(projectID.uuidString)"
+        ) else {
+            return nil
+        }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try? decoder.decode(
+            ProjectProductionIntent.self,
             from: data
         )
     }
