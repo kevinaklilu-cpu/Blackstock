@@ -1193,12 +1193,14 @@ final class StudioState: ObservableObject {
                     charactersIn: "-_ "
                 )
             )
-        let scalars = value.unicodeScalars.map {
-            allowed.contains($0)
-            ? Character(String($0))
-            : "-"
+        let characters = value.map { character in
+            character.unicodeScalars.allSatisfy {
+                allowed.contains($0)
+            }
+            ? character
+            : Character("-")
         }
-        let normalized = String(scalars)
+        let normalized = String(characters)
             .replacingOccurrences(
                 of: " ",
                 with: "-"
