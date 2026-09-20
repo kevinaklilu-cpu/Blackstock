@@ -711,6 +711,20 @@ private struct ResearchAnalysisJourneyView: View {
                 : "Analyse & Produktionsentscheidung"
         ) {
             VStack(alignment: .leading, spacing: 12) {
+                if session.productionIntent(
+                    for: project.id
+                )?.isLinkFirstClip == true {
+                    Label(
+                        "Clip-Vorhaben aus Opportunity",
+                        systemImage: "scissors"
+                    )
+                    .font(.headline)
+                    Text("Der ausgewählte Quelllink bleibt an dieses Projekt gebunden. Research und Analyse werden trotzdem vollständig abgeschlossen, bevor Blackstock ein Produktionsmedium übernimmt.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Divider()
+                }
+
                 if project.stage == .research {
                     researchContent
                 } else {
