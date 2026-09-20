@@ -952,27 +952,29 @@ struct StudioView: View {
         transcript: LocalTranscript,
         timeSeconds: Double
     ) -> String? {
-        transcript.segments.first {
-            let start = max(
-                $0.startSeconds,
-                0
-            )
-            let end =
-                start
-                + max(
-                    $0.durationSeconds,
-                    0.05
+        guard let segment = transcript.segments.first(
+            where: {
+                let start = max(
+                    $0.startSeconds,
+                    0
                 )
-            return timeSeconds >= start
-                && timeSeconds < end
-        }?
-        .text
-        .trimmingCharacters(
+                let end =
+                    start
+                    + max(
+                        $0.durationSeconds,
+                        0.05
+                    )
+                return timeSeconds >= start
+                    && timeSeconds < end
+            }
+        ) else {
+            return nil
+        }
+
+        let text = segment.text.trimmingCharacters(
             in: .whitespacesAndNewlines
         )
-        .flatMap {
-            $0.isEmpty ? nil : $0
-        }
+        return text.isEmpty ? nil : text
     }
 
     private var rightsSheet: some View {
