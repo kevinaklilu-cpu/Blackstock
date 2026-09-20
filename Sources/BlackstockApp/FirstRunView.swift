@@ -266,12 +266,42 @@ struct FirstRunView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
+            Toggle(
+                isOn: Binding(
+                    get: {
+                        session.workspaceRightsResponsibilityAccepted
+                    },
+                    set: {
+                        _ = session
+                            .setWorkspaceRightsResponsibilityAccepted(
+                                $0
+                            )
+                    }
+                )
+            ) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Nutzungsverantwortung einmalig bestätigen")
+                        .font(.callout.weight(.semibold))
+                    Text("Ich verwende Blackstock nur für Inhalte, die ich bearbeiten und veröffentlichen darf, und übernehme die Verantwortung für diese Nutzung.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .toggleStyle(.switch)
+
+            Text("Diese Erklärung gilt für den ausgewählten Arbeitsbereich. Danach verlangt Blackstock nicht bei jedem Video erneut eine Lizenzdatei oder Referenz und behauptet keine eigene Rechteprüfung.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+
             HStack {
                 Spacer()
                 Button("Kanal vorbereiten") {
                     Task { await session.prepareChannelAndLoadOpportunities() }
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled(
+                    !session.workspaceRightsResponsibilityAccepted
+                )
             }
         }
     }
