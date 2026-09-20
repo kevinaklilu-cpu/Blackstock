@@ -840,3 +840,106 @@ jobs:
             ${{ runner.temp }}/dist/Blackstock.pkg
             ${{ runner.temp }}/dist/Blackstock.pkg.sha256
           retention-days: 7
+
+  intel-smoke:
+    runs-on: macos-26-intel
+    needs: package
+    steps:
+      - name: Pinned macOS toolchain guard
+        run: |
+          set -euo pipefail
+          test -d "$DEVELOPER_DIR"
+          test "$(xcodebuild -version | head -n 1)" = "Xcode 26.6"
+          swift --version
+          test "$(uname -m)" = "x86_64"
+
+      - name: Download exact packaged build
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: Blackstock-development-pkg
+          path: ${{ runner.temp }}/intel-package
+
+      - name: Verify downloaded package identity
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/intel-package"
+          test -s Blackstock.pkg
+          test -s Blackstock.pkg.sha256
+          EXPECTED_SHA="$(awk '{print $1}' Blackstock.pkg.sha256)"
+          ACTUAL_SHA="$(shasum -a 256 Blackstock.pkg | awk '{print $1}')"
+          test "$EXPECTED_SHA" = "$ACTUAL_SHA"
+          pkgutil --payload-files Blackstock.pkg | grep -q 'Applications/Blackstock.app'
+          pkgutil --payload-files Blackstock.pkg | grep -q 'Applications/Blackstock.app/Contents/Helpers/BlackstockE2ESmoke'
+
+      - name: Install exact package on native Intel runner
+        run: |
+          set -euo pipefail
+          sudo rm -rf /Applications/Blackstock.app
+          sudo installer -pkg "$RUNNER_TEMP/intel-package/Blackstock.pkg" -target /
+          test -x /Applications/Blackstock.app/Contents/MacOS/Blackstock
+          test -x /Applications/Blackstock.app/Contents/Helpers/BlackstockE2ESmoke
+          lipo -verify_arch arm64 x86_64 /Applications/Blackstock.app/Contents/MacOS/Blackstock
+          lipo -verify_arch arm64 x86_64 /Applications/Blackstock.app/Contents/Helpers/BlackstockE2ESmoke
+          test "$(/usr/libexec/PlistBuddy -c 'Print :BlackstockSourceCommitSHA' /Applications/Blackstock.app/Contents/Info.plist)" = "${GITHUB_SHA}"
+          codesign --verify --deep --strict --verbose=2 /Applications/Blackstock.app
+
+      - name: Launch installed app natively on Intel
+        run: |
+          set -euo pipefail
+          APP_BIN="/Applications/Blackstock.app/Contents/MacOS/Blackstock"
+          LOG="$RUNNER_TEMP/blackstock-intel-launch.log"
+
+          "$APP_BIN" >"$LOG" 2>&1 &
+          pid=$!
+          sleep 3
+
+          if ! kill -0 "$pid" 2>/dev/null; then
+            echo "Blackstock exited during the native Intel launch-stability window." >&2
+            cat "$LOG" || true
+            exit 1
+          fi
+
+          kill -TERM "$pid"
+          for _ in {1..10}; do
+            if ! kill -0 "$pid" 2>/dev/null; then
+              exit 0
+            fi
+            sleep 0.5
+          done
+
+          kill -KILL "$pid" 2>/dev/null || true
+          echo "Blackstock required a forced stop during native Intel smoke." >&2
+          cat "$LOG" || true
+          exit 1
+
+      - name: Run installed creator-loop E2E natively on Intel
+        run: |
+          set -euo pipefail
+          E2E_BIN="/Applications/Blackstock.app/Contents/Helpers/BlackstockE2ESmoke"
+          RESULT="$RUNNER_TEMP/blackstock-intel-clean-machine-e2e.json"
+          LOG="$RUNNER_TEMP/blackstock-intel-clean-machine-e2e.log"
+
+          "$E2E_BIN" --output "$RESULT" | tee "$LOG"
+          grep -q 'BLACKSTOCK_E2E_PASS' "$LOG"
+          test -s "$RESULT"
+
+          python3 - "$RESULT" <<'PY'
+          import json
+          import sys
+
+          data = json.load(open(sys.argv[1]))
+          assert data["generatedSource"] is True
+          assert data["rendered"] is True
+          assert data["renderValidated"] is True
+          assert data["audioTrackValidated"] is True
+          assert data["pcmSamplesAnalyzed"] > 0
+          assert isinstance(data["integratedLUFS"], (int, float))
+          assert isinstance(data["truePeakDBTP"], (int, float))
+          assert data["qualityReviewPassed"] is True
+          assert data["uploadVideoID"] == "e2e-video-123"
+          assert data["uploadJournalCommitted"] is True
+          assert data["analyticsViews"] == 1234
+          assert data["learningFactCount"] > 0
+          assert data["persistenceRoundTrip"] is True
+          PY
+
