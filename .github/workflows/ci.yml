@@ -198,6 +198,32 @@ jobs:
             exit 1
           fi
 
+          cp "$RUNNER_TEMP/capture-hardware-smoke-valid.json" "$EVIDENCE"
+          python3 - "$EVIDENCE" <<'PY'
+          import json, sys
+          path = sys.argv[1]
+          data = json.load(open(path))
+          data["microphone"]["recordedLaunchID"] = "00000000-0000-0000-0000-000000000299"
+          json.dump(data, open(path, "w"))
+          PY
+          if python3 Build/validate_capture_hardware_smoke.py "$EVIDENCE"; then
+            echo "Mixed recording-launch capture evidence was unexpectedly accepted." >&2
+            exit 1
+          fi
+
+          cp "$RUNNER_TEMP/capture-hardware-smoke-valid.json" "$EVIDENCE"
+          python3 - "$EVIDENCE" <<'PY'
+          import json, sys
+          path = sys.argv[1]
+          data = json.load(open(path))
+          data["microphone"]["projectID"] = "00000000-0000-0000-0000-000000000199"
+          json.dump(data, open(path, "w"))
+          PY
+          if python3 Build/validate_capture_hardware_smoke.py "$EVIDENCE"; then
+            echo "Mismatched project-bound capture evidence was unexpectedly accepted." >&2
+            exit 1
+          fi
+
       - name: Professional audio audit
         run: python3 Build/audit_audio.py
       - name: Clean-machine E2E contract audit
