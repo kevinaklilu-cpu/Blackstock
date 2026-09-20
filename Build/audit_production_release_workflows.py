@@ -22,7 +22,6 @@ requirements = {
         "BLACKSTOCK_UPDATE_PRIVATE_KEY_BASE64",
         "BLACKSTOCK_UPDATE_PUBLIC_KEY_BASE64",
         "BLACKSTOCK_GOOGLE_OAUTH_CLIENT_ID",
-        "BLACKSTOCK_GOOGLE_OAUTH_CLIENT_SECRET",
         "Verify update signing key pair",
         "Build/verify_update_key_pair.swift",
         "BLACKSTOCK_INCLUDE_E2E_SMOKE: \"0\"",
@@ -185,6 +184,10 @@ for relative, markers in requirements.items():
 production = (ROOT / ".github/workflows/production-release.yml").read_text(
     encoding="utf-8"
 )
+if "BLACKSTOCK_GOOGLE_OAUTH_CLIENT_SECRET" in production:
+    errors.append(
+        "desktop OAuth client_secret must not be required or injected into the production package workflow"
+    )
 if "BLACKSTOCK_INCLUDE_E2E_SMOKE: \"1\"" in production:
     errors.append(
         "production release workflow must never package the CI-only E2E helper"
