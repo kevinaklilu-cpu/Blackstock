@@ -47,6 +47,18 @@ final class StudioState: ObservableObject {
     @Published var isRenderingSavedClipBatch = false
     @Published var isExportingSavedClipBatch = false
     @Published var packagingSuggestedTitle: String?
+    @Published var overlayText = ""
+    @Published var overlayStart: Double = 0
+    @Published var overlayEnd: Double = 3
+    @Published var overlayVerticalPosition: Double = 0.18
+
+    var currentOutputDurationSeconds: Double {
+        guard let asset else { return 0 }
+        return EditTimelineResolver().resolve(
+            sourceDurationSeconds: asset.durationSeconds,
+            operations: graph.currentOperations
+        ).outputDurationSeconds
+    }
 
     private var clipCandidateSourceTranscript: LocalTranscript?
     private var correlationID = UUID()
@@ -62,6 +74,10 @@ final class StudioState: ObservableObject {
         clipCandidateSourceTranscript = nil
         packagingSuggestedTitle = nil
         isGeneratingClipCandidates = false
+        overlayText = ""
+        overlayStart = 0
+        overlayEnd = 3
+        overlayVerticalPosition = 0.18
 
         do {
             let store = try makeWorkspaceStore()
@@ -728,6 +744,82 @@ final class StudioState: ObservableObject {
             focalPointProposal = nil
             errorMessage = "Lokaler Fokusvorschlag fehlgeschlagen: \(error.localizedDescription)"
         }
+    }
+
+    func applyTextOverlay() async {
+        guard let asset else {
+            errorMessage = "Kein Produktionsmedium geladen."
+            return
+        }
+
+        let text = overlayText.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        guard !text.isEmpty else {
+            errorMessage = "Text-Overlay benötigt sichtbaren Text."
+            return
+        }
+
+        let timeline = EditTimelineResolver().resolve(
+            sourceDurationSeconds: asset.durationSeconds,
+            operations: graph.currentOperations
+        )
+        guard timeline.hasContent else {
+            errorMessage = "Der aktuelle Schnitt enthält keinen Bereich für ein Text-Overlay."
+            return
+        }
+
+        let start = min(
+            max(overlayStart, 0),
+            timeline.outputDurationSeconds
+        )
+        let end = min(
+            max(overlayEnd, start),
+            timeline.outputDurationSeconds
+        )
+        guard end - start >= 0.05 else {
+            errorMessage = "Das Text-Overlay benötigt ein sichtbares Zeitfenster."
+            return
+        }
+
+        let before = graph.headID
+        let operation = EditOperation(
+            type: .overlay,
+            timeRange: .init(
+                startSeconds: start,
+                durationSeconds: end - start
+            ),
+            value: min(
+                max(overlayVerticalPosition, 0.05),
+                0.95
+            ),
+            text: text,
+            createdAt: Date()
+        )
+        let revision = graph.apply(
+            operation,
+            actor: .user
+        )
+        lastUndoneRevisionID = nil
+        renderArtifact = nil
+        invalidateSavedClipRenders()
+
+        ledger.append(.init(
+            timestamp: Date(),
+            actor: .user,
+            stage: .editing,
+            action: "text-overlay-applied",
+            summary:
+                "Text-Overlay „\(text)“ von \(format(start)) bis \(format(end)) angewendet.",
+            beforeRevisionID: before,
+            afterRevisionID: revision.id,
+            reversible: true,
+            correlationID: correlationID
+        ))
+
+        overlayText = ""
+        persistWorkspaceIfPossible()
+        errorMessage = nil
     }
 
     func prepareOutputPreset(
