@@ -206,7 +206,7 @@ struct StudioView: View {
                 .foregroundStyle(.secondary)
             Text("Autorisiertes Produktionsvideo hinzufügen")
                 .font(.title2.bold())
-            Text("Blackstock übernimmt nur Medien in die Bearbeitung, deren Nutzung nachvollziehbar autorisiert ist.")
+            Text("Nach deiner einmaligen Workspace-Erklärung übernimmt Blackstock Produktionsmedien ohne zusätzlichen Lizenz-Upload in die Bearbeitung und bindet Quelle und Projekt automatisch.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: 520)
@@ -2032,7 +2032,7 @@ struct StudioView: View {
                             }
                             Spacer()
                             Label(
-                                "Rechte bestätigt",
+                                "Nutzererklärung vorhanden",
                                 systemImage: "checkmark.shield"
                             )
                             .font(.caption2)
