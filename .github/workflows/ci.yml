@@ -998,8 +998,8 @@ jobs:
           sudo installer -pkg "$RUNNER_TEMP/dist/Blackstock.pkg" -target /
           test -x /Applications/Blackstock.app/Contents/MacOS/Blackstock
           test -x /Applications/Blackstock.app/Contents/Helpers/BlackstockE2ESmoke
-          lipo -verify_arch arm64 x86_64 /Applications/Blackstock.app/Contents/MacOS/Blackstock
-          lipo -verify_arch arm64 x86_64 /Applications/Blackstock.app/Contents/Helpers/BlackstockE2ESmoke
+          lipo /Applications/Blackstock.app/Contents/MacOS/Blackstock -verify_arch arm64 x86_64
+          lipo /Applications/Blackstock.app/Contents/Helpers/BlackstockE2ESmoke -verify_arch arm64 x86_64
           plutil -lint /Applications/Blackstock.app/Contents/Info.plist
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' /Applications/Blackstock.app/Contents/Info.plist)" = "de.blackstock.app"
           test "$(/usr/libexec/PlistBuddy -c 'Print :BlackstockSourceCommitSHA' /Applications/Blackstock.app/Contents/Info.plist)" = "${GITHUB_SHA}"
@@ -1195,8 +1195,8 @@ jobs:
           sudo installer -pkg "$RUNNER_TEMP/intel-package/Blackstock.pkg" -target /
           test -x /Applications/Blackstock.app/Contents/MacOS/Blackstock
           test -x /Applications/Blackstock.app/Contents/Helpers/BlackstockE2ESmoke
-          lipo -verify_arch arm64 x86_64 /Applications/Blackstock.app/Contents/MacOS/Blackstock
-          lipo -verify_arch arm64 x86_64 /Applications/Blackstock.app/Contents/Helpers/BlackstockE2ESmoke
+          lipo /Applications/Blackstock.app/Contents/MacOS/Blackstock -verify_arch arm64 x86_64
+          lipo /Applications/Blackstock.app/Contents/Helpers/BlackstockE2ESmoke -verify_arch arm64 x86_64
           test "$(/usr/libexec/PlistBuddy -c 'Print :BlackstockSourceCommitSHA' /Applications/Blackstock.app/Contents/Info.plist)" = "${GITHUB_SHA}"
           codesign --verify --deep --strict --verbose=2 /Applications/Blackstock.app
 
