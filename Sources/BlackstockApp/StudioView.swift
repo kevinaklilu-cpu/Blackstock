@@ -1513,31 +1513,34 @@ struct StudioView: View {
                 ).isEmpty
             )
 
-            let overlays = state.graph.currentOperations
-                .filter { $0.type == .overlay }
+            let overlays = TextOverlayPlanner().cues(
+                operations: state.graph.currentOperations,
+                outputDurationSeconds:
+                    state.currentOutputDurationSeconds
+            )
             if !overlays.isEmpty {
                 Divider()
                 Text("Aktive Overlays")
                     .font(.caption.weight(.semibold))
 
-                ForEach(overlays) { operation in
-                    if let range = operation.timeRange,
-                       let text = operation.text {
-                        VStack(
-                            alignment: .leading,
-                            spacing: 2
-                        ) {
-                            Text(text)
-                                .font(.caption.weight(.semibold))
-                                .lineLimit(2)
-                            Text(
-                                timeLabel(range.startSeconds)
-                                + " – "
-                                + timeLabel(range.endSeconds)
+                ForEach(overlays) { cue in
+                    VStack(
+                        alignment: .leading,
+                        spacing: 2
+                    ) {
+                        Text(cue.text)
+                            .font(.caption.weight(.semibold))
+                            .lineLimit(2)
+                        Text(
+                            timeLabel(cue.startSeconds)
+                            + " – "
+                            + timeLabel(
+                                cue.startSeconds
+                                + cue.durationSeconds
                             )
-                            .font(.caption2.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                        }
+                        )
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
                     }
                 }
 
