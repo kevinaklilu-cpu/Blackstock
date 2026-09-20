@@ -46,6 +46,7 @@ final class StudioState: ObservableObject {
     @Published var renderingSavedClipID: UUID?
     @Published var isRenderingSavedClipBatch = false
     @Published var isExportingSavedClipBatch = false
+    @Published var packagingSuggestedTitle: String?
 
     private var clipCandidateSourceTranscript: LocalTranscript?
     private var correlationID = UUID()
@@ -59,6 +60,7 @@ final class StudioState: ObservableObject {
         previewedLocalClipCandidateID = nil
         renderingSavedClipID = nil
         clipCandidateSourceTranscript = nil
+        packagingSuggestedTitle = nil
         isGeneratingClipCandidates = false
 
         do {
@@ -1040,6 +1042,7 @@ final class StudioState: ObservableObject {
 
         struct ExportedClipRecord: Codable {
             let clipID: UUID
+            let title: String?
             let sourceStartSeconds: Double
             let sourceDurationSeconds: Double
             let mp4FileName: String
@@ -1111,6 +1114,7 @@ final class StudioState: ObservableObject {
                 records.append(
                     ExportedClipRecord(
                         clipID: selection.id,
+                        title: selection.title,
                         sourceStartSeconds:
                             selection.sourceRange
                                 .startSeconds,
@@ -1448,6 +1452,8 @@ final class StudioState: ObservableObject {
         }
 
         renderArtifact = artifact
+        packagingSuggestedTitle =
+            selection.title
         await refreshAudioInspection(
             for: artifact.fileURL
         )
@@ -1984,6 +1990,7 @@ final class StudioState: ObservableObject {
                 captionStyle: captionVisualStyle
             )
             renderArtifact = artifact
+            packagingSuggestedTitle = nil
             await refreshAudioInspection(
                 for: artifact.fileURL
             )
