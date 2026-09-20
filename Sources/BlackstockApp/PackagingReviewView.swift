@@ -54,7 +54,8 @@ struct PackagingReviewView: View {
         audioTechnicalAssessment: AudioTechnicalAssessment?,
         audioSignalAssessment: AudioSignalAssessment?,
         audioLoudnessAssessment: AudioLoudnessAssessment?,
-        storyboard: StoryboardPlan?
+        storyboard: StoryboardPlan?,
+        suggestedTitle: String? = nil
     ) {
         self.session = session
         self.project = project
@@ -69,9 +70,19 @@ struct PackagingReviewView: View {
         let saved = session.loadPublishPreparation(
             projectID: project.id
         )
+        let normalizedSuggestedTitle =
+            suggestedTitle?
+            .trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
         _title = State(
-            initialValue: saved?.package.metadata.title
-                ?? project.title
+            initialValue:
+                saved?.package.metadata.title
+                ?? (
+                    normalizedSuggestedTitle?.isEmpty == false
+                    ? normalizedSuggestedTitle!
+                    : project.title
+                )
         )
         _description = State(
             initialValue: saved?.package.metadata.description
