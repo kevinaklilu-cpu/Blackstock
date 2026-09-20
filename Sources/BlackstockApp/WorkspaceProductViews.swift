@@ -523,6 +523,21 @@ struct ProjectLibraryView: View {
                 HStack(spacing: 8) {
                     Text(project.title)
                         .font(.headline)
+                    if session.productionIntent(
+                        for: project.id
+                    )?.isLinkFirstClip == true {
+                        Label(
+                            "CLIP",
+                            systemImage: "scissors"
+                        )
+                        .font(.caption2.weight(.bold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(
+                            Color.primary.opacity(0.07),
+                            in: Capsule()
+                        )
+                    }
                     if session.activeProject?.id == project.id {
                         Text("AKTIV")
                             .font(.caption2.weight(.bold))
