@@ -15,6 +15,7 @@ private enum ReleaseVerifierError: Error, LocalizedError {
     case missingCaptureEntitlements
     case incompleteNotaryArguments
     case notarizationNotAccepted(String)
+    case incompleteVerifiedSnapshotArguments
 
     var errorDescription: String? {
         switch self {
@@ -42,6 +43,8 @@ private enum ReleaseVerifierError: Error, LocalizedError {
             return "Notary-Submission-ID benötigt entweder ein Keychain-Profil oder vollständig konfigurierte API-Key-Zugangsdaten."
         case .notarizationNotAccepted(let status):
             return "Apple-Notarisierung ist nicht Accepted, sondern \(status)."
+        case .incompleteVerifiedSnapshotArguments:
+            return "Verifizierter Release-Snapshot benötigt Manifest- und Paketdatei gemeinsam."
         }
     }
 }
@@ -119,10 +122,20 @@ private struct BlackstockReleaseVerifierMain {
     private static func verify(
         _ arguments: Arguments
     ) async throws -> ReleaseVerificationEvidence {
-        let (manifestData, manifestResponse) = try await URLSession.shared.data(
-            from: arguments.manifestURL
-        )
-        try requireHTTPSResponse(manifestResponse)
+        let manifestData: Data
+        if let verifiedManifestInputURL =
+                arguments.verifiedManifestInputURL {
+            manifestData = try Data(
+                contentsOf: verifiedManifestInputURL
+            )
+        } else {
+            let (downloadedManifestData, manifestResponse) =
+                try await URLSession.shared.data(
+                    from: arguments.manifestURL
+                )
+            try requireHTTPSResponse(manifestResponse)
+            manifestData = downloadedManifestData
+        }
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -153,25 +166,42 @@ private struct BlackstockReleaseVerifierMain {
             break
         }
 
-        let (downloadedURL, packageResponse) =
-            try await URLSession.shared.download(
-                from: manifest.packageURL
-            )
-        try requireHTTPSResponse(packageResponse)
+        let packageURL: URL
+        var downloadedPackageURLForCleanup: URL?
+        if let verifiedPackageInputURL =
+                arguments.verifiedPackageInputURL {
+            packageURL = verifiedPackageInputURL
+        } else {
+            let (downloadedURL, packageResponse) =
+                try await URLSession.shared.download(
+                    from: manifest.packageURL
+                )
+            try requireHTTPSResponse(packageResponse)
 
-        let packageURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent(
-                "Blackstock-Release-\(UUID().uuidString)"
+            let temporaryPackageURL =
+                FileManager.default.temporaryDirectory
+                    .appendingPathComponent(
+                        "Blackstock-Release-\(UUID().uuidString)"
+                    )
+                    .appendingPathExtension("pkg")
+            try? FileManager.default.removeItem(
+                at: temporaryPackageURL
             )
-            .appendingPathExtension("pkg")
-        defer {
-            try? FileManager.default.removeItem(at: packageURL)
+            try FileManager.default.moveItem(
+                at: downloadedURL,
+                to: temporaryPackageURL
+            )
+            downloadedPackageURLForCleanup =
+                temporaryPackageURL
+            packageURL = temporaryPackageURL
         }
-        try? FileManager.default.removeItem(at: packageURL)
-        try FileManager.default.moveItem(
-            at: downloadedURL,
-            to: packageURL
-        )
+        defer {
+            if let downloadedPackageURLForCleanup {
+                try? FileManager.default.removeItem(
+                    at: downloadedPackageURLForCleanup
+                )
+            }
+        }
 
         try UpdatePackageIntegrityVerifier().verify(
             fileURL: packageURL,
@@ -359,6 +389,13 @@ private struct BlackstockReleaseVerifierMain {
             arguments
         )
 
+        if let verifiedManifestOutputURL =
+                arguments.verifiedManifestOutputURL {
+            try persistVerifiedManifest(
+                manifestData,
+                to: verifiedManifestOutputURL
+            )
+        }
         if let verifiedPackageOutputURL =
                 arguments.verifiedPackageOutputURL {
             try persistVerifiedPackage(
@@ -545,6 +582,27 @@ private struct BlackstockReleaseVerifierMain {
             && !host.hasSuffix(".test")
     }
 
+    private static func persistVerifiedManifest(
+        _ data: Data,
+        to destinationURL: URL
+    ) throws {
+        try FileManager.default.createDirectory(
+            at: destinationURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try data.write(
+            to: destinationURL,
+            options: [.atomic]
+        )
+        guard try Data(contentsOf: destinationURL) == data else {
+            throw ReleaseVerifierError.commandFailed(
+                "persist verified manifest",
+                -1,
+                "Persistierte Manifestbytes stimmen nicht mit dem verifizierten Snapshot überein."
+            )
+        }
+    }
+
     private static func persistVerifiedPackage(
         from sourceURL: URL,
         to destinationURL: URL,
@@ -657,6 +715,9 @@ private struct Arguments {
     let notaryKeyPath: String?
     let notaryKeyID: String?
     let notaryIssuer: String?
+    let verifiedManifestInputURL: URL?
+    let verifiedPackageInputURL: URL?
+    let verifiedManifestOutputURL: URL?
     let verifiedPackageOutputURL: URL?
     let outputURL: URL?
 
@@ -699,6 +760,16 @@ private struct Arguments {
             )
         }
 
+        let hasVerifiedManifestInput =
+            values["--verified-manifest-input"] != nil
+        let hasVerifiedPackageInput =
+            values["--verified-package-input"] != nil
+        guard hasVerifiedManifestInput
+                == hasVerifiedPackageInput else {
+            throw ReleaseVerifierError
+                .incompleteVerifiedSnapshotArguments
+        }
+
         return Arguments(
             manifestURL: manifestURL,
             publicKeyBase64: try required(
@@ -727,6 +798,18 @@ private struct Arguments {
                 values["--notary-key-id"],
             notaryIssuer:
                 values["--notary-issuer"],
+            verifiedManifestInputURL:
+                values["--verified-manifest-input"].map {
+                    URL(fileURLWithPath: $0)
+                },
+            verifiedPackageInputURL:
+                values["--verified-package-input"].map {
+                    URL(fileURLWithPath: $0)
+                },
+            verifiedManifestOutputURL:
+                values["--verified-manifest-output"].map {
+                    URL(fileURLWithPath: $0)
+                },
             verifiedPackageOutputURL:
                 values["--verified-package-output"].map {
                     URL(fileURLWithPath: $0)
