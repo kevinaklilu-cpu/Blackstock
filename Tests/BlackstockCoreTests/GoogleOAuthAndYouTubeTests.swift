@@ -239,7 +239,7 @@ final class GoogleOAuthAndYouTubeTests: XCTestCase {
 
 
 private final class OAuthURLProtocol: URLProtocol {
-    static var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
+    nonisolated(unsafe) static var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
 
     override class func canInit(with request: URLRequest) -> Bool {
         request.url?.host == "oauth2.googleapis.com"
