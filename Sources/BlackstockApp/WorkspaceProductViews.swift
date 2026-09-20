@@ -285,7 +285,7 @@ struct OpportunityWorkspaceView: View {
             Text(item.channelTitle)
                 .foregroundStyle(.secondary)
 
-            signalStrip(item)
+            videoFacts(item)
 
             DisclosureGroup("Videodetails") {
                 VStack(alignment: .leading, spacing: 7) {
@@ -308,14 +308,12 @@ struct OpportunityWorkspaceView: View {
 
                     if !item.metrics.missingSignals.isEmpty {
                         Label(
-                            "Nicht verfügbar: "
-                            + item.metrics.missingSignals
-                                .joined(separator: ", "),
+                            "Einige Angaben sind bei YouTube für dieses Video nicht verfügbar.",
                             systemImage: "info.circle"
                         )
                     }
 
-                    Text("Die angezeigten Werte stammen von YouTube.")
+                    Text("Die Angaben stammen direkt von YouTube.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -393,7 +391,7 @@ struct OpportunityWorkspaceView: View {
         }
     }
 
-    private func signalStrip(
+    private func videoFacts(
         _ item: YouTubeOpportunityCandidate
     ) -> some View {
         HStack(spacing: 8) {
