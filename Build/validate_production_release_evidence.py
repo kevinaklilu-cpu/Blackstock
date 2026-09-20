@@ -5,6 +5,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
+from uuid import UUID
 
 def fail(message):
     print(
@@ -161,8 +162,13 @@ for key in [
 if str(data["installedAppPath"] or "").strip() != "/Applications/Blackstock.app":
     fail("installedAppPath must be /Applications/Blackstock.app")
 
-if not str(data["notarySubmissionID"] or "").strip():
+notary_submission_id = str(data["notarySubmissionID"] or "").strip()
+if not notary_submission_id:
     fail("notarySubmissionID must be present")
+try:
+    UUID(notary_submission_id)
+except (ValueError, TypeError):
+    fail("notarySubmissionID must be a UUID")
 
 if str(data["notaryStatus"]).casefold() != "accepted":
     fail("notaryStatus must be Accepted")
