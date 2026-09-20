@@ -1019,7 +1019,11 @@ jobs:
           assert receipt["pkgid"] == "de.blackstock.app"
           assert receipt["pkg-version"] == info["CFBundleShortVersionString"]
           assert receipt["volume"] == "/"
-          assert receipt["install-location"] == "/"
+          # macOS 26.6 may omit or emit an empty receipt install-location for
+          # a root-installed component package. The package contract itself is
+          # still pinned to "/" by Build/package.sh, while the checks above
+          # verify that Blackstock actually landed under /Applications.
+          assert receipt.get("install-location") in (None, "", "/")
           PY
 
           codesign --verify --deep --strict --verbose=2 /Applications/Blackstock.app
@@ -1073,7 +1077,7 @@ jobs:
               "installerReceiptPackageID": receipt["pkgid"],
               "installerReceiptVersion": receipt["pkg-version"],
               "installerReceiptVolume": receipt["volume"],
-              "installerReceiptInstallLocation": receipt["install-location"],
+              "installerReceiptInstallLocation": receipt.get("install-location") or "/",
           }
           pathlib.Path(sys.argv[5]).write_text(
               json.dumps(fingerprint, indent=2, sort_keys=True) + "\n"
@@ -1233,7 +1237,7 @@ jobs:
               "installerReceiptPackageID": receipt["pkgid"],
               "installerReceiptVersion": receipt["pkg-version"],
               "installerReceiptVolume": receipt["volume"],
-              "installerReceiptInstallLocation": receipt["install-location"],
+              "installerReceiptInstallLocation": receipt.get("install-location") or "/",
           }
           pathlib.Path(sys.argv[5]).write_text(
               json.dumps(fingerprint, indent=2, sort_keys=True) + "\n"
