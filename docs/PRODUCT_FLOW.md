@@ -90,6 +90,19 @@ Grundregeln:
 - Activity Ledger zeigt, was wann von wem geändert wurde.
 - Nicht implementierte Werkzeuge bleiben verborgen.
 
+## Lokale Clip-Kandidaten
+
+Auf einem **autorisierten lokalen Produktionsmedium** kann Blackstock im Studio Clip-Kandidaten vollständig lokal erzeugen:
+
+1. On-Device-Spracherkennung erzeugt zeitgebundene Sprachsegmente auf dem Originalmedium.
+2. Ein deterministischer lokaler Generator nutzt Segmentgrenzen und gemessene Pausen, um zusammenhängende Ausschnitte vorzuschlagen.
+3. Jeder Vorschlag zeigt ausschließlich nachvollziehbare Fakten: Quell-Zeitbereich, Dauer, Wortzahl, Transkript-Vorschau und – falls verfügbar – Spracherkennungs-Konfidenz.
+4. Es gibt keinen Viralitäts-, Gewinner-, Qualitäts- oder Erfolgs-Score.
+5. Erst **„Diesen Ausschnitt übernehmen“** schreibt einen Trim in den EditGraph.
+6. Der Trim bleibt non-destruktiv und ist über Undo/Redo reversibel. Bestehende weitere EditGraph-Operationen bleiben nachvollziehbar erhalten.
+
+Diese lokale Funktion ersetzt **keine** Ingest-Berechtigung für fremde YouTube-Videos. Ein Research-Video bleibt Playback/Research, solange keine zulässige Produktionsquelle oder ein verifiziert freigegebener Ingest-Pfad vorliegt.
+
 ## Keine Überladung
 
 Navigation zeigt keine nicht validierten Produktflächen.
