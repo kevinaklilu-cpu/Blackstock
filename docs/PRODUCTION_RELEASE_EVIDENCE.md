@@ -212,28 +212,29 @@ Der Release-Verifier allein reicht **nicht** für `Updater = PASS`.
 
 Zusätzlich muss auf einem sauberen Mac der tatsächliche Blackstock-App-Pfad geprüft werden:
 
-1. ältere Produktionsversion installieren;
-2. prüfen, dass deren Bundle-Version exakt der dokumentierten Ausgangsversion entspricht;
-3. diese Version muss mit der realen Produktions-Manifest-URL, dem öffentlichen Update-Schlüssel und der erwarteten Installer-Team-ID gebaut sein;
-4. Blackstock starten und in der App nach Updates suchen;
-5. die App muss das neue signierte Manifest erkennen;
-6. Download muss aus der Manifest-Paket-URL erfolgen;
-7. Blackstock muss Signatur, Hash und Installer-Team erfolgreich prüfen;
-8. erst nach Nutzeraktion darf der macOS-Installer geöffnet werden;
-9. Installation im System-Installer abschließen;
-10. Blackstock neu starten;
-11. der gestartete Bundle-Pfad muss nach Symlink-Auflösung exakt `/Applications/Blackstock.app` sein;
-12. Bundle-Version und Build müssen exakt der Manifest-Zielversion entsprechen;
-13. `BlackstockSourceCommitSHA` des gestarteten Bundles muss exakt dem signierten Manifest-Source-Commit entsprechen;
-14. der SHA-256 des nach dem Update tatsächlich gestarteten Blackstock-Executables wird als `observedInstalledExecutableSHA256` gespeichert und muss im finalen Market-Readiness-Verifier exakt dem veröffentlichten Release und dem Capture-Smoke entsprechen;
-15. die gestartete App muss `codesign --verify --deep --strict` bestehen, als `Developer ID Application` signiert sein und dieselbe Apple-Team-ID tragen wie der verifizierte Installer;
-16. der macOS-Installer-Receipt `de.blackstock.app` muss vorhanden sein, auf `/` installiert sein und exakt die Zielversion ausweisen.
+1. ältere Produktionsversion unter `/Applications/Blackstock.app` installieren;
+2. prüfen, dass deren Bundle-Version und Build exakt der dokumentierten Ausgangsversion entsprechen;
+3. Blackstock muss vor dem Update den Source-Commit und SHA-256 des laufenden Quell-Executables erfassen, `codesign --verify --deep --strict` bestehen, dieselbe erwartete Apple-Team-ID tragen und einen passenden Installer-Receipt `de.blackstock.app` für die Ausgangsversion besitzen;
+4. diese Version muss mit der realen Produktions-Manifest-URL, dem öffentlichen Update-Schlüssel und der erwarteten Installer-Team-ID gebaut sein;
+5. Blackstock starten und in der App nach Updates suchen;
+6. die App muss das neue signierte Manifest erkennen;
+7. Download muss aus der Manifest-Paket-URL erfolgen;
+8. Blackstock muss Signatur, Hash und Installer-Team erfolgreich prüfen;
+9. erst nach Nutzeraktion darf der macOS-Installer geöffnet werden;
+10. Installation im System-Installer abschließen;
+11. Blackstock neu starten;
+12. der gestartete Bundle-Pfad muss nach Symlink-Auflösung exakt `/Applications/Blackstock.app` sein;
+13. Bundle-Version und Build müssen exakt der Manifest-Zielversion entsprechen;
+14. `BlackstockSourceCommitSHA` des gestarteten Bundles muss exakt dem signierten Manifest-Source-Commit entsprechen;
+15. der SHA-256 des nach dem Update tatsächlich gestarteten Blackstock-Executables wird als `observedInstalledExecutableSHA256` gespeichert und muss im finalen Market-Readiness-Verifier exakt dem veröffentlichten Release und dem Capture-Smoke entsprechen;
+16. die gestartete App muss `codesign --verify --deep --strict` bestehen, als `Developer ID Application` signiert sein und dieselbe Apple-Team-ID tragen wie der verifizierte Installer;
+17. der macOS-Installer-Receipt `de.blackstock.app` muss vorhanden sein, auf `/` installiert sein und exakt die Zielversion ausweisen.
 
 Blackstock protokolliert diesen Pfad selbst lokal unter:
 
 `~/Library/Application Support/Blackstock/Update/update-evidence.json`
 
-Die Evidenz wird erst vollständig, wenn derselbe ältere Build ein gültiges Manifest akzeptiert hat, das Paket Hash- und Installer-Team-Prüfung bestanden hat, der macOS-Installer tatsächlich geöffnet wurde und anschließend exakt der Manifest-Ziel-Build **aus dem im Manifest signierten Source-Commit** unter `/Applications/Blackstock.app` gestartet ist. Der Post-Update-Start muss zusätzlich dieselbe Developer-ID-Team-ID und einen passenden Installer-Receipt `de.blackstock.app` belegen. Die lokale Updater-Evidence verwendet dafür Schema v4.
+Die Evidenz wird erst vollständig, wenn derselbe ältere Build ein gültiges Manifest akzeptiert hat, das Paket Hash- und Installer-Team-Prüfung bestanden hat, der macOS-Installer tatsächlich geöffnet wurde und anschließend exakt der Manifest-Ziel-Build **aus dem im Manifest signierten Source-Commit** unter `/Applications/Blackstock.app` gestartet ist. Der Post-Update-Start muss zusätzlich dieselbe Developer-ID-Team-ID und einen passenden Installer-Receipt `de.blackstock.app` belegen. Die lokale Updater-Evidence verwendet dafür Schema v5. Schema v5 bindet zusätzlich bereits die Ausgangs-App selbst an Source-Commit, Executable-SHA-256, `/Applications/Blackstock.app`, gültige Developer-ID-Team-ID und passenden Installer-Receipt.
 
 Nach dem erfolgreichen Test:
 
