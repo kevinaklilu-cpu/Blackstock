@@ -56,6 +56,7 @@ public actor LocalVideoRenderer {
             ![
                 EditOperationType.trim,
                 EditOperationType.removeRange,
+                EditOperationType.volume,
                 EditOperationType.reframe,
                 EditOperationType.overlay
             ].contains($0.type)
@@ -137,8 +138,22 @@ public actor LocalVideoRenderer {
             )
         }
 
+        let masterVolume = EditAudioPlanner().masterVolume(
+            operations: graph.currentOperations
+        )
+        var audioMixParameters: [AVAudioMixInputParameters] = []
+        for track in composition.tracks(withMediaType: .audio) {
+            let parameters = AVMutableAudioMixInputParameters(
+                track: track
+            )
+            parameters.setVolume(
+                Float(masterVolume),
+                at: .zero
+            )
+            audioMixParameters.append(parameters)
+        }
 
-        var supplementalAudioParameters: [AVAudioMixInputParameters] = []
+
         for input in supplementalAudio {
             guard input.volume > 0 else { continue }
 
@@ -193,7 +208,7 @@ public actor LocalVideoRenderer {
                 Float(min(max(input.volume, 0), 1)),
                 at: .zero
             )
-            supplementalAudioParameters.append(parameters)
+            audioMixParameters.append(parameters)
         }
 
         guard let exporter = AVAssetExportSession(
@@ -203,9 +218,9 @@ public actor LocalVideoRenderer {
             throw LocalRenderError.exportSessionUnavailable
         }
 
-        if !supplementalAudioParameters.isEmpty {
+        if !audioMixParameters.isEmpty {
             let audioMix = AVMutableAudioMix()
-            audioMix.inputParameters = supplementalAudioParameters
+            audioMix.inputParameters = audioMixParameters
             exporter.audioMix = audioMix
         }
 
