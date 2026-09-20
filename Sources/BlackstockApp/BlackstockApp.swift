@@ -329,29 +329,16 @@ private struct OverviewView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Blackstock")
+            Text("Übersicht")
                 .font(.largeTitle.bold())
-            Text("Creator-System für Recherche, Produktion, Veröffentlichung und Wachstum")
+            Text("Deine Projekte, nächsten Schritte und Ergebnisse")
                 .font(.title3)
-                .foregroundStyle(.secondary)
-
-            GroupBox("Produktstatus") {
-                HStack {
-                    Image(systemName: "hammer.fill")
-                    Text("NOCH NICHT MARKTREIF")
-                        .fontWeight(.semibold)
-                    Spacer()
-                }
-                .padding(.vertical, 6)
-            }
-
-            Text("Der First-Run nutzt reale Google-/YouTube-Autorisierung. Weitere Produktflächen bleiben unsichtbar, bis ihre Capability-Gates bestehen.")
                 .foregroundStyle(.secondary)
 
             if let project = session.activeProject {
                 let guidance = project.stage.journeyGuidance
 
-                GroupBox("Aktiver Projektpfad") {
+                GroupBox("Aktives Projekt") {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack(alignment: .firstTextBaseline) {
                             VStack(alignment: .leading, spacing: 2) {
@@ -382,14 +369,8 @@ private struct OverviewView: View {
                             "Schritt \(project.stage.canonicalProgressPosition) von \(BlackstockStage.canonicalProgressCount)"
                         )
 
-                        Text(guidance.purpose)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-
-                        Divider()
-
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Nächster sinnvoller Schritt")
+                            Text("Als Nächstes")
                                 .font(.caption.weight(.semibold))
                             Text(guidance.nextAction)
                                 .font(.callout)
@@ -400,20 +381,11 @@ private struct OverviewView: View {
                                 onOpenStudio()
                             } label: {
                                 Label(
-                                    "Im Studio fortfahren",
+                                    "Im Editor fortfahren",
                                     systemImage: "arrow.right.circle.fill"
                                 )
                             }
                             .buttonStyle(.borderedProminent)
-                        } else if guidance.recommendedSurface == .overview {
-                            Label(
-                                project.stage == .published
-                                    ? "Du bist bereits im passenden Bereich Veröffentlicht / Lernen."
-                                    : "Der nächste Schritt wird direkt hier in der Übersicht bearbeitet.",
-                                systemImage: "checkmark.circle"
-                            )
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
