@@ -4,8 +4,35 @@ public enum ProductionMediaAuthorization: String, Codable, Sendable, CaseIterabl
     case owned
     case licensed
     case explicitlyAuthorized
+    case userDeclaredResponsibility
     case unknown
     case prohibited
+}
+
+public struct WorkspaceRightsAttestation: Codable, Sendable, Equatable {
+    public let channelID: String
+    public let confirmedByUser: Bool
+    public let attestedAt: Date
+    public let statementVersion: String
+
+    public init(
+        channelID: String,
+        confirmedByUser: Bool,
+        attestedAt: Date,
+        statementVersion: String = "workspace-rights-responsibility-v1"
+    ) {
+        self.channelID = channelID
+        self.confirmedByUser = confirmedByUser
+        self.attestedAt = attestedAt
+        self.statementVersion = statementVersion
+    }
+
+    public var permitsUserDirectedProduction: Bool {
+        confirmedByUser
+            && !channelID.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            ).isEmpty
+    }
 }
 
 public struct RightsAttestation: Codable, Sendable, Equatable {
@@ -32,6 +59,7 @@ public struct ProductionMediaAsset: Codable, Sendable, Equatable, Identifiable {
     public let authorization: ProductionMediaAuthorization
     public let rightsEvidence: [String]
     public let rightsAttestation: RightsAttestation
+    public let originSource: MediaSourceReference?
     public let importedAt: Date
 
     public init(
@@ -42,6 +70,7 @@ public struct ProductionMediaAsset: Codable, Sendable, Equatable, Identifiable {
         authorization: ProductionMediaAuthorization,
         rightsEvidence: [String],
         rightsAttestation: RightsAttestation,
+        originSource: MediaSourceReference? = nil,
         importedAt: Date
     ) {
         self.id = id
@@ -51,12 +80,14 @@ public struct ProductionMediaAsset: Codable, Sendable, Equatable, Identifiable {
         self.authorization = authorization
         self.rightsEvidence = rightsEvidence
         self.rightsAttestation = rightsAttestation
+        self.originSource = originSource
         self.importedAt = importedAt
     }
 
     public var mayEnterProduction: Bool {
         switch authorization {
-        case .owned, .licensed, .explicitlyAuthorized:
+        case .owned, .licensed, .explicitlyAuthorized,
+                .userDeclaredResponsibility:
             return rightsAttestation.confirmedByUser && !rightsEvidence.isEmpty
         case .unknown, .prohibited:
             return false
