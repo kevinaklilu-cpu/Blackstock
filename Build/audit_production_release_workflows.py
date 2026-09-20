@@ -7,6 +7,9 @@ ROOT = Path(__file__).resolve().parents[1]
 requirements = {
     ".github/workflows/production-release.yml": [
         "workflow_dispatch:",
+        "runs-on: macos-26",
+        "DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer",
+        "Pinned macOS toolchain guard",
         "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
         "persist-credentials: false",
         "BLACKSTOCK_APP_CERT_P12_BASE64",
@@ -36,6 +39,9 @@ requirements = {
     ],
     ".github/workflows/verify-published-release.yml": [
         "workflow_dispatch:",
+        "runs-on: macos-26",
+        "DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer",
+        "Pinned macOS toolchain guard",
         "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
         "persist-credentials: false",
         "Verify remote manifest and package before installation",
@@ -86,6 +92,11 @@ requirements = {
         "sourceCommitSHA",
         "installedAppSourceCommitSHA",
         "installedAppExecutableSHA256",
+        "installedAppArchitectureMismatch",
+        "/usr/bin/lipo",
+        "\"-archs\"",
+        "architectures.contains(\"arm64\")",
+        "architectures.contains(\"x86_64\")",
         "BlackstockSourceCommitSHA",
         "CryptoKit",
         "sha256(of:",
