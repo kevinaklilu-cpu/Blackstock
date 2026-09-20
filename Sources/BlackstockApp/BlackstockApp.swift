@@ -79,7 +79,11 @@ private struct WorkspaceShell: View {
                 OpportunityWorkspaceView(
                     session: session,
                     onProjectCreated: {
-                        selection = "Übersicht"
+                        selection =
+                            session.activeProject?.stage.journeyGuidance
+                                .recommendedSurface == .studio
+                            ? "Studio"
+                            : "Übersicht"
                     }
                 )
             case "Projekte":
@@ -121,6 +125,12 @@ private struct WorkspaceShell: View {
                     session: session,
                     onOpenStudio: { selection = "Studio" }
                 )
+            }
+        }
+        .task {
+            if session.activeProject?.stage.journeyGuidance
+                .recommendedSurface == .studio {
+                selection = "Studio"
             }
         }
         .onChange(of: commandPaletteRequest) { _ in
