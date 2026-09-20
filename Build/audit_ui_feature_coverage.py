@@ -55,6 +55,7 @@ requirements = {
         "state.importMovie(",
         "state.importSupplementalCapture(",
         "state.generateLocalClipCandidates(",
+        "state.createAutomaticHighlights(",
         "state.previewLocalClipCandidate(",
         "state.saveLocalClipCandidate(",
         "state.applyLocalClipCandidate(",
