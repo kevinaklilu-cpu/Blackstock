@@ -16,7 +16,7 @@ final class StudioWorkspaceSnapshotTests: XCTestCase {
             ),
             transcriptPreview: "Gespeicherter Clip",
             wordCount: 3,
-            savedAt: Date(timeIntervalSince1970: 2.5)
+            savedAt: Date(timeIntervalSince1970: 4)
         )
         let snapshot = StudioWorkspaceSnapshot(
             projectID: projectID,
