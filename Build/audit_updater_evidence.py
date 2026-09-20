@@ -194,7 +194,7 @@ requirements = {
         '"installerReceiptInstalledAt"',
         '"captureInstallerReceiptInstalledAt"',
         '"sameInstallationReceiptVerified"',
-        "same installer receipt installation",
+        "installer receipt installation",
         "TemporaryDirectory",
         "write_snapshot(",
         "require_source_unchanged(",
