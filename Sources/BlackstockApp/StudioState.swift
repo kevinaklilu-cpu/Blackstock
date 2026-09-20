@@ -858,11 +858,11 @@ final class StudioState: ObservableObject {
                 "local-clip-candidate-applied",
             summary:
                 "Lokaler Clip-Kandidat als non-destruktiver Trim übernommen: \(format(start)) bis \(format(end)).",
-            beforeRevisionID: before,
-            afterRevisionID: revision.id,
             relatedSourceIDs:
                 candidate.segmentIDs
                     .map(\.uuidString),
+            beforeRevisionID: before,
+            afterRevisionID: revision.id,
             reversible: true,
             correlationID: correlationID
         ))
