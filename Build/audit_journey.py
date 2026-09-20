@@ -37,6 +37,31 @@ checks = {
         '"blackstock.projectSource.',
         "workspaceChannelID",
     ],
+    "Sources/BlackstockCore/LocalClipCandidateGenerator.swift": [
+        "LocalClipCandidateGenerator",
+        "pauseBoundarySeconds",
+        "minimumDurationSeconds",
+        "maximumDurationSeconds",
+        "averageConfidence",
+    ],
+    "Tests/BlackstockCoreTests/LocalClipCandidateGeneratorTests.swift": [
+        "testPauseSeparatedSpeechCreatesMultipleCandidates",
+        "testShortSpeechBlocksAreNotInventedAsCandidates",
+        "testCandidateStaysInsideSourceDuration",
+        "testLongContinuousSpeechIsChunkedByMaximumDuration",
+    ],
+    "Sources/BlackstockApp/StudioState.swift": [
+        "generateLocalClipCandidates(",
+        "applyLocalClipCandidate(",
+        "local-clip-candidates-generated",
+        "local-clip-candidate-applied",
+    ],
+    "Sources/BlackstockApp/StudioView.swift": [
+        "Lokale Clip-Kandidaten",
+        "Clip-Kandidaten lokal finden",
+        "Diesen Ausschnitt übernehmen",
+        "keine Erfolgs-, Qualitäts- oder Viralitätsnote",
+    ],
     "Sources/BlackstockCore/ProjectJourneyGuidance.swift": [
         "case .discovery:",
         "case .research:",
