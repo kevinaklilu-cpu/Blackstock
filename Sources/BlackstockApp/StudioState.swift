@@ -109,7 +109,28 @@ final class StudioState: ObservableObject {
                 renderArtifact = snapshot.renderArtifact
                 supplementalCaptures = snapshot.supplementalCaptures ?? []
                 savedClipSelections =
-                    snapshot.savedClipSelections ?? []
+                    (snapshot.savedClipSelections ?? [])
+                    .map { selection in
+                        guard let artifact =
+                                selection.renderArtifact
+                        else {
+                            return selection
+                        }
+                        let exists =
+                            FileManager.default
+                            .fileExists(
+                                atPath:
+                                    artifact.fileURL.path
+                            )
+                        guard exists,
+                              artifact
+                                .hasCurrentTechnicalValidation
+                        else {
+                            return selection
+                                .withRenderArtifact(nil)
+                        }
+                        return selection
+                    }
 
                 if let reframe = graph.currentOperations
                     .last(where: { $0.type == .reframe })?
@@ -1452,9 +1473,14 @@ final class StudioState: ObservableObject {
     func invalidateSavedClipRenders() {
         var changed = false
         savedClipSelections = savedClipSelections.map {
-            guard $0.renderArtifact != nil else {
+            guard let artifact =
+                    $0.renderArtifact else {
                 return $0
             }
+            try? FileManager.default
+                .removeItem(
+                    at: artifact.fileURL
+                )
             changed = true
             return $0.withRenderArtifact(nil)
         }
