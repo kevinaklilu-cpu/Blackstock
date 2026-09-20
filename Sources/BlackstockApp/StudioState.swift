@@ -936,6 +936,26 @@ final class StudioState: ObservableObject {
         errorMessage = nil
     }
 
+    func renameSavedClipSelection(
+        id: UUID,
+        title: String
+    ) {
+        guard let index =
+                savedClipSelections.firstIndex(
+                    where: { $0.id == id }
+                ) else {
+            return
+        }
+
+        savedClipSelections[index] =
+            savedClipSelections[index]
+                .withTitle(title)
+        persistWorkspaceIfPossible()
+        clipCandidateStatusMessage =
+            "Clip-Name wurde gespeichert."
+        errorMessage = nil
+    }
+
     func removeSavedClipSelection(
         _ selection: SavedClipSelection
     ) {
@@ -1045,10 +1065,22 @@ final class StudioState: ObservableObject {
                     continue
                 }
 
-                let baseName = String(
-                    format: "Blackstock-Clip-%02d",
-                    index + 1
-                )
+                let titleComponent =
+                    safeExportNameComponent(
+                        selection.displayTitle
+                    )
+                let baseName =
+                    String(
+                        format:
+                            "Blackstock-Clip-%02d",
+                        index + 1
+                    )
+                    + (
+                        titleComponent.isEmpty
+                        || titleComponent == "Clip"
+                        ? ""
+                        : "-" + titleComponent
+                    )
                 let mp4URL = try availableExportURL(
                     in: directoryURL,
                     baseName: baseName,
@@ -1149,6 +1181,36 @@ final class StudioState: ObservableObject {
                 "Clip-Export fehlgeschlagen: "
                 + error.localizedDescription
         }
+    }
+
+    private func safeExportNameComponent(
+        _ value: String
+    ) -> String {
+        let allowed =
+            CharacterSet.alphanumerics
+            .union(
+                CharacterSet(
+                    charactersIn: "-_ "
+                )
+            )
+        let scalars = value.unicodeScalars.map {
+            allowed.contains($0)
+            ? Character(String($0))
+            : "-"
+        }
+        let normalized = String(scalars)
+            .replacingOccurrences(
+                of: " ",
+                with: "-"
+            )
+            .split(
+                separator: "-",
+                omittingEmptySubsequences: true
+            )
+            .joined(separator: "-")
+        return String(
+            normalized.prefix(64)
+        )
     }
 
     private func availableExportURL(
