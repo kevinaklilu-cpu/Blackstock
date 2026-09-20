@@ -24,6 +24,11 @@ enum BlackstockCaptureHardwareAudit {
     ) async {
         guard FileManager.default.fileExists(
             atPath: fileURL.path
+        ),
+        isExpectedPersistedProjectCapture(
+            fileURL: fileURL,
+            projectID: projectID,
+            kind: kind
         ) else {
             return
         }
@@ -248,6 +253,64 @@ enum BlackstockCaptureHardwareAudit {
             applicationExecutableSHA256:
                 executableSHA256
         )
+    }
+
+    private static func isExpectedPersistedProjectCapture(
+        fileURL: URL,
+        projectID: UUID,
+        kind: CaptureKind
+    ) -> Bool {
+        do {
+            let base = try FileManager.default.url(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask,
+                appropriateFor: nil,
+                create: true
+            )
+            let projectDirectory = base
+                .appendingPathComponent(
+                    "Blackstock",
+                    isDirectory: true
+                )
+                .appendingPathComponent(
+                    "Projects",
+                    isDirectory: true
+                )
+                .appendingPathComponent(
+                    projectID.uuidString,
+                    isDirectory: true
+                )
+            let expectedDirectory = projectDirectory
+                .appendingPathComponent(
+                    kind == .microphone
+                        ? "Captures"
+                        : "Media",
+                    isDirectory: true
+                )
+                .resolvingSymlinksInPath()
+                .standardizedFileURL
+            let resolvedFileURL = fileURL
+                .resolvingSymlinksInPath()
+                .standardizedFileURL
+
+            guard resolvedFileURL
+                    .deletingLastPathComponent()
+                    == expectedDirectory,
+                  UUID(
+                    uuidString: resolvedFileURL
+                        .deletingPathExtension()
+                        .lastPathComponent
+                  ) != nil else {
+                return false
+            }
+
+            return FileManager.default
+                .isReadableFile(
+                    atPath: resolvedFileURL.path
+                )
+        } catch {
+            return false
+        }
     }
 
     private static func makeStore()
