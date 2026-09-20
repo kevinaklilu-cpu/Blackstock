@@ -21,6 +21,7 @@ requirements = {
         "BLACKSTOCK_NOTARY_ISSUER",
         "BLACKSTOCK_UPDATE_PRIVATE_KEY_BASE64",
         "BLACKSTOCK_UPDATE_PUBLIC_KEY_BASE64",
+        "BLACKSTOCK_GOOGLE_OAUTH_CLIENT_SECRET",
         "Verify update signing key pair",
         "Build/verify_update_key_pair.swift",
         "BLACKSTOCK_INCLUDE_E2E_SMOKE: \"0\"",
