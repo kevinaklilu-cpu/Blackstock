@@ -503,6 +503,24 @@ struct StudioView: View {
 
                             HStack {
                                 Button {
+                                    Task {
+                                        await state
+                                            .previewSavedClipSelection(
+                                                selection
+                                            )
+                                    }
+                                } label: {
+                                    Label(
+                                        state.previewedLocalClipCandidateID
+                                            == selection.id
+                                            ? "Vorschau läuft"
+                                            : "Vorschau abspielen",
+                                        systemImage: "play.circle"
+                                    )
+                                }
+                                .buttonStyle(.bordered)
+
+                                Button {
                                     state.loadSavedClipSelection(
                                         selection
                                     )
