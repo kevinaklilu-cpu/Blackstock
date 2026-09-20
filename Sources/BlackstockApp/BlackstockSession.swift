@@ -79,6 +79,7 @@ final class BlackstockSession: ObservableObject {
     @Published private(set) var latestCommentPage: YouTubeCommentThreadPage?
     @Published private(set) var latestCommentsVideoID: String?
     @Published private(set) var importedOAuthClientID: String
+    @Published private(set) var workspaceRightsResponsibilityAccepted: Bool
 
     private var tokenSet: GoogleOAuthTokenSet?
     private var cachedPublishingJournal: ExternalActionJournal?
@@ -92,6 +93,7 @@ final class BlackstockSession: ObservableObject {
         importedOAuthClientID = BlackstockKeychain.read("google.oauth.importedClientID")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         onboardingComplete = UserDefaults.standard.bool(forKey: "blackstock.firstRun.complete")
+        workspaceRightsResponsibilityAccepted = false
         activeProject = Self.loadStoredProject()
         activeOpportunitySource = Self.loadStoredSource()
         if let activeProject {
@@ -105,6 +107,17 @@ final class BlackstockSession: ObservableObject {
         }
         primaryTopic = UserDefaults.standard.string(forKey: "blackstock.workspace.primaryTopic") ?? ""
         contentLanguage = UserDefaults.standard.string(forKey: "blackstock.workspace.contentLanguage") ?? "de"
+        let storedRightsChannelID =
+            activeProject?.targetChannelID
+            ?? UserDefaults.standard.string(
+                forKey: "blackstock.workspace.channelID"
+            )
+        workspaceRightsResponsibilityAccepted =
+            storedRightsChannelID.flatMap {
+                Self.loadStoredWorkspaceRightsAttestation(
+                    channelID: $0
+                )
+            }?.permitsUserDirectedProduction == true
     }
 
     var selectedChannel: YouTubeChannelIdentity? {
@@ -463,6 +476,10 @@ final class BlackstockSession: ObservableObject {
                     account: "youtube.\(id).oauthClientID"
                 )
             }
+            workspaceRightsResponsibilityAccepted =
+                Self.loadStoredWorkspaceRightsAttestation(
+                    channelID: id
+                )?.permitsUserDirectedProduction == true
             step = .topic
             errorMessage = nil
         } catch {
@@ -475,6 +492,62 @@ final class BlackstockSession: ObservableObject {
             ?? UserDefaults.standard.string(
                 forKey: "blackstock.workspace.channelID"
             )
+    }
+
+    var workspaceRightsAttestation:
+        WorkspaceRightsAttestation? {
+        guard let channelID =
+            selectedChannelID ?? workspaceChannelID else {
+            return nil
+        }
+        return Self.loadStoredWorkspaceRightsAttestation(
+            channelID: channelID
+        )
+    }
+
+    @discardableResult
+    func setWorkspaceRightsResponsibilityAccepted(
+        _ accepted: Bool
+    ) -> Bool {
+        guard let channelID =
+            selectedChannelID ?? workspaceChannelID else {
+            errorMessage =
+                "Wähle zuerst den YouTube-Arbeitsbereich."
+            return false
+        }
+
+        let key =
+            "blackstock.workspace.rightsAttestation.\(channelID)"
+
+        guard accepted else {
+            UserDefaults.standard.removeObject(forKey: key)
+            workspaceRightsResponsibilityAccepted = false
+            errorMessage = nil
+            return true
+        }
+
+        do {
+            let attestation = WorkspaceRightsAttestation(
+                channelID: channelID,
+                confirmedByUser: true,
+                attestedAt: Date()
+            )
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            UserDefaults.standard.set(
+                try encoder.encode(attestation),
+                forKey: key
+            )
+            workspaceRightsResponsibilityAccepted = true
+            errorMessage = nil
+            return true
+        } catch {
+            workspaceRightsResponsibilityAccepted = false
+            errorMessage =
+                "Die Nutzungsverantwortung konnte nicht gespeichert werden: "
+                + describe(error)
+            return false
+        }
     }
 
     var publicPublishingAllowed: Bool {
@@ -1534,6 +1607,12 @@ final class BlackstockSession: ObservableObject {
     func useOpportunityAsClip(
         _ opportunity: YouTubeOpportunityCandidate
     ) {
+        guard workspaceRightsAttestation?
+            .permitsUserDirectedProduction == true else {
+            errorMessage =
+                "Bestätige einmalig die Nutzungsverantwortung für diesen Arbeitsbereich, bevor du ein Video als Clip-Projekt übernimmst."
+            return
+        }
         useOpportunity(
             opportunity,
             productionIntentKind: .clipFromOpportunity
@@ -1765,6 +1844,10 @@ final class BlackstockSession: ObservableObject {
                 project.targetChannelID,
                 forKey: "blackstock.workspace.channelID"
             )
+            workspaceRightsResponsibilityAccepted =
+                Self.loadStoredWorkspaceRightsAttestation(
+                    channelID: project.targetChannelID
+                )?.permitsUserDirectedProduction == true
             latestGrowthLearning = loadGrowthLearning(
                 projectID: project.id
             )
@@ -1806,6 +1889,23 @@ final class BlackstockSession: ObservableObject {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return (try? decoder.decode(ChannelStrategy.self, from: data).version) ?? 1
+    }
+
+    private static func loadStoredWorkspaceRightsAttestation(
+        channelID: String
+    ) -> WorkspaceRightsAttestation? {
+        guard let data = UserDefaults.standard.data(
+            forKey:
+                "blackstock.workspace.rightsAttestation.\(channelID)"
+        ) else {
+            return nil
+        }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try? decoder.decode(
+            WorkspaceRightsAttestation.self,
+            from: data
+        )
     }
 
     private static func store(project: BlackstockProject) throws {
