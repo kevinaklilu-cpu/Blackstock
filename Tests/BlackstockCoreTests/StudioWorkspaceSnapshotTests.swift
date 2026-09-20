@@ -22,6 +22,8 @@ final class StudioWorkspaceSnapshotTests: XCTestCase {
             trimEnd: 10,
             transcript: nil,
             captionURL: nil,
+            burnInCaptionsEnabled: true,
+            captionVisualStyle: .strong,
             renderArtifact: nil,
             updatedAt: Date(timeIntervalSince1970: 3)
         )
@@ -32,6 +34,14 @@ final class StudioWorkspaceSnapshotTests: XCTestCase {
         )
 
         XCTAssertEqual(restored, snapshot)
+        XCTAssertEqual(
+            restored.captionVisualStyle,
+            .strong
+        )
+        XCTAssertEqual(
+            restored.burnInCaptionsEnabled,
+            true
+        )
     }
 
     func testSupplementalCaptureIsCopiedIntoProjectWorkspace() throws {
