@@ -64,7 +64,7 @@ public struct CaptureHardwareSmokeEvidence:
     Codable,
     Sendable,
     Equatable {
-    public static let currentSchemaVersion = 5
+    public static let currentSchemaVersion = 6
 
     public var schemaVersion: Int
     public var testedAt: Date
@@ -76,6 +76,7 @@ public struct CaptureHardwareSmokeEvidence:
     public var installedFromPackage: Bool
     public var installerReceiptPackageID: String
     public var installerReceiptVersion: String
+    public var installerReceiptInstalledAt: Date
     public var installerReceiptVerified: Bool
     public var applicationTeamID: String
     public var developerIDApplicationVerified: Bool
@@ -104,6 +105,7 @@ public struct CaptureHardwareSmokeEvidence:
         installedFromPackage: Bool,
         installerReceiptPackageID: String,
         installerReceiptVersion: String,
+        installerReceiptInstalledAt: Date,
         installerReceiptVerified: Bool,
         applicationTeamID: String,
         developerIDApplicationVerified: Bool,
@@ -122,6 +124,8 @@ public struct CaptureHardwareSmokeEvidence:
             installerReceiptPackageID
         self.installerReceiptVersion =
             installerReceiptVersion
+        self.installerReceiptInstalledAt =
+            installerReceiptInstalledAt
         self.installerReceiptVerified =
             installerReceiptVerified
         self.applicationTeamID = applicationTeamID
@@ -227,6 +231,8 @@ public struct CaptureHardwareSmokeEvidence:
             && installerReceiptVerified
             && !installerReceiptPackageID.isEmpty
             && !installerReceiptVersion.isEmpty
+            && installerReceiptInstalledAt
+                <= testedAt.addingTimeInterval(1)
             && developerIDApplicationVerified
             && !applicationTeamID.isEmpty
             && applicationExecutableSHA256.count == 64
