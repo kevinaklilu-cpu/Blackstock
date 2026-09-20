@@ -1525,7 +1525,7 @@ final class BlackstockSession: ObservableObject {
     }
 
     func useOpportunity(_ opportunity: YouTubeOpportunityCandidate) {
-        guard let channelID = workspaceChannelID ?? selectedChannelID else {
+        guard let channelID = selectedChannelID ?? workspaceChannelID else {
             errorMessage = "Kein Zielkanal ausgewählt."
             return
         }
@@ -1743,6 +1743,7 @@ final class BlackstockSession: ObservableObject {
         activeOpportunitySource = nil
         UserDefaults.standard.removeObject(forKey: "blackstock.activeProject")
         UserDefaults.standard.removeObject(forKey: "blackstock.activeOpportunitySource")
+        UserDefaults.standard.removeObject(forKey: "blackstock.workspace.channelID")
         UserDefaults.standard.removeObject(forKey: "blackstock.workspace.primaryTopic")
         UserDefaults.standard.removeObject(forKey: "blackstock.workspace.contentLanguage")
         primaryTopic = ""
