@@ -46,7 +46,8 @@ public actor LocalVideoRenderer {
         transcript: LocalTranscript? = nil,
         burnInCaptions: Bool = false,
         captionStyle: CaptionVisualStyle = .clear,
-        supplementalAudio: [SupplementalAudioMixInput] = []
+        supplementalAudio: [SupplementalAudioMixInput] = [],
+        supplementalVideo: [SupplementalVideoInsertInput] = []
     ) async throws -> RenderArtifact {
         guard asset.mayEnterProduction else {
             throw LocalRenderError.unauthorizedMedia
@@ -101,8 +102,17 @@ public actor LocalVideoRenderer {
             captionTranscript = nil
         }
 
+        let hasCaptionPostProcess =
+            captionTranscript != nil
+            || !textOverlays.isEmpty
+        let hasSupplementalVideo =
+            !supplementalVideo.isEmpty
+        let needsPostProcess =
+            hasCaptionPostProcess
+            || hasSupplementalVideo
+
         let exportOutputURL: URL
-        if captionTranscript != nil || !textOverlays.isEmpty {
+        if needsPostProcess {
             exportOutputURL = FileManager.default
                 .temporaryDirectory
                 .appendingPathComponent(
@@ -112,10 +122,18 @@ public actor LocalVideoRenderer {
         } else {
             exportOutputURL = outputURL
         }
+
+        var supplementalVideoOutputURL: URL?
         defer {
             if exportOutputURL != outputURL {
                 try? FileManager.default.removeItem(
                     at: exportOutputURL
+                )
+            }
+            if let supplementalVideoOutputURL,
+               supplementalVideoOutputURL != outputURL {
+                try? FileManager.default.removeItem(
+                    at: supplementalVideoOutputURL
                 )
             }
         }
@@ -313,10 +331,38 @@ public actor LocalVideoRenderer {
             throw LocalRenderError.missingOutput
         }
 
-        if captionTranscript != nil || !textOverlays.isEmpty {
-            try await LocalCaptionBurnInRenderer()
+        var postProcessInputURL = exportOutputURL
+
+        if hasSupplementalVideo {
+            let visualOutputURL: URL
+            if hasCaptionPostProcess {
+                visualOutputURL = FileManager.default
+                    .temporaryDirectory
+                    .appendingPathComponent(
+                        "blackstock-visual-inserts-\(UUID().uuidString)"
+                    )
+                    .appendingPathExtension("mp4")
+                supplementalVideoOutputURL =
+                    visualOutputURL
+            } else {
+                visualOutputURL = outputURL
+            }
+
+            try await LocalSupplementalVideoCompositor()
                 .render(
                     inputURL: exportOutputURL,
+                    supplementalVideo:
+                        supplementalVideo,
+                    outputURL: visualOutputURL,
+                    preset: preset
+                )
+            postProcessInputURL = visualOutputURL
+        }
+
+        if hasCaptionPostProcess {
+            try await LocalCaptionBurnInRenderer()
+                .render(
+                    inputURL: postProcessInputURL,
                     transcript: captionTranscript,
                     textOverlays: textOverlays,
                     outputURL: outputURL,

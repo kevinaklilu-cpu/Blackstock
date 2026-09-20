@@ -11,6 +11,7 @@ public struct SupplementalCaptureAsset:
     public let kind: CaptureKind
     public let fileURL: URL
     public let mimeType: String
+    public let durationSeconds: Double?
     public let rightsBasis: String
     public let rightsEvidence: String
     public let rightsConfirmed: Bool
@@ -22,6 +23,7 @@ public struct SupplementalCaptureAsset:
         kind: CaptureKind,
         fileURL: URL,
         mimeType: String,
+        durationSeconds: Double? = nil,
         rightsBasis: String,
         rightsEvidence: String,
         rightsConfirmed: Bool,
@@ -32,6 +34,9 @@ public struct SupplementalCaptureAsset:
         self.kind = kind
         self.fileURL = fileURL
         self.mimeType = mimeType
+        self.durationSeconds = durationSeconds.map {
+            max($0, 0)
+        }
         self.rightsBasis = rightsBasis
             .trimmingCharacters(in: .whitespacesAndNewlines)
         self.rightsEvidence = rightsEvidence

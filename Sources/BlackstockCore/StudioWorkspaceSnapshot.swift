@@ -15,6 +15,7 @@ public struct StudioWorkspaceSnapshot: Codable, Sendable, Equatable {
     public let renderArtifact: RenderArtifact?
     public let supplementalCaptures: [SupplementalCaptureAsset]?
     public let supplementalAudioMixSettings: [SupplementalAudioMixSetting]?
+    public let supplementalVideoInsertSettings: [SupplementalVideoInsertSetting]?
     public let savedClipSelections: [SavedClipSelection]?
     public let updatedAt: Date
 
@@ -33,6 +34,7 @@ public struct StudioWorkspaceSnapshot: Codable, Sendable, Equatable {
         renderArtifact: RenderArtifact?,
         supplementalCaptures: [SupplementalCaptureAsset] = [],
         supplementalAudioMixSettings: [SupplementalAudioMixSetting] = [],
+        supplementalVideoInsertSettings: [SupplementalVideoInsertSetting] = [],
         savedClipSelections: [SavedClipSelection] = [],
         updatedAt: Date
     ) {
@@ -52,6 +54,8 @@ public struct StudioWorkspaceSnapshot: Codable, Sendable, Equatable {
         self.renderArtifact = renderArtifact
         self.supplementalCaptures = supplementalCaptures
         self.supplementalAudioMixSettings = supplementalAudioMixSettings
+        self.supplementalVideoInsertSettings =
+            supplementalVideoInsertSettings
         self.savedClipSelections = savedClipSelections
         self.updatedAt = updatedAt
     }
@@ -79,7 +83,7 @@ private struct PublishPreparationEnvelope: Codable, Sendable, Equatable {
 
 public enum WorkspaceSchema {
     public static let legacyUnversioned = 1
-    public static let current = 4
+    public static let current = 5
 }
 
 public enum WorkspaceMigrationError: Error, Sendable, Equatable {
@@ -239,6 +243,21 @@ public struct ProjectWorkspaceStore: Sendable {
         assetID: UUID
     ) throws -> URL {
         let directory = try captureDirectory(
+            projectID: projectID
+        )
+        return try copyProjectFile(
+            sourceURL: sourceURL,
+            destinationDirectory: directory,
+            assetID: assetID
+        )
+    }
+
+    public func importSupplementalVideoCapture(
+        sourceURL: URL,
+        projectID: UUID,
+        assetID: UUID
+    ) throws -> URL {
+        let directory = try mediaDirectory(
             projectID: projectID
         )
         return try copyProjectFile(
