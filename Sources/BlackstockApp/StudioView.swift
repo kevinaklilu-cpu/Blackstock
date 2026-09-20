@@ -680,7 +680,7 @@ struct StudioView: View {
                                 selection.renderArtifact {
                                 VStack(
                                     alignment: .leading,
-                                    spacing: 3
+                                    spacing: 6
                                 ) {
                                     Label(
                                         "Clip-Datei bereit",
@@ -701,6 +701,27 @@ struct StudioView: View {
                                     )
                                     .foregroundStyle(.secondary)
                                     .textSelection(.enabled)
+
+                                    Button {
+                                        Task {
+                                            await state
+                                                .useSavedClipForPackaging(
+                                                    selection
+                                                )
+                                        }
+                                    } label: {
+                                        Label(
+                                            "Für Packaging verwenden",
+                                            systemImage:
+                                                "shippingbox"
+                                        )
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                    .disabled(
+                                        !artifact
+                                            .hasCurrentTechnicalValidation
+                                        || !editingEnabled
+                                    )
                                 }
                             }
                         }
