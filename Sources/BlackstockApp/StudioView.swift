@@ -1932,36 +1932,99 @@ struct StudioView: View {
         GroupBox("Zusätzliche Aufnahmen") {
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(state.supplementalCaptures) { capture in
-                    HStack(spacing: 8) {
-                        Image(
-                            systemName: capture.kind == .microphone
-                                ? "mic.fill"
-                                : "waveform"
-                        )
-                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 8) {
+                            Image(
+                                systemName: capture.kind == .microphone
+                                    ? "mic.fill"
+                                    : "waveform"
+                            )
+                            .accessibilityHidden(true)
 
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(capture.kind.germanTitle)
-                                .font(.caption.weight(.semibold))
-                            Text(capture.fileURL.lastPathComponent)
-                                .font(.caption2.monospaced())
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                            Text(capture.rightsEvidence)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(capture.kind.germanTitle)
+                                    .font(.caption.weight(.semibold))
+                                Text(capture.fileURL.lastPathComponent)
+                                    .font(.caption2.monospaced())
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                Text(capture.rightsEvidence)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                            }
+                            Spacer()
+                            Label(
+                                "Rechte bestätigt",
+                                systemImage: "checkmark.shield"
+                            )
+                            .font(.caption2)
                         }
-                        Spacer()
-                        Label(
-                            "Rechte bestätigt",
-                            systemImage: "checkmark.shield"
-                        )
-                        .font(.caption2)
+
+                        if capture.kind == .microphone
+                            || capture.kind == .systemAudio {
+                            let setting = state.supplementalAudioSetting(
+                                for: capture.id
+                            )
+
+                            Toggle(
+                                "Im finalen Render mischen",
+                                isOn: Binding(
+                                    get: {
+                                        state.supplementalAudioSetting(
+                                            for: capture.id
+                                        ).enabled
+                                    },
+                                    set: {
+                                        state.setSupplementalAudioEnabled(
+                                            captureID: capture.id,
+                                            enabled: $0
+                                        )
+                                    }
+                                )
+                            )
+                            .font(.caption)
+                            .disabled(!editingEnabled)
+
+                            HStack(spacing: 10) {
+                                Text("Lautstärke")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+
+                                Slider(
+                                    value: Binding(
+                                        get: {
+                                            state.supplementalAudioSetting(
+                                                for: capture.id
+                                            ).volume
+                                        },
+                                        set: {
+                                            state.setSupplementalAudioVolume(
+                                                captureID: capture.id,
+                                                volume: $0
+                                            )
+                                        }
+                                    ),
+                                    in: 0...1,
+                                    step: 0.05
+                                )
+                                .disabled(
+                                    !editingEnabled
+                                    || !setting.enabled
+                                )
+
+                                Text(
+                                    "\(Int((setting.volume * 100).rounded())) %"
+                                )
+                                .font(.caption2.monospacedDigit())
+                                .frame(width: 42, alignment: .trailing)
+                            }
+                        }
                     }
+                    .padding(.vertical, 3)
                 }
 
-                Text("Zusätzliche Audioaufnahmen bleiben getrennt vom Hauptvideo und können später gezielt in den Audiomix übernommen werden.")
+                Text("Aktivierte Zusatzspuren werden lokal ab 0:00 mit dem Originalton gemischt und auf die finale Videolänge begrenzt. Die technische Audio- und Loudness-Prüfung misst anschließend den tatsächlich gerenderten Mix.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
