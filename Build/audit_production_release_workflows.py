@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 requirements = {
     ".github/workflows/production-release.yml": [
         "workflow_dispatch:",
+        "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
         "BLACKSTOCK_APP_CERT_P12_BASE64",
         "BLACKSTOCK_INSTALLER_CERT_P12_BASE64",
         "BLACKSTOCK_CODESIGN_IDENTITY",
@@ -26,7 +27,7 @@ requirements = {
         "BLACKSTOCK_SOURCE_COMMIT_SHA",
         "notary-response.json",
         "Developer-only helper leaked into production package.",
-        "actions/upload-artifact@v4",
+        "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
         "parsed.username",
         "parsed.fragment",
         "host.endswith(\".local\")",
@@ -34,6 +35,7 @@ requirements = {
     ],
     ".github/workflows/verify-published-release.yml": [
         "workflow_dispatch:",
+        "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
         "Verify remote manifest and package before installation",
         "BlackstockReleaseVerifier",
         "validate_production_release_evidence.py",
@@ -57,7 +59,7 @@ requirements = {
         "parsed.username",
         "parsed.fragment",
         "host.endswith(\".local\")",
-        "actions/upload-artifact@v4",
+        "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
     ],
     "Build/package.sh": [
         "BLACKSTOCK_NOTARY_KEY_PATH",
