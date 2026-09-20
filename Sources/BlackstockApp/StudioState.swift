@@ -869,9 +869,6 @@ final class StudioState: ObservableObject {
 
         do {
             try await rebuildPreview()
-            await refreshAudioInspection(
-                for: asset.sourceURL
-            )
             persistWorkspaceIfPossible()
             clipCandidateStatusMessage =
                 "Clip-Kandidat wurde als EditGraph-Revision übernommen und kann rückgängig gemacht werden."
