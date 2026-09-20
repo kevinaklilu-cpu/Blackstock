@@ -33,6 +33,30 @@ final class ZeroCostProcessingPolicyTests: XCTestCase {
         XCTAssertNil(route.providerID)
     }
 
+    func testImplementedLocalVisionReframingIsZeroCostAndRuntimeGated() {
+        let unavailable = BuiltInProcessingProviders.localVision(
+            available: false,
+            lastVerifiedAt: Date()
+        )
+        let available = BuiltInProcessingProviders.localVision(
+            available: true,
+            lastVerifiedAt: Date()
+        )
+
+        XCTAssertFalse(ZeroCostProcessingPolicy().permits(unavailable))
+        XCTAssertTrue(ZeroCostProcessingPolicy().permits(available))
+
+        let route = ZeroCostProviderSelector().select(
+            capability: .reframing,
+            providers: [
+                BuiltInProcessingProviders.opusClipAPI,
+                available
+            ]
+        )
+        XCTAssertEqual(route.status, .ready)
+        XCTAssertEqual(route.providerID, "blackstock.local.vision")
+    }
+
     func testLocalSpeechProviderIsRuntimeGated() {
         let unavailable = BuiltInProcessingProviders.localSpeech(
             available: false,
