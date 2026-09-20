@@ -133,6 +133,12 @@ requirements = {
         "applicationSigningMetadata",
         "Authority=Developer ID Application",
         "TeamIdentifier=",
+        "isExpectedPersistedProjectCapture",
+        '"Projects"',
+        '"Captures"',
+        '"Media"',
+        "resolvingSymlinksInPath",
+        "deletingPathExtension()",
     ],
     "Build/Blackstock.entitlements": [
         "com.apple.security.device.camera",
@@ -165,6 +171,12 @@ requirements = {
         "applicationExecutableSHA256",
         "non-finite JSON number",
         "durationSeconds must be finite",
+        "Application Support",
+        "canonical",
+        "project does not match projectID",
+        "all four canonical capture paths must belong to the same project",
+        "all four canonical capture paths must come from the same recording launch",
+        "persistedFilePath must use UUID project and asset names",
     ],
 }
 
