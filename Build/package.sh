@@ -9,7 +9,6 @@ VERSION="${BLACKSTOCK_VERSION:-0.1.0}"
 BUILD_NUMBER="${BLACKSTOCK_BUILD:-1}"
 BUNDLE_ID="de.blackstock.app"
 OAUTH_CLIENT_ID="${BLACKSTOCK_GOOGLE_OAUTH_CLIENT_ID:-}"
-OAUTH_CLIENT_SECRET="${BLACKSTOCK_GOOGLE_OAUTH_CLIENT_SECRET:-}"
 PUBLIC_PUBLISHING_APPROVED="${BLACKSTOCK_YOUTUBE_PUBLIC_PUBLISHING_APPROVED:-0}"
 APP_SIGN_IDENTITY="${BLACKSTOCK_CODESIGN_IDENTITY:-}"
 INSTALLER_SIGN_IDENTITY="${BLACKSTOCK_INSTALLER_IDENTITY:-}"
@@ -128,7 +127,6 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <key>NSMicrophoneUsageDescription</key><string>Blackstock verwendet das Mikrofon nur nach deiner Freigabe, um autorisierte Produktionsaufnahmen direkt in dein lokales Projekt aufzunehmen.</string>
 <key>NSSpeechRecognitionUsageDescription</key><string>Blackstock transkribiert autorisierte Produktionsmedien lokal auf diesem Mac, wenn On-Device-Spracherkennung verfügbar ist.</string>
 <key>BlackstockGoogleOAuthClientID</key><string>${OAUTH_CLIENT_ID}</string>
-<key>BlackstockGoogleOAuthClientSecret</key><string>${OAUTH_CLIENT_SECRET}</string>
 <key>BlackstockYouTubePublicPublishingApproved</key>${PUBLIC_PUBLISHING_PLIST}
 <key>BlackstockUpdateManifestURL</key><string>${UPDATE_MANIFEST_URL}</string>
 <key>BlackstockUpdatePublicKeyBase64</key><string>${UPDATE_PUBLIC_KEY}</string>
