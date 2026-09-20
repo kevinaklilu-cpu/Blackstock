@@ -36,6 +36,9 @@ final class StudioState: ObservableObject {
     @Published var isAnalyzingRetention = false
     @Published var storyboard: StoryboardPlan?
     @Published var supplementalCaptures: [SupplementalCaptureAsset] = []
+    @Published var localClipCandidates: [LocalClipCandidate] = []
+    @Published var isGeneratingClipCandidates = false
+    @Published var clipCandidateStatusMessage: String?
 
     private var correlationID = UUID()
     private var activeProjectID: UUID?
@@ -43,6 +46,9 @@ final class StudioState: ObservableObject {
 
     func loadWorkspace(projectID: UUID) async {
         activeProjectID = projectID
+        localClipCandidates = []
+        clipCandidateStatusMessage = nil
+        isGeneratingClipCandidates = false
 
         do {
             let store = try makeWorkspaceStore()
@@ -310,6 +316,8 @@ final class StudioState: ObservableObject {
             }
 
             asset = imported
+            localClipCandidates = []
+            clipCandidateStatusMessage = nil
             graph = EditGraph(createdAt: Date())
             ledger = ActivityLedger()
             correlationID = UUID()
@@ -704,6 +712,174 @@ final class StudioState: ObservableObject {
             errorMessage = nil
         } catch {
             errorMessage = "Reframe-Vorschau konnte nicht aktualisiert werden: \(error.localizedDescription)"
+        }
+    }
+
+    func generateLocalClipCandidates(
+        localeIdentifier: String
+    ) async {
+        guard let asset else {
+            clipCandidateStatusMessage =
+                "Kein autorisiertes Produktionsmedium geladen."
+            return
+        }
+
+        isGeneratingClipCandidates = true
+        clipCandidateStatusMessage = nil
+        defer { isGeneratingClipCandidates = false }
+
+        let transcriber = LocalOnDeviceTranscriber()
+        var authorization = transcriber.authorizationState()
+        if authorization == .notDetermined {
+            authorization = await transcriber.requestAuthorization()
+        }
+        speechAuthorizationState = authorization
+
+        guard authorization == .authorized else {
+            localClipCandidates = []
+            clipCandidateStatusMessage =
+                authorization == .restricted
+                ? "Lokale Spracherkennung ist auf diesem Mac eingeschränkt."
+                : "Lokale Spracherkennung wurde nicht erlaubt."
+            return
+        }
+
+        guard transcriber.isOnDeviceAvailable(
+            localeIdentifier: localeIdentifier
+        ) else {
+            localClipCandidates = []
+            clipCandidateStatusMessage =
+                "Für diese Sprache ist auf diesem Mac keine On-Device-Spracherkennung verfügbar. Blackstock verwendet keinen Cloud-Fallback."
+            return
+        }
+
+        do {
+            let sourceTranscript =
+                try await transcriber.transcribeVideo(
+                    url: asset.sourceURL,
+                    localeIdentifier: localeIdentifier
+                )
+
+            let candidates = LocalClipCandidateGenerator()
+                .generate(
+                    transcript: sourceTranscript,
+                    sourceDurationSeconds:
+                        asset.durationSeconds
+                )
+
+            localClipCandidates = candidates
+            if candidates.isEmpty {
+                clipCandidateStatusMessage =
+                    "Keine mindestens 15 Sekunden langen zusammenhängenden Sprachblöcke gefunden. Blackstock erfindet deshalb keine Clip-Vorschläge."
+            } else {
+                clipCandidateStatusMessage =
+                    "\(candidates.count) lokale Clip-Kandidaten aus Sprachsegmenten und gemessenen Pausen gefunden."
+            }
+
+            ledger.append(.init(
+                timestamp: Date(),
+                actor: .blackstock,
+                stage: .editing,
+                action:
+                    "local-clip-candidates-generated",
+                summary:
+                    "\(candidates.count) lokale Clip-Kandidaten wurden deterministisch aus dem Original-Transkript und gemessenen Pausen abgeleitet; es wurde keine Erfolgs- oder Viralitätsnote erzeugt.",
+                relatedSourceIDs:
+                    candidates.flatMap(\.segmentIDs)
+                        .map(\.uuidString),
+                reversible: false,
+                correlationID: correlationID
+            ))
+            persistWorkspaceIfPossible()
+            errorMessage = nil
+        } catch {
+            localClipCandidates = []
+            clipCandidateStatusMessage =
+                "Lokale Clip-Analyse fehlgeschlagen: "
+                + error.localizedDescription
+        }
+    }
+
+    func applyLocalClipCandidate(
+        _ candidate: LocalClipCandidate
+    ) async {
+        guard let asset else {
+            errorMessage =
+                "Kein Produktionsmedium geladen."
+            return
+        }
+
+        let start = min(
+            max(candidate.sourceRange.startSeconds, 0),
+            asset.durationSeconds
+        )
+        let end = min(
+            max(candidate.sourceRange.endSeconds, start),
+            asset.durationSeconds
+        )
+        guard end - start > 0.05 else {
+            errorMessage =
+                "Der vorgeschlagene Clip-Bereich ist nicht mehr gültig."
+            return
+        }
+
+        let before = graph.headID
+        let operation = EditOperation(
+            type: .trim,
+            timeRange: .init(
+                startSeconds: start,
+                durationSeconds: end - start
+            ),
+            createdAt: Date()
+        )
+        let revision = graph.apply(
+            operation,
+            actor: .user
+        )
+
+        trimStart = start
+        trimEnd = end
+        lastUndoneRevisionID = nil
+        renderArtifact = nil
+        transcript = nil
+        captionURL = nil
+        transcriptStructure = nil
+        retentionAdvisory = nil
+        retentionAdvisorAvailability = nil
+        audioTechnicalAssessment = nil
+        audioSignalAssessment = nil
+        audioLoudnessAssessment = nil
+
+        ledger.append(.init(
+            timestamp: Date(),
+            actor: .user,
+            stage: .editing,
+            action:
+                "local-clip-candidate-applied",
+            summary:
+                "Lokaler Clip-Kandidat als non-destruktiver Trim übernommen: \(format(start)) bis \(format(end)).",
+            beforeRevisionID: before,
+            afterRevisionID: revision.id,
+            relatedSourceIDs:
+                candidate.segmentIDs
+                    .map(\.uuidString),
+            reversible: true,
+            correlationID: correlationID
+        ))
+
+        do {
+            try await rebuildPreview()
+            await refreshAudioInspection(
+                for: asset.sourceURL
+            )
+            persistWorkspaceIfPossible()
+            clipCandidateStatusMessage =
+                "Clip-Kandidat wurde als EditGraph-Revision übernommen und kann rückgängig gemacht werden."
+            errorMessage = nil
+        } catch {
+            errorMessage =
+                "Clip-Vorschau konnte nicht aktualisiert werden: "
+                + error.localizedDescription
         }
     }
 
