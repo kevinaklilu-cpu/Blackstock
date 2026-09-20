@@ -1557,6 +1557,10 @@ final class BlackstockSession: ObservableObject {
             )
             activeProject = seed.project
             activeOpportunitySource = seed.source
+            lastPublishingResult = nil
+            latestGrowthLearning = nil
+            latestCommentPage = nil
+            latestCommentsVideoID = nil
             UserDefaults.standard.set(channelID, forKey: "blackstock.workspace.channelID")
             UserDefaults.standard.set(primaryTopic, forKey: "blackstock.workspace.primaryTopic")
             UserDefaults.standard.set(contentLanguage, forKey: "blackstock.workspace.contentLanguage")
@@ -1728,6 +1732,12 @@ final class BlackstockSession: ObservableObject {
                 project.targetChannelID,
                 forKey: "blackstock.workspace.channelID"
             )
+            latestGrowthLearning = loadGrowthLearning(
+                projectID: project.id
+            )
+            latestCommentPage = nil
+            latestCommentsVideoID = nil
+            lastPublishingResult = nil
             errorMessage = nil
             return true
         } catch {
