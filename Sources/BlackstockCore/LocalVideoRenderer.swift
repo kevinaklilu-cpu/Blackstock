@@ -54,7 +54,8 @@ public actor LocalVideoRenderer {
             ![
                 EditOperationType.trim,
                 EditOperationType.removeRange,
-                EditOperationType.reframe
+                EditOperationType.reframe,
+                EditOperationType.overlay
             ].contains($0.type)
         }
         if let unsupported {
@@ -77,6 +78,11 @@ public actor LocalVideoRenderer {
             throw LocalRenderError.emptyEditResult
         }
 
+        let textOverlays = TextOverlayPlanner().cues(
+            operations: graph.currentOperations,
+            outputDurationSeconds: timeline.outputDurationSeconds
+        )
+
         let captionTranscript: LocalTranscript?
         if burnInCaptions,
            let transcript,
@@ -93,7 +99,7 @@ public actor LocalVideoRenderer {
         }
 
         let exportOutputURL: URL
-        if captionTranscript != nil {
+        if captionTranscript != nil || !textOverlays.isEmpty {
             exportOutputURL = FileManager.default
                 .temporaryDirectory
                 .appendingPathComponent(
@@ -225,11 +231,12 @@ public actor LocalVideoRenderer {
             throw LocalRenderError.missingOutput
         }
 
-        if let captionTranscript {
+        if captionTranscript != nil || !textOverlays.isEmpty {
             try await LocalCaptionBurnInRenderer()
                 .render(
                     inputURL: exportOutputURL,
                     transcript: captionTranscript,
+                    textOverlays: textOverlays,
                     outputURL: outputURL,
                     preset: preset,
                     style: captionStyle
