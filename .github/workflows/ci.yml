@@ -1141,17 +1141,6 @@ jobs:
           assert data["persistenceRoundTrip"] is True
           PY
 
-      - name: Upload Intel release identity evidence
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: Blackstock-intel-release-identity
-          path: |
-            ${{ runner.temp }}/intel-installed-release-fingerprint.json
-            ${{ runner.temp }}/blackstock-intel-clean-machine-e2e.json
-            ${{ runner.temp }}/blackstock-intel-clean-machine-e2e.log
-          retention-days: 7
-          if-no-files-found: error
-
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: Blackstock-development-pkg
@@ -1355,4 +1344,16 @@ jobs:
           assert data["learningFactCount"] > 0
           assert data["persistenceRoundTrip"] is True
           PY
+
+      - name: Upload Intel release identity evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: Blackstock-intel-release-identity
+          path: |
+            ${{ runner.temp }}/intel-installed-release-fingerprint.json
+            ${{ runner.temp }}/blackstock-intel-clean-machine-e2e.json
+            ${{ runner.temp }}/blackstock-intel-clean-machine-e2e.log
+          retention-days: 7
+          if-no-files-found: error
+
 
