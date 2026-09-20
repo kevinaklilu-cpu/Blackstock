@@ -42,7 +42,7 @@ struct FirstRunView: View {
             Spacer()
 
             Text("Von Video zu Clip.")
-                .font(.system(size: 42, weight: .bold))
+                .font(.largeTitle.bold())
                 .tracking(-1)
             Text("Verbinde deinen Kanal und starte.")
                 .font(.title3)
@@ -191,7 +191,7 @@ struct FirstRunView: View {
                 "Thema, z. B. KI für Selbstständige",
                 text: $session.primaryTopic
             )
-            .accessibilityLabel("Kanalthema")
+            .accessibilityLabel("Strategischer Kanal-Schwerpunkt")
             .textFieldStyle(.roundedBorder)
             .font(.title3)
 
