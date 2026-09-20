@@ -18,7 +18,7 @@ requirements = {
         "rightsConfirmed",
     ],
     "Sources/BlackstockCore/StudioWorkspaceSnapshot.swift": [
-        "public static let current = 3",
+        "public static let current = 4",
         "supplementalCaptures",
         "importSupplementalCapture",
         'appendingPathComponent("Captures"',
