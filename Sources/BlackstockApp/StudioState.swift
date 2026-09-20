@@ -1175,6 +1175,17 @@ final class StudioState: ObservableObject {
         reframeAspectRatio = .portrait9x16
         reframeFocalX = 0.5
         reframeFocalY = 0.5
+        if let asset {
+            do {
+                let proposal = try await LocalVisionFocalPointSuggester()
+                    .suggest(url: asset.sourceURL)
+                focalPointProposal = proposal
+                reframeFocalX = proposal.focalX
+                reframeFocalY = proposal.focalY
+            } catch {
+                focalPointProposal = nil
+            }
+        }
         captionVisualStyle = .strong
 
         await applyLocalClipCandidate(primary)
