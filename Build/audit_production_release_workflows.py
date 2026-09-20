@@ -146,6 +146,12 @@ requirements = {
         "cameraEntitlementVerified",
         "audioInputEntitlementVerified",
         "/Applications/Blackstock.app",
+        "non-finite JSON number",
+        "parsed.username",
+        "parsed.password",
+        "parsed.fragment",
+        'host == "::1"',
+        'host.endswith(".local")',
     ],
 }
 
