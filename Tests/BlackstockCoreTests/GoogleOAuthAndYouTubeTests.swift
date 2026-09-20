@@ -122,15 +122,49 @@ final class GoogleOAuthAndYouTubeTests: XCTestCase {
         OAuthURLProtocol.handler = { request in
             XCTAssertEqual(request.httpMethod, "POST")
             let body = String(
-                data: request.httpBody ?? Data(),
+                data: OAuthURLProtocol.bodyData(from: request),
                 encoding: .utf8
             ) ?? ""
-            XCTAssertTrue(body.contains("client_id=abc.apps.googleusercontent.com"))
-            XCTAssertTrue(body.contains("client_secret=desktop-secret"))
-            XCTAssertTrue(body.contains("code=auth-code"))
-            XCTAssertTrue(body.contains("code_verifier=pkce-verifier"))
-            XCTAssertTrue(body.contains("redirect_uri=http%3A%2F%2F127%2E0%2E0%2E1%3A54321"))
-            XCTAssertTrue(body.contains("grant_type=authorization_code"))
+            let fields = Dictionary(
+                uniqueKeysWithValues: body
+                    .split(separator: "&")
+                    .compactMap { pair -> (String, String)? in
+                        let parts = pair.split(
+                            separator: "=",
+                            maxSplits: 1,
+                            omittingEmptySubsequences: false
+                        )
+                        guard parts.count == 2 else { return nil }
+                        let key = String(parts[0])
+                            .removingPercentEncoding
+                            ?? String(parts[0])
+                        let value = String(parts[1])
+                            .removingPercentEncoding
+                            ?? String(parts[1])
+                        return (key, value)
+                    }
+            )
+            XCTAssertEqual(
+                fields["client_id"],
+                "abc.apps.googleusercontent.com"
+            )
+            XCTAssertEqual(
+                fields["client_secret"],
+                "desktop-secret"
+            )
+            XCTAssertEqual(fields["code"], "auth-code")
+            XCTAssertEqual(
+                fields["code_verifier"],
+                "pkce-verifier"
+            )
+            XCTAssertEqual(
+                fields["redirect_uri"],
+                "http://127.0.0.1:54321"
+            )
+            XCTAssertEqual(
+                fields["grant_type"],
+                "authorization_code"
+            )
 
             let response = HTTPURLResponse(
                 url: request.url!,
@@ -240,6 +274,35 @@ final class GoogleOAuthAndYouTubeTests: XCTestCase {
 
 private final class OAuthURLProtocol: URLProtocol {
     nonisolated(unsafe) static var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
+
+    static func bodyData(from request: URLRequest) -> Data {
+        if let body = request.httpBody {
+            return body
+        }
+        guard let stream = request.httpBodyStream else {
+            return Data()
+        }
+
+        stream.open()
+        defer { stream.close() }
+
+        var data = Data()
+        let bufferSize = 4096
+        let buffer = UnsafeMutablePointer<UInt8>.allocate(
+            capacity: bufferSize
+        )
+        defer { buffer.deallocate() }
+
+        while stream.hasBytesAvailable {
+            let count = stream.read(
+                buffer,
+                maxLength: bufferSize
+            )
+            guard count > 0 else { break }
+            data.append(buffer, count: count)
+        }
+        return data
+    }
 
     override class func canInit(with request: URLRequest) -> Bool {
         request.url?.host == "oauth2.googleapis.com"
