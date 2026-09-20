@@ -25,11 +25,17 @@ requirements = {
     "Build/package.sh": [
         "BLACKSTOCK_INCLUDE_E2E_SMOKE",
         "Contents/Helpers/BlackstockE2ESmoke",
+        "--arch arm64",
+        "--arch x86_64",
+        "lipo -create",
+        "require_universal_binary",
     ],
     ".github/workflows/ci.yml": [
         'BLACKSTOCK_INCLUDE_E2E_SMOKE: "1"',
         "Run installed creator-loop E2E",
         "/Applications/Blackstock.app/Contents/Helpers/BlackstockE2ESmoke",
+        "lipo -verify_arch arm64 x86_64 /Applications/Blackstock.app/Contents/MacOS/Blackstock",
+        "lipo -verify_arch arm64 x86_64 /Applications/Blackstock.app/Contents/Helpers/BlackstockE2ESmoke",
         "BLACKSTOCK_E2E_PASS",
         'data["renderValidated"] is True',
         'data["qualityReviewPassed"] is True',
@@ -61,6 +67,6 @@ if errors:
 
 print(
     "Clean-machine E2E audit passed: CI installs the package and runs the "
-    "opt-in creator-loop helper from /Applications with real local media "
-    "processing and mocked external HTTP boundaries."
+    "opt-in creator-loop helper from /Applications with Universal-2 binaries, "
+    "real local media processing and mocked external HTTP boundaries."
 )
