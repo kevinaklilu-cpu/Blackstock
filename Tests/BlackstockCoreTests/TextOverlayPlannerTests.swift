@@ -55,6 +55,52 @@ final class TextOverlayPlannerTests: XCTestCase {
         )
     }
 
+    func testStructuralEditInvalidatesEarlierOverlayUntilUndo() {
+        let overlay = EditOperation(
+            type: .overlay,
+            timeRange: .init(
+                startSeconds: 1,
+                durationSeconds: 2
+            ),
+            text: "Vorher",
+            createdAt: Date()
+        )
+        let laterTrim = EditOperation(
+            type: .trim,
+            timeRange: .init(
+                startSeconds: 2,
+                durationSeconds: 5
+            ),
+            createdAt: Date()
+        )
+
+        XCTAssertTrue(
+            TextOverlayPlanner().cues(
+                operations: [overlay, laterTrim],
+                outputDurationSeconds: 5
+            ).isEmpty
+        )
+
+        let replacementOverlay = EditOperation(
+            type: .overlay,
+            timeRange: .init(
+                startSeconds: 0.5,
+                durationSeconds: 1.5
+            ),
+            text: "Nachher",
+            createdAt: Date()
+        )
+        let active = TextOverlayPlanner().cues(
+            operations: [
+                overlay,
+                laterTrim,
+                replacementOverlay
+            ],
+            outputDurationSeconds: 5
+        )
+        XCTAssertEqual(active.map(\.text), ["Nachher"])
+    }
+
     func testPlannerDropsEmptyAndInvalidOverlays() {
         let empty = EditOperation(
             type: .overlay,
