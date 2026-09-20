@@ -52,6 +52,19 @@ Die Nutzeroberfläche priorisiert:
 - "Warum hier?" als Disclosure,
 - Provider-/Abrufzeit-Provenance.
 
+## Kontinuierlicher Workspace nach dem First-Run
+
+Discovery endet nicht mit der Ersteinrichtung. Nach dem Onboarding bleiben **Chancen** und **Projekte** normale Hauptflächen:
+
+- **Chancen** lädt jederzeit neue reale YouTube-Suchergebnisse für den verbundenen Workspace-Kanal.
+- Suchraum und Provider-Sortierung sind sichtbar; Blackstock erzeugt weiterhin keinen eigenen Virality-Score.
+- **Als neues Projekt übernehmen** legt einen neuen Research-Loop an, ohne das vorherige Projekt zu löschen.
+- **Projekte** zeigt laufende, geprüfte und veröffentlichte Projekte im Verlauf und erlaubt den Wechsel zurück in den jeweils passenden nächsten Schritt.
+- Projektgebundene Opportunity-Quelle, Research-Evidence, Studio-Workspace, Publish-/Growth-Daten bleiben an der Projekt-ID gebunden.
+- Laufzeitdaten wie Kommentare und Learning-Zustand werden beim Projektwechsel neu auf den gewählten Kontext ausgerichtet, damit kein Zustand eines anderen Projekts in die Oberfläche hineinragt.
+
+Der First-Run richtet also den Workspace ein; er ist **nicht** der einzige Weg, später neue Content-Loops zu starten.
+
 ## Research-Video vs. Produktionsmedium
 
 Research-/Opportunity-Videos:
