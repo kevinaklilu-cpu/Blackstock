@@ -793,7 +793,7 @@ struct StudioView: View {
                                 spacing: 2
                             ) {
                                 Text(
-                                    "Sichtbare Captions ins Video rendern"
+                                    "Sichtbare Untertitel ins Video rendern"
                                 )
                                     .font(
                                         .caption.weight(
@@ -940,7 +940,7 @@ struct StudioView: View {
                         .padding(.horizontal, 28)
                         .padding(.bottom, 24)
                         .accessibilityLabel(
-                            "Burn-in-Caption: \(text)"
+                            "Eingebrannter Untertitel: \(text)"
                         )
                 }
             }
