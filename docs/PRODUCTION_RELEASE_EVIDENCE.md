@@ -91,6 +91,8 @@ Die Canonical-CI prüft mit `Build/audit_production_release_workflows.py`, dass 
 
 ### Produktionskonfiguration vor dem Build
 
+Die Produktions-URL-Policy gilt konsistent für Workflow-Eingaben, den Manifest-Generator und den Release-Verifier. Manifest- und Paket-URLs müssen HTTPS verwenden, dürfen keine eingebetteten Zugangsdaten oder Fragmente enthalten und dürfen nicht auf lokale/Test-Spezialhosts wie `localhost`, Loopback, `.local`, `.invalid`, `.example` oder `.test` zeigen. Dasselbe gilt nach HTTP-Redirects im Release-Verifier.
+
 Wenn `BLACKSTOCK_PRODUCTION_RELEASE=1` gesetzt ist, bricht `Build/package.sh` bereits **vor** der Kompilierung ab, wenn die Produktionskonfiguration nicht fail-closed gültig ist. `Build/validate_production_package_config.py` verlangt:
 
 - eine absolute HTTPS-Manifest-URL auf einem realen Host, ohne eingebettete Zugangsdaten oder Fragment,
