@@ -23,13 +23,16 @@ on:
 permissions:
   contents: read
 
+env:
+  DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+
 concurrency:
   group: blackstock-production-release
   cancel-in-progress: false
 
 jobs:
   build-sign-notarize:
-    runs-on: macos-latest
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
