@@ -42,6 +42,18 @@ requirements = {
         'data["uploadJournalCommitted"] is True',
         'data["analyticsViews"] == 1234',
         'data["persistenceRoundTrip"] is True',
+        "intel-smoke:",
+        "runs-on: macos-26-intel",
+        "needs: package",
+        "actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16",
+        "name: Blackstock-development-pkg",
+        'test "$(uname -m)" = "x86_64"',
+        "Verify downloaded package identity",
+        'ACTUAL_SHA="$(shasum -a 256 Blackstock.pkg',
+        "Install exact package on native Intel runner",
+        "Launch installed app natively on Intel",
+        "Run installed creator-loop E2E natively on Intel",
+        "blackstock-intel-clean-machine-e2e.json",
     ],
 }
 
@@ -56,7 +68,7 @@ for relative, markers in requirements.items():
             errors.append(f"{relative}: missing E2E contract marker: {marker}")
 
 ci = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-for job_marker in ["\n  test:\n", "\n  package:\n"]:
+for job_marker in ["\n  test:\n", "\n  package:\n", "\n  intel-smoke:\n"]:
     count = ci.count(job_marker)
     if count != 1:
         errors.append(
@@ -76,6 +88,7 @@ if errors:
 
 print(
     "Clean-machine E2E audit passed: CI installs the package and runs the "
-    "opt-in creator-loop helper from /Applications with Universal-2 binaries, "
-    "real local media processing and mocked external HTTP boundaries."
+    "opt-in creator-loop helper from /Applications with Universal-2 binaries "
+    "on both native Apple-Silicon and Intel runners, real local media "
+    "processing and mocked external HTTP boundaries."
 )
