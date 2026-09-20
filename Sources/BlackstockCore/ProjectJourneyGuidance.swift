@@ -34,89 +34,89 @@ public extension BlackstockStage {
         case .discovery:
             return .init(
                 stage: self,
-                title: "Chancen",
-                purpose: "Reale Opportunity-Signale und Quellen prüfen.",
-                nextAction: "Eine belegte Opportunity für Research auswählen.",
+                title: "Videos",
+                purpose: "Videos finden und direkt ansehen.",
+                nextAction: "Ein Video auswählen.",
                 recommendedSurface: .none
             )
         case .research:
             return .init(
                 stage: self,
                 title: "Recherche",
-                purpose: "Quellen und relevante Provider-Daten nachvollziehbar prüfen.",
-                nextAction: "Recherchefrage und eigene Notizen auf Basis der Provider-Fakten vervollständigen.",
+                purpose: "Video und Thema prüfen.",
+                nextAction: "Notizen vervollständigen und fortfahren.",
                 recommendedSurface: .overview
             )
         case .analysis:
             return .init(
                 stage: self,
                 title: "Analyse",
-                purpose: "Belegte Erkenntnisse in eine Produktionsentscheidung überführen.",
-                nextAction: "Entscheidung, Begründung und offene Unsicherheit festhalten.",
+                purpose: "Entscheiden, wie das Video weiterverarbeitet wird.",
+                nextAction: "Entscheidung festhalten und fortfahren.",
                 recommendedSurface: .overview
             )
         case .production:
             return .init(
                 stage: self,
                 title: "Produktion",
-                purpose: "Ein autorisiertes Produktionsmedium mit Rechte-Nachweis vorbereiten.",
-                nextAction: "Medium importieren und Rechte bestätigen.",
+                purpose: "Video für den Schnitt bereitstellen.",
+                nextAction: "Video auswählen und Schnitt starten.",
                 recommendedSurface: .studio
             )
         case .preview:
             return .init(
                 stage: self,
                 title: "Vorschau",
-                purpose: "Das echte Produktionsmedium vor strukturellen Edits prüfen.",
-                nextAction: "Vorschau prüfen und Storyboard starten.",
+                purpose: "Video kurz prüfen.",
+                nextAction: "Video prüfen und weiter zum Schnitt.",
                 recommendedSurface: .studio
             )
         case .storyboard:
             return .init(
                 stage: self,
                 title: "Storyboard",
-                purpose: "Struktur, Beats und visuelle Richtung vor dem Schnitt festlegen.",
-                nextAction: "Storyboard fertigstellen und Bearbeitung starten.",
+                purpose: "Aufbau des Videos festlegen.",
+                nextAction: "Schnitt starten.",
                 recommendedSurface: .studio
             )
         case .editing:
             return .init(
                 stage: self,
                 title: "Bearbeitung",
-                purpose: "Non-destruktive Edits im EditGraph prüfen und rendern.",
-                nextAction: "Schnitt finalisieren und Packaging & Review öffnen.",
+                purpose: "Highlights, Schnitt, Untertitel, Format und Ton bearbeiten.",
+                nextAction: "Video fertigstellen und Veröffentlichung vorbereiten.",
                 recommendedSurface: .studio
             )
         case .packaging:
             return .init(
                 stage: self,
-                title: "Veröffentlichungspaket",
-                purpose: "Metadaten, Vorschaubild, Untertitel und technische Qualitätsprüfung vorbereiten.",
-                nextAction: "Paket-Belege vervollständigen und Prüfung speichern.",
+                title: "Veröffentlichen",
+                purpose: "Titel, Beschreibung, Vorschaubild und Untertitel vorbereiten.",
+                nextAction: "Angaben prüfen und Upload vorbereiten.",
                 recommendedSurface: .studio
             )
         case .review:
             return .init(
                 stage: self,
                 title: "Prüfung",
-                purpose: "Finales Artefakt, Rechte, Qualität und Zielkanal vor Remote-Aktion prüfen.",
-                nextAction: "Veröffentlichungsprüfung kontrollieren und Upload ausdrücklich bestätigen.",
+                purpose: "Video und Zielkanal vor dem Upload prüfen.",
+                nextAction: "Upload bestätigen.",
                 recommendedSurface: .studio
             )
         case .publishing:
             return .init(
                 stage: self,
                 title: "Veröffentlichung",
-                purpose: "Den bestätigten YouTube-Upload und Fortsetzungszustand nachvollziehbar ausführen.",
-                nextAction: "Upload- und Resume-Status prüfen.",
+                purpose: "Video zu YouTube hochladen.",
+                nextAction: "Upload abschließen.",
                 recommendedSurface: .studio
             )
         case .published:
             return .init(
                 stage: self,
-                title: "Veröffentlicht / Lernen",
-                purpose: "Reale YouTube-Ergebnisse beobachten und belegte Lernfakten festhalten.",
-                nextAction: "Analytics und veröffentlichte Kommentare beobachten.",
+                title: "Analyse",
+                purpose: "Leistung des veröffentlichten Videos beobachten.",
+                nextAction: "Views, Wiedergabezeit, Zuschauerbindung und Kommentare ansehen.",
                 recommendedSurface: .overview
             )
         }
