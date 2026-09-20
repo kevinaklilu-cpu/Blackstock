@@ -150,6 +150,7 @@ jobs:
           }
           JSON
           python3 Build/validate_capture_hardware_smoke.py "$EVIDENCE"
+          cp "$EVIDENCE" "$RUNNER_TEMP/capture-hardware-smoke-valid.json"
 
           python3 - "$EVIDENCE" <<'PY'
           import json, sys
@@ -160,6 +161,19 @@ jobs:
           PY
           if python3 Build/validate_capture_hardware_smoke.py "$EVIDENCE"; then
             echo "Invalid capture hardware evidence was unexpectedly accepted." >&2
+            exit 1
+          fi
+
+          cp "$RUNNER_TEMP/capture-hardware-smoke-valid.json" "$EVIDENCE"
+          python3 - "$EVIDENCE" <<'PY'
+          import json, sys
+          path = sys.argv[1]
+          data = json.load(open(path))
+          data["camera"]["durationSeconds"] = float("nan")
+          json.dump(data, open(path, "w"))
+          PY
+          if python3 Build/validate_capture_hardware_smoke.py "$EVIDENCE"; then
+            echo "Non-finite capture evidence was unexpectedly accepted." >&2
             exit 1
           fi
 
@@ -204,6 +218,7 @@ jobs:
           }
           JSON
           python3 Build/validate_production_release_evidence.py "$EVIDENCE"
+          cp "$EVIDENCE" "$RUNNER_TEMP/release-evidence-valid.json"
 
           python3 - "$EVIDENCE" <<'PY'
           import json, sys
@@ -214,6 +229,32 @@ jobs:
           PY
           if python3 Build/validate_production_release_evidence.py "$EVIDENCE"; then
             echo "Invalid release evidence was unexpectedly accepted." >&2
+            exit 1
+          fi
+
+          cp "$RUNNER_TEMP/release-evidence-valid.json" "$EVIDENCE"
+          python3 - "$EVIDENCE" <<'PY'
+          import json, sys
+          path = sys.argv[1]
+          data = json.load(open(path))
+          data["manifestURL"] = "https://user:pass@updates.blackstock.app/update-manifest.json"
+          json.dump(data, open(path, "w"))
+          PY
+          if python3 Build/validate_production_release_evidence.py "$EVIDENCE"; then
+            echo "Credential-bearing production release evidence URL was unexpectedly accepted." >&2
+            exit 1
+          fi
+
+          cp "$RUNNER_TEMP/release-evidence-valid.json" "$EVIDENCE"
+          printf '\n"poison": NaN\n' > "$RUNNER_TEMP/non-finite-release-fragment.txt"
+          python3 - "$EVIDENCE" <<'PY'
+          import pathlib, sys
+          path = pathlib.Path(sys.argv[1])
+          text = path.read_text()
+          path.write_text(text[:-2] + ',\n  "poison": NaN\n}\n')
+          PY
+          if python3 Build/validate_production_release_evidence.py "$EVIDENCE"; then
+            echo "Non-finite production release evidence was unexpectedly accepted." >&2
             exit 1
           fi
 
@@ -251,6 +292,7 @@ jobs:
           }
           JSON
           python3 Build/validate_in_app_update_evidence.py "$EVIDENCE"
+          cp "$EVIDENCE" "$RUNNER_TEMP/in-app-update-evidence-valid.json"
 
           python3 - "$EVIDENCE" <<'PY'
           import json, sys
@@ -261,6 +303,32 @@ jobs:
           PY
           if python3 Build/validate_in_app_update_evidence.py "$EVIDENCE"; then
             echo "Invalid in-app update evidence was unexpectedly accepted." >&2
+            exit 1
+          fi
+
+          cp "$RUNNER_TEMP/in-app-update-evidence-valid.json" "$EVIDENCE"
+          python3 - "$EVIDENCE" <<'PY'
+          import json, sys
+          path = sys.argv[1]
+          data = json.load(open(path))
+          data["value"]["startedAt"] = float("nan")
+          json.dump(data, open(path, "w"))
+          PY
+          if python3 Build/validate_in_app_update_evidence.py "$EVIDENCE"; then
+            echo "Non-finite in-app update evidence was unexpectedly accepted." >&2
+            exit 1
+          fi
+
+          cp "$RUNNER_TEMP/in-app-update-evidence-valid.json" "$EVIDENCE"
+          python3 - "$EVIDENCE" <<'PY'
+          import json, sys
+          path = sys.argv[1]
+          data = json.load(open(path))
+          data["value"]["packageURL"] = "https://updates.blackstock.local/Blackstock.pkg"
+          json.dump(data, open(path, "w"))
+          PY
+          if python3 Build/validate_in_app_update_evidence.py "$EVIDENCE"; then
+            echo "Local-host updater evidence URL was unexpectedly accepted." >&2
             exit 1
           fi
 
