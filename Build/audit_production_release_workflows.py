@@ -172,9 +172,41 @@ if "pull_request:" in production or "push:" in production:
         "production release workflow must remain explicit workflow_dispatch only"
     )
 
+for marker, expected in [
+    ("- name: Validate release inputs", 1),
+    ("- name: Validate required production secrets", 1),
+    ("- name: Verify update signing key pair", 1),
+    ("- name: Build sign and notarize production package", 1),
+    ("- name: Generate signed production update manifest", 1),
+    ("- name: Upload production release bundle", 1),
+    ("- name: Cleanup signing material", 1),
+]:
+    actual = production.count(marker)
+    if actual != expected:
+        errors.append(
+            f"production release workflow must contain {marker!r} exactly "
+            f"{expected} time(s), found {actual}"
+        )
+
 verify = (ROOT / ".github/workflows/verify-published-release.yml").read_text(
     encoding="utf-8"
 )
+for marker, expected in [
+    ("- name: Validate verification inputs", 1),
+    ("- name: Validate required verification secrets", 1),
+    ("- name: Verify remote manifest and package before installation", 1),
+    ("- name: Install exact package verified by release verifier", 1),
+    ("- name: Produce full production release evidence", 1),
+    ("- name: Launch verified production app", 1),
+    ("- name: Upload production verification evidence", 1),
+    ("- name: Cleanup notarization key", 1),
+]:
+    actual = verify.count(marker)
+    if actual != expected:
+        errors.append(
+            f"published release verification must contain {marker!r} exactly "
+            f"{expected} time(s), found {actual}"
+        )
 if "pull_request:" in verify or "push:" in verify:
     errors.append(
         "published release verification must remain explicit workflow_dispatch only"
