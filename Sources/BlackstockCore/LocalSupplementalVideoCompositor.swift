@@ -35,11 +35,7 @@ public actor LocalSupplementalVideoCompositor {
         preset: LocalRenderPreset
     ) async throws {
         let baseAsset = AVURLAsset(url: inputURL)
-        let baseDuration = try await baseAsset.load(.duration)
-        let baseDurationSeconds = max(
-            CMTimeGetSeconds(baseDuration),
-            0
-        )
+        let assetDuration = try await baseAsset.load(.duration)
         let baseVideoTracks = try await baseAsset.loadTracks(
             withMediaType: .video
         )
@@ -47,6 +43,29 @@ public actor LocalSupplementalVideoCompositor {
             throw LocalSupplementalVideoError
                 .missingBaseVideoTrack
         }
+        let baseVideoTimeRange = try await baseVideoTrack.load(
+            .timeRange
+        )
+        let baseVideoStartSeconds = max(
+            CMTimeGetSeconds(baseVideoTimeRange.start),
+            0
+        )
+        let baseVideoDurationSeconds = max(
+            CMTimeGetSeconds(baseVideoTimeRange.duration),
+            0
+        )
+        let assetDurationSeconds = max(
+            CMTimeGetSeconds(assetDuration),
+            0
+        )
+        let baseDurationSeconds = min(
+            assetDurationSeconds,
+            baseVideoDurationSeconds
+        )
+        let baseDuration = CMTime(
+            seconds: baseDurationSeconds,
+            preferredTimescale: 600
+        )
 
         let baseNaturalSize = try await baseVideoTrack.load(
             .naturalSize
@@ -97,9 +116,15 @@ public actor LocalSupplementalVideoCompositor {
                     )
             }
 
-            let sourceDuration = try await asset.load(.duration)
+            let sourceTimeRange = try await sourceTrack.load(
+                .timeRange
+            )
+            let sourceTrackStartSeconds = max(
+                CMTimeGetSeconds(sourceTimeRange.start),
+                0
+            )
             let sourceDurationSeconds = max(
-                CMTimeGetSeconds(sourceDuration),
+                CMTimeGetSeconds(sourceTimeRange.duration),
                 0
             )
             let sourceStart = min(
@@ -130,7 +155,8 @@ public actor LocalSupplementalVideoCompositor {
                     order: order,
                     captureID: input.captureID,
                     sourceTrack: sourceTrack,
-                    sourceStartSeconds: sourceStart,
+                    sourceStartSeconds:
+                        sourceTrackStartSeconds + sourceStart,
                     timelineStartSeconds: timelineStart,
                     timelineEndSeconds:
                         timelineStart + durationSeconds,
@@ -194,10 +220,27 @@ public actor LocalSupplementalVideoCompositor {
                         "Basisaudiospur konnte nicht angelegt werden."
                     )
             }
+            let audioTimeRange = try await sourceAudioTrack
+                .load(.timeRange)
+            let audioDurationSeconds = min(
+                baseDurationSeconds,
+                max(
+                    CMTimeGetSeconds(
+                        audioTimeRange.duration
+                    ),
+                    0
+                )
+            )
+            guard audioDurationSeconds >= 0.001 else {
+                continue
+            }
             try audioTrack.insertTimeRange(
                 CMTimeRange(
-                    start: .zero,
-                    duration: baseDuration
+                    start: audioTimeRange.start,
+                    duration: CMTime(
+                        seconds: audioDurationSeconds,
+                        preferredTimescale: 600
+                    )
                 ),
                 of: sourceAudioTrack,
                 at: .zero
@@ -237,7 +280,8 @@ public actor LocalSupplementalVideoCompositor {
                 transform = activeInsert.transform
             } else {
                 sourceTrack = baseVideoTrack
-                sourceStart = start
+                sourceStart =
+                    baseVideoStartSeconds + start
                 transform = baseTransform
             }
 
