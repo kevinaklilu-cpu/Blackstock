@@ -64,7 +64,8 @@ Nicht als durch die App lösbar angenommen werden vollständige Kompromittierung
 
 ### Update-Sicherheit
 
-- Manifest und Paket-URL müssen HTTPS verwenden.
+- Manifest und Paket-URL müssen die gemeinsame Produktions-HTTPS-Policy erfüllen: keine eingebetteten Zugangsdaten oder Fragmente, kein localhost/Loopback und keine `.local`-/`.invalid`-/`.example`-/`.test`-Hosts.
+- Sowohl der konfigurierte Start-Endpunkt als auch die tatsächlich nach Redirects erreichte finale Manifest-/Paket-URL werden im In-App-Updater erneut gegen dieselbe Policy geprüft.
 - Update-Manifest wird mit Ed25519 verifiziert.
 - Das Paket muss dem signierten SHA-256 entsprechen.
 - Vor Installer-Handoff wird die Integrität erneut geprüft.
