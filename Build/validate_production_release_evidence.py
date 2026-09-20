@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import math
 import re
 import sys
 from datetime import datetime
@@ -21,7 +22,7 @@ if not path.is_file():
     fail(f"evidence file not found: {path}")
 
 try:
-    data = json.loads(path.read_text(encoding="utf-8"))
+    data = json.loads(path.read_text(encoding="utf-8"), parse_constant=lambda token: (_ for _ in ()).throw(ValueError(f"non-finite JSON number: {token}")))
 except Exception as error:
     fail(f"invalid JSON: {error}")
 
