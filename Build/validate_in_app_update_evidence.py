@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -20,7 +21,7 @@ if not path.is_file():
     fail(f"evidence file not found: {path}")
 
 try:
-    envelope = json.loads(path.read_text(encoding="utf-8"))
+    envelope = json.loads(path.read_text(encoding="utf-8"), parse_constant=lambda token: (_ for _ in ()).throw(ValueError(f"non-finite JSON number: {token}")))
 except Exception as error:
     fail(f"invalid JSON: {error}")
 
@@ -140,7 +141,10 @@ for key in time_keys:
     raw = value[key]
     if not isinstance(raw, (int, float)):
         fail(f"{key} must use Blackstock's numeric Foundation reference timestamp")
-    times.append(float(raw))
+    numeric = float(raw)
+    if not math.isfinite(numeric):
+        fail(f"{key} must be finite")
+    times.append(numeric)
 
 if any(later < earlier for earlier, later in zip(times, times[1:])):
     fail("update evidence timestamps are not monotonic")
