@@ -34,7 +34,12 @@ else:
                 f"{path.relative_to(ROOT)}: moving *-latest runner labels are forbidden"
             )
 
-        macos_job_count = text.count("runs-on: macos-26")
+        macos_job_count = len(
+            re.findall(
+                r"runs-on:\s*macos-26(?:-intel)?\b",
+                text,
+            )
+        )
         if macos_job_count:
             if (
                 "DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer"
@@ -47,7 +52,7 @@ else:
             if guard_count != macos_job_count:
                 errors.append(
                     f"{path.relative_to(ROOT)}: expected one pinned toolchain guard "
-                    f"per macos-26 job ({macos_job_count}), found {guard_count}"
+                    f"per pinned macOS job ({macos_job_count}), found {guard_count}"
                 )
 
         if "permissions:\n  contents: read" not in text:
