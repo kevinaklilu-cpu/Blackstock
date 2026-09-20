@@ -10,6 +10,7 @@ public struct SavedClipSelection:
     public let transcriptPreview: String
     public let wordCount: Int
     public let transcript: LocalTranscript?
+    public let renderArtifact: RenderArtifact?
     public let savedAt: Date
 
     public init(
@@ -18,6 +19,7 @@ public struct SavedClipSelection:
         transcriptPreview: String,
         wordCount: Int,
         transcript: LocalTranscript? = nil,
+        renderArtifact: RenderArtifact? = nil,
         savedAt: Date
     ) {
         self.id = id
@@ -25,7 +27,22 @@ public struct SavedClipSelection:
         self.transcriptPreview = transcriptPreview
         self.wordCount = max(wordCount, 0)
         self.transcript = transcript
+        self.renderArtifact = renderArtifact
         self.savedAt = savedAt
+    }
+
+    public func withRenderArtifact(
+        _ artifact: RenderArtifact?
+    ) -> SavedClipSelection {
+        SavedClipSelection(
+            id: id,
+            sourceRange: sourceRange,
+            transcriptPreview: transcriptPreview,
+            wordCount: wordCount,
+            transcript: transcript,
+            renderArtifact: artifact,
+            savedAt: savedAt
+        )
     }
 
     public init(
@@ -39,6 +56,7 @@ public struct SavedClipSelection:
                 candidate.transcriptPreview,
             wordCount: candidate.wordCount,
             transcript: transcript,
+            renderArtifact: nil,
             savedAt: savedAt
         )
     }
