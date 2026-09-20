@@ -28,8 +28,11 @@ struct BlackstockUpdatePackageDownloader: Sendable {
         bundle: Bundle = .main,
         session: URLSession = .shared
     ) async throws -> URL {
-        guard manifest.packageURL.scheme?.lowercased() == "https" else {
-            throw BlackstockUpdateDownloadError.packageURLMustUseHTTPS
+        guard ProductionUpdateURLPolicy.allows(
+            manifest.packageURL
+        ) else {
+            throw BlackstockUpdateDownloadError
+                .packageURLMustUseHTTPS
         }
         let expectedTeamID = (
             bundle.object(
@@ -55,6 +58,16 @@ struct BlackstockUpdatePackageDownloader: Sendable {
             throw BlackstockUpdateDownloadError.invalidHTTPStatus(
                 (response as? HTTPURLResponse)?.statusCode ?? -1
             )
+        }
+        guard let finalURL = http.url,
+              ProductionUpdateURLPolicy.allows(
+                finalURL
+              ) else {
+            try? FileManager.default.removeItem(
+                at: temporaryURL
+            )
+            throw BlackstockUpdateDownloadError
+                .packageURLMustUseHTTPS
         }
 
         guard FileManager.default.fileExists(atPath: temporaryURL.path) else {
