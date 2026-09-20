@@ -16,19 +16,29 @@ public struct TranscriptSegment: Codable, Sendable, Equatable, Identifiable {
     public let durationSeconds: Double
     public let text: String
     public let confidence: Float
+    public let editedByUser: Bool?
+    public let editedAt: Date?
 
     public init(
         id: UUID = UUID(),
         startSeconds: Double,
         durationSeconds: Double,
         text: String,
-        confidence: Float
+        confidence: Float,
+        editedByUser: Bool? = nil,
+        editedAt: Date? = nil
     ) {
         self.id = id
         self.startSeconds = startSeconds
         self.durationSeconds = durationSeconds
         self.text = text
         self.confidence = confidence
+        self.editedByUser = editedByUser
+        self.editedAt = editedAt
+    }
+
+    public var wasEditedByUser: Bool {
+        editedByUser == true
     }
 }
 

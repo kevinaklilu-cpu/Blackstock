@@ -21,6 +21,10 @@ struct StudioView: View {
     @State private var rightsConfirmed = false
     @State private var showPackagingReview = false
     @State private var showClipExportFolderImporter = false
+    @State private var selectedCaptionSegmentID: UUID?
+    @State private var captionEditText = ""
+    @State private var captionEditStartSeconds: Double = 0
+    @State private var captionEditDurationSeconds: Double = 1
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1433,6 +1437,182 @@ struct StudioView: View {
                             .foregroundStyle(.secondary)
                         }
 
+                        DisclosureGroup("Untertitel bearbeiten") {
+                            VStack(
+                                alignment: .leading,
+                                spacing: 10
+                            ) {
+                                ForEach(transcript.segments) {
+                                    segment in
+                                    Button {
+                                        beginCaptionEdit(
+                                            segment
+                                        )
+                                    } label: {
+                                        HStack {
+                                            VStack(
+                                                alignment: .leading,
+                                                spacing: 2
+                                            ) {
+                                                Text(segment.text)
+                                                    .lineLimit(2)
+                                                Text(
+                                                    timeLabel(
+                                                        segment.startSeconds
+                                                    )
+                                                    + " – "
+                                                    + timeLabel(
+                                                        segment.startSeconds
+                                                        + segment.durationSeconds
+                                                    )
+                                                )
+                                                .font(
+                                                    .caption2
+                                                        .monospacedDigit()
+                                                )
+                                                .foregroundStyle(
+                                                    .secondary
+                                                )
+                                            }
+                                            Spacer()
+                                            if segment
+                                                .wasEditedByUser {
+                                                Label(
+                                                    "Korrigiert",
+                                                    systemImage:
+                                                        "checkmark.circle"
+                                                )
+                                                .font(.caption2)
+                                            } else {
+                                                Image(
+                                                    systemName:
+                                                        "pencil"
+                                                )
+                                                .foregroundStyle(
+                                                    .secondary
+                                                )
+                                                .accessibilityLabel(
+                                                    "Untertitelsegment bearbeiten"
+                                                )
+                                            }
+                                        }
+                                        .contentShape(
+                                            Rectangle()
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(!editingEnabled)
+                                }
+
+                                if let selectedID =
+                                        selectedCaptionSegmentID,
+                                   transcript.segments
+                                    .contains(
+                                        where: {
+                                            $0.id
+                                                == selectedID
+                                        }
+                                    ) {
+                                    Divider()
+
+                                    Text("Segment korrigieren")
+                                        .font(
+                                            .caption.weight(
+                                                .semibold
+                                            )
+                                        )
+
+                                    TextField(
+                                        "Untertiteltext",
+                                        text: $captionEditText,
+                                        axis: .vertical
+                                    )
+                                    .lineLimit(2...5)
+                                    .disabled(!editingEnabled)
+
+                                    HStack {
+                                        TextField(
+                                            "Start in Sekunden",
+                                            value:
+                                                $captionEditStartSeconds,
+                                            format:
+                                                .number.precision(
+                                                    .fractionLength(
+                                                        2
+                                                    )
+                                                )
+                                        )
+                                        TextField(
+                                            "Dauer in Sekunden",
+                                            value:
+                                                $captionEditDurationSeconds,
+                                            format:
+                                                .number.precision(
+                                                    .fractionLength(
+                                                        2
+                                                    )
+                                                )
+                                        )
+                                    }
+                                    .textFieldStyle(
+                                        .roundedBorder
+                                    )
+                                    .disabled(!editingEnabled)
+
+                                    HStack {
+                                        Button(
+                                            "Änderung speichern"
+                                        ) {
+                                            state.updateCaptionSegment(
+                                                id: selectedID,
+                                                text:
+                                                    captionEditText,
+                                                startSeconds:
+                                                    captionEditStartSeconds,
+                                                durationSeconds:
+                                                    captionEditDurationSeconds
+                                            )
+                                            if state.errorMessage
+                                                == nil {
+                                                selectedCaptionSegmentID =
+                                                    nil
+                                            }
+                                        }
+                                        .buttonStyle(
+                                            .borderedProminent
+                                        )
+                                        .disabled(
+                                            !editingEnabled
+                                            || captionEditText
+                                                .trimmingCharacters(
+                                                    in:
+                                                        .whitespacesAndNewlines
+                                                )
+                                                .isEmpty
+                                        )
+
+                                        Button("Abbrechen") {
+                                            selectedCaptionSegmentID =
+                                                nil
+                                        }
+                                        .buttonStyle(.bordered)
+                                    }
+
+                                    Text(
+                                        "Text und Timing werden lokal in Transkript und WebVTT gespeichert. Überlappende oder außerhalb des aktuellen Schnitts liegende Segmente werden abgelehnt."
+                                    )
+                                    .font(.caption2)
+                                    .foregroundStyle(
+                                        .secondary
+                                    )
+                                }
+                            }
+                            .padding(.top, 6)
+                        }
+                        .font(
+                            .caption.weight(.semibold)
+                        )
+
                         DisclosureGroup("Transkript anzeigen") {
                             Text(transcript.text)
                                 .font(.caption)
@@ -1842,6 +2022,17 @@ struct StudioView: View {
             }
             .allowsHitTesting(false)
         }
+    }
+
+    private func beginCaptionEdit(
+        _ segment: TranscriptSegment
+    ) {
+        selectedCaptionSegmentID = segment.id
+        captionEditText = segment.text
+        captionEditStartSeconds =
+            segment.startSeconds
+        captionEditDurationSeconds =
+            segment.durationSeconds
     }
 
     private func previewCaptionFont(
