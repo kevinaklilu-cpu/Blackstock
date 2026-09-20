@@ -650,6 +650,33 @@ jobs:
           grep -q '"installerReceiptVersion": "1.0.0"' "$ROOT/market-readiness.json"
           grep -q '"sourceInstallerReceiptInstalledAt"' "$ROOT/market-readiness.json"
           grep -q '"installerReceiptInstalledAt"' "$ROOT/market-readiness.json"
+          grep -q '"sameInstallationReceiptVerified": true' "$ROOT/market-readiness.json"
+
+          python3 - "$ROOT/capture.json" <<'PY'
+          import json
+          import sys
+          path = sys.argv[1]
+          data = json.load(open(path))
+          data["installerReceiptInstalledAt"] = "2026-09-02T00:01:03Z"
+          json.dump(data, open(path, "w"))
+          PY
+
+          if python3 Build/verify_market_readiness.py \
+            --capture-evidence "$ROOT/capture.json" \
+            --production-release-evidence "$ROOT/release.json" \
+            --in-app-update-evidence "$ROOT/updater.json"; then
+            echo "Different capture/updater installer receipt instances were unexpectedly accepted." >&2
+            exit 1
+          fi
+
+          python3 - "$ROOT/capture.json" <<'PY'
+          import json
+          import sys
+          path = sys.argv[1]
+          data = json.load(open(path))
+          data["installerReceiptInstalledAt"] = "2026-09-02T00:00:03Z"
+          json.dump(data, open(path, "w"))
+          PY
 
           python3 - "$ROOT/capture.json" <<'PY'
           import json
