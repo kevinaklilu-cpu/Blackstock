@@ -12,13 +12,25 @@ struct FirstRunView: View {
     var body: some View {
         ZStack {
             Color(nsColor: .windowBackgroundColor).ignoresSafeArea()
-            HStack(spacing: 0) {
-                identityPane
-                    .frame(minWidth: 390, idealWidth: 470, maxWidth: 540)
+            VStack(spacing: 0) {
+                HStack(spacing: 12) {
+                    BlackstockBrandMark(width: 46)
+                    Text("Blackstock")
+                        .font(.title2.bold())
+                    Spacer()
+                    Text("\(session.step.rawValue + 1) / 6")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 32)
+                .padding(.vertical, 22)
+
                 Divider()
+
                 contentPane
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            .frame(maxWidth: 880)
         }
         .fileImporter(
             isPresented: $showOAuthImporter,
@@ -34,20 +46,15 @@ struct FirstRunView: View {
     private var identityPane: some View {
         VStack(alignment: .leading, spacing: 24) {
             HStack(spacing: 10) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.08))
-                    Text("B").font(.title2.bold())
-                }
-                .frame(width: 42, height: 42)
+                BlackstockBrandMark(width: 46)
                 Text("Blackstock").font(.title2.bold())
             }
 
             Spacer()
 
-            Text("Vom Signal\nzum nächsten Video.")
+            Text("YouTube-Clips erstellen.")
                 .font(.largeTitle.bold())
-                .tracking(-1.1)
-            Text("Recherche, Produktion, Veröffentlichung und echtes Lernen aus deinem YouTube-Kanal – mit nachvollziehbaren Quellen statt erfundenen Scores.")
+            Text("Kanal verbinden, Video auswählen, schneiden und veröffentlichen.")
                 .font(.title3)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -117,8 +124,8 @@ struct FirstRunView: View {
             } label: {
                 HStack {
                     if session.isWorking { ProgressView().controlSize(.small) }
-                    Image(systemName: "person.crop.circle.badge.checkmark")
-                    Text(session.isWorking ? "Warte auf Google …" : "Mit Google fortfahren")
+                    Image(systemName: "link")
+                    Text(session.isWorking ? "Google wird verbunden …" : "Google verbinden")
                     Spacer()
                     Image(systemName: "arrow.right")
                 }
@@ -136,17 +143,16 @@ struct FirstRunView: View {
                     session.removeImportedOAuthConfiguration()
                 }
             } label: {
-                Label("Verbindungsoptionen", systemImage: "ellipsis.circle")
+                Label("OAuth-Datei importieren", systemImage: "doc.badge.gearshape")
             }
 
-            Text("OAuth-Konfiguration: \(session.oauthConfigurationSource)")
+            Text(session.oauthConfigurationSource)
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            Text("Eine importierte Google-JSON wird lokal validiert. Blackstock übernimmt nur die Desktop-Client-ID; ein enthaltenes Client Secret wird nicht benötigt und nicht gespeichert.")
+            Text("Die OAuth-Datei bleibt lokal. Zugangsdaten werden im macOS-Keychain gespeichert.")
                 .font(.caption)
-                .foregroundStyle(.tertiary)
-                .fixedSize(horizontal: false, vertical: true)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -180,9 +186,7 @@ struct FirstRunView: View {
                 }
                 .buttonStyle(.plain)
             }
-            Text("Blackstock wählt keinen Kanal stillschweigend aus.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+
         }
     }
 
@@ -238,7 +242,7 @@ struct FirstRunView: View {
             }
             .pickerStyle(.menu)
 
-            Text("Die Strategie wird versioniert gespeichert. Blackstock erfindet keine Zielgruppe, Säulen oder Ausschlüsse für dich.")
+            Text("Diese Angaben steuern Recherche und Vorschläge.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -262,9 +266,7 @@ struct FirstRunView: View {
             }
             .pickerStyle(.menu)
 
-            Text("Blackstock selbst bleibt Deutsch. Research-Sprachen können später breiter sein als die Output-Sprache.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+
 
             Toggle(
                 isOn: Binding(
@@ -280,17 +282,17 @@ struct FirstRunView: View {
                 )
             ) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Nutzungsverantwortung einmalig bestätigen")
+                    Text("Nutzungsrechte bestätigen")
                         .font(.callout.weight(.semibold))
-                    Text("Ich verwende Blackstock nur für Inhalte, die ich bearbeiten und veröffentlichen darf, und übernehme die Verantwortung für diese Nutzung.")
+                    Text("Ich darf die ausgewählten Inhalte bearbeiten und veröffentlichen.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
             .toggleStyle(.switch)
 
-            Text("Diese Erklärung gilt für den ausgewählten Arbeitsbereich. Danach verlangt Blackstock nicht bei jedem Video erneut eine Lizenzdatei oder Referenz und behauptet keine eigene Rechteprüfung.")
-                .font(.caption2)
+            Text("Einmal pro Arbeitsbereich. Keine zusätzliche Lizenzdatei pro Video.")
+                .font(.caption)
                 .foregroundStyle(.secondary)
 
             HStack {
@@ -311,8 +313,8 @@ struct FirstRunView: View {
             HStack(spacing: 12) {
                 ProgressView()
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Strategie wird versioniert gespeichert").font(.headline)
-                    Text("Danach lädt Blackstock reale YouTube-Kandidaten für „\(session.primaryTopic)“.")
+                    Text("Kanal wird vorbereitet").font(.headline)
+                    Text("Videos für „\(session.primaryTopic)“ werden geladen.")
                         .foregroundStyle(.secondary)
                 }
             }
@@ -328,9 +330,9 @@ struct FirstRunView: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Reale YouTube-Signale")
+                    Text("Videos")
                         .font(.headline)
-                    Text("Rohdaten von YouTube · keine abgeleiteten Scores")
+                    Text("YouTube-Ergebnisse für deinen Kanal")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -434,7 +436,7 @@ struct FirstRunView: View {
             }
 
             HStack {
-                Label("Ansehen → verstehen → als Projekt übernehmen", systemImage: "eye")
+                Label("Video auswählen und als Clip öffnen", systemImage: "scissors")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -573,23 +575,23 @@ struct FirstRunView: View {
 
     private var stepTitle: String {
         switch session.step {
-        case .welcome: "Willkommen bei Blackstock"
-        case .channel: "Welcher Kanal ist dein Arbeitsbereich?"
-        case .topic: "Wofür soll dein Kanal stehen?"
-        case .language: "Sprache deiner Inhalte"
-        case .preparing: "Blackstock bereitet deinen Kanal vor"
-        case .opportunities: "Deine ersten Chancen"
+        case .welcome: "Google verbinden"
+        case .channel: "YouTube-Kanal auswählen"
+        case .topic: "Kanal einrichten"
+        case .language: "Sprache und Rechte"
+        case .preparing: "Kanal vorbereiten"
+        case .opportunities: "Video auswählen"
         }
     }
 
     private var stepSubtitle: String {
         switch session.step {
-        case .welcome: "Google öffnet im Systembrowser. Blackstock fordert zunächst nur Leserechte für YouTube an."
-        case .channel: "Wähle den konkreten Zielkanal explizit aus."
-        case .topic: "Lege den strategischen Kern fest. Historische Beobachtungen bleiben davon getrennt."
-        case .language: "Produkt- und Content-Sprache sind unterschiedliche Einstellungen."
-        case .preparing: "Nur reale, verfügbare Daten werden verarbeitet."
-        case .opportunities: "Diese Liste stammt aus der realen YouTube-API und ist noch keine automatisch behauptete Empfehlung."
+        case .welcome: "Verknüpfe deinen YouTube-Kanal."
+        case .channel: "Wähle den Kanal, mit dem du arbeiten willst."
+        case .topic: "Beschreibe kurz Thema und Zielgruppe."
+        case .language: "Lege Content-Sprache fest und bestätige die Nutzungsrechte."
+        case .preparing: "Blackstock lädt die benötigten Kanaldaten."
+        case .opportunities: "Wähle ein Video für dein erstes Clip-Projekt."
         }
     }
 }
