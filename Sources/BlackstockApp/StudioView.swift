@@ -553,6 +553,35 @@ struct StudioView: View {
                                 )
                                 .disabled(!editingEnabled)
 
+                                Button {
+                                    Task {
+                                        await state
+                                            .renderSavedClipSelection(
+                                                selection
+                                            )
+                                    }
+                                } label: {
+                                    HStack {
+                                        if state.renderingSavedClipID
+                                            == selection.id {
+                                            ProgressView()
+                                                .controlSize(.small)
+                                        }
+                                        Label(
+                                            state.renderingSavedClipID
+                                                == selection.id
+                                                ? "Clip-Datei wird erstellt …"
+                                                : "Clip-Datei erstellen",
+                                            systemImage: "film"
+                                        )
+                                    }
+                                }
+                                .buttonStyle(.bordered)
+                                .disabled(
+                                    state.renderingSavedClipID != nil
+                                    || !editingEnabled
+                                )
+
                                 Button(
                                     role: .destructive
                                 ) {
@@ -566,6 +595,34 @@ struct StudioView: View {
                                     )
                                 }
                                 .buttonStyle(.bordered)
+                            }
+
+                            if let artifact =
+                                selection.renderArtifact {
+                                VStack(
+                                    alignment: .leading,
+                                    spacing: 3
+                                ) {
+                                    Label(
+                                        "Clip-Datei bereit",
+                                        systemImage:
+                                            "checkmark.seal.fill"
+                                    )
+                                    .font(
+                                        .caption.weight(
+                                            .semibold
+                                        )
+                                    )
+                                    Text(
+                                        artifact.fileURL
+                                            .lastPathComponent
+                                    )
+                                    .font(
+                                        .caption2.monospaced()
+                                    )
+                                    .foregroundStyle(.secondary)
+                                    .textSelection(.enabled)
+                                }
                             }
                         }
                         .padding(8)
@@ -829,7 +886,23 @@ struct StudioView: View {
                     Text("Render")
                         .font(.headline)
 
-                    Picker("Qualität", selection: $state.renderPreset) {
+                    Picker(
+                        "Qualität",
+                        selection: Binding(
+                            get: {
+                                state.renderPreset
+                            },
+                            set: { newValue in
+                                guard state.renderPreset
+                                    != newValue else {
+                                    return
+                                }
+                                state.renderPreset = newValue
+                                state.renderArtifact = nil
+                                state.invalidateSavedClipRenders()
+                            }
+                        )
+                    ) {
                         Text("1080p").tag(LocalRenderPreset.hd1080)
                         Text("4K").tag(LocalRenderPreset.uhd4K)
                     }
