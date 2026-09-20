@@ -1,6 +1,36 @@
 import CryptoKit
 import Foundation
 
+public enum ProductionUpdateURLPolicy {
+    public static func allows(
+        _ url: URL
+    ) -> Bool {
+        guard url.scheme?.lowercased() == "https",
+              var host = url.host?.lowercased(),
+              !host.isEmpty,
+              url.user == nil,
+              url.password == nil,
+              url.fragment == nil else {
+            return false
+        }
+
+        while host.hasSuffix(".") {
+            host.removeLast()
+        }
+        guard !host.isEmpty else {
+            return false
+        }
+
+        return host != "localhost"
+            && host != "::1"
+            && !host.hasPrefix("127.")
+            && !host.hasSuffix(".local")
+            && !host.hasSuffix(".invalid")
+            && !host.hasSuffix(".example")
+            && !host.hasSuffix(".test")
+    }
+}
+
 public struct BlackstockUpdateManifest: Codable, Sendable, Equatable {
     public let version: String
     public let build: Int
@@ -74,7 +104,9 @@ public struct UpdateManifestVerifier: Sendable {
         guard manifest.build > 0 else {
             throw UpdateManifestValidationError.invalidBuild
         }
-        guard manifest.packageURL.scheme?.lowercased() == "https" else {
+        guard ProductionUpdateURLPolicy.allows(
+            manifest.packageURL
+        ) else {
             throw UpdateManifestValidationError.packageURLMustUseHTTPS
         }
         guard manifest.sha256.count == 64,
