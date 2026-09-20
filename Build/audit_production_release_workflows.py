@@ -41,11 +41,9 @@ requirements = {
         "preinstall-release-evidence.json",
         "manifestSignatureVerified",
         "packageHashVerified",
-        "packageURL",
-        "packageSHA256",
-        "curl",
-        "--proto '=https'",
-        "--proto-redir '=https'",
+        "--verified-package-output",
+        "Blackstock-production.pkg",
+        "Install exact package verified by release verifier",
         "sudo installer",
         "Launch verified production app",
         "actions/upload-artifact@v4",
@@ -83,6 +81,9 @@ requirements = {
         "com.apple.security.device.audio-input",
         "isProductionHTTPSURL(manifest.packageURL)",
         "isProductionHTTPSURL(finalURL)",
+        "--verified-package-output",
+        "persistVerifiedPackage(",
+        "expectedSHA256: manifest.sha256",
     ],
     "Build/validate_production_release_evidence.py": [
         "installedAppVersion",
@@ -129,6 +130,14 @@ if "pull_request:" in verify or "push:" in verify:
 if "production-manifest.json" in verify:
     errors.append(
         "published release verification must not re-fetch an unbound manifest after cryptographic verification"
+    )
+if "curl " in verify or "\ncurl" in verify:
+    errors.append(
+        "published release verification must install the exact package emitted by BlackstockReleaseVerifier, not re-download it"
+    )
+if "--verified-package-output" not in verify:
+    errors.append(
+        "published release verification must persist the exact verifier-checked package for installation"
     )
 if errors:
     print("Production release workflow audit failed:", file=sys.stderr)
