@@ -35,7 +35,7 @@ public actor LocalSupplementalVideoCompositor {
         preset: LocalRenderPreset
     ) async throws {
         let baseAsset = AVURLAsset(url: inputURL)
-        let assetDuration = try await baseAsset.load(.duration)
+        let baseAssetDuration = try await baseAsset.load(.duration)
         let baseVideoTracks = try await baseAsset.loadTracks(
             withMediaType: .video
         )
@@ -43,25 +43,18 @@ public actor LocalSupplementalVideoCompositor {
             throw LocalSupplementalVideoError
                 .missingBaseVideoTrack
         }
+
         let baseVideoTimeRange = try await baseVideoTrack.load(
             .timeRange
         )
-        let baseVideoStartSeconds = max(
-            CMTimeGetSeconds(baseVideoTimeRange.start),
-            0
-        )
-        let baseVideoDurationSeconds = max(
-            CMTimeGetSeconds(baseVideoTimeRange.duration),
-            0
-        )
-        let assetDurationSeconds = max(
-            CMTimeGetSeconds(assetDuration),
-            0
-        )
         let baseDurationSeconds = min(
-            assetDurationSeconds,
-            baseVideoDurationSeconds
+            max(CMTimeGetSeconds(baseAssetDuration), 0),
+            max(CMTimeGetSeconds(baseVideoTimeRange.duration), 0)
         )
+        guard baseDurationSeconds >= 0.05 else {
+            throw LocalSupplementalVideoError
+                .missingBaseVideoTrack
+        }
         let baseDuration = CMTime(
             seconds: baseDurationSeconds,
             preferredTimescale: 600
@@ -93,11 +86,69 @@ public actor LocalSupplementalVideoCompositor {
             renderSize: renderSize
         )
 
+        let composition = AVMutableComposition()
+        guard let baseCompositionTrack =
+                composition.addMutableTrack(
+                    withMediaType: .video,
+                    preferredTrackID:
+                        kCMPersistentTrackID_Invalid
+                ) else {
+            throw LocalSupplementalVideoError
+                .missingBaseVideoTrack
+        }
+
+        try baseCompositionTrack.insertTimeRange(
+            CMTimeRange(
+                start: baseVideoTimeRange.start,
+                duration: baseDuration
+            ),
+            of: baseVideoTrack,
+            at: .zero
+        )
+
+        let baseAudioTracks = try await baseAsset.loadTracks(
+            withMediaType: .audio
+        )
+        for sourceAudioTrack in baseAudioTracks {
+            let sourceRange = try await sourceAudioTrack.load(
+                .timeRange
+            )
+            let audioDurationSeconds = min(
+                baseDurationSeconds,
+                max(
+                    CMTimeGetSeconds(sourceRange.duration),
+                    0
+                )
+            )
+            guard audioDurationSeconds >= 0.001 else {
+                continue
+            }
+            guard let audioTrack = composition.addMutableTrack(
+                withMediaType: .audio,
+                preferredTrackID:
+                    kCMPersistentTrackID_Invalid
+            ) else {
+                throw LocalSupplementalVideoError
+                    .exportFailed(
+                        "Basisaudiospur konnte nicht angelegt werden."
+                    )
+            }
+            try audioTrack.insertTimeRange(
+                CMTimeRange(
+                    start: sourceRange.start,
+                    duration: CMTime(
+                        seconds: audioDurationSeconds,
+                        preferredTimescale: 600
+                    )
+                ),
+                of: sourceAudioTrack,
+                at: .zero
+            )
+        }
+
         struct PreparedInsert {
             let order: Int
-            let captureID: UUID
-            let sourceTrack: AVAssetTrack
-            let sourceStartSeconds: Double
+            let track: AVMutableCompositionTrack
             let timelineStartSeconds: Double
             let timelineEndSeconds: Double
             let transform: CGAffineTransform
@@ -116,18 +167,14 @@ public actor LocalSupplementalVideoCompositor {
                     )
             }
 
-            let sourceTimeRange = try await sourceTrack.load(
+            let sourceRange = try await sourceTrack.load(
                 .timeRange
             )
-            let sourceTrackStartSeconds = max(
-                CMTimeGetSeconds(sourceTimeRange.start),
-                0
-            )
             let sourceDurationSeconds = max(
-                CMTimeGetSeconds(sourceTimeRange.duration),
+                CMTimeGetSeconds(sourceRange.duration),
                 0
             )
-            let sourceStart = min(
+            let sourceStartOffset = min(
                 max(input.sourceStartSeconds, 0),
                 sourceDurationSeconds
             )
@@ -137,11 +184,53 @@ public actor LocalSupplementalVideoCompositor {
             )
             let durationSeconds = min(
                 max(input.durationSeconds, 0),
-                sourceDurationSeconds - sourceStart,
+                sourceDurationSeconds - sourceStartOffset,
                 baseDurationSeconds - timelineStart
             )
             guard durationSeconds >= 0.05 else {
                 continue
+            }
+
+            guard let compositionTrack =
+                    composition.addMutableTrack(
+                        withMediaType: .video,
+                        preferredTrackID:
+                            kCMPersistentTrackID_Invalid
+                    ) else {
+                throw LocalSupplementalVideoError
+                    .exportFailed(
+                        "Zusätzliche Videospur konnte nicht angelegt werden."
+                    )
+            }
+
+            let sourceStart = CMTimeAdd(
+                sourceRange.start,
+                CMTime(
+                    seconds: sourceStartOffset,
+                    preferredTimescale: 600
+                )
+            )
+            do {
+                try compositionTrack.insertTimeRange(
+                    CMTimeRange(
+                        start: sourceStart,
+                        duration: CMTime(
+                            seconds: durationSeconds,
+                            preferredTimescale: 600
+                        )
+                    ),
+                    of: sourceTrack,
+                    at: CMTime(
+                        seconds: timelineStart,
+                        preferredTimescale: 600
+                    )
+                )
+            } catch {
+                throw LocalSupplementalVideoError
+                    .exportFailed(
+                        "B-Roll konnte nicht in die eigene Videospur eingesetzt werden: "
+                        + error.localizedDescription
+                    )
             }
 
             let naturalSize = try await sourceTrack.load(
@@ -150,13 +239,11 @@ public actor LocalSupplementalVideoCompositor {
             let preferredTransform = try await sourceTrack.load(
                 .preferredTransform
             )
+
             prepared.append(
                 PreparedInsert(
                     order: order,
-                    captureID: input.captureID,
-                    sourceTrack: sourceTrack,
-                    sourceStartSeconds:
-                        sourceTrackStartSeconds + sourceStart,
+                    track: compositionTrack,
                     timelineStartSeconds: timelineStart,
                     timelineEndSeconds:
                         timelineStart + durationSeconds,
@@ -187,6 +274,7 @@ public actor LocalSupplementalVideoCompositor {
             )
         }
         boundaries.sort()
+
         var normalizedBoundaries: [Double] = []
         for value in boundaries {
             let clamped = min(
@@ -199,153 +287,24 @@ public actor LocalSupplementalVideoCompositor {
             }
             normalizedBoundaries.append(clamped)
         }
-        boundaries = normalizedBoundaries
-
-        let composition = AVMutableComposition()
-        guard let outputVideoTrack =
-                composition.addMutableTrack(
-                    withMediaType: .video,
-                    preferredTrackID:
-                        kCMPersistentTrackID_Invalid
-                ) else {
-            throw LocalSupplementalVideoError
-                .missingBaseVideoTrack
-        }
-
-        let baseAudioTracks = try await baseAsset.loadTracks(
-            withMediaType: .audio
-        )
-        for sourceAudioTrack in baseAudioTracks {
-            guard let audioTrack =
-                    composition.addMutableTrack(
-                        withMediaType: .audio,
-                        preferredTrackID:
-                            kCMPersistentTrackID_Invalid
-                    ) else {
-                throw LocalSupplementalVideoError
-                    .exportFailed(
-                        "Basisaudiospur konnte nicht angelegt werden."
-                    )
-            }
-            let audioTimeRange = try await sourceAudioTrack
-                .load(.timeRange)
-            let audioDurationSeconds = min(
-                baseDurationSeconds,
-                max(
-                    CMTimeGetSeconds(
-                        audioTimeRange.duration
-                    ),
-                    0
-                )
-            )
-            guard audioDurationSeconds >= 0.001 else {
-                continue
-            }
-            try audioTrack.insertTimeRange(
-                CMTimeRange(
-                    start: audioTimeRange.start,
-                    duration: CMTime(
-                        seconds: audioDurationSeconds,
-                        preferredTimescale: 600
-                    )
-                ),
-                of: sourceAudioTrack,
-                at: .zero
-            )
-        }
 
         var instructions:
             [AVMutableVideoCompositionInstruction] = []
-
-        for index in 0..<(boundaries.count - 1) {
-            let start = boundaries[index]
-            let end = boundaries[index + 1]
-            let duration = end - start
-            guard duration >= 0.001 else {
+        for index in 0..<(normalizedBoundaries.count - 1) {
+            let start = normalizedBoundaries[index]
+            let end = normalizedBoundaries[index + 1]
+            guard end - start >= 0.001 else {
                 continue
             }
 
             let activeInsert = prepared
                 .filter {
                     $0.timelineStartSeconds
-                        <= start + 0.0005
+                        <= start + 0.000_5
                     && $0.timelineEndSeconds
-                        >= end - 0.0005
+                        >= end - 0.000_5
                 }
                 .max { $0.order < $1.order }
-
-            let sourceTrack: AVAssetTrack
-            let sourceStart: Double
-            let sourceEnd: Double
-            let transform: CGAffineTransform
-
-            if let activeInsert {
-                sourceTrack = activeInsert.sourceTrack
-                sourceStart =
-                    activeInsert.sourceStartSeconds
-                    + start
-                    - activeInsert.timelineStartSeconds
-                let sourceTimeRange = try await sourceTrack.load(
-                    .timeRange
-                )
-                sourceEnd =
-                    CMTimeGetSeconds(
-                        sourceTimeRange.start
-                    )
-                    + CMTimeGetSeconds(
-                        sourceTimeRange.duration
-                    )
-                transform = activeInsert.transform
-            } else {
-                sourceTrack = baseVideoTrack
-                sourceStart =
-                    baseVideoStartSeconds + start
-                sourceEnd =
-                    baseVideoStartSeconds
-                    + baseVideoDurationSeconds
-                transform = baseTransform
-            }
-
-            let safeDuration = min(
-                duration,
-                max(sourceEnd - sourceStart, 0)
-            )
-            guard safeDuration >= 0.001 else {
-                continue
-            }
-
-            do {
-                try outputVideoTrack.insertTimeRange(
-                    CMTimeRange(
-                        start: CMTime(
-                            seconds: sourceStart,
-                            preferredTimescale: 600
-                        ),
-                        duration: CMTime(
-                            seconds: safeDuration,
-                            preferredTimescale: 600
-                        )
-                    ),
-                    of: sourceTrack,
-                    at: CMTime(
-                        seconds: start,
-                        preferredTimescale: 600
-                    )
-                )
-            } catch {
-                throw LocalSupplementalVideoError.exportFailed(
-                    "Videoabschnitt konnte nicht eingesetzt werden: Ziel "
-                    + String(format: "%.6f", start)
-                    + "–"
-                    + String(format: "%.6f", end)
-                    + " s, Quelle ab "
-                    + String(format: "%.6f", sourceStart)
-                    + " s, verfügbare Dauer "
-                    + String(format: "%.6f", max(sourceEnd - sourceStart, 0))
-                    + " s. "
-                    + error.localizedDescription
-                )
-            }
 
             let instruction =
                 AVMutableVideoCompositionInstruction()
@@ -355,19 +314,33 @@ public actor LocalSupplementalVideoCompositor {
                     preferredTimescale: 600
                 ),
                 duration: CMTime(
-                    seconds: duration,
+                    seconds: end - start,
                     preferredTimescale: 600
                 )
             )
-            let layer =
-                AVMutableVideoCompositionLayerInstruction(
-                    assetTrack: outputVideoTrack
+
+            if let activeInsert {
+                let layer =
+                    AVMutableVideoCompositionLayerInstruction(
+                        assetTrack: activeInsert.track
+                    )
+                layer.setTransform(
+                    activeInsert.transform,
+                    at: instruction.timeRange.start
                 )
-            layer.setTransform(
-                transform,
-                at: instruction.timeRange.start
-            )
-            instruction.layerInstructions = [layer]
+                instruction.layerInstructions = [layer]
+            } else {
+                let layer =
+                    AVMutableVideoCompositionLayerInstruction(
+                        assetTrack: baseCompositionTrack
+                    )
+                layer.setTransform(
+                    baseTransform,
+                    at: instruction.timeRange.start
+                )
+                instruction.layerInstructions = [layer]
+            }
+
             instructions.append(instruction)
         }
 
