@@ -359,6 +359,14 @@ private struct BlackstockReleaseVerifierMain {
             arguments
         )
 
+        if let verifiedPackageOutputURL =
+                arguments.verifiedPackageOutputURL {
+            try persistVerifiedPackage(
+                from: packageURL,
+                to: verifiedPackageOutputURL
+            )
+        }
+
         return ReleaseVerificationEvidence(
             schemaVersion: 3,
             verifiedAt: Date(),
@@ -536,6 +544,42 @@ private struct BlackstockReleaseVerifierMain {
             && !host.hasSuffix(".test")
     }
 
+    private static func persistVerifiedPackage(
+        from sourceURL: URL,
+        to destinationURL: URL
+    ) throws {
+        let fileManager = FileManager.default
+        try fileManager.createDirectory(
+            at: destinationURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+
+        let temporaryURL = destinationURL
+            .deletingLastPathComponent()
+            .appendingPathComponent(
+                ".\(destinationURL.lastPathComponent).\(UUID().uuidString).tmp"
+            )
+        defer {
+            try? fileManager.removeItem(at: temporaryURL)
+        }
+
+        try? fileManager.removeItem(at: temporaryURL)
+        try fileManager.copyItem(
+            at: sourceURL,
+            to: temporaryURL
+        )
+        try UpdatePackageIntegrityVerifier().verify(
+            fileURL: temporaryURL,
+            expectedSHA256: try sha256(of: sourceURL)
+        )
+
+        try? fileManager.removeItem(at: destinationURL)
+        try fileManager.moveItem(
+            at: temporaryURL,
+            to: destinationURL
+        )
+    }
+
     private static func sha256(
         of url: URL
     ) throws -> String {
@@ -611,6 +655,7 @@ private struct Arguments {
     let notaryKeyPath: String?
     let notaryKeyID: String?
     let notaryIssuer: String?
+    let verifiedPackageOutputURL: URL?
     let outputURL: URL?
 
     static func parse(
@@ -680,6 +725,10 @@ private struct Arguments {
                 values["--notary-key-id"],
             notaryIssuer:
                 values["--notary-issuer"],
+            verifiedPackageOutputURL:
+                values["--verified-package-output"].map {
+                    URL(fileURLWithPath: $0)
+                },
             outputURL: values["--output"].map {
                 URL(fileURLWithPath: $0)
             }
