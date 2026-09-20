@@ -43,14 +43,37 @@ public actor LocalSupplementalVideoCompositor {
         }
 
         let composition = AVMutableComposition()
-        try await composition.insertTimeRange(
+        guard let baseCompositionTrack =
+                composition.addMutableTrack(
+                    withMediaType: .video,
+                    preferredTrackID:
+                        kCMPersistentTrackID_Invalid
+                ) else {
+            throw LocalSupplementalVideoError.missingBaseVideoTrack
+        }
+        try baseCompositionTrack.insertTimeRange(
             CMTimeRange(start: .zero, duration: baseDuration),
-            of: baseAsset,
+            of: baseVideoTrack,
             at: .zero
         )
-        guard let baseCompositionTrack =
-                composition.tracks(withMediaType: .video).first else {
-            throw LocalSupplementalVideoError.missingBaseVideoTrack
+
+        let baseAudioTracks = try await baseAsset.loadTracks(
+            withMediaType: .audio
+        )
+        for sourceAudioTrack in baseAudioTracks {
+            guard let audioTrack = composition.addMutableTrack(
+                withMediaType: .audio,
+                preferredTrackID: kCMPersistentTrackID_Invalid
+            ) else {
+                throw LocalSupplementalVideoError.exportFailed(
+                    "Basisaudiospur konnte nicht angelegt werden."
+                )
+            }
+            try audioTrack.insertTimeRange(
+                CMTimeRange(start: .zero, duration: baseDuration),
+                of: sourceAudioTrack,
+                at: .zero
+            )
         }
 
         let baseNaturalSize = try await baseVideoTrack.load(.naturalSize)
