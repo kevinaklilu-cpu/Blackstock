@@ -21,6 +21,7 @@ public enum LocalRenderError: Error, Sendable, Equatable {
     case exportSessionUnavailable
     case unsupportedOutputType
     case missingVideoTrack
+    case missingSupplementalAudioTrack(UUID)
     case emptyEditResult
     case reframePlanUnavailable
     case exportFailed(String)
@@ -44,7 +45,8 @@ public actor LocalVideoRenderer {
         preset: LocalRenderPreset,
         transcript: LocalTranscript? = nil,
         burnInCaptions: Bool = false,
-        captionStyle: CaptionVisualStyle = .clear
+        captionStyle: CaptionVisualStyle = .clear,
+        supplementalAudio: [SupplementalAudioMixInput] = []
     ) async throws -> RenderArtifact {
         guard asset.mayEnterProduction else {
             throw LocalRenderError.unauthorizedMedia
@@ -135,11 +137,76 @@ public actor LocalVideoRenderer {
             )
         }
 
+
+        var supplementalAudioParameters: [AVAudioMixInputParameters] = []
+        for input in supplementalAudio {
+            guard input.volume > 0 else { continue }
+
+            let supplementalAsset = AVURLAsset(url: input.fileURL)
+            let audioTracks = try await supplementalAsset.loadTracks(
+                withMediaType: .audio
+            )
+            guard let sourceAudioTrack = audioTracks.first else {
+                throw LocalRenderError.missingSupplementalAudioTrack(
+                    input.captureID
+                )
+            }
+
+            let supplementalDuration = try await supplementalAsset.load(
+                .duration
+            )
+            let supplementalDurationSeconds = max(
+                CMTimeGetSeconds(supplementalDuration),
+                0
+            )
+            let mixDurationSeconds = min(
+                supplementalDurationSeconds,
+                timeline.outputDurationSeconds
+            )
+            guard mixDurationSeconds > 0.01 else { continue }
+
+            guard let compositionTrack = composition.addMutableTrack(
+                withMediaType: .audio,
+                preferredTrackID: kCMPersistentTrackID_Invalid
+            ) else {
+                throw LocalRenderError.exportFailed(
+                    "Zusätzliche Audiospur konnte nicht angelegt werden."
+                )
+            }
+
+            try compositionTrack.insertTimeRange(
+                CMTimeRange(
+                    start: .zero,
+                    duration: CMTime(
+                        seconds: mixDurationSeconds,
+                        preferredTimescale: 600
+                    )
+                ),
+                of: sourceAudioTrack,
+                at: .zero
+            )
+
+            let parameters = AVMutableAudioMixInputParameters(
+                track: compositionTrack
+            )
+            parameters.setVolume(
+                Float(min(max(input.volume, 0), 1)),
+                at: .zero
+            )
+            supplementalAudioParameters.append(parameters)
+        }
+
         guard let exporter = AVAssetExportSession(
             asset: composition,
             presetName: preset.avPresetName
         ) else {
             throw LocalRenderError.exportSessionUnavailable
+        }
+
+        if !supplementalAudioParameters.isEmpty {
+            let audioMix = AVMutableAudioMix()
+            audioMix.inputParameters = supplementalAudioParameters
+            exporter.audioMix = audioMix
         }
 
         if let reframe = graph.currentOperations
