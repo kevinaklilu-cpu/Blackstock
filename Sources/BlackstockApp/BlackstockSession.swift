@@ -432,7 +432,6 @@ final class BlackstockSession: ObservableObject {
             let state = try PKCEPair.generate().verifier
             let request = GoogleOAuthAuthorizationRequest(
                 clientID: effectiveClientID,
-                clientSecret: effectiveClientSecret,
                 redirectURI: redirectURI,
                 scopes: [.youtubeReadOnly],
                 state: state,
@@ -1483,6 +1482,7 @@ final class BlackstockSession: ObservableObject {
         return try await GoogleOAuthTokenExchange().exchange(
             code: code,
             clientID: effectiveClientID,
+            clientSecret: effectiveClientSecret,
             redirectURI: redirectURI,
             verifier: pkce.verifier
         )
