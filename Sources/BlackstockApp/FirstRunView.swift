@@ -411,7 +411,7 @@ struct FirstRunView: View {
 
                 if let selected = selectedOpportunity {
                     Button("Als Clip verwenden") {
-                        session.useOpportunity(selected)
+                        session.useOpportunityAsClip(selected)
                     }
                     .buttonStyle(.borderedProminent)
                 } else {
