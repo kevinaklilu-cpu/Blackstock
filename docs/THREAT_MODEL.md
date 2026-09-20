@@ -20,7 +20,8 @@ Blackstock ist eine lokale macOS-Anwendung für Recherche, Produktion, Publishin
 3. **Browser ↔ Loopback OAuth** – untrusted Browser-Eingang; der Listener bindet ausschließlich an 127.0.0.1 und akzeptiert nur den dokumentierten Root-Callback `/` auf dem dynamischen Loopback-Port.
 4. **Google/YouTube APIs** – externe Providergrenze; Responses gelten nicht implizit als zum Projekt passend und werden gegen Projekt-/Kanal-/Video-Kontext geprüft.
 5. **Update-Infrastruktur** – Netzwerk und CDN sind untrusted; Vertrauen entsteht erst durch Ed25519-Manifest-Signatur, SHA-256-Paketbindung und Developer-ID-Installer-Teamprüfung.
-6. **Lokale Persistenz** – Dateien können beschädigt, veraltet oder aus einer inkompatiblen Zukunftsversion stammen; Schema- und Projektbindung werden vor Verwendung validiert.
+6. **GitHub-Actions-Supply-Chain** – externe Workflow-Actions sind ausführbarer Fremdcode. Blackstock bindet sie deshalb ausschließlich über vollständige unveränderliche Commit-SHAs; bewegliche Major-/Tag-Referenzen sind durch Canonical-CI verboten.
+7. **Lokale Persistenz** – Dateien können beschädigt, veraltet oder aus einer inkompatiblen Zukunftsversion stammen; Schema- und Projektbindung werden vor Verwendung validiert.
 
 ## Angreiferannahmen
 
@@ -70,6 +71,13 @@ Nicht als durch die App lösbar angenommen werden vollständige Kompromittierung
 - Das Paket muss eine gültige Developer-ID-Installer-Signatur des erwarteten Team-ID-Besitzers tragen.
 - Fehlgeschlagene Prüfungen verwerfen das Paket; keine stille Installation.
 
+### Build- und Workflow-Supply-Chain
+
+- Externe GitHub Actions müssen in allen Workflow-Dateien auf vollständige 40-stellige Commit-SHAs gepinnt sein.
+- Canonical-CI führt `Build/audit_github_actions_supply_chain.py` aus und blockiert bewegliche Action-Tags sowie `docker://`-Actions.
+- Die produktionskritischen Checkout- und Artifact-Actions sind auf verifizierte Release-Commits gepinnt.
+- Dependabot darf Aktualisierungen als überprüfbare Pull Requests vorschlagen; es ändert die Produktionskette nicht stillschweigend zur Laufzeit.
+
 ### Persistenz und Wiederherstellung
 
 - Persistenzdateien sind schemaversioniert.
@@ -80,7 +88,7 @@ Nicht als durch die App lösbar angenommen werden vollständige Kompromittierung
 
 ## Security-Test-Suite
 
-Die Canonical-CI führt `Build/audit_security.py` und `swift test` aus.
+Die Canonical-CI führt `Build/audit_security.py`, `Build/audit_github_actions_supply_chain.py` und `swift test` aus.
 
 Der statische Security-Audit erzwingt kritische Sicherheitsverträge in den produktiven Quellen und das Vorhandensein zentraler Negativtests. Die Swift-Tests decken unter anderem manipulierte Update-Manifeste, unsichere HTTP-Update-URLs, falsche Installer-Team-IDs, falsche Publishing-Kanäle, Resume-/Idempotenzpfade sowie Schema-Hard-Stops ab.
 
