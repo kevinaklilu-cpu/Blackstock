@@ -25,6 +25,8 @@ jobs:
           grep -q 'NOCH NICHT MARKTREIF' README.md
       - name: Accessibility semantic audit
         run: python3 Build/audit_accessibility.py
+      - name: GitHub Actions supply-chain audit
+        run: python3 Build/audit_github_actions_supply_chain.py
       - name: Security contract audit
         run: python3 Build/audit_security.py
       - name: Desktop OAuth contract audit
