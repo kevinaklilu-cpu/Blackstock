@@ -77,7 +77,9 @@ Nicht als durch die App lösbar angenommen werden vollständige Kompromittierung
 - `actions/checkout` muss `persist-credentials: false` verwenden; der Checkout hinterlegt damit keinen wiederverwendbaren Repository-Token in der lokalen Git-Konfiguration.
 - Jeder Workflow muss den `GITHUB_TOKEN` top-level auf `contents: read` begrenzen; Write-Berechtigungen werden vom Supply-Chain-Audit blockiert.
 - `pull_request_target` ist verboten, damit untrusted Pull-Request-Kontext nicht mit privilegierter Ausführung kombiniert wird.
-- Canonical-CI führt `Build/audit_github_actions_supply_chain.py` aus und blockiert bewegliche Action-Tags, `docker://`-Actions, persistierte Checkout-Credentials und schreibfähige Workflow-Tokens.
+- Canonical-CI führt `Build/audit_github_actions_supply_chain.py` aus und blockiert bewegliche Action-Tags, `docker://`-Actions, persistierte Checkout-Credentials, schreibfähige Workflow-Tokens und bewegliche `*-latest`-Runner.
+- macOS-Build-/Release-Jobs sind auf `macos-26` und Xcode 26.6 gepinnt; fehlt der erwartete Toolchain-Pfad oder meldet Xcode eine andere Version, stoppt der Job vor Build oder Signing.
+- Der distributierbare App-Binary wird separat für arm64 und x86_64 gebaut, vor dem Signieren zu Universal-2 vereinigt und nach Installation erneut auf beide Slices geprüft.
 - Die produktionskritischen Checkout- und Artifact-Actions sind auf verifizierte Release-Commits gepinnt.
 - Dependabot darf Aktualisierungen als überprüfbare Pull Requests vorschlagen; es ändert die Produktionskette nicht stillschweigend zur Laufzeit.
 
