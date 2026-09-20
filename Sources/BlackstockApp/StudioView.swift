@@ -2329,7 +2329,7 @@ struct StudioView: View {
                             Text("Die Einblendung ersetzt nur das Bild im gewählten Zeitfenster; der Hauptton läuft weiter. Zu lange Bereiche werden beim Rendern automatisch an Quell- und Videolänge begrenzt.")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
-
+                        }
                     }
                     .padding(.vertical, 3)
                 }
