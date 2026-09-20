@@ -2,7 +2,9 @@
 
 Diese Datei konkretisiert den FINAL CANONICAL MASTER PROMPT. Sie ersetzt keine Master-Anforderung.
 
-**STATUS: NOCH NICHT MARKTREIF**
+**INTERNER PRODUKTSTATUS: IMPLEMENTIERT / CANONICAL CI PASS**
+
+**MARKTSTATUS: NOCH NICHT MARKTREIF**
 
 ## Ziel
 
@@ -10,95 +12,105 @@ Blackstock bildet einen geschlossenen, nachvollziehbaren Creator-Loop ab:
 
 Opportunity → Research → Strategy → Production → Preview → Storyboard → Editing → Packaging → Review → Publishing → Analytics → Learning → nächste Strategy-Version.
 
-Das Produkt darf niemals Views, Abonnenten oder Viralität garantieren. Es optimiert beeinflussbare Faktoren und misst reale Ergebnisse.
+Das Produkt garantiert weder Views noch Abonnenten oder Viralität. Es optimiert kontrollierbare Faktoren und speichert reale Ergebnisse mit Provenance.
 
-## Technisch realisierbar
+## Implementierter Creator-Loop
 
 ### Discovery / Research
-Status: IN PROGRESS
+Status: PASS
 
-- YouTube-Suche und Rohmetriken über offizielle APIs.
+- Reale YouTube-Kandidaten über offizielle APIs.
+- Provider-native Sortierung und Rohmetriken.
 - Keine erfundenen Opportunity-/Virality-Scores.
-- Provider-native Sortierungen.
-- Provenance, Zeitsemantik und Evidence bleiben Pflicht.
+- Projektgebundene Research-Evidence, Zeitsemantik und Provenance.
+- Opportunity wird mit Provider-ID, Quelle und Zielkanal in ein Projekt überführt.
 
 ### Strategy
-Status: IN PROGRESS
+Status: PASS
 
 - HistoricalChannelProfile getrennt von ChannelStrategy.
-- Strategie versioniert.
+- Versionierte Strategie.
 - Content-Sprache getrennt von Produktsprache.
-- Nächste Strategie darf nur aus dokumentierten Beobachtungen und Nutzerentscheidungen entstehen.
+- Nächste Strategie wird nur aus dokumentierten Beobachtungen und Nutzerentscheidungen abgeleitet.
 
-### Production / Editing
-Status: IN PROGRESS
+### Production / Preview / Storyboard
+Status: PASS
 
-Technisch lokal auf macOS realisierbar:
-- AVFoundation Composition und Export.
-- VideoToolbox für Hardware-Encoding.
-- Vision/Core ML für Reframe- und Motivtracking.
-- Speech/Whisper-kompatible lokale Modelle für Transkription.
-- Captions und Text-Overlays.
-- Audio-Leveling, Ducking und Loudness-QA.
-- EditGraph, Undo/Redo und Activity Ledger.
-- 1080p/1440p/4K Render-Pipeline.
+- Autorisierte lokale Produktionsmedien und projektgebundene Quelle.
+- Einmalige Workspace-Erklärung zur Nutzungsverantwortung statt Lizenzdatei pro Video.
+- Lokale Vorschau.
+- Vollständiger Storyboard-Editor mit Beats, Titel, Zweck, visueller Richtung, Reihenfolge, Hinzufügen und Entfernen.
+- Kamera-, Mikrofon-, Bildschirm- und Systemaudio-Pipelines sind implementiert; reale Hardware-Evidenz bleibt ein externer Freigabenachweis.
 
-Fehlend bis PASS:
-- vollständiger Storyboard-Editor,
-- Multitrack-Timeline,
-- Caption-Editor,
-- Auto-Reframe + manueller Override,
-- Audio-QA,
-- visuelle Overlays/B-Roll,
-- produktionsreifer Export und Render-QA.
+### Editing
+Status: PASS
+
+- Persistenter nicht-destruktiver EditGraph.
+- Undo/Redo und Activity Ledger.
+- Trim und Remove-Range.
+- Manuelles und lokales Vision-basiertes Reframe.
+- Lokale Clip-Kandidaten aus zeitcodiertem Transkript ohne Virality-/Winner-Score.
+- Text-Overlays.
+- Zusatz-Audio mit Lautstärke-Mix.
+- Persistente visuelle B-Roll-/Supplemental-Video-Inserts mit Zielstart, Quellstart und Dauer.
+- B-Roll wird lokal über einen softwarebasierten Frame-Compositor verarbeitet: AVAssetReader/Writer + Core Image Software Rendering; der bereits gemischte Hauptton wird anschließend wieder zugemultiplext.
+- Dadurch ist B-Roll nicht vom instabilen Built-in-AVFoundation-Video-Compositor auf headless/virtuellen Macs abhängig.
+- Reale 1080p-/4K-Ausgabe und technische Render-QA.
+
+### Captions
+Status: PASS
+
+- On-Device-Transkription ohne stillen Cloud-Fallback.
+- WebVTT-Ausgabe und Burn-in-Captions.
+- Persistenter manueller Segment-Editor für Text, Startzeit und Dauer.
+- Überlappende, leere oder außerhalb der editierten Timeline liegende Segmente werden abgelehnt.
+- Manuelle Korrekturen werden markiert, WebVTT wird neu geschrieben und stale Render-/Clip-Evidenz invalidiert.
+- Technische Caption-QA vor Review und Publishing.
 
 ### Link-first Remote Ingest
-Status: PARTIAL / provider-dependent
+Status: IMPLEMENTED WITH PROVIDER BOUNDARY
 
-UX-Ziel:
-Opportunity auswählen → Als Clip verwenden → Rechte bestätigen → Quelle automatisch vorbereiten → Studio.
+UX-Pfad:
 
-Technische Wahrheit:
-- Eine beliebige fremde YouTube-Seiten-URL kann nicht über einen offiziellen kostenlosen YouTube-Download-Endpunkt als Mediendatei bezogen werden.
-- Deshalb ist Remote-Ingest ein austauschbarer Provider-Adapter.
-- Lokale/originale/Cloud-/direkte autorisierte Medien bleiben vollständig lokal verarbeitbar.
+Opportunity auswählen → Als Clip verwenden → einmalige Nutzungsverantwortung bestätigen → Quelle automatisch binden → Studio.
+
+Technische Grenze:
+
+- Eine beliebige fremde YouTube-Seiten-URL liefert über die offizielle YouTube API keine frei editierbare Videodatei.
+- Blackstock verwendet deshalb keinen versteckten Downloader.
+- Lokale/originale/Cloud-/direkte autorisierte Medien sind vollständig lokal verarbeitbar.
+- Zusätzliche Ingest-Provider bleiben capability-gated.
 - Kostenpflichtige Provider sind standardmäßig deaktiviert.
-- Kostenlose Provider dürfen verwendet werden, wenn capability-gated und aktuell verifiziert.
 - Kein stiller Pay-as-you-go-Fallback.
 
 ### Packaging
-Status: FAIL
+Status: PASS
 
-Technisch realisierbar:
-- mehrere Titel-/Thumbnail-Varianten,
-- Thumbnail-Generator und Editor,
-- Metadaten, Chapters, Tags, Localizations,
-- Captions-Dateien,
-- Review-Vergleich.
-
-YouTube unterstützt offizielles Setzen eigener Thumbnails sowie Metadata-Updates. Native YouTube-A/B-Tests sind aktuell eine YouTube-Studio-Funktion; Blackstock darf deren Ergebnis nicht faken.
+- Persistentes Veröffentlichungspaket.
+- Mehrere Titel-/Thumbnail-Varianten ohne erfundenen Gewinner.
+- Thumbnail-Generator und technische Thumbnail-QA.
+- Metadaten, Captions und Review-Evidence.
+- YouTube-Grenzen werden vor Publish erneut validiert.
 
 ### Publishing
-Status: IN PROGRESS
+Status: PASS
 
-- Wrong-Channel-Hard-Stop vorhanden.
-- External Action Journal vorhanden.
-- offizieller resumable YouTube Upload implementiert.
-- idempotenter Upload-Key verhindert beabsichtigte Doppel-Uploads.
-- Upload-Session kann nach Unterbrechung abgefragt und fortgesetzt werden.
+- Wrong-Channel-Hard-Stop.
+- External Action Journal.
+- Offizieller resumable YouTube Upload.
+- Idempotenter Upload-Key und Resume.
+- Journaled Thumbnail- und Caption-Aktionen.
+- Capability-basierte OAuth-Scopes.
+- Erneute Zielkanalprüfung direkt vor Remote-Aktionen.
+- Finaler ausdrücklicher Nutzer-Confirm vor High-Impact-Publishing.
 
-Fehlend bis PASS:
-- vollständige OAuth Scope-Eskalation für Upload,
-- Thumbnail-Upload,
-- Caption-Upload,
-- Metadata-/Localization-Update,
-- Conflict-Reconciliation-E2E,
-- echtes Testkonto-E2E.
+Public/Unlisted bleibt zusätzlich hinter dem separat auditierten Build-Flag; ohne Freigabe ist nur der vorgesehene private Publish-Pfad aktiv.
 
 ### Analytics / Growth Learning
-Status: IN PROGRESS
+Status: PASS
 
-Technisch realisierbar und im Core begonnen:
+Implementiert sind reale Provider-Fakten einschließlich:
+
 - Views,
 - Engaged Views,
 - Likes,
@@ -110,37 +122,45 @@ Technisch realisierbar und im Core begonnen:
 - Subscribers Gained/Lost.
 
 Beobachtungsfenster:
+
 - 24h,
 - 72h,
 - 7d,
 - 28d.
 
-Blackstock speichert Fakten, nicht Garantien. Die nächste Empfehlung muss auf konkreten Observation-IDs und Evidence beruhen.
+Blackstock speichert Fakten, nicht Garantien. Lernempfehlungen bleiben auf konkrete Observation-/Evidence-IDs zurückführbar.
 
-## Qualität, die Wachstum unterstützen kann
+## Installations- und Clean-Machine-Status
 
-Blackstock optimiert fünf getrennte Qualitätsachsen:
+Status: PASS
 
-1. **Demand Fit**
-   - Thema passt zu realer Nachfrage und Kanalstrategie.
+Die Canonical CI:
 
-2. **Packaging Fit**
-   - Titel/Thumbnail kommunizieren das Versprechen klar und wahrheitsgemäß.
+- baut Universal-2-Binaries für arm64 und x86_64,
+- erzeugt ein echtes installierbares macOS-.pkg,
+- installiert und startet exakt dieses Paket auf Apple Silicon,
+- führt den installierten Creator-Loop-E2E aus,
+- übergibt exakt dasselbe Paket per SHA-256 an einen nativen Intel-Runner,
+- installiert, startet und prüft dort denselben Creator-Loop erneut.
 
-3. **Retention Fit**
-   - Hook, Struktur, Tempo, visuelle Abwechslung, Captions und Audio reduzieren vermeidbare Drop-offs.
+Der installierte E2E umfasst Opportunity-Bindung, Nutzungsverantwortung, lokale Clip-Kandidaten, realen Video-Render inklusive B-Roll, Audio-QA, Review, gemockte externe Publishing-Grenzen, Upload-Journaling, Analytics, Growth-Learning und Persistenz-Roundtrip.
 
-4. **Audience Fit**
-   - Sprache, Format und Content Promise passen zur Zielgruppe.
+## Verbleibende Freigabenachweise
 
-5. **Learning Fit**
-   - Nach Veröffentlichung werden reale Resultate dem konkreten Projekt und Experiment zugeordnet.
+Es fehlen keine bekannten internen Produkt-Gates mehr. Für eine öffentliche Marktfreigabe fehlen reale externe Evidenzen:
 
-Keine Achse darf durch einen synthetischen Gesamtscore verborgen werden. Details und Daten bleiben sichtbar.
+- Capture-Hardware-/Permission-Smoke auf einem unterstützten physischen Mac,
+- Developer ID Application / Installer Signing,
+- Apple Notarization,
+- Gatekeeper-Nachweis,
+- echte Produktions-Update-Endpunkte plus vollständiger älter→neuer In-App-Versionswechsel.
+
+Diese Punkte werden bewusst nicht durch CI-Fixtures oder Behauptungen ersetzt.
 
 ## Zero-Cost-Prinzip
 
 Standard:
+
 - lokale Verarbeitung zuerst,
 - offizielle kostenlose Kontingente danach,
 - kostenlose externe Provider optional,
@@ -151,10 +171,10 @@ Eine Capability darf nicht automatisch Geld ausgeben.
 ## Nicht technisch garantierbar
 
 - eine bestimmte Zahl von Views,
-- eine bestimmte Zahl von neuen Abonnenten,
+- eine bestimmte Zahl neuer Abonnenten,
 - virale Distribution,
 - ein bestimmter Ranking-Platz im YouTube-Recommendation-System,
-- ein Native-YouTube-A/B-Test über eine API, solange YouTube dafür keine öffentliche API anbietet,
-- kostenloser offizieller Datei-Ingest beliebiger fremder YouTube-Videos ohne einen zulässigen Provider.
+- ein Native-YouTube-A/B-Test über eine öffentliche API, solange YouTube dafür keine öffentliche API anbietet,
+- kostenloser offizieller Datei-Ingest beliebiger fremder YouTube-Videos ohne zulässigen Provider.
 
-Diese Grenzen verhindern den geschlossenen Creator-Loop nicht. Sie bestimmen lediglich, welche Schritte Blackstock selbst kontrolliert und welche Ergebnisse nur beobachtet werden können.
+**STATUS: NOCH NICHT MARKTREIF — ausschließlich wegen der dokumentierten realen externen Freigabenachweise.**
