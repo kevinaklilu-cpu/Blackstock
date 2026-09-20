@@ -2187,16 +2187,9 @@ final class BlackstockSession: ObservableObject {
 
         do {
             let accessToken =
-                tokenSet?.accessToken
-                ?? BlackstockKeychain.read(
-                    "youtube.\(channel.id).accessToken"
+                try await validatedReadOnlyAccessToken(
+                    targetChannelID: channel.id
                 )
-            guard !accessToken.isEmpty else {
-                errorMessage =
-                    "Die Google-Autorisierung ist nicht mehr verfügbar. Verbinde den Kanal erneut."
-                step = .welcome
-                return
-            }
 
             let strategy = try ChannelStrategyDraft(
                 primaryTopic: primaryTopic,
@@ -2253,17 +2246,10 @@ final class BlackstockSession: ObservableObject {
             isWorking = true
             defer { isWorking = false }
             do {
-                let accessToken: String
-                if let currentAccessToken =
-                    tokenSet?.accessToken,
-                   !currentAccessToken.isEmpty {
-                    accessToken = currentAccessToken
-                } else {
-                    accessToken =
-                        try await validatedReadOnlyAccessToken(
-                            targetChannelID: channelID
-                        )
-                }
+                let accessToken =
+                    try await validatedReadOnlyAccessToken(
+                        targetChannelID: channelID
+                    )
                 opportunities =
                     try await YouTubeAuthorizedClient(
                         accessToken: accessToken
@@ -2306,21 +2292,15 @@ final class BlackstockSession: ObservableObject {
             return
         }
 
-        let accessToken =
-            tokenSet?.accessToken
-            ?? BlackstockKeychain.read(
-                "youtube.\(channelID).accessToken"
-            )
-        guard !accessToken.isEmpty else {
-            errorMessage = "Die Google-Verbindung für diesen Kanal ist nicht mehr verfügbar."
-            return
-        }
-
         isWorking = true
         errorMessage = nil
         defer { isWorking = false }
 
         do {
+            let accessToken =
+                try await validatedReadOnlyAccessToken(
+                    targetChannelID: channelID
+                )
             let client = YouTubeAuthorizedClient(
                 accessToken: accessToken
             )
