@@ -8,6 +8,7 @@ requirements = {
     ".github/workflows/production-release.yml": [
         "workflow_dispatch:",
         "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+        "persist-credentials: false",
         "BLACKSTOCK_APP_CERT_P12_BASE64",
         "BLACKSTOCK_INSTALLER_CERT_P12_BASE64",
         "BLACKSTOCK_CODESIGN_IDENTITY",
@@ -36,6 +37,7 @@ requirements = {
     ".github/workflows/verify-published-release.yml": [
         "workflow_dispatch:",
         "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+        "persist-credentials: false",
         "Verify remote manifest and package before installation",
         "BlackstockReleaseVerifier",
         "validate_production_release_evidence.py",
