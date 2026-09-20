@@ -44,6 +44,7 @@ final class StudioState: ObservableObject {
     @Published var clipCandidateStatusMessage: String?
     @Published var previewedLocalClipCandidateID: UUID?
     @Published var renderingSavedClipID: UUID?
+    @Published var isRenderingSavedClipBatch = false
 
     private var clipCandidateSourceTranscript: LocalTranscript?
     private var correlationID = UUID()
@@ -978,6 +979,51 @@ final class StudioState: ObservableObject {
         trimEnd = end
         clipCandidateStatusMessage =
             "Gespeicherte Clip-Auswahl in die Timeline geladen. Erst „Als Trim setzen“ verändert den EditGraph."
+        errorMessage = nil
+    }
+
+    func renderAllSavedClipSelections() async {
+        guard !savedClipSelections.isEmpty else {
+            clipCandidateStatusMessage =
+                "Es sind noch keine gespeicherten Clips vorhanden."
+            return
+        }
+        guard !isRenderingSavedClipBatch,
+              renderingSavedClipID == nil else {
+            errorMessage =
+                "Es läuft bereits ein Clip-Render."
+            return
+        }
+
+        isRenderingSavedClipBatch = true
+        defer {
+            isRenderingSavedClipBatch = false
+        }
+
+        let ids = savedClipSelections.map(\.id)
+        var completed = 0
+
+        for id in ids {
+            guard let selection =
+                    savedClipSelections.first(
+                        where: { $0.id == id }
+                    ) else {
+                continue
+            }
+
+            await renderSavedClipSelection(
+                selection
+            )
+            if errorMessage != nil {
+                clipCandidateStatusMessage =
+                    "Stapel-Render nach \(completed) fertigen Clip-Dateien gestoppt."
+                return
+            }
+            completed += 1
+        }
+
+        clipCandidateStatusMessage =
+            "\(completed) gespeicherte Clips wurden als eigene validierte MP4-Dateien erstellt."
         errorMessage = nil
     }
 
