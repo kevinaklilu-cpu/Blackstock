@@ -75,6 +75,18 @@ final class InAppUpdateEvidenceTests:
                         sourceCommitSHA,
                     installedExecutableSHA256:
                         String(repeating: "a", count: 64),
+                    installedAppPath:
+                        "/Applications/Blackstock.app",
+                    applicationTeamID:
+                        "ABC123TEAM",
+                    developerIDApplicationVerified:
+                        true,
+                    installerReceiptPackageID:
+                        "de.blackstock.app",
+                    installerReceiptVersion:
+                        "0.9.0",
+                    installerReceiptVerified:
+                        true,
                     now: Date(
                         timeIntervalSinceReferenceDate:
                             104
@@ -94,6 +106,18 @@ final class InAppUpdateEvidenceTests:
                         sourceCommitSHA,
                     installedExecutableSHA256:
                         String(repeating: "a", count: 64),
+                    installedAppPath:
+                        "/Applications/Blackstock.app",
+                    applicationTeamID:
+                        "ABC123TEAM",
+                    developerIDApplicationVerified:
+                        true,
+                    installerReceiptPackageID:
+                        "de.blackstock.app",
+                    installerReceiptVersion:
+                        "1.0.0",
+                    installerReceiptVerified:
+                        true,
                     now: Date(
                         timeIntervalSinceReferenceDate:
                             105.875
@@ -122,6 +146,92 @@ final class InAppUpdateEvidenceTests:
             reloaded?.observedInstalledExecutableSHA256,
             String(repeating: "a", count: 64)
         )
+        XCTAssertEqual(
+            reloaded?.observedInstalledAppPath,
+            "/Applications/Blackstock.app"
+        )
+        XCTAssertEqual(
+            reloaded?.observedApplicationTeamID,
+            "ABC123TEAM"
+        )
+        XCTAssertEqual(
+            reloaded?.observedDeveloperIDApplicationVerified,
+            true
+        )
+        XCTAssertEqual(
+            reloaded?.observedInstallerReceiptPackageID,
+            "de.blackstock.app"
+        )
+        XCTAssertEqual(
+            reloaded?.observedInstallerReceiptVersion,
+            "1.0.0"
+        )
+        XCTAssertEqual(
+            reloaded?.observedInstallerReceiptVerified,
+            true
+        )
+    }
+
+    func testPostUpdateLaunchRejectsNonProductionAppPath()
+        throws {
+        let root = FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(
+                UUID().uuidString,
+                isDirectory: true
+            )
+        defer {
+            try? FileManager.default
+                .removeItem(at: root)
+        }
+
+        let store = InAppUpdateEvidenceStore(
+            fileURL: root.appendingPathComponent(
+                "update-evidence.json"
+            )
+        )
+        let manifest = makeManifest(
+            version: "1.0.0",
+            build: 100
+        )
+
+        _ = try store.begin(
+            currentVersion: "0.9.0",
+            currentBuild: 90,
+            manifestURL: URL(
+                string:
+                    "https://updates.blackstock.app/update-manifest.json"
+            )!,
+            expectedInstallerTeamID: "ABC123TEAM"
+        )
+        _ = try store.recordManifestVerified(manifest)
+        _ = try store.recordPackageVerified(manifest)
+        _ = try store.recordInstallerOpened(manifest)
+
+        let result = try store
+            .recordPostUpdateLaunchIfMatching(
+                installedVersion: "1.0.0",
+                installedBuild: 100,
+                installedSourceCommitSHA:
+                    sourceCommitSHA,
+                installedExecutableSHA256:
+                    String(repeating: "a", count: 64),
+                installedAppPath:
+                    "/Users/test/Blackstock.app",
+                applicationTeamID:
+                    "ABC123TEAM",
+                developerIDApplicationVerified:
+                    true,
+                installerReceiptPackageID:
+                    "de.blackstock.app",
+                installerReceiptVersion:
+                    "1.0.0",
+                installerReceiptVerified:
+                    true
+            )
+
+        XCTAssertEqual(result?.isComplete, false)
+        XCTAssertNil(result?.postUpdateLaunchVerifiedAt)
     }
 
     func testPackageVerificationRejectsDifferentManifest()
