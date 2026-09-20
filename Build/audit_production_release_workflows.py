@@ -152,6 +152,7 @@ requirements = {
         "parsed.fragment",
         'host == "::1"',
         'host.endswith(".local")',
+        "notarySubmissionID must be a UUID",
     ],
 }
 
