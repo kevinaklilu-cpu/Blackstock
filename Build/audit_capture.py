@@ -163,6 +163,8 @@ requirements = {
         "applicationTeamID",
         "developerIDApplicationVerified",
         "applicationExecutableSHA256",
+        "non-finite JSON number",
+        "durationSeconds must be finite",
     ],
 }
 
