@@ -17,6 +17,25 @@ checks = {
         '.keyboardShortcut("k", modifiers: .command)',
         "hasActiveProject: session.activeProject?.stage",
         'title: "Studio öffnen"',
+        'Label("Chancen", systemImage: "sparkle.magnifyingglass")',
+        'Label("Projekte", systemImage: "tray.full")',
+        "OpportunityWorkspaceView(",
+        "ProjectLibraryView(",
+    ],
+    "Sources/BlackstockApp/WorkspaceProductViews.swift": [
+        "struct OpportunityWorkspaceView",
+        "Als neues Projekt übernehmen",
+        "Keine erfundenen Scores",
+        "struct ProjectLibraryView",
+        "Neue Chance finden",
+        "session.projects",
+    ],
+    "Sources/BlackstockApp/BlackstockSession.swift": [
+        "loadWorkspaceOpportunities(",
+        "selectProject(",
+        '"blackstock.projects"',
+        '"blackstock.projectSource.',
+        "workspaceChannelID",
     ],
     "Sources/BlackstockCore/ProjectJourneyGuidance.swift": [
         "case .discovery:",
@@ -98,4 +117,4 @@ if errors:
         print(f"- {error}", file=sys.stderr)
     sys.exit(1)
 
-print("Journey audit passed: first run, evidence stages, Studio flow and learning surface remain connected.")
+print("Journey audit passed: first run, persistent opportunities/projects, evidence stages, Studio flow and learning surface remain connected.")
