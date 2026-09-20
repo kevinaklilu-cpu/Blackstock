@@ -14,6 +14,7 @@ public struct StudioWorkspaceSnapshot: Codable, Sendable, Equatable {
     public let captionVisualStyle: CaptionVisualStyle?
     public let renderArtifact: RenderArtifact?
     public let supplementalCaptures: [SupplementalCaptureAsset]?
+    public let supplementalAudioMixSettings: [SupplementalAudioMixSetting]?
     public let savedClipSelections: [SavedClipSelection]?
     public let updatedAt: Date
 
@@ -31,6 +32,7 @@ public struct StudioWorkspaceSnapshot: Codable, Sendable, Equatable {
         captionVisualStyle: CaptionVisualStyle? = nil,
         renderArtifact: RenderArtifact?,
         supplementalCaptures: [SupplementalCaptureAsset] = [],
+        supplementalAudioMixSettings: [SupplementalAudioMixSetting] = [],
         savedClipSelections: [SavedClipSelection] = [],
         updatedAt: Date
     ) {
@@ -49,6 +51,7 @@ public struct StudioWorkspaceSnapshot: Codable, Sendable, Equatable {
             captionVisualStyle
         self.renderArtifact = renderArtifact
         self.supplementalCaptures = supplementalCaptures
+        self.supplementalAudioMixSettings = supplementalAudioMixSettings
         self.savedClipSelections = savedClipSelections
         self.updatedAt = updatedAt
     }
@@ -76,7 +79,7 @@ private struct PublishPreparationEnvelope: Codable, Sendable, Equatable {
 
 public enum WorkspaceSchema {
     public static let legacyUnversioned = 1
-    public static let current = 3
+    public static let current = 4
 }
 
 public enum WorkspaceMigrationError: Error, Sendable, Equatable {
