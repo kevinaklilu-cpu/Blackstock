@@ -151,6 +151,40 @@ else:
             "imported OAuth client ID becomes active"
         )
 
+
+def function_block(source, signature):
+    start = source.find(signature)
+    if start < 0:
+        return None
+    next_function = source.find("\n    func ", start + len(signature))
+    if next_function < 0:
+        return source[start:]
+    return source[start:next_function]
+
+for signature in [
+    "func prepareChannelAndLoadOpportunities() async",
+    "func reloadOpportunities(order: OpportunitySortMode) async",
+    "func loadWorkspaceOpportunities(",
+]:
+    block = function_block(session, signature)
+    if block is None:
+        errors.append(
+            f"Could not isolate OAuth-backed discovery function: {signature}"
+        )
+        continue
+    if "validatedReadOnlyAccessToken(" not in block:
+        errors.append(
+            f"{signature} must use the centralized refresh-aware YouTube token path"
+        )
+    if "tokenSet?.accessToken" in block:
+        errors.append(
+            f"{signature} must not bypass token-expiry validation with the runtime token"
+        )
+    if ".accessToken\")" in block and "BlackstockKeychain.read(" in block:
+        errors.append(
+            f"{signature} must not read a raw cached YouTube access token directly"
+        )
+
 loopback = (
     ROOT / "Sources/BlackstockApp/LoopbackOAuthServer.swift"
 ).read_text(encoding="utf-8")
