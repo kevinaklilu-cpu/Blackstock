@@ -50,7 +50,7 @@ REQUIRED = {
         "channelAudienceSetting",
         "YouTubeChannelSetupClient(",
         "applyAndVerify(",
-        "nextStrategyVersion(for:",
+        "nextStrategyVersion(",
     ],
 }
 
