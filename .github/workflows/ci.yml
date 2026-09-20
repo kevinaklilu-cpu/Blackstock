@@ -514,9 +514,13 @@ jobs:
 
       - name: Production release workflow audit
         run: python3 Build/audit_production_release_workflows.py
-      - name: Release verifier immutable snapshot argument audit
+      - name: Release verifier immutable snapshot and URL audit
         run: |
           set -euo pipefail
+          swift build -c release --product BlackstockReleaseVerifier
+          BIN_DIR="$(swift build -c release --show-bin-path)"
+          VERIFIER="$BIN_DIR/BlackstockReleaseVerifier"
+
           COMMON_ARGS=(
             --manifest-url "https://updates.blackstock.app/update-manifest.json"
             --public-key-base64 "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
@@ -525,19 +529,40 @@ jobs:
             --current-build "90"
           )
 
-          if swift run -c release BlackstockReleaseVerifier \
+          if "$VERIFIER" \
             "${COMMON_ARGS[@]}" \
             --verified-manifest-input "$RUNNER_TEMP/manifest.json"; then
             echo "Release verifier unexpectedly accepted a manifest snapshot without its paired package." >&2
             exit 1
           fi
 
-          if swift run -c release BlackstockReleaseVerifier \
+          if "$VERIFIER" \
             "${COMMON_ARGS[@]}" \
             --verified-package-input "$RUNNER_TEMP/Blackstock.pkg"; then
             echo "Release verifier unexpectedly accepted a package snapshot without its paired manifest." >&2
             exit 1
           fi
+
+          for BAD_URL in \
+            "http://updates.blackstock.app/update-manifest.json" \
+            "https://localhost./update-manifest.json" \
+            "https://[::1]/update-manifest.json" \
+            "https://updates.blackstock.local/update-manifest.json" \
+            "https://user:pass@updates.blackstock.app/update-manifest.json" \
+            "https://updates.blackstock.app/update-manifest.json#fragment"
+          do
+            if "$VERIFIER" \
+              --manifest-url "$BAD_URL" \
+              --public-key-base64 "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" \
+              --installer-team-id "ABC123TEAM" \
+              --current-version "0.9.0" \
+              --current-build "90" \
+              --verified-manifest-input "$RUNNER_TEMP/manifest.json" \
+              --verified-package-input "$RUNNER_TEMP/Blackstock.pkg"; then
+              echo "Release verifier unexpectedly accepted invalid production manifest URL: $BAD_URL" >&2
+              exit 1
+            fi
+          done
       - name: Production package configuration audit
         run: |
           set -euo pipefail
@@ -551,6 +576,9 @@ jobs:
           for BAD_URL in \
             "http://updates.blackstock.app/update-manifest.json" \
             "https://localhost/update-manifest.json" \
+            "https://localhost./update-manifest.json" \
+            "https://[::1]/update-manifest.json" \
+            "https://updates.blackstock.local/update-manifest.json" \
             "https://updates.blackstock.invalid" \
             "https://user:pass@updates.blackstock.app/update-manifest.json" \
             "https://updates.blackstock.app/update-manifest.json#fragment"
@@ -598,6 +626,35 @@ jobs:
             echo "Production package unexpectedly accepted missing release configuration." >&2
             exit 1
           fi
+      - name: Signed update manifest production URL audit
+        run: |
+          set -euo pipefail
+          PACKAGE="$RUNNER_TEMP/url-audit.pkg"
+          OUTPUT="$RUNNER_TEMP/url-audit-manifest.json"
+          printf x > "$PACKAGE"
+          PRIVATE="$(python3 -c 'import base64; print(base64.b64encode(bytes(range(1, 33))).decode())')"
+
+          for BAD_URL in \
+            "http://updates.blackstock.app/Blackstock.pkg" \
+            "https://localhost./Blackstock.pkg" \
+            "https://[::1]/Blackstock.pkg" \
+            "https://updates.blackstock.local/Blackstock.pkg" \
+            "https://updates.blackstock.invalid/Blackstock.pkg" \
+            "https://user:pass@updates.blackstock.app/Blackstock.pkg" \
+            "https://updates.blackstock.app/Blackstock.pkg#fragment"
+          do
+            if BLACKSTOCK_UPDATE_PRIVATE_KEY_BASE64="$PRIVATE" \
+              swift Build/generate_update_manifest.swift \
+                --package "$PACKAGE" \
+                --package-url "$BAD_URL" \
+                --version "1.0.0" \
+                --build "100" \
+                --source-commit-sha "1111111111111111111111111111111111111111" \
+                --output "$OUTPUT"; then
+              echo "Signed manifest generator unexpectedly accepted invalid production package URL: $BAD_URL" >&2
+              exit 1
+            fi
+          done
       - name: Swift tests
         run: swift test
       - name: Release build
@@ -630,7 +687,7 @@ jobs:
           export BLACKSTOCK_UPDATE_PRIVATE_KEY_BASE64="$KEY"
           swift Build/generate_update_manifest.swift \
             --package "$RUNNER_TEMP/dist/Blackstock.pkg" \
-            --package-url "https://updates.blackstock.invalid/Blackstock.pkg" \
+            --package-url "https://updates.blackstock.app/Blackstock.pkg" \
             --version "0.1.0" \
             --build "1" \
             --source-commit-sha "${GITHUB_SHA}" \
