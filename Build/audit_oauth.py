@@ -11,6 +11,7 @@ CONTRACTS = {
         "missingClientID",
         "invalidClientID",
         'hasSuffix(".apps.googleusercontent.com")',
+        "clientSecret",
         "projectID",
         "redirectURIs",
     ],
@@ -44,6 +45,8 @@ CONTRACTS = {
         'deleteAccounts(',
         'withPrefix: "youtube."',
         'account: "google.oauth.importedClientID"',
+        'account: "google.oauth.importedClientSecret"',
+        "clientSecret: effectiveClientSecret",
         "clearOAuthRuntimeAuthorizationState",
         "func removeImportedOAuthConfiguration",
         "validateStoredOAuthClient",
@@ -52,7 +55,7 @@ CONTRACTS = {
     "Sources/BlackstockApp/FirstRunView.swift": [
         "Eigene Desktop-OAuth-JSON auswählen …",
         "session.importOAuthJSON(from: url)",
-        "Client Secret wird nicht benötigt und nicht gespeichert.",
+        "Zugangsdaten werden im macOS-Keychain gespeichert.",
     ],
     "Sources/BlackstockApp/BlackstockApp.swift": [
         "Desktop-OAuth-JSON importieren …",
@@ -81,7 +84,7 @@ TEST_CONTRACTS = {
         "testAuthorizationRequestContainsDesktopPKCEAndLeastPrivilegeScope",
         "testOAuthJSONRequiresDesktopInstalledClient",
         "testOAuthJSONRejectsMissingAndInvalidClientIDs",
-        "testOAuthJSONDoesNotExposeOrPersistClientSecret",
+        "testOAuthJSONParsesDesktopClientSecretForKeychainBackedExchange",
         '"http://127.0.0.1:54321"',
     ],
     "Tests/BlackstockCoreTests/GoogleOAuthLifecycleTests.swift": [
@@ -114,9 +117,9 @@ for relative, markers in {**CONTRACTS, **TEST_CONTRACTS}.items():
 config = (
     ROOT / "Sources/BlackstockCore/OAuthClientConfiguration.swift"
 ).read_text(encoding="utf-8")
-if "clientSecret" in config or "client_secret" in config:
+if "clientSecret" not in config or 'client_secret' not in config:
     errors.append(
-        "OAuthClientConfiguration must not model or persist client_secret"
+        "OAuthClientConfiguration must parse the optional desktop client_secret"
     )
 
 session = (
@@ -131,9 +134,9 @@ if import_start < 0 or import_end < 0:
     errors.append("Could not isolate importOAuthJSON implementation")
 else:
     import_block = session[import_start:import_end]
-    if "client_secret" in import_block or "clientSecret" in import_block:
+    if 'account: "google.oauth.importedClientSecret"' not in import_block:
         errors.append(
-            "OAuth JSON import must never handle or persist client_secret"
+            "OAuth JSON import must store the optional desktop client_secret in Keychain"
         )
     delete_index = import_block.find('withPrefix: "youtube."')
     write_index = import_block.find(
@@ -161,6 +164,6 @@ if errors:
 
 print(
     "OAuth audit passed: desktop JSON import, client-bound Keychain "
-    "credentials, PKCE/state, root loopback redirect and capability-based "
+    "credentials (including optional desktop secret in Keychain), PKCE/state, root loopback redirect and capability-based "
     "reauthorization remain connected."
 )
