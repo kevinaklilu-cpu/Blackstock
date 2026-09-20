@@ -65,21 +65,45 @@ fi
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
-BIN_DIR="$(swift build -c release --show-bin-path)"
-swift build -c release
-
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
+ARM64_BUILD="$WORK/build-arm64"
+X86_64_BUILD="$WORK/build-x86_64"
+
+swift build -c release --arch arm64 --scratch-path "$ARM64_BUILD"
+swift build -c release --arch x86_64 --scratch-path "$X86_64_BUILD"
+
+ARM64_BIN_DIR="$(
+  swift build -c release --arch arm64     --scratch-path "$ARM64_BUILD"     --show-bin-path
+)"
+X86_64_BIN_DIR="$(
+  swift build -c release --arch x86_64     --scratch-path "$X86_64_BUILD"     --show-bin-path
+)"
+
+require_universal_binary() {
+  local binary="$1"
+  local archs
+  archs="$(lipo -archs "$binary")"
+  for required_arch in arm64 x86_64; do
+    if [[ " $archs " != *" $required_arch "* ]]; then
+      echo "Required architecture $required_arch missing from $binary: $archs" >&2
+      exit 1
+    fi
+  done
+}
+
 APP="$WORK/Blackstock.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN_DIR/Blackstock" "$APP/Contents/MacOS/Blackstock"
+lipo -create   "$ARM64_BIN_DIR/Blackstock"   "$X86_64_BIN_DIR/Blackstock"   -output "$APP/Contents/MacOS/Blackstock"
 chmod +x "$APP/Contents/MacOS/Blackstock"
+require_universal_binary "$APP/Contents/MacOS/Blackstock"
 
 if [[ "$INCLUDE_E2E_SMOKE" == "1" ]]; then
   mkdir -p "$APP/Contents/Helpers"
-  cp "$BIN_DIR/BlackstockE2ESmoke" "$APP/Contents/Helpers/BlackstockE2ESmoke"
+  lipo -create     "$ARM64_BIN_DIR/BlackstockE2ESmoke"     "$X86_64_BIN_DIR/BlackstockE2ESmoke"     -output "$APP/Contents/Helpers/BlackstockE2ESmoke"
   chmod +x "$APP/Contents/Helpers/BlackstockE2ESmoke"
+  require_universal_binary "$APP/Contents/Helpers/BlackstockE2ESmoke"
 fi
 
 cat > "$APP/Contents/Info.plist" <<PLIST
@@ -123,6 +147,10 @@ else
     --sign - "$APP"
 fi
 codesign --verify --deep --strict "$APP"
+require_universal_binary "$APP/Contents/MacOS/Blackstock"
+if [[ "$INCLUDE_E2E_SMOKE" == "1" ]]; then
+  require_universal_binary "$APP/Contents/Helpers/BlackstockE2ESmoke"
+fi
 
 PAYLOAD="$WORK/payload"
 mkdir -p "$PAYLOAD/Applications"
