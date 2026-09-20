@@ -25,6 +25,8 @@ struct PackagingReviewView: View {
     @State private var thumbnailURL: URL?
     @State private var captionTracks: [PublishCaptionTrack] = []
     @State private var showThumbnailImporter = false
+    @State private var thumbnailFramePosition = 0.25
+    @State private var isGeneratingThumbnail = false
     @State private var showCaptionImporter = false
     @State private var manualChecks: Set<CreatorQualityArea> = []
     @State private var persistedReview: CreatorQualityReview?
@@ -466,18 +468,68 @@ struct PackagingReviewView: View {
     private var packagingAssetsSection: some View {
         GroupBox("Vorschaubild & Untertitel") {
             VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Vorschaubild")
-                            .font(.headline)
-                        Text(thumbnailURL?.lastPathComponent ?? "Noch kein Vorschaubild gewählt")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Vorschaubild")
+                                .font(.headline)
+                            Text(thumbnailURL?.lastPathComponent ?? "Noch kein Vorschaubild gewählt")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button("Auswählen …") {
+                            showThumbnailImporter = true
+                        }
+                        Button {
+                            Task {
+                                await generateThumbnailFromRender()
+                            }
+                        } label: {
+                            HStack {
+                                if isGeneratingThumbnail {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                }
+                                Label(
+                                    isGeneratingThumbnail
+                                        ? "Erzeugt …"
+                                        : "Aus Video erzeugen",
+                                    systemImage: "photo.badge.plus"
+                                )
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(isGeneratingThumbnail)
                     }
-                    Spacer()
-                    Button("Auswählen …") {
-                        showThumbnailImporter = true
+
+                    HStack(spacing: 10) {
+                        Text("Frame")
+                            .font(.caption.weight(.semibold))
+                        Slider(
+                            value: $thumbnailFramePosition,
+                            in: 0.05...0.95
+                        )
+                        .accessibilityLabel("Zeitpunkt für Vorschaubild")
+                        .accessibilityValue(
+                            String(
+                                format: "%.0f Prozent",
+                                thumbnailFramePosition * 100
+                            )
+                        )
+                        Text(
+                            String(
+                                format: "%.0f%%",
+                                thumbnailFramePosition * 100
+                            )
+                        )
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
                     }
+
+                    Text("Blackstock nimmt lokal einen Frame aus dem validierten Render und erzeugt daraus ein zentriertes 1280×720-JPEG. Die kreative Auswahl bleibt bei dir.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
 
                 if let assessment = thumbnailAssessment {
@@ -502,6 +554,42 @@ struct PackagingReviewView: View {
             }
             .padding(.vertical, 6)
             .disabled(reviewFrozen)
+        }
+    }
+
+    private func generateThumbnailFromRender() async {
+        isGeneratingThumbnail = true
+        defer { isGeneratingThumbnail = false }
+
+        let temporaryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "blackstock-thumbnail-\(UUID().uuidString)"
+            )
+            .appendingPathExtension("jpg")
+        defer {
+            try? FileManager.default.removeItem(at: temporaryURL)
+        }
+
+        do {
+            _ = try await LocalThumbnailFrameGenerator().generate(
+                videoURL: artifact.fileURL,
+                normalizedPosition: thumbnailFramePosition,
+                outputURL: temporaryURL
+            )
+            let durableURL = try session.importPackagingAsset(
+                from: temporaryURL,
+                projectID: project.id,
+                kind: .thumbnail
+            )
+            let assessment = try ThumbnailTechnicalInspector()
+                .inspect(url: durableURL)
+            thumbnailURL = durableURL
+            thumbnailAssessment = assessment
+            session.errorMessage = nil
+        } catch {
+            session.errorMessage =
+                "Vorschaubild konnte nicht lokal aus dem Video erzeugt werden: "
+                + error.localizedDescription
         }
     }
 
