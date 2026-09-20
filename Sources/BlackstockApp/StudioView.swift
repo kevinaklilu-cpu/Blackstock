@@ -235,6 +235,10 @@ struct StudioView: View {
                     VideoPlayer(player: state.player)
                         .accessibilityLabel("Video-Vorschau des aktuellen Schnitts")
 
+                    if state.previewedLocalClipCandidateID == nil {
+                        textOverlayPreview
+                    }
+
                     if state.burnInCaptionsEnabled,
                        state.previewedLocalClipCandidateID == nil {
                         captionPreviewOverlay
@@ -938,6 +942,10 @@ struct StudioView: View {
 
                 Divider()
 
+                textOverlaySection(asset)
+
+                Divider()
+
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Bildformat & Fokus")
                         .font(.headline)
@@ -1366,6 +1374,241 @@ struct StudioView: View {
             .padding(18)
         }
         .background(Color.primary.opacity(0.02))
+    }
+
+    private func textOverlaySection(
+        _ asset: ProductionMediaAsset
+    ) -> some View {
+        let duration = max(
+            state.currentOutputDurationSeconds,
+            0.05
+        )
+        let startUpperBound = max(
+            duration - 0.05,
+            0.05
+        )
+
+        return VStack(alignment: .leading, spacing: 10) {
+            Text("Text-Overlay")
+                .font(.headline)
+
+            TextField(
+                "Text im Video",
+                text: $state.overlayText
+            )
+            .textFieldStyle(.roundedBorder)
+            .disabled(!editingEnabled)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Start")
+                    Spacer()
+                    Text(timeLabel(min(
+                        max(state.overlayStart, 0),
+                        startUpperBound
+                    )))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                }
+                Slider(
+                    value: Binding(
+                        get: {
+                            min(
+                                max(state.overlayStart, 0),
+                                startUpperBound
+                            )
+                        },
+                        set: { newValue in
+                            state.overlayStart = newValue
+                            state.overlayEnd = min(
+                                max(
+                                    state.overlayEnd,
+                                    newValue + 0.05
+                                ),
+                                duration
+                            )
+                        }
+                    ),
+                    in: 0...startUpperBound
+                )
+                .accessibilityLabel("Start des Text-Overlays")
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Ende")
+                    Spacer()
+                    Text(timeLabel(min(
+                        max(state.overlayEnd, 0.05),
+                        duration
+                    )))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                }
+                Slider(
+                    value: Binding(
+                        get: {
+                            min(
+                                max(state.overlayEnd, 0.05),
+                                duration
+                            )
+                        },
+                        set: { newValue in
+                            state.overlayEnd = newValue
+                            state.overlayStart = min(
+                                state.overlayStart,
+                                max(newValue - 0.05, 0)
+                            )
+                        }
+                    ),
+                    in: 0.05...duration
+                )
+                .accessibilityLabel("Ende des Text-Overlays")
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Position von oben")
+                    Spacer()
+                    Text(
+                        String(
+                            format: "%.0f%%",
+                            state.overlayVerticalPosition
+                                * 100
+                        )
+                    )
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                }
+                Slider(
+                    value: $state.overlayVerticalPosition,
+                    in: 0.05...0.95
+                )
+                .accessibilityLabel(
+                    "Vertikale Position des Text-Overlays"
+                )
+                .accessibilityValue(
+                    String(
+                        format: "%.0f Prozent von oben",
+                        state.overlayVerticalPosition * 100
+                    )
+                )
+            }
+
+            Button {
+                Task {
+                    await state.applyTextOverlay()
+                }
+            } label: {
+                Label(
+                    "Overlay anwenden",
+                    systemImage: "text.bubble"
+                )
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(
+                !editingEnabled
+                || state.overlayText.trimmingCharacters(
+                    in: .whitespacesAndNewlines
+                ).isEmpty
+            )
+
+            let overlays = state.graph.currentOperations
+                .filter { $0.type == .overlay }
+            if !overlays.isEmpty {
+                Divider()
+                Text("Aktive Overlays")
+                    .font(.caption.weight(.semibold))
+
+                ForEach(overlays) { operation in
+                    if let range = operation.timeRange,
+                       let text = operation.text {
+                        VStack(
+                            alignment: .leading,
+                            spacing: 2
+                        ) {
+                            Text(text)
+                                .font(.caption.weight(.semibold))
+                                .lineLimit(2)
+                            Text(
+                                timeLabel(range.startSeconds)
+                                + " – "
+                                + timeLabel(range.endSeconds)
+                            )
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                Text("Overlays sind non-destruktive EditGraph-Änderungen und können mit Rückgängig/Wiederholen entfernt oder wiederhergestellt werden.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Text("Die Studio-Vorschau zeigt dieselben Zeitfenster und dieselbe vertikale Position. Beim finalen Render wird der Text lokal in die Videopixel eingebrannt.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var textOverlayPreview: some View {
+        GeometryReader { geometry in
+            TimelineView(
+                .periodic(
+                    from: .now,
+                    by: 0.10
+                )
+            ) { _ in
+                let timeSeconds = max(
+                    CMTimeGetSeconds(
+                        state.player.currentTime()
+                    ),
+                    0
+                )
+                let cues = TextOverlayPlanner().cues(
+                    operations: state.graph.currentOperations,
+                    outputDurationSeconds:
+                        state.currentOutputDurationSeconds
+                )
+                ForEach(
+                    cues.filter {
+                        timeSeconds >= $0.startSeconds
+                        && timeSeconds
+                            < $0.startSeconds
+                            + $0.durationSeconds
+                    }
+                ) { cue in
+                    Text(cue.text)
+                        .font(.title3.bold())
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 10)
+                        .frame(
+                            maxWidth:
+                                geometry.size.width * 0.72
+                        )
+                        .background(
+                            Color.black.opacity(0.52),
+                            in: RoundedRectangle(
+                                cornerRadius: 12
+                            )
+                        )
+                        .shadow(radius: 3, y: -1)
+                        .position(
+                            x: geometry.size.width / 2,
+                            y: geometry.size.height
+                                * cue.normalizedYFromTop
+                        )
+                        .accessibilityLabel(
+                            "Text-Overlay: \(cue.text)"
+                        )
+                }
+            }
+        }
+        .allowsHitTesting(false)
     }
 
     @ViewBuilder
