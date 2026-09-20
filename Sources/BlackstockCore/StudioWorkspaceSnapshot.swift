@@ -10,6 +10,7 @@ public struct StudioWorkspaceSnapshot: Codable, Sendable, Equatable {
     public let trimEnd: Double
     public let transcript: LocalTranscript?
     public let captionURL: URL?
+    public let burnInCaptionsEnabled: Bool?
     public let renderArtifact: RenderArtifact?
     public let supplementalCaptures: [SupplementalCaptureAsset]?
     public let updatedAt: Date
@@ -24,6 +25,7 @@ public struct StudioWorkspaceSnapshot: Codable, Sendable, Equatable {
         trimEnd: Double,
         transcript: LocalTranscript?,
         captionURL: URL?,
+        burnInCaptionsEnabled: Bool? = nil,
         renderArtifact: RenderArtifact?,
         supplementalCaptures: [SupplementalCaptureAsset] = [],
         updatedAt: Date
@@ -37,6 +39,8 @@ public struct StudioWorkspaceSnapshot: Codable, Sendable, Equatable {
         self.trimEnd = max(trimEnd, self.trimStart)
         self.transcript = transcript
         self.captionURL = captionURL
+        self.burnInCaptionsEnabled =
+            burnInCaptionsEnabled
         self.renderArtifact = renderArtifact
         self.supplementalCaptures = supplementalCaptures
         self.updatedAt = updatedAt
