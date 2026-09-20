@@ -106,7 +106,8 @@ public actor LocalCaptionBurnInRenderer {
 
     public func render(
         inputURL: URL,
-        transcript: LocalTranscript,
+        transcript: LocalTranscript?,
+        textOverlays: [TextOverlayCue] = [],
         outputURL: URL,
         preset: LocalRenderPreset,
         style: CaptionVisualStyle = .clear
@@ -197,17 +198,28 @@ public actor LocalCaptionBurnInRenderer {
         overlayLayer.frame = parentLayer.frame
         parentLayer.addSublayer(overlayLayer)
 
-        let cues = CaptionBurnInPlanner().cues(
-            transcript: transcript,
-            outputDurationSeconds:
-                durationSeconds
-        )
-        for cue in cues {
+        let captionCues = transcript.map {
+            CaptionBurnInPlanner().cues(
+                transcript: $0,
+                outputDurationSeconds:
+                    durationSeconds
+            )
+        } ?? []
+        for cue in captionCues {
             overlayLayer.addSublayer(
                 Self.captionLayer(
                     cue: cue,
                     renderSize: renderSize,
                     style: style
+                )
+            )
+        }
+
+        for cue in textOverlays {
+            overlayLayer.addSublayer(
+                Self.textOverlayLayer(
+                    cue: cue,
+                    renderSize: renderSize
                 )
             )
         }
@@ -285,6 +297,83 @@ public actor LocalCaptionBurnInRenderer {
             throw LocalCaptionBurnInError
                 .missingOutput
         }
+    }
+
+    private static func textOverlayLayer(
+        cue: TextOverlayCue,
+        renderSize: CGSize
+    ) -> CALayer {
+        let width = renderSize.width * 0.72
+        let height = max(
+            renderSize.height * 0.12,
+            84
+        )
+        let x = (renderSize.width - width) / 2
+        let centerY = renderSize.height
+            * (1 - cue.normalizedYFromTop)
+        let y = min(
+            max(centerY - (height / 2), 0),
+            max(renderSize.height - height, 0)
+        )
+
+        let layer = CATextLayer()
+        layer.frame = CGRect(
+            x: x,
+            y: y,
+            width: width,
+            height: height
+        )
+        layer.string = cue.text
+        layer.alignmentMode = .center
+        layer.isWrapped = true
+        layer.truncationMode = .end
+        layer.foregroundColor = NSColor.white.cgColor
+        layer.backgroundColor = NSColor.black
+            .withAlphaComponent(0.52)
+            .cgColor
+        layer.cornerRadius = max(
+            renderSize.height * 0.012,
+            10
+        )
+        layer.masksToBounds = true
+        layer.contentsScale = 2
+
+        let fontSize = max(
+            renderSize.height * 0.05,
+            28
+        )
+        layer.font = NSFont.systemFont(
+            ofSize: fontSize,
+            weight: .bold
+        )
+        layer.fontSize = fontSize
+        layer.shadowOpacity = 0.35
+        layer.shadowRadius = 3
+        layer.shadowOffset = CGSize(
+            width: 0,
+            height: -1
+        )
+        layer.opacity = 0
+
+        let visibility = CABasicAnimation(
+            keyPath: "opacity"
+        )
+        visibility.fromValue = 1
+        visibility.toValue = 1
+        visibility.beginTime =
+            AVCoreAnimationBeginTimeAtZero
+            + cue.startSeconds
+        visibility.duration = max(
+            cue.durationSeconds,
+            0.05
+        )
+        visibility.isRemovedOnCompletion = true
+        layer.add(
+            visibility,
+            forKey: "blackstock-text-overlay-visible"
+        )
+
+        return layer
     }
 
     private static func captionLayer(
