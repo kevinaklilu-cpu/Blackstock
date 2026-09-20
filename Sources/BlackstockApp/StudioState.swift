@@ -45,6 +45,7 @@ final class StudioState: ObservableObject {
     @Published var previewedLocalClipCandidateID: UUID?
     @Published var renderingSavedClipID: UUID?
     @Published var isRenderingSavedClipBatch = false
+    @Published var isExportingSavedClipBatch = false
 
     private var clipCandidateSourceTranscript: LocalTranscript?
     private var correlationID = UUID()
@@ -980,6 +981,206 @@ final class StudioState: ObservableObject {
         clipCandidateStatusMessage =
             "Gespeicherte Clip-Auswahl in die Timeline geladen. Erst „Als Trim setzen“ verändert den EditGraph."
         errorMessage = nil
+    }
+
+    func exportRenderedSavedClips(
+        to directoryURL: URL
+    ) {
+        guard !isExportingSavedClipBatch else {
+            return
+        }
+
+        let readySelections = savedClipSelections.filter {
+            guard let artifact = $0.renderArtifact else {
+                return false
+            }
+            return artifact.hasCurrentTechnicalValidation
+                && FileManager.default.fileExists(
+                    atPath: artifact.fileURL.path
+                )
+        }
+        guard !readySelections.isEmpty else {
+            clipCandidateStatusMessage =
+                "Erstelle zuerst mindestens eine validierte Clip-Datei."
+            return
+        }
+
+        isExportingSavedClipBatch = true
+        defer {
+            isExportingSavedClipBatch = false
+        }
+
+        let accessed =
+            directoryURL.startAccessingSecurityScopedResource()
+        defer {
+            if accessed {
+                directoryURL.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        struct ExportedClipRecord: Codable {
+            let clipID: UUID
+            let sourceStartSeconds: Double
+            let sourceDurationSeconds: Double
+            let mp4FileName: String
+            let captionFileName: String?
+            let renderSHA256: String
+        }
+
+        struct ExportManifest: Codable {
+            let schemaVersion: Int
+            let projectID: UUID
+            let exportedAt: Date
+            let clips: [ExportedClipRecord]
+        }
+
+        do {
+            var records: [ExportedClipRecord] = []
+            let fileManager = FileManager.default
+
+            for (index, selection) in
+                readySelections.enumerated() {
+                guard let artifact =
+                        selection.renderArtifact else {
+                    continue
+                }
+
+                let baseName = String(
+                    format: "Blackstock-Clip-%02d",
+                    index + 1
+                )
+                let mp4URL = try availableExportURL(
+                    in: directoryURL,
+                    baseName: baseName,
+                    pathExtension: "mp4"
+                )
+                try fileManager.copyItem(
+                    at: artifact.fileURL,
+                    to: mp4URL
+                )
+
+                var captionFileName: String?
+                if let transcript =
+                    selection.transcript {
+                    let captionURL =
+                        try availableExportURL(
+                            in: directoryURL,
+                            baseName: baseName,
+                            pathExtension: "vtt"
+                        )
+                    try WebVTTCaptionWriter().write(
+                        transcript: transcript,
+                        to: captionURL
+                    )
+                    captionFileName =
+                        captionURL.lastPathComponent
+                }
+
+                records.append(
+                    ExportedClipRecord(
+                        clipID: selection.id,
+                        sourceStartSeconds:
+                            selection.sourceRange
+                                .startSeconds,
+                        sourceDurationSeconds:
+                            selection.sourceRange
+                                .durationSeconds,
+                        mp4FileName:
+                            mp4URL.lastPathComponent,
+                        captionFileName:
+                            captionFileName,
+                        renderSHA256: artifact.sha256
+                    )
+                )
+            }
+
+            guard let projectID =
+                    activeProjectID else {
+                throw CocoaError(.fileNoSuchFile)
+            }
+
+            let manifest = ExportManifest(
+                schemaVersion: 1,
+                projectID: projectID,
+                exportedAt: Date(),
+                clips: records
+            )
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [
+                .prettyPrinted,
+                .sortedKeys
+            ]
+            encoder.dateEncodingStrategy = .iso8601
+            let manifestData =
+                try encoder.encode(manifest)
+            let manifestURL =
+                try availableExportURL(
+                    in: directoryURL,
+                    baseName:
+                        "Blackstock-Clips",
+                    pathExtension: "json"
+                )
+            try manifestData.write(
+                to: manifestURL,
+                options: .atomic
+            )
+
+            ledger.append(.init(
+                timestamp: Date(),
+                actor: .user,
+                stage: .editing,
+                action:
+                    "saved-clips-exported",
+                summary:
+                    "\(records.count) gerenderte Clips wurden mit nachvollziehbarem Export-Manifest in einen vom Nutzer gewählten Ordner kopiert.",
+                relatedSourceIDs:
+                    records.map {
+                        $0.clipID.uuidString
+                    },
+                reversible: false,
+                correlationID: correlationID
+            ))
+            persistWorkspaceIfPossible()
+            clipCandidateStatusMessage =
+                "\(records.count) Clip-Dateien wurden exportiert. Vorhandene Clip-Transkripte liegen zusätzlich als WebVTT im Zielordner."
+            errorMessage = nil
+        } catch {
+            errorMessage =
+                "Clip-Export fehlgeschlagen: "
+                + error.localizedDescription
+        }
+    }
+
+    private func availableExportURL(
+        in directoryURL: URL,
+        baseName: String,
+        pathExtension: String
+    ) throws -> URL {
+        let fileManager = FileManager.default
+        var candidate =
+            directoryURL
+            .appendingPathComponent(baseName)
+            .appendingPathExtension(
+                pathExtension
+            )
+        var suffix = 2
+
+        while fileManager.fileExists(
+            atPath: candidate.path
+        ) {
+            candidate =
+                directoryURL
+                .appendingPathComponent(
+                    baseName
+                    + "-"
+                    + String(suffix)
+                )
+                .appendingPathExtension(
+                    pathExtension
+                )
+            suffix += 1
+        }
+        return candidate
     }
 
     func renderAllSavedClipSelections() async {
