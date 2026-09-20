@@ -49,6 +49,11 @@ final class InAppUpdateEvidenceTests:
                 "de.blackstock.app",
             currentInstallerReceiptVersion:
                 "0.9.0",
+            currentInstallerReceiptInstalledAt:
+                Date(
+                    timeIntervalSinceReferenceDate:
+                        90
+                ),
             currentInstallerReceiptVerified:
                 true,
             manifestURL: URL(
@@ -103,6 +108,11 @@ final class InAppUpdateEvidenceTests:
                         "de.blackstock.app",
                     installerReceiptVersion:
                         "0.9.0",
+                    installerReceiptInstalledAt:
+                        Date(
+                            timeIntervalSinceReferenceDate:
+                                90
+                        ),
                     installerReceiptVerified:
                         true,
                     now: Date(
@@ -134,6 +144,11 @@ final class InAppUpdateEvidenceTests:
                         "de.blackstock.app",
                     installerReceiptVersion:
                         "1.0.0",
+                    installerReceiptInstalledAt:
+                        Date(
+                            timeIntervalSinceReferenceDate:
+                                105
+                        ),
                     installerReceiptVerified:
                         true,
                     now: Date(
@@ -185,6 +200,13 @@ final class InAppUpdateEvidenceTests:
             "1.0.0"
         )
         XCTAssertEqual(
+            reloaded?.observedInstallerReceiptInstalledAt,
+            Date(
+                timeIntervalSinceReferenceDate:
+                    105
+            )
+        )
+        XCTAssertEqual(
             reloaded?.observedInstallerReceiptVerified,
             true
         )
@@ -230,6 +252,11 @@ final class InAppUpdateEvidenceTests:
                 "de.blackstock.app",
             currentInstallerReceiptVersion:
                 "0.9.0",
+            currentInstallerReceiptInstalledAt:
+                Date(
+                    timeIntervalSinceReferenceDate:
+                        90
+                ),
             currentInstallerReceiptVerified:
                 true,
             manifestURL: URL(
@@ -260,11 +287,118 @@ final class InAppUpdateEvidenceTests:
                     "de.blackstock.app",
                 installerReceiptVersion:
                     "1.0.0",
+                installerReceiptInstalledAt:
+                    Date(
+                        timeIntervalSinceReferenceDate:
+                            105
+                    ),
                 installerReceiptVerified:
                     true
             )
 
         XCTAssertEqual(result?.isComplete, false)
+        XCTAssertNil(result?.postUpdateLaunchVerifiedAt)
+    }
+
+    func testPostUpdateLaunchRejectsReceiptPredatingInstallerHandoff()
+        throws {
+        let root = FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(
+                UUID().uuidString,
+                isDirectory: true
+            )
+        defer {
+            try? FileManager.default.removeItem(at: root)
+        }
+
+        let store = InAppUpdateEvidenceStore(
+            fileURL: root.appendingPathComponent(
+                "update-evidence.json"
+            )
+        )
+        let manifest = makeManifest(
+            version: "1.0.0",
+            build: 100
+        )
+
+        _ = try store.begin(
+            currentVersion: "0.9.0",
+            currentBuild: 90,
+            currentSourceCommitSHA: currentSourceCommitSHA,
+            currentExecutableSHA256:
+                String(repeating: "b", count: 64),
+            currentAppPath:
+                "/Applications/Blackstock.app",
+            currentApplicationTeamID:
+                "ABC123TEAM",
+            currentDeveloperIDApplicationVerified: true,
+            currentInstallerReceiptPackageID:
+                "de.blackstock.app",
+            currentInstallerReceiptVersion: "0.9.0",
+            currentInstallerReceiptInstalledAt:
+                Date(
+                    timeIntervalSinceReferenceDate: 90
+                ),
+            currentInstallerReceiptVerified: true,
+            manifestURL: URL(
+                string:
+                    "https://updates.blackstock.app/update-manifest.json"
+            )!,
+            expectedInstallerTeamID: "ABC123TEAM",
+            now: Date(
+                timeIntervalSinceReferenceDate: 100
+            )
+        )
+        _ = try store.recordManifestVerified(
+            manifest,
+            now: Date(
+                timeIntervalSinceReferenceDate: 101
+            )
+        )
+        _ = try store.recordPackageVerified(
+            manifest,
+            now: Date(
+                timeIntervalSinceReferenceDate: 102
+            )
+        )
+        _ = try store.recordInstallerOpened(
+            manifest,
+            now: Date(
+                timeIntervalSinceReferenceDate: 104
+            )
+        )
+
+        let result = try store
+            .recordPostUpdateLaunchIfMatching(
+                installedVersion: "1.0.0",
+                installedBuild: 100,
+                installedSourceCommitSHA:
+                    sourceCommitSHA,
+                installedExecutableSHA256:
+                    String(repeating: "a", count: 64),
+                installedAppPath:
+                    "/Applications/Blackstock.app",
+                applicationTeamID:
+                    "ABC123TEAM",
+                developerIDApplicationVerified: true,
+                installerReceiptPackageID:
+                    "de.blackstock.app",
+                installerReceiptVersion: "1.0.0",
+                installerReceiptInstalledAt:
+                    Date(
+                        timeIntervalSinceReferenceDate: 102
+                    ),
+                installerReceiptVerified: true,
+                now: Date(
+                    timeIntervalSinceReferenceDate: 105
+                )
+            )
+
+        XCTAssertEqual(result?.isComplete, false)
+        XCTAssertNil(
+            result?.observedInstallerReceiptInstalledAt
+        )
         XCTAssertNil(result?.postUpdateLaunchVerifiedAt)
     }
 
@@ -367,6 +501,11 @@ final class InAppUpdateEvidenceTests:
                 "de.blackstock.app",
             currentInstallerReceiptVersion:
                 "0.9.0",
+            currentInstallerReceiptInstalledAt:
+                Date(
+                    timeIntervalSinceReferenceDate:
+                        90
+                ),
             currentInstallerReceiptVerified:
                 true,
             manifestURL: URL(
@@ -431,6 +570,11 @@ final class InAppUpdateEvidenceTests:
                 "de.blackstock.app",
             currentInstallerReceiptVersion:
                 "0.9.0",
+            currentInstallerReceiptInstalledAt:
+                Date(
+                    timeIntervalSinceReferenceDate:
+                        90
+                ),
             currentInstallerReceiptVerified:
                 true,
             manifestURL: URL(
@@ -502,6 +646,11 @@ final class InAppUpdateEvidenceTests:
                 "de.blackstock.app",
             currentInstallerReceiptVersion:
                 "0.9.0",
+            currentInstallerReceiptInstalledAt:
+                Date(
+                    timeIntervalSinceReferenceDate:
+                        90
+                ),
             currentInstallerReceiptVerified:
                 true,
             manifestURL: URL(
