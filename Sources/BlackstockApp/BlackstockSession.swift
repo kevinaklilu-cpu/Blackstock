@@ -180,6 +180,17 @@ final class BlackstockSession: ObservableObject {
                 config.clientID,
                 account: "google.oauth.importedClientID"
             )
+            if let clientSecret = config.clientSecret,
+               !clientSecret.isEmpty {
+                try BlackstockKeychain.write(
+                    clientSecret,
+                    account: "google.oauth.importedClientSecret"
+                )
+            } else {
+                try? BlackstockKeychain.delete(
+                    "google.oauth.importedClientSecret"
+                )
+            }
             importedOAuthClientID = config.clientID
             clearOAuthRuntimeAuthorizationState(
                 clearChannelSelection: clientChanged
@@ -360,6 +371,9 @@ final class BlackstockSession: ObservableObject {
             try BlackstockKeychain.delete(
                 "google.oauth.importedClientID"
             )
+            try? BlackstockKeychain.delete(
+                "google.oauth.importedClientSecret"
+            )
             importedOAuthClientID = ""
             clearOAuthRuntimeAuthorizationState(
                 clearChannelSelection: clientChanged
@@ -441,6 +455,7 @@ final class BlackstockSession: ObservableObject {
             let tokens = try await GoogleOAuthTokenExchange().exchange(
                 code: code,
                 clientID: effectiveClientID,
+                clientSecret: effectiveClientSecret,
                 redirectURI: redirectURI,
                 verifier: pkce.verifier
             )
@@ -1045,7 +1060,8 @@ final class BlackstockSession: ObservableObject {
         if !refreshToken.isEmpty {
             let refreshed = try await GoogleOAuthTokenRefresher().refresh(
                 refreshToken: refreshToken,
-                clientID: effectiveClientID
+                clientID: effectiveClientID,
+                clientSecret: effectiveClientSecret
             )
             try BlackstockKeychain.write(
                 refreshed.accessToken,
@@ -1149,7 +1165,8 @@ final class BlackstockSession: ObservableObject {
         if !refreshToken.isEmpty {
             let refreshed = try await GoogleOAuthTokenRefresher().refresh(
                 refreshToken: refreshToken,
-                clientID: effectiveClientID
+                clientID: effectiveClientID,
+                clientSecret: effectiveClientSecret
             )
             try BlackstockKeychain.write(
                 refreshed.accessToken,
@@ -1188,7 +1205,8 @@ final class BlackstockSession: ObservableObject {
         if !refreshToken.isEmpty {
             let refreshed = try await GoogleOAuthTokenRefresher().refresh(
                 refreshToken: refreshToken,
-                clientID: effectiveClientID
+                clientID: effectiveClientID,
+                clientSecret: effectiveClientSecret
             )
             try BlackstockKeychain.write(
                 refreshed.accessToken,
@@ -1456,6 +1474,7 @@ final class BlackstockSession: ObservableObject {
         return try await GoogleOAuthTokenExchange().exchange(
             code: code,
             clientID: effectiveClientID,
+            clientSecret: effectiveClientSecret,
             redirectURI: redirectURI,
             verifier: pkce.verifier
         )
@@ -2035,6 +2054,25 @@ final class BlackstockSession: ObservableObject {
     private var importedClientID: String {
         importedOAuthClientID
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var bundledClientSecret: String {
+        (Bundle.main.object(
+            forInfoDictionaryKey: "BlackstockGoogleOAuthClientSecret"
+        ) as? String ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var importedClientSecret: String {
+        BlackstockKeychain.read("google.oauth.importedClientSecret")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var effectiveClientSecret: String? {
+        let value = importedClientID.isEmpty
+            ? bundledClientSecret
+            : importedClientSecret
+        return value.isEmpty ? nil : value
     }
 
     private var effectiveClientID: String {
