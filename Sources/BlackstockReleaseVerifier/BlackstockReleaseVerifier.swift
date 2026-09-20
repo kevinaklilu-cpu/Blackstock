@@ -12,6 +12,7 @@ private enum ReleaseVerifierError: Error, LocalizedError {
     case appIdentityMismatch
     case installedAppVersionMismatch
     case installedAppSourceCommitMismatch
+    case installedAppArchitectureMismatch(String)
     case missingCaptureEntitlements
     case incompleteNotaryArguments
     case notarizationNotAccepted(String)
@@ -37,6 +38,8 @@ private enum ReleaseVerifierError: Error, LocalizedError {
             return "Die installierte App entspricht nicht exakt Manifest-Version und -Build."
         case .installedAppSourceCommitMismatch:
             return "Die installierte App stammt nicht aus dem im signierten Manifest gebundenen Source-Commit."
+        case .installedAppArchitectureMismatch(let architectures):
+            return "Die installierte App ist nicht Universal-2 (arm64 + x86_64): \(architectures)."
         case .missingCaptureEntitlements:
             return "Der installierten Produktions-App fehlen die Hardened-Runtime-Entitlements für Kamera oder Audioeingang."
         case .incompleteNotaryArguments:
@@ -358,6 +361,30 @@ private struct BlackstockReleaseVerifierMain {
                 .appendingPathComponent("Contents")
                 .appendingPathComponent("MacOS")
                 .appendingPathComponent(executableName)
+
+            let architectureResult = try requireSuccessful(
+                run(
+                    "/usr/bin/lipo",
+                    ["-archs", executableURL.path]
+                ),
+                command: "lipo -archs"
+            )
+            let architectures = Set(
+                architectureResult.output
+                    .split(whereSeparator: { $0.isWhitespace })
+                    .map(String.init)
+            )
+            guard architectures.contains("arm64"),
+                  architectures.contains("x86_64") else {
+                throw ReleaseVerifierError
+                    .installedAppArchitectureMismatch(
+                        architectureResult.output
+                            .trimmingCharacters(
+                                in: .whitespacesAndNewlines
+                            )
+                    )
+            }
+
             installedAppExecutableSHA256 =
                 try sha256(of: executableURL)
 
