@@ -287,6 +287,11 @@ struct PackagingReviewView: View {
                 "Zielkanal: \(project.targetChannelID) · Sichtbarkeit: \(draftPackage.metadata.privacyStatus.rawValue). Diese Aktion erstellt bzw. setzt reale YouTube-Ressourcen."
             )
         }
+        .onChange(of: session.activeProject?.stage) { stage in
+            if stage == .published {
+                dismiss()
+            }
+        }
         .fileImporter(
             isPresented: $showCaptionImporter,
             allowedContentTypes: ["vtt", "srt"].compactMap {
