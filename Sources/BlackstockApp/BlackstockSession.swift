@@ -94,6 +94,15 @@ final class BlackstockSession: ObservableObject {
         onboardingComplete = UserDefaults.standard.bool(forKey: "blackstock.firstRun.complete")
         activeProject = Self.loadStoredProject()
         activeOpportunitySource = Self.loadStoredSource()
+        if let activeProject {
+            try? Self.upsertStoredProject(activeProject)
+            if let activeOpportunitySource {
+                try? Self.store(
+                    source: activeOpportunitySource,
+                    projectID: activeProject.id
+                )
+            }
+        }
         primaryTopic = UserDefaults.standard.string(forKey: "blackstock.workspace.primaryTopic") ?? ""
         contentLanguage = UserDefaults.standard.string(forKey: "blackstock.workspace.contentLanguage") ?? "de"
     }
@@ -111,6 +120,16 @@ final class BlackstockSession: ObservableObject {
 
     var hasImportedOAuthConfiguration: Bool {
         !importedClientID.isEmpty
+    }
+
+    var projects: [BlackstockProject] {
+        Self.loadStoredProjects()
+            .sorted { lhs, rhs in
+                if lhs.updatedAt == rhs.updatedAt {
+                    return lhs.createdAt > rhs.createdAt
+                }
+                return lhs.updatedAt > rhs.updatedAt
+            }
     }
 
     @discardableResult
@@ -1452,31 +1471,61 @@ final class BlackstockSession: ObservableObject {
     }
 
     func reloadOpportunities(order: OpportunitySortMode) async {
-        guard let channel = selectedChannel else { return }
-        let accessToken = tokenSet?.accessToken ?? BlackstockKeychain.read("youtube.\(channel.id).accessToken")
-        guard !accessToken.isEmpty, !primaryTopic.isEmpty else { return }
+        await loadWorkspaceOpportunities(
+            query: primaryTopic,
+            order: order
+        )
+    }
+
+    func loadWorkspaceOpportunities(
+        query: String,
+        order: OpportunitySortMode
+    ) async {
+        let resolvedQuery = query.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        guard !resolvedQuery.isEmpty else {
+            errorMessage = "Gib zuerst einen konkreten Suchraum für neue Chancen ein."
+            return
+        }
+        guard let channelID = workspaceChannelID else {
+            errorMessage = "Kein YouTube-Arbeitsbereich ist verbunden."
+            return
+        }
+
+        let accessToken =
+            tokenSet?.accessToken
+            ?? BlackstockKeychain.read(
+                "youtube.\(channelID).accessToken"
+            )
+        guard !accessToken.isEmpty else {
+            errorMessage = "Die Google-Autorisierung für den Arbeitsbereich ist nicht mehr verfügbar."
+            return
+        }
 
         isWorking = true
+        errorMessage = nil
         defer { isWorking = false }
 
         do {
-            let candidates = try await YouTubeAuthorizedClient(accessToken: accessToken)
-                .firstOpportunityCandidates(
-                    query: primaryTopic,
-                    maxResults: 12,
-                    order: order
-                )
-            if !candidates.isEmpty {
-                opportunities = candidates
-                errorMessage = nil
+            let candidates = try await YouTubeAuthorizedClient(
+                accessToken: accessToken
+            ).firstOpportunityCandidates(
+                query: resolvedQuery,
+                maxResults: 20,
+                order: order
+            )
+            opportunities = candidates
+            if candidates.isEmpty {
+                errorMessage = "YouTube hat für diesen Suchraum aktuell keine passenden Videos geliefert."
             }
         } catch {
-            errorMessage = "YouTube-Sortierung konnte nicht aktualisiert werden: \(describe(error))"
+            errorMessage = "Neue Chancen konnten nicht aus realen YouTube-Daten geladen werden: \(describe(error))"
         }
     }
 
     func useOpportunity(_ opportunity: YouTubeOpportunityCandidate) {
-        guard let channel = selectedChannel else {
+        guard let channelID = workspaceChannelID ?? selectedChannelID else {
             errorMessage = "Kein Zielkanal ausgewählt."
             return
         }
@@ -1484,11 +1533,14 @@ final class BlackstockSession: ObservableObject {
         do {
             let seed = try OpportunityProjectFactory().make(
                 opportunity: opportunity,
-                targetChannelID: channel.id,
-                strategyVersion: storedStrategyVersion(for: channel.id)
+                targetChannelID: channelID,
+                strategyVersion: storedStrategyVersion(for: channelID)
             )
             try Self.store(project: seed.project)
-            try Self.store(source: seed.source)
+            try Self.store(
+                source: seed.source,
+                projectID: seed.project.id
+            )
             let providerFacts = Self.providerFacts(
                 for: opportunity
             )
@@ -1505,7 +1557,7 @@ final class BlackstockSession: ObservableObject {
             )
             activeProject = seed.project
             activeOpportunitySource = seed.source
-            UserDefaults.standard.set(channel.id, forKey: "blackstock.workspace.channelID")
+            UserDefaults.standard.set(channelID, forKey: "blackstock.workspace.channelID")
             UserDefaults.standard.set(primaryTopic, forKey: "blackstock.workspace.primaryTopic")
             UserDefaults.standard.set(contentLanguage, forKey: "blackstock.workspace.contentLanguage")
             UserDefaults.standard.set(true, forKey: "blackstock.firstRun.complete")
@@ -1644,6 +1696,46 @@ final class BlackstockSession: ObservableObject {
         }
     }
 
+    @discardableResult
+    func selectProject(_ projectID: UUID) -> Bool {
+        guard let project = projects.first(
+            where: { $0.id == projectID }
+        ) else {
+            errorMessage = "Das ausgewählte Projekt ist nicht mehr im Projektverlauf vorhanden."
+            return false
+        }
+
+        do {
+            try Self.store(project: project)
+            activeProject = project
+            if let source = Self.loadStoredSource(
+                projectID: project.id
+            ) ?? loadResearchEvidence(
+                projectID: project.id
+            )?.source {
+                try Self.store(
+                    source: source,
+                    projectID: project.id
+                )
+                activeOpportunitySource = source
+            } else {
+                activeOpportunitySource = nil
+                UserDefaults.standard.removeObject(
+                    forKey: "blackstock.activeOpportunitySource"
+                )
+            }
+            UserDefaults.standard.set(
+                project.targetChannelID,
+                forKey: "blackstock.workspace.channelID"
+            )
+            errorMessage = nil
+            return true
+        } catch {
+            errorMessage = "Das Projekt konnte nicht als aktives Projekt geöffnet werden: \(describe(error))"
+            return false
+        }
+    }
+
     func resetFirstRun() {
         UserDefaults.standard.set(false, forKey: "blackstock.firstRun.complete")
         onboardingComplete = false
@@ -1675,13 +1767,62 @@ final class BlackstockSession: ObservableObject {
     private static func store(project: BlackstockProject) throws {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
-        UserDefaults.standard.set(try encoder.encode(project), forKey: "blackstock.activeProject")
+        UserDefaults.standard.set(
+            try encoder.encode(project),
+            forKey: "blackstock.activeProject"
+        )
+        try upsertStoredProject(project)
     }
 
-    private static func store(source: MediaSourceReference) throws {
+    private static func upsertStoredProject(
+        _ project: BlackstockProject
+    ) throws {
+        var catalog = loadStoredProjects()
+        if let index = catalog.firstIndex(
+            where: { $0.id == project.id }
+        ) {
+            catalog[index] = project
+        } else {
+            catalog.append(project)
+        }
+
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
-        UserDefaults.standard.set(try encoder.encode(source), forKey: "blackstock.activeOpportunitySource")
+        UserDefaults.standard.set(
+            try encoder.encode(catalog),
+            forKey: "blackstock.projects"
+        )
+    }
+
+    private static func loadStoredProjects() -> [BlackstockProject] {
+        guard let data = UserDefaults.standard.data(
+            forKey: "blackstock.projects"
+        ) else {
+            return []
+        }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return (try? decoder.decode(
+            [BlackstockProject].self,
+            from: data
+        )) ?? []
+    }
+
+    private static func store(
+        source: MediaSourceReference,
+        projectID: UUID
+    ) throws {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(source)
+        UserDefaults.standard.set(
+            data,
+            forKey: "blackstock.activeOpportunitySource"
+        )
+        UserDefaults.standard.set(
+            data,
+            forKey: "blackstock.projectSource.\(projectID.uuidString)"
+        )
     }
 
     private static func loadStoredProject() -> BlackstockProject? {
@@ -1696,6 +1837,22 @@ final class BlackstockSession: ObservableObject {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return try? decoder.decode(MediaSourceReference.self, from: data)
+    }
+
+    private static func loadStoredSource(
+        projectID: UUID
+    ) -> MediaSourceReference? {
+        guard let data = UserDefaults.standard.data(
+            forKey: "blackstock.projectSource.\(projectID.uuidString)"
+        ) else {
+            return nil
+        }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try? decoder.decode(
+            MediaSourceReference.self,
+            from: data
+        )
     }
 
     private var bundledClientID: String {
