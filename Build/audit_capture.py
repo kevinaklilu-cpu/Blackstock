@@ -71,7 +71,7 @@ requirements = {
         '"supplemental-capture-imported"',
     ],
     "Sources/BlackstockApp/StudioView.swift": [
-        "pendingCaptureKind == .microphone",
+        "if captureKind == .microphone",
         "state.importSupplementalCapture(",
         "state.importMovie(",
         '"Zusätzliche Aufnahmen"',
