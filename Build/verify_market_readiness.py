@@ -255,10 +255,14 @@ def main():
     updater_team_id = str(
         updater.get("expectedInstallerTeamID", "")
     ).strip()
+    updater_observed_team_id = str(
+        updater.get("observedApplicationTeamID", "")
+    ).strip()
     if len({
         release_team_id,
         capture_team_id,
         updater_team_id,
+        updater_observed_team_id,
     }) != 1:
         fail(
             "capture, production release and updater evidence use "
@@ -329,6 +333,23 @@ def main():
         fail(
             "production release evidence must verify "
             "/Applications/Blackstock.app"
+        )
+    if updater.get("observedInstalledAppPath") != release.get("installedAppPath"):
+        fail(
+            "production release and updater evidence do not verify "
+            "the same installed app path"
+        )
+    if capture.get("installerReceiptPackageID") != updater.get(
+        "observedInstallerReceiptPackageID"
+    ):
+        fail(
+            "capture and updater evidence use different installer receipt package IDs"
+        )
+    if str(capture.get("installerReceiptVersion")) != str(
+        updater.get("observedInstallerReceiptVersion")
+    ):
+        fail(
+            "capture and updater evidence use different installer receipt versions"
         )
 
     report = {
