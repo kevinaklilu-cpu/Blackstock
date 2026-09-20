@@ -9,25 +9,25 @@ checks = {
         "if session.onboardingComplete",
         "FirstRunView(session: session)",
         "WorkspaceShell(",
-        "GroupBox(\"Aktiver Projektpfad\")",
+        "GroupBox(\"Aktives Projekt\")",
         "ResearchAnalysisJourneyView(",
         "session.completeResearch(",
         "session.completeAnalysis(",
         "growthLoopCard(",
         '.keyboardShortcut("k", modifiers: .command)',
         "hasActiveProject: session.activeProject?.stage",
-        'title: "Studio öffnen"',
-        'Label("Chancen", systemImage: "sparkle.magnifyingglass")',
-        'Label("Projekte", systemImage: "tray.full")',
+        'title: "Editor"',
+        '.tag("Chancen")',
+        '.tag("Projekte")',
         "OpportunityWorkspaceView(",
         "ProjectLibraryView(",
     ],
     "Sources/BlackstockApp/WorkspaceProductViews.swift": [
         "struct OpportunityWorkspaceView",
-        "Als neues Projekt übernehmen",
-        "Keine erfundenen Scores",
+        "Projekt starten",
+        'Text("Entdecken")',
         "struct ProjectLibraryView",
-        "Neue Chance finden",
+        'Button("Entdecken")',
         "session.projects",
     ],
     "Sources/BlackstockApp/BlackstockSession.swift": [
@@ -78,8 +78,8 @@ checks = {
         "burnInCaptions: burnInCaptionsEnabled",
     ],
     "Sources/BlackstockApp/StudioView.swift": [
-        "Lokale Clip-Kandidaten",
-        "Clip-Kandidaten lokal finden",
+        'Text("Clips")',
+        "Clips finden",
         "Diesen Ausschnitt übernehmen",
         "Exportieren …",
         "Für Packaging verwenden",
@@ -93,7 +93,7 @@ checks = {
         "In Timeline laden",
         "Übernehmen",
         "Zurück zur aktuellen Schnittvorschau",
-        "keine Erfolgs-, Qualitäts- oder Viralitätsnote",
+        "Blackstock findet Abschnitte lokal",
         "Sichtbare Untertitel ins Video rendern",
         "Untertitelstil",
         "Ausgabe-Preset vorbereiten",
@@ -210,7 +210,11 @@ if guidance_path.is_file():
 app_path = ROOT / "Sources/BlackstockApp/BlackstockApp.swift"
 if app_path.is_file():
     app = app_path.read_text(encoding="utf-8")
-    if 'if session.activeProject?.stage.journeyGuidance\n                    .recommendedSurface == .studio' not in app:
+    if (
+        "if session.activeProject?.stage" not in app
+        or ".journeyGuidance" not in app
+        or ".recommendedSurface == .studio" not in app
+    ):
         errors.append("Studio navigation must remain capability/stage gated")
     if 'project.stage == .research\n                || project.stage == .analysis' not in app:
         errors.append("Research and analysis must expose guided overview UI")

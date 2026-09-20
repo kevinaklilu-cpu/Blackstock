@@ -11,6 +11,8 @@ CONTRACTS = {
         "missingClientID",
         "invalidClientID",
         'hasSuffix(".apps.googleusercontent.com")',
+        "clientSecret",
+        'case clientSecret = "client_secret"',
         "projectID",
         "redirectURIs",
     ],
@@ -21,16 +23,23 @@ CONTRACTS = {
     ],
     "Sources/BlackstockCore/GoogleOAuth.swift": [
         "SecRandomCopyBytes",
-        'code_challenge_method", value: "S256"',
+        '"code_challenge_method"',
+        '"S256"',
         '.init(name: "state", value: state)',
         'access_type", value: "offline"',
         'prompt", value: "select_account consent"',
         '"code_verifier": verifier',
+        '"client_secret"',
+        "GoogleOAuthTokenEndpointError",
+        "providerDescription",
+        "oauthFormEncoded",
     ],
     "Sources/BlackstockCore/GoogleOAuthLifecycle.swift": [
         "Installed/desktop apps do not support Google's incremental authorization",
         "granted.union(required)",
-        "refresh_token",
+        '"refresh_token"',
+        '"client_secret"',
+        "tokenEndpointError(",
     ],
     "Sources/BlackstockApp/LoopbackOAuthServer.swift": [
         'host: "127.0.0.1"',
@@ -41,18 +50,20 @@ CONTRACTS = {
     "Sources/BlackstockApp/BlackstockSession.swift": [
         "func importOAuthJSON",
         "OAuthClientBindingPolicy()",
-        'deleteAccounts(',
         'withPrefix: "youtube."',
         'account: "google.oauth.importedClientID"',
+        'account: "google.oauth.importedClientSecret"',
+        "effectiveClientSecret",
+        "clientSecret: effectiveClientSecret",
         "clearOAuthRuntimeAuthorizationState",
         "func removeImportedOAuthConfiguration",
         "validateStoredOAuthClient",
         'account: "youtube.\\(id).oauthClientID"',
     ],
     "Sources/BlackstockApp/FirstRunView.swift": [
-        "Eigene Desktop-OAuth-JSON auswählen …",
+        "Desktop-OAuth-JSON importieren …",
         "session.importOAuthJSON(from: url)",
-        "Client Secret wird nicht benötigt und nicht gespeichert.",
+        "session.connectGoogle()",
     ],
     "Sources/BlackstockApp/BlackstockApp.swift": [
         "Desktop-OAuth-JSON importieren …",
@@ -62,7 +73,6 @@ CONTRACTS = {
         "allowedContentTypes: [.json]",
         "session.importOAuthJSON(from: url)",
         "session.removeImportedOAuthConfiguration()",
-        "werden vorhandene YouTube-Tokens und Scopes sofort aus dem macOS-Keychain entfernt",
     ],
     "Sources/BlackstockApp/BlackstockKeychain.swift": [
         "kSecAttrAccessibleWhenUnlockedThisDeviceOnly",
@@ -71,7 +81,7 @@ CONTRACTS = {
     "docs/THREAT_MODEL.md": [
         "Root-Pfad `/`",
         "http://127.0.0.1:<dynamischer Port>",
-        "persistiert kein `client_secret`",
+        "ausschließlich im macOS-Keychain",
     ],
 }
 
@@ -81,7 +91,8 @@ TEST_CONTRACTS = {
         "testAuthorizationRequestContainsDesktopPKCEAndLeastPrivilegeScope",
         "testOAuthJSONRequiresDesktopInstalledClient",
         "testOAuthJSONRejectsMissingAndInvalidClientIDs",
-        "testOAuthJSONDoesNotExposeOrPersistClientSecret",
+        "testOAuthJSONParsesDesktopClientSecretForTokenExchange",
+        "testOAuthFormEncodingKeepsPKCEAndRedirectValuesValid",
         '"http://127.0.0.1:54321"',
     ],
     "Tests/BlackstockCoreTests/GoogleOAuthLifecycleTests.swift": [
@@ -104,20 +115,12 @@ for relative, markers in {**CONTRACTS, **TEST_CONTRACTS}.items():
     if not path.is_file():
         errors.append(f"missing OAuth contract file: {relative}")
         continue
-    text = path.read_text(encoding="utf-8")
+    source = path.read_text(encoding="utf-8")
     for marker in markers:
-        if marker not in text:
+        if marker not in source:
             errors.append(
                 f"{relative}: missing OAuth contract marker: {marker}"
             )
-
-config = (
-    ROOT / "Sources/BlackstockCore/OAuthClientConfiguration.swift"
-).read_text(encoding="utf-8")
-if "clientSecret" in config or "client_secret" in config:
-    errors.append(
-        "OAuthClientConfiguration must not model or persist client_secret"
-    )
 
 session = (
     ROOT / "Sources/BlackstockApp/BlackstockSession.swift"
@@ -131,18 +134,23 @@ if import_start < 0 or import_end < 0:
     errors.append("Could not isolate importOAuthJSON implementation")
 else:
     import_block = session[import_start:import_end]
-    if "client_secret" in import_block or "clientSecret" in import_block:
-        errors.append(
-            "OAuth JSON import must never handle or persist client_secret"
-        )
     delete_index = import_block.find('withPrefix: "youtube."')
-    write_index = import_block.find(
+    client_id_index = import_block.find(
         'account: "google.oauth.importedClientID"'
     )
-    if delete_index < 0 or write_index < 0 or delete_index > write_index:
+    secret_index = import_block.find(
+        'account: "google.oauth.importedClientSecret"'
+    )
+    if (
+        delete_index < 0
+        or client_id_index < 0
+        or secret_index < 0
+        or delete_index > client_id_index
+        or delete_index > secret_index
+    ):
         errors.append(
-            "Client-change token invalidation must occur before the new "
-            "imported OAuth client ID becomes active"
+            "Client-change token invalidation must occur before imported "
+            "OAuth credentials become active"
         )
 
 loopback = (
@@ -160,7 +168,7 @@ if errors:
     sys.exit(1)
 
 print(
-    "OAuth audit passed: desktop JSON import, client-bound Keychain "
-    "credentials, PKCE/state, root loopback redirect and capability-based "
-    "reauthorization remain connected."
+    "OAuth audit passed: desktop JSON credentials, Keychain binding, "
+    "PKCE/state, root loopback redirect, token-endpoint diagnostics and "
+    "capability-based reauthorization remain connected."
 )

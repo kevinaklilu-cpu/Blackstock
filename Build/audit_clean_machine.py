@@ -41,6 +41,9 @@ requirements = {
         "--arch x86_64",
         "lipo -create",
         "require_universal_binary",
+        "Build/generate_app_icon.swift",
+        "Contents/Resources/Blackstock.icns",
+        "CFBundleIconFile",
     ],
     ".github/workflows/ci.yml": [
         'BLACKSTOCK_INCLUDE_E2E_SMOKE: "1"',

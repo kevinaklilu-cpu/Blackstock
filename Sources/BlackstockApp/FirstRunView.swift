@@ -33,32 +33,24 @@ struct FirstRunView: View {
 
     private var identityPane: some View {
         VStack(alignment: .leading, spacing: 24) {
-            HStack(spacing: 10) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.08))
-                    Text("B").font(.title2.bold())
-                }
-                .frame(width: 42, height: 42)
-                Text("Blackstock").font(.title2.bold())
-            }
+            BlackstockWordmark(
+                markWidth: 44,
+                markHeight: 32,
+                font: .title2
+            )
 
             Spacer()
 
-            Text("Vom Signal\nzum nächsten Video.")
+            Text("Von Video zu Clip.")
                 .font(.largeTitle.bold())
-                .tracking(-1.1)
-            Text("Recherche, Produktion, Veröffentlichung und echtes Lernen aus deinem YouTube-Kanal – mit nachvollziehbaren Quellen statt erfundenen Scores.")
+                .tracking(-1)
+            Text("Verbinde deinen Kanal und starte.")
                 .font(.title3)
                 .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
 
             Spacer()
-
-            Label("Produktsprache Deutsch · Content-Sprache separat", systemImage: "character.bubble")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
-        .padding(36)
+        .padding(40)
         .background(Color.primary.opacity(0.025))
     }
 
@@ -111,42 +103,52 @@ struct FirstRunView: View {
     }
 
     private var welcome: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 14) {
             Button {
                 Task { await session.connectGoogle() }
             } label: {
                 HStack {
-                    if session.isWorking { ProgressView().controlSize(.small) }
-                    Image(systemName: "person.crop.circle.badge.checkmark")
-                    Text(session.isWorking ? "Warte auf Google …" : "Mit Google fortfahren")
+                    if session.isWorking {
+                        ProgressView().controlSize(.small)
+                    }
+                    Text(
+                        session.isWorking
+                            ? "Google wird geöffnet …"
+                            : "Mit Google verbinden"
+                    )
                     Spacer()
                     Image(systemName: "arrow.right")
                 }
-                .padding(.vertical, 10)
+                .padding(.vertical, 9)
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
             .disabled(session.isWorking)
 
-            Menu {
-                Button("Eigene Desktop-OAuth-JSON auswählen …") {
-                    showOAuthImporter = true
+            HStack(spacing: 10) {
+                Menu {
+                    Button("Desktop-OAuth-JSON importieren …") {
+                        showOAuthImporter = true
+                    }
+                    if session.hasImportedOAuthConfiguration {
+                        Button(
+                            "Importierte OAuth-Konfiguration entfernen",
+                            role: .destructive
+                        ) {
+                            session.removeImportedOAuthConfiguration()
+                        }
+                    }
+                } label: {
+                    Label(
+                        "OAuth-Konfiguration",
+                        systemImage: "ellipsis.circle"
+                    )
                 }
-                Button("Importierte OAuth-Konfiguration entfernen", role: .destructive) {
-                    session.removeImportedOAuthConfiguration()
-                }
-            } label: {
-                Label("Verbindungsoptionen", systemImage: "ellipsis.circle")
+
+                Text(session.oauthConfigurationSource)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-
-            Text("OAuth-Konfiguration: \(session.oauthConfigurationSource)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            Text("Eine importierte Google-JSON wird lokal validiert. Blackstock übernimmt nur die Desktop-Client-ID; ein enthaltenes Client Secret wird nicht benötigt und nicht gespeichert.")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -180,16 +182,13 @@ struct FirstRunView: View {
                 }
                 .buttonStyle(.plain)
             }
-            Text("Blackstock wählt keinen Kanal stillschweigend aus.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
     }
 
     private var topic: some View {
         VStack(alignment: .leading, spacing: 12) {
             TextField(
-                "Kanal-Schwerpunkt, z. B. KI für Selbstständige",
+                "Thema, z. B. KI für Selbstständige",
                 text: $session.primaryTopic
             )
             .accessibilityLabel("Strategischer Kanal-Schwerpunkt")
@@ -197,62 +196,69 @@ struct FirstRunView: View {
             .font(.title3)
 
             TextField(
-                "Content-Versprechen, z. B. praktische KI ohne Hype",
+                "Content-Versprechen",
                 text: $session.strategyContentPromise
             )
             .textFieldStyle(.roundedBorder)
 
             TextField(
-                "Zielgruppen-Hypothese, z. B. Solo-Selbstständige mit wenig Zeit",
+                "Zielgruppe",
                 text: $session.strategyAudienceHypothesis
             )
             .textFieldStyle(.roundedBorder)
 
             TextField(
-                "Inhaltliche Säulen, durch Komma getrennt",
+                "Themenfelder, durch Komma getrennt",
                 text: $session.strategyPillarsText
             )
             .textFieldStyle(.roundedBorder)
 
-            TextField(
-                "Angrenzende Themen (optional)",
-                text: $session.strategyAdjacentTopicsText
-            )
-            .textFieldStyle(.roundedBorder)
+            DisclosureGroup("Weitere Optionen") {
+                VStack(alignment: .leading, spacing: 10) {
+                    TextField(
+                        "Angrenzende Themen",
+                        text: $session.strategyAdjacentTopicsText
+                    )
+                    .textFieldStyle(.roundedBorder)
 
-            TextField(
-                "Ausgeschlossene Themen (optional)",
-                text: $session.strategyExcludedTopicsText
-            )
-            .textFieldStyle(.roundedBorder)
+                    TextField(
+                        "Ausgeschlossene Themen",
+                        text: $session.strategyExcludedTopicsText
+                    )
+                    .textFieldStyle(.roundedBorder)
 
-            Picker(
-                "Hauptziel",
-                selection: $session.strategyObjective
-            ) {
-                Text("Ausgewogen").tag(StrategicObjective.balanced)
-                Text("Reichweite").tag(StrategicObjective.reach)
-                Text("Wiedergabezeit").tag(StrategicObjective.watchTime)
-                Text("Abonnenten").tag(StrategicObjective.subscribers)
-                Text("Umsatz").tag(StrategicObjective.revenue)
+                    Picker(
+                        "Ziel",
+                        selection: $session.strategyObjective
+                    ) {
+                        Text("Ausgewogen").tag(StrategicObjective.balanced)
+                        Text("Reichweite").tag(StrategicObjective.reach)
+                        Text("Wiedergabezeit").tag(StrategicObjective.watchTime)
+                        Text("Abonnenten").tag(StrategicObjective.subscribers)
+                        Text("Umsatz").tag(StrategicObjective.revenue)
+                    }
+                    .pickerStyle(.menu)
+                }
+                .padding(.top, 8)
             }
-            .pickerStyle(.menu)
-
-            Text("Die Strategie wird versioniert gespeichert. Blackstock erfindet keine Zielgruppe, Säulen oder Ausschlüsse für dich.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            .font(.callout)
 
             HStack {
                 Spacer()
-                Button("Weiter") { session.continueFromTopic() }
-                    .buttonStyle(.borderedProminent)
+                Button("Weiter") {
+                    session.continueFromTopic()
+                }
+                .buttonStyle(.borderedProminent)
             }
         }
     }
 
     private var language: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Picker("Primäre Content-Sprache", selection: $session.contentLanguage) {
+        VStack(alignment: .leading, spacing: 16) {
+            Picker(
+                "Content-Sprache",
+                selection: $session.contentLanguage
+            ) {
                 Text("Deutsch").tag("de")
                 Text("Englisch").tag("en")
                 Text("Spanisch").tag("es")
@@ -261,10 +267,6 @@ struct FirstRunView: View {
                 Text("Portugiesisch").tag("pt")
             }
             .pickerStyle(.menu)
-
-            Text("Blackstock selbst bleibt Deutsch. Research-Sprachen können später breiter sein als die Output-Sprache.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
 
             Toggle(
                 isOn: Binding(
@@ -280,23 +282,24 @@ struct FirstRunView: View {
                 )
             ) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Nutzungsverantwortung einmalig bestätigen")
+                    Text("Nutzungsrechte bestätigt")
                         .font(.callout.weight(.semibold))
-                    Text("Ich verwende Blackstock nur für Inhalte, die ich bearbeiten und veröffentlichen darf, und übernehme die Verantwortung für diese Nutzung.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Text(
+                        "Ich bearbeite und veröffentliche nur Inhalte, die ich verwenden darf."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
             }
             .toggleStyle(.switch)
 
-            Text("Diese Erklärung gilt für den ausgewählten Arbeitsbereich. Danach verlangt Blackstock nicht bei jedem Video erneut eine Lizenzdatei oder Referenz und behauptet keine eigene Rechteprüfung.")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-
             HStack {
                 Spacer()
-                Button("Kanal vorbereiten") {
-                    Task { await session.prepareChannelAndLoadOpportunities() }
+                Button("Weiter") {
+                    Task {
+                        await session
+                            .prepareChannelAndLoadOpportunities()
+                    }
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(
@@ -307,18 +310,23 @@ struct FirstRunView: View {
     }
 
     private var preparing: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 12) {
                 ProgressView()
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Strategie wird versioniert gespeichert").font(.headline)
-                    Text("Danach lädt Blackstock reale YouTube-Kandidaten für „\(session.primaryTopic)“.")
+                    Text("Kanal wird eingerichtet")
+                        .font(.headline)
+                    Text("YouTube-Daten werden geladen.")
                         .foregroundStyle(.secondary)
                 }
             }
+
             if session.errorMessage != nil && !session.isWorking {
                 Button("Erneut versuchen") {
-                    Task { await session.prepareChannelAndLoadOpportunities() }
+                    Task {
+                        await session
+                            .prepareChannelAndLoadOpportunities()
+                    }
                 }
             }
         }
@@ -328,9 +336,9 @@ struct FirstRunView: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Reale YouTube-Signale")
+                    Text("Videos")
                         .font(.headline)
-                    Text("Rohdaten von YouTube · keine abgeleiteten Scores")
+                    Text("YouTube-Daten")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -434,9 +442,6 @@ struct FirstRunView: View {
             }
 
             HStack {
-                Label("Ansehen → verstehen → als Projekt übernehmen", systemImage: "eye")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
                 Spacer()
 
                 if let selected = selectedOpportunity {
@@ -562,34 +567,34 @@ struct FirstRunView: View {
 
     private var stepEyebrow: String {
         switch session.step {
-        case .welcome: "1 · Google"
-        case .channel: "2 · YouTube-Kanal"
-        case .topic: "3 · Kanalthema"
-        case .language: "4 · Content-Sprache"
-        case .preparing: "5 · Vorbereitung"
-        case .opportunities: "6 · Erste Chancen"
+        case .welcome: "Schritt 1 von 6"
+        case .channel: "Schritt 2 von 6"
+        case .topic: "Schritt 3 von 6"
+        case .language: "Schritt 4 von 6"
+        case .preparing: "Schritt 5 von 6"
+        case .opportunities: "Schritt 6 von 6"
         }
     }
 
     private var stepTitle: String {
         switch session.step {
-        case .welcome: "Willkommen bei Blackstock"
-        case .channel: "Welcher Kanal ist dein Arbeitsbereich?"
-        case .topic: "Wofür soll dein Kanal stehen?"
-        case .language: "Sprache deiner Inhalte"
-        case .preparing: "Blackstock bereitet deinen Kanal vor"
-        case .opportunities: "Deine ersten Chancen"
+        case .welcome: "Google verbinden"
+        case .channel: "Kanal wählen"
+        case .topic: "Kanal einrichten"
+        case .language: "Sprache & Rechte"
+        case .preparing: "Einrichtung"
+        case .opportunities: "Video auswählen"
         }
     }
 
     private var stepSubtitle: String {
         switch session.step {
-        case .welcome: "Google öffnet im Systembrowser. Blackstock fordert zunächst nur Leserechte für YouTube an."
-        case .channel: "Wähle den konkreten Zielkanal explizit aus."
-        case .topic: "Lege den strategischen Kern fest. Historische Beobachtungen bleiben davon getrennt."
-        case .language: "Produkt- und Content-Sprache sind unterschiedliche Einstellungen."
-        case .preparing: "Nur reale, verfügbare Daten werden verarbeitet."
-        case .opportunities: "Diese Liste stammt aus der realen YouTube-API und ist noch keine automatisch behauptete Empfehlung."
+        case .welcome: "YouTube-Zugriff wird im Browser bestätigt."
+        case .channel: "Wähle deinen YouTube-Kanal."
+        case .topic: "Lege Thema und Zielgruppe fest."
+        case .language: "Diese Angaben gelten für den Arbeitsbereich."
+        case .preparing: "Einen Moment."
+        case .opportunities: "Wähle ein Video oder öffne Blackstock."
         }
     }
 }

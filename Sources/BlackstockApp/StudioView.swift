@@ -99,32 +99,29 @@ struct StudioView: View {
     }
 
     private var header: some View {
-        HStack {
+        HStack(spacing: 14) {
+            BlackstockMark(
+                width: 36,
+                height: 26
+            )
+
             VStack(alignment: .leading, spacing: 2) {
-                Text("Studio")
+                Text(project.title)
                     .font(.title2.bold())
-                Text("Vorschau und non-destruktive Bearbeitung")
+                    .lineLimit(1)
+                Text(currentStage.rawValue)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
             Spacer()
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(project.title)
-                    .font(.caption.weight(.semibold))
-                    .lineLimit(1)
-                Text("Zielkanal: \(project.targetChannelID)")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                Text("Status: \(currentStage.rawValue)")
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.secondary)
-            }
-            Button("Video importieren …") {
+
+            Button("Importieren …") {
                 showImporter = true
             }
             .buttonStyle(.borderedProminent)
         }
-        .padding(18)
+        .padding(16)
     }
 
     private func sourceContext(_ source: MediaSourceReference) -> some View {
@@ -163,7 +160,7 @@ struct StudioView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 7) {
-                    Text("Opportunity-Quelle")
+                    Text("Quelle")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                     if isLinkFirstClip {
@@ -252,7 +249,7 @@ struct StudioView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                DisclosureGroup("Quell-Provenance") {
+                DisclosureGroup("Quelldetails") {
                     Text(source.pageURL.absoluteString)
                         .font(.caption2.monospaced())
                         .textSelection(.enabled)
@@ -300,12 +297,11 @@ struct StudioView: View {
             Image(systemName: "film.stack")
                 .font(.largeTitle)
                 .foregroundStyle(.secondary)
-            Text("Autorisiertes Produktionsvideo hinzufügen")
+            Text("Video hinzufügen")
                 .font(.title2.bold())
-            Text("Nach deiner einmaligen Arbeitsbereich-Erklärung übernimmt Blackstock Produktionsmedien ohne zusätzlichen Lizenz-Upload in die Bearbeitung und bindet Quelle und Projekt automatisch.")
+            Text("Importiere eine Datei oder nimm direkt auf.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
-                .frame(maxWidth: 520)
             Button("Video auswählen …") {
                 showImporter = true
             }
@@ -429,10 +425,10 @@ struct StudioView: View {
 
     private var localClipCandidatesSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Lokale Clip-Kandidaten")
+            Text("Clips")
                 .font(.headline)
 
-            Text("Blackstock analysiert das autorisierte Originalmedium lokal auf Sprachsegmente und gemessene Pausen. Die Vorschläge enthalten keine Erfolgs-, Qualitäts- oder Viralitätsnote und verändern den Schnitt erst nach deiner Auswahl.")
+            Text("Blackstock findet Abschnitte lokal. Du entscheidest, was übernommen wird.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -451,8 +447,8 @@ struct StudioView: View {
                     }
                     Label(
                         state.isGeneratingClipCandidates
-                            ? "Lokale Clip-Analyse läuft …"
-                            : "Clip-Kandidaten lokal finden",
+                            ? "Clips werden gesucht …"
+                            : "Clips finden",
                         systemImage: "scissors.badge.ellipsis"
                     )
                 }

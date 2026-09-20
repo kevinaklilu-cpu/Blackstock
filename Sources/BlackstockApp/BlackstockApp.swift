@@ -45,22 +45,62 @@ private struct WorkspaceShell: View {
 
     var body: some View {
         NavigationSplitView {
-            List(selection: $selection) {
-                Label("Übersicht", systemImage: "rectangle.grid.2x2")
-                    .tag("Übersicht")
-                Label("Chancen", systemImage: "sparkle.magnifyingglass")
-                    .tag("Chancen")
-                Label("Projekte", systemImage: "tray.full")
-                    .tag("Projekte")
-                if session.activeProject?.stage.journeyGuidance
-                    .recommendedSurface == .studio {
-                    Label("Studio", systemImage: "film.stack")
-                        .tag("Studio")
+            VStack(spacing: 0) {
+                HStack {
+                    BlackstockWordmark(
+                        markWidth: 34,
+                        markHeight: 24,
+                        font: .headline
+                    )
+                    Spacer()
                 }
-                Label("Einstellungen", systemImage: "gearshape")
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+
+                Divider()
+
+                List(selection: $selection) {
+                    Label(
+                        "Übersicht",
+                        systemImage: "rectangle.grid.2x2"
+                    )
+                    .tag("Übersicht")
+
+                    Label(
+                        "Entdecken",
+                        systemImage: "sparkle.magnifyingglass"
+                    )
+                    .tag("Chancen")
+
+                    Label(
+                        "Projekte",
+                        systemImage: "tray.full"
+                    )
+                    .tag("Projekte")
+
+                    if session.activeProject?.stage
+                        .journeyGuidance
+                        .recommendedSurface == .studio {
+                        Label(
+                            "Editor",
+                            systemImage: "film.stack"
+                        )
+                        .tag("Studio")
+                    }
+
+                    Label(
+                        "Einstellungen",
+                        systemImage: "gearshape"
+                    )
                     .tag("Einstellungen")
+                }
+                .listStyle(.sidebar)
             }
-            .navigationTitle("Blackstock")
+            .navigationSplitViewColumnWidth(
+                min: 190,
+                ideal: 220,
+                max: 260
+            )
         } detail: {
             switch selection {
             case "Chancen":
@@ -163,16 +203,16 @@ private struct CommandPaletteView: View {
             ),
             .init(
                 id: "opportunities",
-                title: "Chancen öffnen",
-                subtitle: "Neue reale YouTube-Signale recherchieren",
+                title: "Entdecken",
+                subtitle: "Videos und Themen finden",
                 systemImage: "sparkle.magnifyingglass",
                 destination: "Chancen",
                 isDestructive: false
             ),
             .init(
                 id: "projects",
-                title: "Projekte öffnen",
-                subtitle: "Zwischen laufenden und veröffentlichten Projekten wechseln",
+                title: "Projekte",
+                subtitle: "Projekte öffnen",
                 systemImage: "tray.full",
                 destination: "Projekte",
                 isDestructive: false
@@ -183,8 +223,8 @@ private struct CommandPaletteView: View {
             result.append(
                 .init(
                     id: "studio",
-                    title: "Studio öffnen",
-                    subtitle: "Aktives Projekt visuell bearbeiten",
+                    title: "Editor",
+                    subtitle: "Aktives Projekt bearbeiten",
                     systemImage: "film.stack",
                     destination: "Studio",
                     isDestructive: false
@@ -195,8 +235,8 @@ private struct CommandPaletteView: View {
         result.append(contentsOf: [
             .init(
                 id: "settings",
-                title: "Einstellungen öffnen",
-                subtitle: "Google-/YouTube- und App-Einstellungen",
+                title: "Einstellungen",
+                subtitle: "Google, YouTube und App",
                 systemImage: "gearshape",
                 destination: "Einstellungen",
                 isDestructive: false
@@ -289,29 +329,16 @@ private struct OverviewView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Blackstock")
+            Text("Übersicht")
                 .font(.largeTitle.bold())
-            Text("Creator-System für Recherche, Produktion, Veröffentlichung und Wachstum")
+            Text("Deine Projekte, nächsten Schritte und Ergebnisse")
                 .font(.title3)
-                .foregroundStyle(.secondary)
-
-            GroupBox("Produktstatus") {
-                HStack {
-                    Image(systemName: "hammer.fill")
-                    Text("NOCH NICHT MARKTREIF")
-                        .fontWeight(.semibold)
-                    Spacer()
-                }
-                .padding(.vertical, 6)
-            }
-
-            Text("Der First-Run nutzt reale Google-/YouTube-Autorisierung. Weitere Produktflächen bleiben unsichtbar, bis ihre Capability-Gates bestehen.")
                 .foregroundStyle(.secondary)
 
             if let project = session.activeProject {
                 let guidance = project.stage.journeyGuidance
 
-                GroupBox("Aktiver Projektpfad") {
+                GroupBox("Aktives Projekt") {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack(alignment: .firstTextBaseline) {
                             VStack(alignment: .leading, spacing: 2) {
@@ -342,14 +369,8 @@ private struct OverviewView: View {
                             "Schritt \(project.stage.canonicalProgressPosition) von \(BlackstockStage.canonicalProgressCount)"
                         )
 
-                        Text(guidance.purpose)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-
-                        Divider()
-
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Nächster sinnvoller Schritt")
+                            Text("Als Nächstes")
                                 .font(.caption.weight(.semibold))
                             Text(guidance.nextAction)
                                 .font(.callout)
@@ -360,20 +381,11 @@ private struct OverviewView: View {
                                 onOpenStudio()
                             } label: {
                                 Label(
-                                    "Im Studio fortfahren",
+                                    "Im Editor fortfahren",
                                     systemImage: "arrow.right.circle.fill"
                                 )
                             }
                             .buttonStyle(.borderedProminent)
-                        } else if guidance.recommendedSurface == .overview {
-                            Label(
-                                project.stage == .published
-                                    ? "Du bist bereits im passenden Bereich Veröffentlicht / Lernen."
-                                    : "Der nächste Schritt wird direkt hier in der Übersicht bearbeitet.",
-                                systemImage: "checkmark.circle"
-                            )
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -923,10 +935,6 @@ private struct SettingsView: View {
             GroupBox("Google / YouTube") {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("OAuth-Konfiguration: \(session.oauthConfigurationSource)")
-                    Text("Entwickler-Secrets und API-Key-Felder werden normalen Nutzern nicht angeboten.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
                     HStack(spacing: 10) {
                         Button {
                             showOAuthImporter = true
@@ -950,7 +958,7 @@ private struct SettingsView: View {
                         )
                     }
 
-                    Text("Blackstock übernimmt ausschließlich die Desktop-Client-ID. Ein Client Secret wird weder benötigt noch gespeichert. Wechselt die effektive Client-ID, werden vorhandene YouTube-Tokens und Scopes sofort aus dem macOS-Keychain entfernt und Google muss erneut autorisiert werden.")
+                    Text("Die Desktop-OAuth-Konfiguration wird lokal im macOS-Schlüsselbund gespeichert. Bei einem Client-Wechsel wird Google neu autorisiert.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
@@ -969,7 +977,7 @@ private struct SettingsView: View {
                         showCredentialRemovalConfirmation = true
                     }
 
-                    Text("Entfernt lokal gespeicherte YouTube-Zugriffs-, Refresh- und Scope-Daten aus dem macOS-Keychain. Die OAuth-Client-Konfiguration und deine Projektdateien bleiben erhalten.")
+                    Text("Entfernt die lokale YouTube-Anmeldung. Projekte bleiben erhalten.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
@@ -1002,7 +1010,7 @@ private struct SettingsView: View {
                     }
                     .disabled(isRevokingGoogleAccess)
 
-                    Text("Widerruft die aktuell verwendete Google-OAuth-Berechtigung beim Provider und entfernt anschließend die lokalen YouTube-Zugangsdaten.")
+                    Text("Widerruft den Google-Zugriff und entfernt die lokale Anmeldung.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 

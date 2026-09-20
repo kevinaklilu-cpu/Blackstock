@@ -32,7 +32,7 @@ REQUIRED = {
         "testMissingVideoIDIsRejected",
     ],
     "Sources/BlackstockApp/FirstRunView.swift": [
-        "keine abgeleiteten Scores",
+        "keinen eigenen Opportunity- oder Virality-Score",
         "Blackstock ersetzt fehlende Werte nicht durch Schätzungen.",
         "Datenabruf:",
     ],

@@ -9,6 +9,7 @@ VERSION="${BLACKSTOCK_VERSION:-0.1.0}"
 BUILD_NUMBER="${BLACKSTOCK_BUILD:-1}"
 BUNDLE_ID="de.blackstock.app"
 OAUTH_CLIENT_ID="${BLACKSTOCK_GOOGLE_OAUTH_CLIENT_ID:-}"
+OAUTH_CLIENT_SECRET="${BLACKSTOCK_GOOGLE_OAUTH_CLIENT_SECRET:-}"
 PUBLIC_PUBLISHING_APPROVED="${BLACKSTOCK_YOUTUBE_PUBLIC_PUBLISHING_APPROVED:-0}"
 APP_SIGN_IDENTITY="${BLACKSTOCK_CODESIGN_IDENTITY:-}"
 INSTALLER_SIGN_IDENTITY="${BLACKSTOCK_INSTALLER_IDENTITY:-}"
@@ -95,6 +96,10 @@ require_universal_binary() {
 
 APP="$WORK/Blackstock.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+ICONSET="$WORK/Blackstock.iconset"
+swift Build/generate_app_icon.swift "$ICONSET"
+iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/Blackstock.icns"
+test -s "$APP/Contents/Resources/Blackstock.icns"
 lipo -create   "$ARM64_BIN_DIR/Blackstock"   "$X86_64_BIN_DIR/Blackstock"   -output "$APP/Contents/MacOS/Blackstock"
 chmod +x "$APP/Contents/MacOS/Blackstock"
 require_universal_binary "$APP/Contents/MacOS/Blackstock"
@@ -112,6 +117,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <plist version="1.0"><dict>
 <key>CFBundleDisplayName</key><string>Blackstock</string>
 <key>CFBundleExecutable</key><string>Blackstock</string>
+<key>CFBundleIconFile</key><string>Blackstock.icns</string>
 <key>CFBundleIdentifier</key><string>${BUNDLE_ID}</string>
 <key>CFBundleName</key><string>Blackstock</string>
 <key>CFBundlePackageType</key><string>APPL</string>
@@ -124,6 +130,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <key>NSMicrophoneUsageDescription</key><string>Blackstock verwendet das Mikrofon nur nach deiner Freigabe, um autorisierte Produktionsaufnahmen direkt in dein lokales Projekt aufzunehmen.</string>
 <key>NSSpeechRecognitionUsageDescription</key><string>Blackstock transkribiert autorisierte Produktionsmedien lokal auf diesem Mac, wenn On-Device-Spracherkennung verfügbar ist.</string>
 <key>BlackstockGoogleOAuthClientID</key><string>${OAUTH_CLIENT_ID}</string>
+<key>BlackstockGoogleOAuthClientSecret</key><string>${OAUTH_CLIENT_SECRET}</string>
 <key>BlackstockYouTubePublicPublishingApproved</key>${PUBLIC_PUBLISHING_PLIST}
 <key>BlackstockUpdateManifestURL</key><string>${UPDATE_MANIFEST_URL}</string>
 <key>BlackstockUpdatePublicKeyBase64</key><string>${UPDATE_PUBLIC_KEY}</string>
@@ -147,6 +154,7 @@ else
     --sign - "$APP"
 fi
 codesign --verify --deep --strict "$APP"
+test -s "$APP/Contents/Resources/Blackstock.icns"
 require_universal_binary "$APP/Contents/MacOS/Blackstock"
 if [[ "$INCLUDE_E2E_SMOKE" == "1" ]]; then
   require_universal_binary "$APP/Contents/Helpers/BlackstockE2ESmoke"

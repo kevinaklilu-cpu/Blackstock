@@ -83,6 +83,7 @@ final class BlackstockSession: ObservableObject {
 
     private var tokenSet: GoogleOAuthTokenSet?
     private var cachedPublishingJournal: ExternalActionJournal?
+    private var importedOAuthClientSecret = ""
 
     init() {
         BlackstockUpdateAudit.reconcilePostUpdateLaunch()
@@ -92,6 +93,10 @@ final class BlackstockSession: ObservableObject {
         )
         importedOAuthClientID = BlackstockKeychain.read("google.oauth.importedClientID")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        importedOAuthClientSecret = BlackstockKeychain.read(
+            "google.oauth.importedClientSecret"
+        )
+        .trimmingCharacters(in: .whitespacesAndNewlines)
         onboardingComplete = UserDefaults.standard.bool(forKey: "blackstock.firstRun.complete")
         workspaceRightsResponsibilityAccepted = false
         activeProject = Self.loadStoredProject()
@@ -180,6 +185,18 @@ final class BlackstockSession: ObservableObject {
                 config.clientID,
                 account: "google.oauth.importedClientID"
             )
+            if let clientSecret = config.clientSecret {
+                try BlackstockKeychain.write(
+                    clientSecret,
+                    account: "google.oauth.importedClientSecret"
+                )
+                importedOAuthClientSecret = clientSecret
+            } else {
+                try BlackstockKeychain.delete(
+                    "google.oauth.importedClientSecret"
+                )
+                importedOAuthClientSecret = ""
+            }
             importedOAuthClientID = config.clientID
             clearOAuthRuntimeAuthorizationState(
                 clearChannelSelection: clientChanged
@@ -302,6 +319,7 @@ final class BlackstockSession: ObservableObject {
         tokenSet = nil
         cachedPublishingJournal = nil
         importedOAuthClientID = ""
+        importedOAuthClientSecret = ""
         onboardingComplete = !failures.isEmpty
         activeProject = nil
         activeOpportunitySource = nil
@@ -360,7 +378,11 @@ final class BlackstockSession: ObservableObject {
             try BlackstockKeychain.delete(
                 "google.oauth.importedClientID"
             )
+            try BlackstockKeychain.delete(
+                "google.oauth.importedClientSecret"
+            )
             importedOAuthClientID = ""
+            importedOAuthClientSecret = ""
             clearOAuthRuntimeAuthorizationState(
                 clearChannelSelection: clientChanged
             )
@@ -441,6 +463,7 @@ final class BlackstockSession: ObservableObject {
             let tokens = try await GoogleOAuthTokenExchange().exchange(
                 code: code,
                 clientID: effectiveClientID,
+                clientSecret: effectiveClientSecret,
                 redirectURI: redirectURI,
                 verifier: pkce.verifier
             )
@@ -1045,7 +1068,8 @@ final class BlackstockSession: ObservableObject {
         if !refreshToken.isEmpty {
             let refreshed = try await GoogleOAuthTokenRefresher().refresh(
                 refreshToken: refreshToken,
-                clientID: effectiveClientID
+                clientID: effectiveClientID,
+                clientSecret: effectiveClientSecret
             )
             try BlackstockKeychain.write(
                 refreshed.accessToken,
@@ -1149,7 +1173,8 @@ final class BlackstockSession: ObservableObject {
         if !refreshToken.isEmpty {
             let refreshed = try await GoogleOAuthTokenRefresher().refresh(
                 refreshToken: refreshToken,
-                clientID: effectiveClientID
+                clientID: effectiveClientID,
+                clientSecret: effectiveClientSecret
             )
             try BlackstockKeychain.write(
                 refreshed.accessToken,
@@ -1188,7 +1213,8 @@ final class BlackstockSession: ObservableObject {
         if !refreshToken.isEmpty {
             let refreshed = try await GoogleOAuthTokenRefresher().refresh(
                 refreshToken: refreshToken,
-                clientID: effectiveClientID
+                clientID: effectiveClientID,
+                clientSecret: effectiveClientSecret
             )
             try BlackstockKeychain.write(
                 refreshed.accessToken,
@@ -1456,6 +1482,7 @@ final class BlackstockSession: ObservableObject {
         return try await GoogleOAuthTokenExchange().exchange(
             code: code,
             clientID: effectiveClientID,
+            clientSecret: effectiveClientSecret,
             redirectURI: redirectURI,
             verifier: pkce.verifier
         )
@@ -2032,6 +2059,13 @@ final class BlackstockSession: ObservableObject {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private var bundledClientSecret: String {
+        (Bundle.main.object(
+            forInfoDictionaryKey: "BlackstockGoogleOAuthClientSecret"
+        ) as? String ?? "")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private var importedClientID: String {
         importedOAuthClientID
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2042,6 +2076,16 @@ final class BlackstockSession: ObservableObject {
             bundled: bundledClientID,
             imported: importedClientID
         )
+    }
+
+    private var effectiveClientSecret: String? {
+        let value = importedClientID.isEmpty
+            ? bundledClientSecret
+            : importedOAuthClientSecret
+        let trimmed = value.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private func clearOAuthRuntimeAuthorizationState(

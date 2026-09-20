@@ -80,37 +80,50 @@ final class GoogleOAuthAndYouTubeTests: XCTestCase {
         }
     }
 
-    func testOAuthJSONDoesNotExposeOrPersistClientSecret() throws {
+    func testOAuthJSONParsesDesktopClientSecretForTokenExchange() throws {
         let data = Data(#"""
         {
           "installed": {
             "client_id": "abc.apps.googleusercontent.com",
-            "client_secret": "must-not-be-retained",
+            "client_secret": "desktop-client-secret",
             "project_id": "project-123",
             "redirect_uris": ["http://localhost"]
           }
         }
         """#.utf8)
 
-        let config =
-            try OAuthClientConfiguration
-                .parseGoogleDesktopJSON(data)
+        let config = try OAuthClientConfiguration
+            .parseGoogleDesktopJSON(data)
 
         XCTAssertEqual(
             config.clientID,
             "abc.apps.googleusercontent.com"
+        )
+        XCTAssertEqual(
+            config.clientSecret,
+            "desktop-client-secret"
         )
         XCTAssertEqual(config.projectID, "project-123")
         XCTAssertEqual(
             config.redirectURIs,
             ["http://localhost"]
         )
+    }
 
-        let reflected = String(
-            reflecting: config
+    func testOAuthFormEncodingKeepsPKCEAndRedirectValuesValid() {
+        let body = oauthFormBody([
+            "code_verifier": "a_b-c.d~e",
+            "redirect_uri": "http://127.0.0.1:54321"
+        ])
+        let text = String(data: body ?? Data(), encoding: .utf8)
+
+        XCTAssertTrue(
+            text?.contains("code_verifier=a_b-c.d~e") == true
         )
-        XCTAssertFalse(
-            reflected.contains("must-not-be-retained")
+        XCTAssertTrue(
+            text?.contains(
+                "redirect_uri=http%3A%2F%2F127.0.0.1%3A54321"
+            ) == true
         )
     }
 
