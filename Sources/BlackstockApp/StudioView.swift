@@ -392,7 +392,7 @@ struct StudioView: View {
                     .font(.title2.bold())
 
                 Text(
-                    "Sobald die verarbeitbare Originaldatei für dieses Video bereitsteht, erstellt Blackstock automatisch Highlights, Hochkantformat und Captions."
+                    "Sobald die verarbeitbare Originaldatei für dieses Video bereitsteht, erstellt Blackstock automatisch Highlights, Hochkantformat und Untertitel."
                 )
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
