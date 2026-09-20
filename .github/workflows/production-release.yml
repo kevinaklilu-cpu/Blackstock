@@ -58,15 +58,21 @@ jobs:
               parsed = urlparse(value)
               if parsed.scheme.lower() != "https" or not parsed.hostname:
                   raise SystemExit(f"{key} must be an absolute HTTPS URL")
-              host = parsed.hostname.lower()
+              host = parsed.hostname.rstrip(".").lower()
               if (
                   host == "localhost"
+                  or host == "::1"
                   or host.startswith("127.")
+                  or host.endswith(".local")
                   or host.endswith(".invalid")
                   or host.endswith(".example")
                   or host.endswith(".test")
               ):
                   raise SystemExit(f"{key} must use a real production host")
+              if parsed.username is not None or parsed.password is not None:
+                  raise SystemExit(f"{key} must not contain embedded credentials")
+              if parsed.fragment:
+                  raise SystemExit(f"{key} must not contain a fragment")
           PY
 
       - name: Validate required production secrets
