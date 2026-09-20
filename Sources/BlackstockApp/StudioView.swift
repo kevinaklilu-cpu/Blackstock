@@ -1,5 +1,6 @@
 #if os(macOS)
 import SwiftUI
+import AVFoundation
 import AVKit
 import UniformTypeIdentifiers
 import BlackstockCore
@@ -181,11 +182,22 @@ struct StudioView: View {
     private func editor(_ asset: ProductionMediaAsset) -> some View {
         HSplitView {
             VStack(spacing: 12) {
-                VideoPlayer(player: state.player)
-                    .accessibilityLabel("Video-Vorschau des aktuellen Schnitts")
-                    .frame(minWidth: 620, minHeight: 360)
-                    .background(.black)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                ZStack(alignment: .bottom) {
+                    VideoPlayer(player: state.player)
+                        .accessibilityLabel(
+                            "Video-Vorschau des aktuellen Schnitts"
+                        )
+
+                    if state.burnInCaptionsEnabled,
+                       state.previewedLocalClipCandidateID == nil {
+                        captionPreviewOverlay
+                    }
+                }
+                .frame(minWidth: 620, minHeight: 360)
+                .background(.black)
+                .clipShape(
+                    RoundedRectangle(cornerRadius: 12)
+                )
 
                 timeline(asset)
                     .frame(height: 112)
@@ -766,6 +778,42 @@ struct StudioView: View {
                         .foregroundStyle(.secondary)
 
                     if let transcript = state.transcript {
+                        Toggle(
+                            isOn: Binding(
+                                get: {
+                                    state.burnInCaptionsEnabled
+                                },
+                                set: {
+                                    state.setBurnInCaptionsEnabled(
+                                        $0
+                                    )
+                                }
+                            )
+                        ) {
+                            VStack(
+                                alignment: .leading,
+                                spacing: 2
+                            ) {
+                                Text(
+                                    "Sichtbare Captions ins Video rendern"
+                                )
+                                    .font(
+                                        .caption.weight(
+                                            .semibold
+                                        )
+                                    )
+                                Text(
+                                    "Zusätzlich zur VTT-Datei lokal in die MP4 einbrennen."
+                                )
+                                    .font(.caption2)
+                                    .foregroundStyle(
+                                        .secondary
+                                    )
+                            }
+                        }
+                        .toggleStyle(.switch)
+                        .disabled(!editingEnabled)
+
                         DisclosureGroup("Transkript anzeigen") {
                             Text(transcript.text)
                                 .font(.caption)
@@ -858,6 +906,75 @@ struct StudioView: View {
             .padding(18)
         }
         .background(Color.primary.opacity(0.02))
+    }
+
+    @ViewBuilder
+    private var captionPreviewOverlay: some View {
+        if let transcript = state.transcript {
+            TimelineView(
+                .periodic(
+                    from: .now,
+                    by: 0.10
+                )
+            ) { _ in
+                if let text = activeCaptionText(
+                    transcript: transcript,
+                    timeSeconds: max(
+                        CMTimeGetSeconds(
+                            state.player.currentTime()
+                        ),
+                        0
+                    )
+                ) {
+                    Text(text)
+                        .font(.title3.bold())
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 10)
+                        .frame(maxWidth: 560)
+                        .background(
+                            Color.black.opacity(0.72),
+                            in: RoundedRectangle(
+                                cornerRadius: 12
+                            )
+                        )
+                        .padding(.horizontal, 28)
+                        .padding(.bottom, 24)
+                        .accessibilityLabel(
+                            "Burn-in-Caption: \(text)"
+                        )
+                }
+            }
+            .allowsHitTesting(false)
+        }
+    }
+
+    private func activeCaptionText(
+        transcript: LocalTranscript,
+        timeSeconds: Double
+    ) -> String? {
+        transcript.segments.first {
+            let start = max(
+                $0.startSeconds,
+                0
+            )
+            let end =
+                start
+                + max(
+                    $0.durationSeconds,
+                    0.05
+                )
+            return timeSeconds >= start
+                && timeSeconds < end
+        }?
+        .text
+        .trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        .flatMap {
+            $0.isEmpty ? nil : $0
+        }
     }
 
     private var rightsSheet: some View {
