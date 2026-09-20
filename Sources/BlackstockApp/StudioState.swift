@@ -39,6 +39,7 @@ final class StudioState: ObservableObject {
     @Published var storyboard: StoryboardPlan?
     @Published var supplementalCaptures: [SupplementalCaptureAsset] = []
     @Published var supplementalAudioMixSettings: [SupplementalAudioMixSetting] = []
+    @Published var supplementalVideoInsertSettings: [SupplementalVideoInsertSetting] = []
     @Published var localClipCandidates: [LocalClipCandidate] = []
     @Published var savedClipSelections: [SavedClipSelection] = []
     @Published var isGeneratingClipCandidates = false
@@ -141,6 +142,17 @@ final class StudioState: ObservableObject {
                         $0.id == setting.captureID
                     }
                 }
+                supplementalVideoInsertSettings =
+                    snapshot.supplementalVideoInsertSettings ?? []
+                supplementalVideoInsertSettings.removeAll { setting in
+                    !supplementalCaptures.contains { capture in
+                        capture.id == setting.captureID
+                            && (
+                                capture.kind == .camera
+                                || capture.kind == .screen
+                            )
+                    }
+                }
                 savedClipSelections =
                     (snapshot.savedClipSelections ?? [])
                     .map { selection in
@@ -231,6 +243,8 @@ final class StudioState: ObservableObject {
             }
 
             supplementalCaptures = []
+            supplementalAudioMixSettings = []
+            supplementalVideoInsertSettings = []
             savedClipSelections = []
             burnInCaptionsEnabled = false
             captionVisualStyle = .clear
@@ -480,11 +494,23 @@ final class StudioState: ObservableObject {
             workspaceStore = store
 
             let captureID = UUID()
-            let durableURL = try store.importSupplementalCapture(
-                sourceURL: url,
-                projectID: projectID,
-                assetID: captureID
-            )
+            let durableURL: URL
+            switch kind {
+            case .camera, .screen:
+                durableURL = try store
+                    .importSupplementalVideoCapture(
+                        sourceURL: url,
+                        projectID: projectID,
+                        assetID: captureID
+                    )
+            case .microphone, .systemAudio:
+                durableURL = try store
+                    .importSupplementalCapture(
+                        sourceURL: url,
+                        projectID: projectID,
+                        assetID: captureID
+                    )
+            }
 
             let mimeType: String
             switch kind {
@@ -496,12 +522,26 @@ final class StudioState: ObservableObject {
                 mimeType = "video/mp4"
             }
 
+            let durationSeconds: Double?
+            do {
+                let duration = try await AVURLAsset(
+                    url: durableURL
+                ).load(.duration)
+                durationSeconds = max(
+                    CMTimeGetSeconds(duration),
+                    0
+                )
+            } catch {
+                durationSeconds = nil
+            }
+
             let capture = SupplementalCaptureAsset(
                 id: captureID,
                 projectID: projectID,
                 kind: kind,
                 fileURL: durableURL,
                 mimeType: mimeType,
+                durationSeconds: durationSeconds,
                 rightsBasis: basis,
                 rightsEvidence: evidence,
                 rightsConfirmed: rightsConfirmed,
@@ -520,14 +560,33 @@ final class StudioState: ObservableObject {
             }
             supplementalCaptures.append(capture)
 
-            if !supplementalAudioMixSettings.contains(
-                where: { $0.captureID == capture.id }
-            ) {
-                supplementalAudioMixSettings.append(
-                    SupplementalAudioMixSetting(
-                        captureID: capture.id
+            if kind == .microphone || kind == .systemAudio {
+                if !supplementalAudioMixSettings.contains(
+                    where: { $0.captureID == capture.id }
+                ) {
+                    supplementalAudioMixSettings.append(
+                        SupplementalAudioMixSetting(
+                            captureID: capture.id
+                        )
                     )
-                )
+                }
+            }
+
+            if kind == .camera || kind == .screen {
+                if !supplementalVideoInsertSettings.contains(
+                    where: { $0.captureID == capture.id }
+                ) {
+                    let defaultDuration = min(
+                        max(durationSeconds ?? 5, 0.1),
+                        5
+                    )
+                    supplementalVideoInsertSettings.append(
+                        SupplementalVideoInsertSetting(
+                            captureID: capture.id,
+                            durationSeconds: defaultDuration
+                        )
+                    )
+                }
             }
 
             ledger.append(.init(
@@ -2219,6 +2278,117 @@ final class StudioState: ObservableObject {
         }
     }
 
+    func supplementalVideoSetting(
+        for captureID: UUID
+    ) -> SupplementalVideoInsertSetting {
+        if let setting = supplementalVideoInsertSettings.first(
+            where: { $0.captureID == captureID }
+        ) {
+            return setting
+        }
+
+        let captureDuration = supplementalCaptures.first(
+            where: { $0.id == captureID }
+        )?.durationSeconds ?? 5
+        return SupplementalVideoInsertSetting(
+            captureID: captureID,
+            durationSeconds: min(
+                max(captureDuration, 0.1),
+                5
+            )
+        )
+    }
+
+    func setSupplementalVideoEnabled(
+        captureID: UUID,
+        enabled: Bool
+    ) {
+        updateSupplementalVideoInsertSetting(
+            captureID: captureID
+        ) { $0.enabled = enabled }
+        invalidateSupplementalVideoRender()
+        ledger.append(.init(
+            timestamp: Date(),
+            actor: .user,
+            stage: .editing,
+            action: enabled
+                ? "supplemental-video-enabled"
+                : "supplemental-video-disabled",
+            summary: enabled
+                ? "Zusätzliche Videoaufnahme wurde als visuelle Einblendung aktiviert."
+                : "Zusätzliche Videoaufnahme wurde aus dem nächsten Render entfernt.",
+            relatedSourceIDs: [captureID.uuidString],
+            reversible: false,
+            correlationID: correlationID
+        ))
+        persistWorkspaceIfPossible()
+    }
+
+    func setSupplementalVideoTimelineStart(
+        captureID: UUID,
+        seconds: Double
+    ) {
+        updateSupplementalVideoInsertSetting(
+            captureID: captureID
+        ) {
+            $0.timelineStartSeconds = max(seconds, 0)
+        }
+        invalidateSupplementalVideoRender()
+        persistWorkspaceIfPossible()
+    }
+
+    func setSupplementalVideoSourceStart(
+        captureID: UUID,
+        seconds: Double
+    ) {
+        updateSupplementalVideoInsertSetting(
+            captureID: captureID
+        ) {
+            $0.sourceStartSeconds = max(seconds, 0)
+        }
+        invalidateSupplementalVideoRender()
+        persistWorkspaceIfPossible()
+    }
+
+    func setSupplementalVideoDuration(
+        captureID: UUID,
+        seconds: Double
+    ) {
+        updateSupplementalVideoInsertSetting(
+            captureID: captureID
+        ) {
+            $0.durationSeconds = max(seconds, 0.05)
+        }
+        invalidateSupplementalVideoRender()
+        persistWorkspaceIfPossible()
+    }
+
+    private func updateSupplementalVideoInsertSetting(
+        captureID: UUID,
+        change: (inout SupplementalVideoInsertSetting) -> Void
+    ) {
+        if let index = supplementalVideoInsertSettings.firstIndex(
+            where: { $0.captureID == captureID }
+        ) {
+            change(&supplementalVideoInsertSettings[index])
+            return
+        }
+
+        var setting = supplementalVideoSetting(
+            for: captureID
+        )
+        change(&setting)
+        supplementalVideoInsertSettings.append(setting)
+    }
+
+    private func invalidateSupplementalVideoRender() {
+        renderArtifact = nil
+        invalidateSavedClipRenders()
+        audioTechnicalAssessment = nil
+        audioSignalAssessment = nil
+        audioLoudnessAssessment = nil
+    }
+
     func render(projectID: UUID) async {
         guard let asset else {
             errorMessage = "Kein Produktionsmedium geladen."
@@ -2256,6 +2426,48 @@ final class StudioState: ObservableObject {
                     )
                 }
 
+            let outputDuration = currentOutputDurationSeconds
+            let supplementalVideo =
+                supplementalVideoInsertSettings
+                .compactMap { setting -> SupplementalVideoInsertInput? in
+                    guard let capture = supplementalCaptures.first(
+                        where: {
+                            $0.id == setting.captureID
+                                && $0.mayBeUsedInProduction
+                                && (
+                                    $0.kind == .camera
+                                    || $0.kind == .screen
+                                )
+                        }
+                    ) else {
+                        return nil
+                    }
+
+                    let sourceDuration =
+                        capture.durationSeconds
+                        ?? max(
+                            setting.sourceStartSeconds
+                                + setting.durationSeconds,
+                            setting.durationSeconds
+                        )
+                    guard let plan = SupplementalVideoInsertPlanner()
+                        .plan(
+                            setting: setting,
+                            sourceDurationSeconds: sourceDuration,
+                            outputDurationSeconds: outputDuration
+                        ) else {
+                        return nil
+                    }
+
+                    return SupplementalVideoInsertInput(
+                        captureID: capture.id,
+                        fileURL: capture.fileURL,
+                        timelineStartSeconds: plan.timelineStartSeconds,
+                        sourceStartSeconds: plan.sourceStartSeconds,
+                        durationSeconds: plan.durationSeconds
+                    )
+                }
+
             let artifact = try await LocalVideoRenderer().render(
                 projectID: projectID,
                 asset: asset,
@@ -2265,9 +2477,14 @@ final class StudioState: ObservableObject {
                 transcript: transcript,
                 burnInCaptions: burnInCaptionsEnabled,
                 captionStyle: captionVisualStyle,
-                supplementalAudio: supplementalAudio
+                supplementalAudio: supplementalAudio,
+                supplementalVideo: supplementalVideo
             )
             renderArtifact = artifact
+            player.replaceCurrentItem(
+                with: AVPlayerItem(url: artifact.fileURL)
+            )
+            player.volume = 1
             packagingSuggestedTitle = nil
             await refreshAudioInspection(
                 for: artifact.fileURL
@@ -2446,6 +2663,8 @@ final class StudioState: ObservableObject {
                 supplementalCaptures: supplementalCaptures,
                 supplementalAudioMixSettings:
                     supplementalAudioMixSettings,
+                supplementalVideoInsertSettings:
+                    supplementalVideoInsertSettings,
                 savedClipSelections: savedClipSelections,
                 updatedAt: Date()
             )

@@ -1029,10 +1029,8 @@ struct StudioView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                if !state.supplementalCaptures.isEmpty {
-                    Divider()
-                    supplementalCapturesSection
-                }
+                Divider()
+                supplementalCapturesSection
 
                 Divider()
 
@@ -2025,10 +2023,22 @@ struct StudioView: View {
         }
 
         Task {
-            if captureKind == .microphone {
+            let isSupplementalCapture =
+                captureKind == .microphone
+                || captureKind == .systemAudio
+                || (
+                    state.asset != nil
+                    && (
+                        captureKind == .camera
+                        || captureKind == .screen
+                    )
+                )
+
+            if isSupplementalCapture,
+               let captureKind {
                 let saved = await state.importSupplementalCapture(
                     url: url,
-                    kind: .microphone,
+                    kind: captureKind,
                     projectID: project.id,
                     rightsBasis:
                         "Arbeitsbereich-Nutzererklärung "
@@ -2037,18 +2047,19 @@ struct StudioView: View {
                     rightsConfirmed: true
                 )
                 if saved,
-                   let persisted = state.supplementalCaptures
-                    .last(where: { $0.kind == .microphone }) {
+                   let persisted = state.supplementalCaptures.last(
+                    where: { $0.kind == captureKind }
+                   ) {
                     await BlackstockCaptureHardwareAudit
                         .recordPersistedCapture(
-                            kind: .microphone,
+                            kind: captureKind,
                             fileURL: persisted.fileURL,
                             projectID: project.id
                         )
                     try? FileManager.default.removeItem(at: url)
                     BlackstockCaptureHardwareAudit
                         .recordTemporaryCleanup(
-                            for: .microphone,
+                            for: captureKind,
                             temporaryURL: url
                         )
                 }
@@ -2104,9 +2115,10 @@ struct StudioView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack(spacing: 8) {
                             Image(
-                                systemName: capture.kind == .microphone
-                                    ? "mic.fill"
-                                    : "waveform"
+                                systemName:
+                                    supplementalCaptureIcon(
+                                        capture.kind
+                                    )
                             )
                             .accessibilityHidden(true)
 
@@ -2189,16 +2201,175 @@ struct StudioView: View {
                                 .frame(width: 42, alignment: .trailing)
                             }
                         }
+
+                        if capture.kind == .camera
+                            || capture.kind == .screen {
+                            let setting =
+                                state.supplementalVideoSetting(
+                                    for: capture.id
+                                )
+                            let outputDuration = max(
+                                state.currentOutputDurationSeconds,
+                                0.1
+                            )
+                            let sourceDuration = max(
+                                capture.durationSeconds ?? 5,
+                                0.1
+                            )
+
+                            Toggle(
+                                "Als visuelle Einblendung verwenden",
+                                isOn: Binding(
+                                    get: {
+                                        state.supplementalVideoSetting(
+                                            for: capture.id
+                                        ).enabled
+                                    },
+                                    set: {
+                                        state.setSupplementalVideoEnabled(
+                                            captureID: capture.id,
+                                            enabled: $0
+                                        )
+                                    }
+                                )
+                            )
+                            .font(.caption)
+                            .disabled(!editingEnabled)
+
+                            HStack {
+                                Text("Einblendung ab")
+                                Spacer()
+                                Text(
+                                    timeLabel(
+                                        setting.timelineStartSeconds
+                                    )
+                                )
+                                .font(.caption2.monospacedDigit())
+                            }
+                            Slider(
+                                value: Binding(
+                                    get: {
+                                        min(
+                                            setting.timelineStartSeconds,
+                                            outputDuration
+                                        )
+                                    },
+                                    set: {
+                                        state.setSupplementalVideoTimelineStart(
+                                            captureID: capture.id,
+                                            seconds: $0
+                                        )
+                                    }
+                                ),
+                                in: 0...outputDuration
+                            )
+                            .disabled(!editingEnabled || !setting.enabled)
+
+                            HStack {
+                                Text("Quelle ab")
+                                Spacer()
+                                Text(
+                                    timeLabel(
+                                        setting.sourceStartSeconds
+                                    )
+                                )
+                                .font(.caption2.monospacedDigit())
+                            }
+                            Slider(
+                                value: Binding(
+                                    get: {
+                                        min(
+                                            setting.sourceStartSeconds,
+                                            sourceDuration
+                                        )
+                                    },
+                                    set: {
+                                        state.setSupplementalVideoSourceStart(
+                                            captureID: capture.id,
+                                            seconds: $0
+                                        )
+                                    }
+                                ),
+                                in: 0...sourceDuration
+                            )
+                            .disabled(!editingEnabled || !setting.enabled)
+
+                            HStack {
+                                Text("Dauer")
+                                Spacer()
+                                Text(
+                                    timeLabel(
+                                        setting.durationSeconds
+                                    )
+                                )
+                                .font(.caption2.monospacedDigit())
+                            }
+                            Slider(
+                                value: Binding(
+                                    get: {
+                                        min(
+                                            max(
+                                                setting.durationSeconds,
+                                                0.05
+                                            ),
+                                            max(sourceDuration, 0.05)
+                                        )
+                                    },
+                                    set: {
+                                        state.setSupplementalVideoDuration(
+                                            captureID: capture.id,
+                                            seconds: $0
+                                        )
+                                    }
+                                ),
+                                in: 0.05...max(sourceDuration, 0.05)
+                            )
+                            .disabled(!editingEnabled || !setting.enabled)
+
+                            Text("Die Einblendung ersetzt nur das Bild im gewählten Zeitfenster; der Hauptton läuft weiter. Zu lange Bereiche werden beim Rendern automatisch an Quell- und Videolänge begrenzt.")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+
                     }
                     .padding(.vertical, 3)
                 }
 
-                Text("Aktivierte Zusatzspuren werden lokal ab 0:00 mit dem Originalton gemischt und auf die finale Videolänge begrenzt. Die technische Audio- und Loudness-Prüfung misst anschließend den tatsächlich gerenderten Mix.")
+                if state.asset != nil {
+                    Divider()
+                    CaptureCapabilityPanel { url, kind in
+                        pendingURL = url
+                        pendingCaptureKind = kind
+                        if session.workspaceRightsAttestation?
+                            .permitsUserDirectedProduction == true {
+                            importPendingMedia()
+                        } else {
+                            rightsConfirmed = false
+                            showRightsSheet = true
+                        }
+                    }
+                }
+
+                Text("Audio-Zusatzspuren werden lokal ab 0:00 gemischt. Kamera- und Bildschirmaufnahmen können zusätzlich als zeitgesteuerte visuelle Einblendung genutzt werden. Die technische Prüfung misst anschließend den tatsächlich gerenderten Export.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 4)
+        }
+    }
+
+    private func supplementalCaptureIcon(
+        _ kind: CaptureKind
+    ) -> String {
+        switch kind {
+        case .camera:
+            return "video.fill"
+        case .microphone:
+            return "mic.fill"
+        case .screen:
+            return "rectangle.on.rectangle"
+        case .systemAudio:
+            return "waveform"
         }
     }
 
