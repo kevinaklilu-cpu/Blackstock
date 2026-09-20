@@ -23,7 +23,8 @@ CONTRACTS = {
     ],
     "Sources/BlackstockCore/GoogleOAuth.swift": [
         "SecRandomCopyBytes",
-        'code_challenge_method", value: "S256"',
+        '"code_challenge_method"',
+        '"S256"',
         '.init(name: "state", value: state)',
         'access_type", value: "offline"',
         'prompt", value: "select_account consent"',
