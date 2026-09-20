@@ -1,4 +1,5 @@
 #if os(macOS)
+import Foundation
 import SwiftUI
 import BlackstockCore
 
@@ -547,21 +548,27 @@ struct ProjectLibraryView: View {
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
 
-                Button {
-                    onOpenProject(project)
-                } label: {
-                    Label(
-                        session.activeProject?.id == project.id
-                            ? "Fortfahren"
-                            : "Öffnen",
-                        systemImage: "arrow.right.circle"
-                    )
+                if session.activeProject?.id == project.id {
+                    Button {
+                        onOpenProject(project)
+                    } label: {
+                        Label(
+                            "Fortfahren",
+                            systemImage: "arrow.right.circle"
+                        )
+                    }
+                    .buttonStyle(.borderedProminent)
+                } else {
+                    Button {
+                        onOpenProject(project)
+                    } label: {
+                        Label(
+                            "Öffnen",
+                            systemImage: "arrow.right.circle"
+                        )
+                    }
+                    .buttonStyle(.bordered)
                 }
-                .buttonStyle(
-                    session.activeProject?.id == project.id
-                        ? .borderedProminent
-                        : .bordered
-                )
             }
         }
         .padding(14)
