@@ -40,7 +40,7 @@ Blackstock enthält zwei bewusst getrennte manuelle Workflows:
    - installiert exakt diese geprüfte Paketdatei auf einem frischen macOS-Runner,
    - führt die Post-Install-Prüfung ausschließlich mit `--verified-manifest-input` und `--verified-package-input` über denselben Snapshot aus, ohne Manifest oder Paket erneut aus dem Netz zu laden,
    - vergleicht Pre-Install- und Post-Install-Evidence auf identische Release-Identität,
-   - verifiziert Developer ID Application, Gatekeeper sowie exakte Manifest-Version, -Build, **Source-Commit und Executable-SHA-256** der installierten App,
+   - verifiziert Developer ID Application, Gatekeeper, **Universal-2 (arm64 + x86_64)** sowie exakte Manifest-Version, -Build, **Source-Commit und Executable-SHA-256** der installierten App,
    - startet die installierte Produktions-App,
    - erzeugt `release-evidence.json`.
 
@@ -99,7 +99,7 @@ Wenn `BLACKSTOCK_PRODUCTION_RELEASE=1` gesetzt ist, bricht `Build/package.sh` be
 - einen Base64-kodierten 32-Byte-Update-Public-Key,
 - eine ASCII-alphanumerische Apple-Installer-Team-ID.
 
-Zusätzlich muss der Produktionsmodus Developer-ID-App-/Installer-Identitäten und vollständige Notarisierungsdaten besitzen; der CI-only E2E-Helper ist verboten.
+Zusätzlich muss der Produktionsmodus Developer-ID-App-/Installer-Identitäten und vollständige Notarisierungsdaten besitzen; der CI-only E2E-Helper ist verboten. Der Paketierer erzeugt die auszuliefernde App immer als Universal-2 aus separat gebauten arm64- und x86_64-Slices und bricht ab, wenn einer der beiden Slices fehlt.
 
 Die Developer-ID-Application-Signatur verwendet Hardened Runtime plus `Build/Blackstock.entitlements`. Die vollständige Produktions-Evidenz verlangt deshalb zusätzlich:
 
@@ -186,7 +186,8 @@ Er prüft:
 - optional: installierte App besteht `codesign --deep --strict`.
 - optional: installierte App weist Developer ID Application und erwartete Team-ID aus.
 - optional: `BlackstockSourceCommitSHA` der installierten App entspricht exakt dem signierten Manifest-Commit.
-- optional: der SHA-256 des installierten Blackstock-Executables wird als `installedAppExecutableSHA256` in der Release-Evidenz gebunden.
+- optional: die installierte App muss als Universal-2-Binary sowohl arm64 als auch x86_64 enthalten; ein fehlender Slice führt zum Hard-Stop.
+- optional: der SHA-256 des vollständigen installierten Universal-Executables wird als `installedAppExecutableSHA256` in der Release-Evidenz gebunden.
 - optional: Gatekeeper akzeptiert die installierte App.
 - optional: `notarytool info` meldet für die konkrete Submission `Accepted`.
 
