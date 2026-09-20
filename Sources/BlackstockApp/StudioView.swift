@@ -812,6 +812,39 @@ struct StudioView: View {
                         .toggleStyle(.switch)
                         .disabled(!editingEnabled)
 
+                        if state.burnInCaptionsEnabled {
+                            Picker(
+                                "Untertitelstil",
+                                selection: Binding(
+                                    get: {
+                                        state.captionVisualStyle
+                                    },
+                                    set: {
+                                        state.setCaptionVisualStyle(
+                                            $0
+                                        )
+                                    }
+                                )
+                            ) {
+                                ForEach(
+                                    CaptionVisualStyle.allCases,
+                                    id: \.self
+                                ) { style in
+                                    Text(style.germanTitle)
+                                        .tag(style)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                            .disabled(!editingEnabled)
+
+                            Text(
+                                state.captionVisualStyle
+                                    .germanExplanation
+                            )
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        }
+
                         DisclosureGroup("Transkript anzeigen") {
                             Text(transcript.text)
                                 .font(.caption)
@@ -925,26 +958,138 @@ struct StudioView: View {
                     )
                 ) {
                     Text(text)
-                        .font(.title3.bold())
-                        .multilineTextAlignment(.center)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 18)
-                        .padding(.vertical, 10)
-                        .frame(maxWidth: 560)
-                        .background(
-                            Color.black.opacity(0.72),
-                            in: RoundedRectangle(
-                                cornerRadius: 12
+                        .font(
+                            previewCaptionFont(
+                                state.captionVisualStyle
                             )
                         )
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.white)
+                        .padding(
+                            .horizontal,
+                            previewCaptionHorizontalPadding(
+                                state.captionVisualStyle
+                            )
+                        )
+                        .padding(
+                            .vertical,
+                            previewCaptionVerticalPadding(
+                                state.captionVisualStyle
+                            )
+                        )
+                        .frame(
+                            maxWidth:
+                                previewCaptionMaxWidth(
+                                    state.captionVisualStyle
+                                )
+                        )
+                        .background(
+                            Color.black.opacity(
+                                state.captionVisualStyle
+                                    .backgroundOpacity
+                            ),
+                            in: RoundedRectangle(
+                                cornerRadius:
+                                    previewCaptionCornerRadius(
+                                        state.captionVisualStyle
+                                    )
+                            )
+                        )
+                        .shadow(
+                            radius:
+                                previewCaptionShadowRadius(
+                                    state.captionVisualStyle
+                                ),
+                            y: -1
+                        )
                         .padding(.horizontal, 28)
-                        .padding(.bottom, 24)
+                        .padding(
+                            .bottom,
+                            previewCaptionBottomPadding(
+                                state.captionVisualStyle
+                            )
+                        )
                         .accessibilityLabel(
                             "Eingebrannter Untertitel: \(text)"
                         )
                 }
             }
             .allowsHitTesting(false)
+        }
+    }
+
+    private func previewCaptionFont(
+        _ style: CaptionVisualStyle
+    ) -> Font {
+        switch style.fontWeight {
+        case .semibold:
+            return style == .minimal
+                ? .callout.weight(.semibold)
+                : .title3.weight(.semibold)
+        case .bold:
+            return .title3.bold()
+        case .heavy:
+            return .title2.weight(.heavy)
+        }
+    }
+
+    private func previewCaptionHorizontalPadding(
+        _ style: CaptionVisualStyle
+    ) -> CGFloat {
+        switch style {
+        case .clear: return 18
+        case .strong: return 22
+        case .minimal: return 14
+        }
+    }
+
+    private func previewCaptionVerticalPadding(
+        _ style: CaptionVisualStyle
+    ) -> CGFloat {
+        switch style {
+        case .clear: return 10
+        case .strong: return 13
+        case .minimal: return 8
+        }
+    }
+
+    private func previewCaptionMaxWidth(
+        _ style: CaptionVisualStyle
+    ) -> CGFloat {
+        switch style {
+        case .clear: return 560
+        case .strong: return 600
+        case .minimal: return 500
+        }
+    }
+
+    private func previewCaptionCornerRadius(
+        _ style: CaptionVisualStyle
+    ) -> CGFloat {
+        switch style {
+        case .clear: return 12
+        case .strong: return 16
+        case .minimal: return 9
+        }
+    }
+
+    private func previewCaptionShadowRadius(
+        _ style: CaptionVisualStyle
+    ) -> CGFloat {
+        switch style {
+        case .clear: return 3
+        case .strong: return 5
+        case .minimal: return 2
+        }
+    }
+
+    private func previewCaptionBottomPadding(
+        _ style: CaptionVisualStyle
+    ) -> CGFloat {
+        switch style {
+        case .clear: return 24
+        case .strong: return 30
+        case .minimal: return 20
         }
     }
 
