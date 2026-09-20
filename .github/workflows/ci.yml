@@ -1233,7 +1233,7 @@ jobs:
           )
           PY
 
-          python3 - "$RUNNER_TEMP/intel-package/installed-release-fingerprint.json" "$INTEL_FINGERPRINT" <<'PY'
+          python3 - "$RUNNER_TEMP/intel-package/installed-release-fingerprint.json" "$INTEL_FINGERPRINT" "$RUNNER_TEMP/intel-package/Blackstock.pkg" <<'PY'
           import json
           import pathlib
           import sys
@@ -1246,9 +1246,7 @@ jobs:
           if intel.get("runnerArchitecture") != "x86_64":
               raise SystemExit("Intel fingerprint did not originate from x86_64")
 
-          package_path = pathlib.Path(
-              "$RUNNER_TEMP/intel-package/Blackstock.pkg"
-          )
+          package_path = pathlib.Path(sys.argv[3])
           downloaded_package_sha = __import__("hashlib").sha256(
               package_path.read_bytes()
           ).hexdigest()
