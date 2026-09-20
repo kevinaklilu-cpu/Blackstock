@@ -61,7 +61,9 @@ struct BlackstockUpdateChecker: Sendable {
         guard let manifestURL = URL(string: rawURL) else {
             throw BlackstockUpdateCheckError.invalidManifestURL
         }
-        guard manifestURL.scheme?.lowercased() == "https" else {
+        guard ProductionUpdateURLPolicy.allows(
+            manifestURL
+        ) else {
             throw BlackstockUpdateCheckError.manifestURLMustUseHTTPS
         }
         guard !publicKey.isEmpty else {
@@ -82,6 +84,13 @@ struct BlackstockUpdateChecker: Sendable {
             throw BlackstockUpdateCheckError.invalidHTTPStatus(
                 (response as? HTTPURLResponse)?.statusCode ?? -1
             )
+        }
+        guard let finalURL = http.url,
+              ProductionUpdateURLPolicy.allows(
+                finalURL
+              ) else {
+            throw BlackstockUpdateCheckError
+                .manifestURLMustUseHTTPS
         }
 
         let decoder = JSONDecoder()
