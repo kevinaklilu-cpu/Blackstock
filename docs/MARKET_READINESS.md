@@ -63,7 +63,7 @@ Der Verifier verlangt deshalb:
 - identischen Git-Source-Commit-SHA zwischen Capture-Hardware-Evidenz, signiertem Produktionsrelease, installierter App und In-App-Updater-Evidenz,
 - identischen SHA-256 des tatsächlich installierten Blackstock-Executables zwischen Capture-Smoke, veröffentlichtem Release und nach dem In-App-Update gestarteter App,
 - identische Apple-Team-ID zwischen der tatsächlich signierten Capture-App, dem Produktionsrelease, der vom Updater erwarteten Team-ID und der nach dem Update tatsächlich gestarteten Developer-ID-App,
-- identischen Installer-Receipt `de.blackstock.app` samt Zielversion zwischen Capture-Smoke und Post-Update-Start,
+- identischen Installer-Receipt `de.blackstock.app` samt Zielversion **und identischem Installationszeitpunkt** zwischen Capture-Smoke und Post-Update-Start; damit müssen beide Nachweise auf derselben konkreten Zielinstallation beruhen,
 - identischen installierten App-Pfad `/Applications/Blackstock.app` zwischen Published-Release-Verifikation und echtem Updater-E2E.
 
 Damit kann zum Beispiel kein erfolgreicher Hardware-Smoke von Build 100 mit einem signierten Build 101 oder einem Update-Paket eines anderen Hashes kombiniert werden.
@@ -81,7 +81,7 @@ Die reale Capture-Evidenz wird von Blackstock selbst erzeugt. Sie enthält für 
 - SHA-256 dieser Datei,
 - gemeinsame Aufnahme-Launch-ID für alle vier kanonischen Capture-Pfade,
 - Source-Commit-SHA des installierten Blackstock-Bundles,
-- gültiger macOS-Installer-Receipt `de.blackstock.app` für exakt dieselbe App-Version,
+- gültiger macOS-Installer-Receipt `de.blackstock.app` für exakt dieselbe App-Version inklusive des von `pkgutil` gemeldeten Installationszeitpunkts,
 - erfolgreiche `codesign --verify --deep --strict`-Prüfung der laufenden App plus tatsächliche `Developer ID Application`-Team-ID,
 - SHA-256 des tatsächlich laufenden Blackstock-Executables,
 - Restart-Launch-ID,
@@ -117,7 +117,7 @@ Blackstock selbst protokolliert den tatsächlichen App-Pfad:
 7. SHA-256 des tatsächlich gestarteten Executables,
 8. exakter Bundle-Pfad `/Applications/Blackstock.app`,
 9. erfolgreiche `codesign --verify --deep --strict`-Prüfung plus tatsächliche `Developer ID Application`-Team-ID,
-10. passender macOS-Installer-Receipt `de.blackstock.app` für exakt die Zielversion.
+10. passender macOS-Installer-Receipt `de.blackstock.app` für exakt die Zielversion und ein Installationszeitpunkt, der nach dem Installer-Handoff liegt, neuer als der Quell-Receipt ist und mit dem späteren Capture-Smoke übereinstimmt.
 
 ## CI-Regel
 
