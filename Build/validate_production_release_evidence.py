@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import json
-import math
 import re
 import sys
 from datetime import datetime
@@ -72,15 +71,21 @@ for key in ["manifestURL", "packageURL"]:
     parsed = urlparse(str(data[key]))
     if parsed.scheme.lower() != "https" or not parsed.hostname:
         fail(f"{key} must be an absolute HTTPS URL")
-    host = parsed.hostname.lower()
+    host = parsed.hostname.rstrip(".").lower()
     if (
         host == "localhost"
+        or host == "::1"
         or host.startswith("127.")
+        or host.endswith(".local")
         or host.endswith(".invalid")
         or host.endswith(".example")
         or host.endswith(".test")
     ):
         fail(f"{key} must use a real production host")
+    if parsed.username is not None or parsed.password is not None:
+        fail(f"{key} must not contain embedded credentials")
+    if parsed.fragment:
+        fail(f"{key} must not contain a fragment")
 
 version_pattern = re.compile(r"^\d+(?:\.\d+){0,3}$")
 for key in ["currentVersion", "targetVersion", "installedAppVersion"]:
