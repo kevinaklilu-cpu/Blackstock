@@ -13,15 +13,22 @@ struct OpportunityWorkspaceView: View {
     @State private var hasLoadedInitially = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 16) {
             header
 
             HStack(spacing: 10) {
-                TextField(
-                    "YouTube durchsuchen",
-                    text: $query
-                )
-                .textFieldStyle(.roundedBorder)
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                    TextField(
+                        "YouTube durchsuchen",
+                        text: $query
+                    )
+                    .textFieldStyle(.plain)
+                }
+                .padding(.horizontal, 12)
+                .frame(height: 38)
+                .blackstockSurface(raised: true)
                 .onSubmit {
                     Task { await loadOpportunities() }
                 }
@@ -50,6 +57,7 @@ struct OpportunityWorkspaceView: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(BlackstockDesign.accent)
                 .disabled(
                     session.isWorking
                     || query.trimmingCharacters(
@@ -75,7 +83,8 @@ struct OpportunityWorkspaceView: View {
 
             Spacer(minLength: 0)
         }
-        .padding(28)
+        .padding(24)
+        .background(BlackstockDesign.canvas)
         .task {
             guard !hasLoadedInitially else { return }
             hasLoadedInitially = true
@@ -144,7 +153,7 @@ struct OpportunityWorkspaceView: View {
                 }
                 .padding(.vertical, 2)
             }
-            .frame(minWidth: 360, idealWidth: 430)
+            .frame(minWidth: 390, idealWidth: 430)
 
             ScrollView {
                 if let selectedOpportunity {
@@ -156,7 +165,7 @@ struct OpportunityWorkspaceView: View {
                         .frame(maxWidth: .infinity, minHeight: 280)
                 }
             }
-            .frame(minWidth: 480)
+            .frame(minWidth: 560)
         }
     }
 
@@ -209,17 +218,23 @@ struct OpportunityWorkspaceView: View {
             .padding(10)
             .background(
                 selectedOpportunity?.id == item.id
-                    ? Color.accentColor.opacity(0.10)
-                    : Color.primary.opacity(0.025),
-                in: RoundedRectangle(cornerRadius: 12)
+                    ? BlackstockDesign.selectedFill
+                    : BlackstockDesign.surface,
+                in: RoundedRectangle(
+                    cornerRadius: BlackstockDesign.cornerRadius,
+                    style: .continuous
+                )
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(
-                        selectedOpportunity?.id == item.id
-                            ? Color.accentColor.opacity(0.35)
-                            : Color.clear
-                    )
+                RoundedRectangle(
+                    cornerRadius: BlackstockDesign.cornerRadius,
+                    style: .continuous
+                )
+                .strokeBorder(
+                    selectedOpportunity?.id == item.id
+                        ? BlackstockDesign.selectedBorder
+                        : BlackstockDesign.subtleBorder
+                )
             )
             .contentShape(Rectangle())
         }
@@ -235,9 +250,20 @@ struct OpportunityWorkspaceView: View {
                     .accessibilityLabel(
                         "YouTube-Vorschau: \(item.title)"
                     )
-                    .frame(minHeight: 300)
+                    .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                    .background(BlackstockDesign.mediaSurface)
                     .clipShape(
-                        RoundedRectangle(cornerRadius: 14)
+                        RoundedRectangle(
+                            cornerRadius: BlackstockDesign.cornerRadius,
+                            style: .continuous
+                        )
+                    )
+                    .overlay(
+                        RoundedRectangle(
+                            cornerRadius: BlackstockDesign.cornerRadius,
+                            style: .continuous
+                        )
+                        .strokeBorder(BlackstockDesign.subtleBorder)
                     )
             } else {
                 ZStack {
@@ -261,7 +287,7 @@ struct OpportunityWorkspaceView: View {
 
             signalStrip(item)
 
-            GroupBox("Details") {
+            DisclosureGroup("Videodetails") {
                 VStack(alignment: .leading, spacing: 7) {
                     Label(
                         "Suchanfrage: \(item.query)",
@@ -359,6 +385,7 @@ struct OpportunityWorkspaceView: View {
                     )
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(BlackstockDesign.accent)
                 .disabled(
                     !session.workspaceRightsResponsibilityAccepted
                 )
