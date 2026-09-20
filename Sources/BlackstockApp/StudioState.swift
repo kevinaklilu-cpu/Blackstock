@@ -21,6 +21,7 @@ final class StudioState: ObservableObject {
     @Published var isTranscribing = false
     @Published var transcript: LocalTranscript?
     @Published var captionURL: URL?
+    @Published var burnInCaptionsEnabled = false
     @Published var speechAuthorizationState: LocalSpeechAuthorizationState = .notDetermined
     @Published var audioTechnicalAssessment: AudioTechnicalAssessment?
     @Published var audioSignalAssessment: AudioSignalAssessment?
@@ -90,6 +91,12 @@ final class StudioState: ObservableObject {
                 trimEnd = snapshot.trimEnd
                 transcript = snapshot.transcript
                 captionURL = snapshot.captionURL
+                burnInCaptionsEnabled =
+                    snapshot.burnInCaptionsEnabled
+                    ?? false
+                if transcript == nil {
+                    burnInCaptionsEnabled = false
+                }
                 renderArtifact = snapshot.renderArtifact
                 supplementalCaptures = snapshot.supplementalCaptures ?? []
 
@@ -159,6 +166,7 @@ final class StudioState: ObservableObject {
             }
 
             supplementalCaptures = []
+            burnInCaptionsEnabled = false
             loadStoryboard(projectID: projectID)
             persistWorkspaceIfPossible()
         } catch {
@@ -330,6 +338,7 @@ final class StudioState: ObservableObject {
             renderArtifact = nil
             transcript = nil
             captionURL = nil
+            burnInCaptionsEnabled = false
             transcriptStructure = nil
             retentionAdvisory = nil
             retentionAdvisorAvailability = nil
@@ -481,6 +490,7 @@ final class StudioState: ObservableObject {
         renderArtifact = nil
         transcript = nil
         captionURL = nil
+        burnInCaptionsEnabled = false
         audioTechnicalAssessment = nil
         audioSignalAssessment = nil
         audioLoudnessAssessment = nil
@@ -552,6 +562,7 @@ final class StudioState: ObservableObject {
         renderArtifact = nil
         transcript = nil
         captionURL = nil
+        burnInCaptionsEnabled = false
         audioTechnicalAssessment = nil
         audioSignalAssessment = nil
         audioLoudnessAssessment = nil
@@ -587,6 +598,7 @@ final class StudioState: ObservableObject {
         renderArtifact = nil
         transcript = nil
         captionURL = nil
+        burnInCaptionsEnabled = false
         audioTechnicalAssessment = nil
         audioSignalAssessment = nil
         audioLoudnessAssessment = nil
@@ -617,6 +629,7 @@ final class StudioState: ObservableObject {
         renderArtifact = nil
         transcript = nil
         captionURL = nil
+        burnInCaptionsEnabled = false
         audioTechnicalAssessment = nil
         audioSignalAssessment = nil
         audioLoudnessAssessment = nil
@@ -927,6 +940,7 @@ final class StudioState: ObservableObject {
         renderArtifact = nil
         transcript = nil
         captionURL = nil
+        burnInCaptionsEnabled = false
         transcriptStructure = nil
         retentionAdvisory = nil
         retentionAdvisorAvailability = nil
@@ -1038,6 +1052,9 @@ final class StudioState: ObservableObject {
 
             transcript = localTranscript
             captionURL = outputURL
+            if burnInCaptionsEnabled {
+                renderArtifact = nil
+            }
             let structure = TranscriptStructureAnalyzer().analyze(
                 transcript: localTranscript
             )
@@ -1062,6 +1079,39 @@ final class StudioState: ObservableObject {
         } catch {
             errorMessage = "Lokale Transkription fehlgeschlagen: \(error.localizedDescription)"
         }
+    }
+
+    func setBurnInCaptionsEnabled(
+        _ enabled: Bool
+    ) {
+        guard enabled == false || transcript != nil else {
+            errorMessage =
+                "Erstelle zuerst lokale Untertitel, bevor du Burn-in-Captions aktivierst."
+            return
+        }
+        guard burnInCaptionsEnabled != enabled else {
+            return
+        }
+
+        burnInCaptionsEnabled = enabled
+        renderArtifact = nil
+
+        ledger.append(.init(
+            timestamp: Date(),
+            actor: .user,
+            stage: .editing,
+            action: enabled
+                ? "caption-burn-in-enabled"
+                : "caption-burn-in-disabled",
+            summary: enabled
+                ? "Sichtbare Burn-in-Captions wurden für den nächsten lokalen Render aktiviert."
+                : "Sichtbare Burn-in-Captions wurden für den nächsten lokalen Render deaktiviert.",
+            reversible: false,
+            correlationID: correlationID
+        ))
+
+        persistWorkspaceIfPossible()
+        errorMessage = nil
     }
 
     func analyzeRetentionLocally() async {
@@ -1133,7 +1183,9 @@ final class StudioState: ObservableObject {
                 asset: asset,
                 graph: graph,
                 outputURL: outputURL,
-                preset: renderPreset
+                preset: renderPreset,
+                transcript: transcript,
+                burnInCaptions: burnInCaptionsEnabled
             )
             renderArtifact = artifact
             await refreshAudioInspection(
@@ -1290,6 +1342,8 @@ final class StudioState: ObservableObject {
                 trimEnd: trimEnd,
                 transcript: transcript,
                 captionURL: captionURL,
+                burnInCaptionsEnabled:
+                    burnInCaptionsEnabled,
                 renderArtifact: renderArtifact,
                 supplementalCaptures: supplementalCaptures,
                 updatedAt: Date()
