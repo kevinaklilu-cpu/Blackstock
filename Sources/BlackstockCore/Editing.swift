@@ -399,3 +399,18 @@ public struct EditTimelineResolver: Sendable {
         return EditTimelinePlan(sourceRanges: kept)
     }
 }
+
+
+public struct EditAudioPlanner: Sendable {
+    public init() {}
+
+    public func masterVolume(
+        operations: [EditOperation]
+    ) -> Double {
+        let proposed = operations
+            .last(where: { $0.type == .volume })?
+            .value
+            ?? 1
+        return min(max(proposed, 0), 1)
+    }
+}
