@@ -621,6 +621,10 @@ jobs:
           (root / "updater.json").write_text(json.dumps(updater))
           PY
 
+          CAPTURE_EVIDENCE_SHA="$(shasum -a 256 "$ROOT/capture.json" | awk '{print $1}')"
+          RELEASE_EVIDENCE_SHA="$(shasum -a 256 "$ROOT/release.json" | awk '{print $1}')"
+          UPDATER_EVIDENCE_SHA="$(shasum -a 256 "$ROOT/updater.json" | awk '{print $1}')"
+
           python3 Build/verify_market_readiness.py \
             --capture-evidence "$ROOT/capture.json" \
             --production-release-evidence "$ROOT/release.json" \
@@ -628,6 +632,9 @@ jobs:
             --output "$ROOT/market-readiness.json"
           grep -q '"ready": true' "$ROOT/market-readiness.json"
           grep -q '"schemaVersion": 3' "$ROOT/market-readiness.json"
+          test "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["captureEvidenceSHA256"])' "$ROOT/market-readiness.json")" = "$CAPTURE_EVIDENCE_SHA"
+          test "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["productionReleaseEvidenceSHA256"])' "$ROOT/market-readiness.json")" = "$RELEASE_EVIDENCE_SHA"
+          test "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["inAppUpdateEvidenceSHA256"])' "$ROOT/market-readiness.json")" = "$UPDATER_EVIDENCE_SHA"
           grep -q '"sourceAppPath": "/Applications/Blackstock.app"' "$ROOT/market-readiness.json"
           grep -q '"installedAppPath": "/Applications/Blackstock.app"' "$ROOT/market-readiness.json"
           grep -q '"sourceInstallerReceiptVersion": "0.9.0"' "$ROOT/market-readiness.json"
