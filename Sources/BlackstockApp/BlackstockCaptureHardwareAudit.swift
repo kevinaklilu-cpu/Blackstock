@@ -428,6 +428,31 @@ enum BlackstockCaptureHardwareAudit {
             return ("", false)
         }
 
+        let verifyProcess = Process()
+        verifyProcess.executableURL = URL(
+            fileURLWithPath: "/usr/bin/codesign"
+        )
+        verifyProcess.arguments = [
+            "--verify",
+            "--deep",
+            "--strict",
+            "--verbose=2",
+            Bundle.main.bundleURL.path
+        ]
+        let verifyPipe = Pipe()
+        verifyProcess.standardOutput = verifyPipe
+        verifyProcess.standardError = verifyPipe
+
+        do {
+            try verifyProcess.run()
+            verifyProcess.waitUntilExit()
+            guard verifyProcess.terminationStatus == 0 else {
+                return ("", false)
+            }
+        } catch {
+            return ("", false)
+        }
+
         let process = Process()
         process.executableURL = URL(
             fileURLWithPath: "/usr/bin/codesign"
