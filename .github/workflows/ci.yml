@@ -313,7 +313,7 @@ jobs:
           EVIDENCE="$RUNNER_TEMP/in-app-update-evidence.json"
           cat > "$EVIDENCE" <<'JSON'
           {
-            "schemaVersion": 3,
+            "schemaVersion": 4,
             "value": {
               "id": "00000000-0000-0000-0000-000000000001",
               "currentVersion": "0.9.0",
@@ -334,6 +334,12 @@ jobs:
               "observedInstalledBuild": 100,
               "observedInstalledSourceCommitSHA": "1111111111111111111111111111111111111111",
               "observedInstalledExecutableSHA256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "observedInstalledAppPath": "/Applications/Blackstock.app",
+              "observedApplicationTeamID": "ABC123TEAM",
+              "observedDeveloperIDApplicationVerified": true,
+              "observedInstallerReceiptPackageID": "de.blackstock.app",
+              "observedInstallerReceiptVersion": "1.0.0",
+              "observedInstallerReceiptVerified": true,
               "postUpdateLaunchVerifiedAt": 810000004.0
             }
           }
@@ -376,6 +382,19 @@ jobs:
           PY
           if python3 Build/validate_in_app_update_evidence.py "$EVIDENCE"; then
             echo "Local-host updater evidence URL was unexpectedly accepted." >&2
+            exit 1
+          fi
+
+          cp "$RUNNER_TEMP/in-app-update-evidence-valid.json" "$EVIDENCE"
+          python3 - "$EVIDENCE" <<'PY'
+          import json, sys
+          path = sys.argv[1]
+          data = json.load(open(path))
+          data["value"]["observedInstalledAppPath"] = "/Users/test/Blackstock.app"
+          json.dump(data, open(path, "w"))
+          PY
+          if python3 Build/validate_in_app_update_evidence.py "$EVIDENCE"; then
+            echo "Non-production post-update app path was unexpectedly accepted." >&2
             exit 1
           fi
 
@@ -517,7 +536,7 @@ jobs:
           }
 
           updater = {
-              "schemaVersion": 3,
+              "schemaVersion": 4,
               "value": {
                   "id": "00000000-0000-0000-0000-000000000001",
                   "currentVersion": "0.9.0",
@@ -538,6 +557,12 @@ jobs:
                   "observedInstalledBuild": 100,
                   "observedInstalledSourceCommitSHA": source_commit,
                   "observedInstalledExecutableSHA256": executable_hash,
+                  "observedInstalledAppPath": "/Applications/Blackstock.app",
+                  "observedApplicationTeamID": "ABC123TEAM",
+                  "observedDeveloperIDApplicationVerified": True,
+                  "observedInstallerReceiptPackageID": "de.blackstock.app",
+                  "observedInstallerReceiptVersion": "1.0.0",
+                  "observedInstallerReceiptVerified": True,
                   "postUpdateLaunchVerifiedAt": 810000004.0,
               },
           }
