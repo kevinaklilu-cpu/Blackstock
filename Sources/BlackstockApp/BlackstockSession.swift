@@ -2063,23 +2063,16 @@ final class BlackstockSession: ObservableObject {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var bundledClientSecret: String {
-        (Bundle.main.object(
-            forInfoDictionaryKey: "BlackstockGoogleOAuthClientSecret"
-        ) as? String ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
     private var importedClientSecret: String {
         BlackstockKeychain.read("google.oauth.importedClientSecret")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private var effectiveClientSecret: String? {
-        let value = importedClientID.isEmpty
-            ? bundledClientSecret
+        guard !importedClientID.isEmpty else { return nil }
+        return importedClientSecret.isEmpty
+            ? nil
             : importedClientSecret
-        return value.isEmpty ? nil : value
     }
 
     private var effectiveClientID: String {
