@@ -35,8 +35,8 @@ REQUIRED = {
         "advanceActiveProject(to: .production)",
     ],
     "Sources/BlackstockApp/BlackstockApp.swift": [
-        "Eingefrorene Provider-Fakten",
-        "Provider-Fakten werden nicht überschrieben.",
+        "Videodaten",
+        "Die Angaben zum Video bleiben unverändert;",
         "Recherche abschließen und analysieren",
         "Offenes Risiko oder unbekannter Punkt",
     ],
