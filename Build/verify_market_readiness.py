@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 import argparse
+import hashlib
 import json
 import re
 import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -41,9 +43,30 @@ def load_json(path_value, label):
     if not path.is_file():
         fail(f"{label} file not found: {path}")
     try:
-        return path, json.loads(path.read_text(encoding="utf-8"), parse_constant=lambda token: (_ for _ in ()).throw(ValueError(f"non-finite JSON number: {token}")))
+        raw = path.read_bytes()
+        data = json.loads(
+            raw.decode("utf-8"),
+            parse_constant=lambda token: (_ for _ in ()).throw(
+                ValueError(f"non-finite JSON number: {token}")
+            ),
+        )
+        digest = hashlib.sha256(raw).hexdigest()
+        return path, data, raw, digest
     except Exception as error:
         fail(f"{label} is invalid JSON: {error}")
+
+def write_snapshot(directory, name, raw):
+    snapshot = Path(directory) / name
+    snapshot.write_bytes(raw)
+    return snapshot
+
+def require_source_unchanged(path, expected_sha256, label):
+    try:
+        current = hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError as error:
+        fail(f"{label} changed or disappeared during verification: {error}")
+    if current != expected_sha256:
+        fail(f"{label} changed during verification")
 
 def run_validator(script_name, evidence_path):
     script = ROOT / "Build" / script_name
@@ -126,30 +149,80 @@ def main():
     statuses = release_gate_statuses()
     require_internal_gates_pass(statuses)
 
-    capture_path, capture = load_json(
+    (
+        capture_path,
+        capture,
+        capture_raw,
+        capture_sha256,
+    ) = load_json(
         args.capture_evidence,
         "capture evidence",
     )
-    release_path, release = load_json(
+    (
+        release_path,
+        release,
+        release_raw,
+        release_sha256,
+    ) = load_json(
         args.production_release_evidence,
         "production release evidence",
     )
-    updater_path, updater_envelope = load_json(
+    (
+        updater_path,
+        updater_envelope,
+        updater_raw,
+        updater_sha256,
+    ) = load_json(
         args.in_app_update_evidence,
         "in-app update evidence",
     )
 
-    run_validator(
-        "validate_capture_hardware_smoke.py",
+    with tempfile.TemporaryDirectory(
+        prefix="blackstock-market-readiness-"
+    ) as snapshot_directory:
+        capture_snapshot = write_snapshot(
+            snapshot_directory,
+            "capture-evidence.json",
+            capture_raw,
+        )
+        release_snapshot = write_snapshot(
+            snapshot_directory,
+            "production-release-evidence.json",
+            release_raw,
+        )
+        updater_snapshot = write_snapshot(
+            snapshot_directory,
+            "in-app-update-evidence.json",
+            updater_raw,
+        )
+
+        run_validator(
+            "validate_capture_hardware_smoke.py",
+            capture_snapshot,
+        )
+        run_validator(
+            "validate_production_release_evidence.py",
+            release_snapshot,
+        )
+        run_validator(
+            "validate_in_app_update_evidence.py",
+            updater_snapshot,
+        )
+
+    require_source_unchanged(
         capture_path,
+        capture_sha256,
+        "capture evidence",
     )
-    run_validator(
-        "validate_production_release_evidence.py",
+    require_source_unchanged(
         release_path,
+        release_sha256,
+        "production release evidence",
     )
-    run_validator(
-        "validate_in_app_update_evidence.py",
+    require_source_unchanged(
         updater_path,
+        updater_sha256,
+        "in-app update evidence",
     )
 
     updater = updater_envelope.get("value")
@@ -403,8 +476,11 @@ def main():
             "observedInstallerReceiptInstalledAt"
         ),
         "captureEvidence": str(capture_path),
+        "captureEvidenceSHA256": capture_sha256,
         "productionReleaseEvidence": str(release_path),
+        "productionReleaseEvidenceSHA256": release_sha256,
         "inAppUpdateEvidence": str(updater_path),
+        "inAppUpdateEvidenceSHA256": updater_sha256,
         "internalGateCount": sum(
             1
             for gate, status in statuses.items()
