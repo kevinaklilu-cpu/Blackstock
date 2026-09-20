@@ -225,6 +225,20 @@ def main():
         "in-app update evidence",
     )
 
+    if args.output:
+        output_path = Path(args.output).expanduser().resolve()
+        evidence_paths = {
+            capture_path,
+            release_path,
+            updater_path,
+        }
+        if output_path in evidence_paths:
+            fail(
+                "market readiness output must not overwrite an evidence file"
+            )
+    else:
+        output_path = None
+
     updater = updater_envelope.get("value")
     if not isinstance(updater, dict):
         fail("in-app update evidence has no value object")
@@ -529,12 +543,28 @@ def main():
         indent=2,
         sort_keys=True,
     )
-    if args.output:
-        output = Path(args.output).expanduser().resolve()
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(encoded + "\n", encoding="utf-8")
+    if output_path is not None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=output_path.parent,
+            prefix=f".{output_path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temporary_output = Path(handle.name)
+            handle.write(encoded + "\n")
+            handle.flush()
+        try:
+            temporary_output.replace(output_path)
+        finally:
+            try:
+                temporary_output.unlink(missing_ok=True)
+            except OSError:
+                pass
         print("BLACKSTOCK_MARKET_READINESS_PASS")
-        print(output)
+        print(output_path)
     else:
         print("BLACKSTOCK_MARKET_READINESS_PASS")
         print(encoded)
