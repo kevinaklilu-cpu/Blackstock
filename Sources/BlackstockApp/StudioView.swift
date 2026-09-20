@@ -46,10 +46,13 @@ struct StudioView: View {
             if case .success(let urls) = result, let url = urls.first {
                 pendingURL = url
                 pendingCaptureKind = nil
-                rightsEvidence = ""
-                rightsConfirmed = false
-                rightsSelection = .owned
-                showRightsSheet = true
+                if session.workspaceRightsAttestation?
+                    .permitsUserDirectedProduction == true {
+                    importPendingMedia()
+                } else {
+                    rightsConfirmed = false
+                    showRightsSheet = true
+                }
             }
         }
         .fileImporter(
@@ -154,7 +157,11 @@ struct StudioView: View {
                     .font(.callout.monospaced())
                     .lineLimit(1)
                     .textSelection(.enabled)
-                Text(resolution.explanation)
+                Text(
+                    state.asset?.originSource?.id == source.id
+                        ? "Die Produktionsdatei ist automatisch mit dieser Opportunity verknüpft."
+                        : resolution.explanation
+                )
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -211,10 +218,13 @@ struct StudioView: View {
             CaptureCapabilityPanel { url, kind in
                 pendingURL = url
                 pendingCaptureKind = kind
-                rightsSelection = .owned
-                rightsEvidence = "Direkt mit Blackstock aufgezeichnet: \(kind.germanTitle)"
-                rightsConfirmed = false
-                showRightsSheet = true
+                if session.workspaceRightsAttestation?
+                    .permitsUserDirectedProduction == true {
+                    importPendingMedia()
+                } else {
+                    rightsConfirmed = false
+                    showRightsSheet = true
+                }
             }
             .frame(maxWidth: 620)
 
@@ -1850,27 +1860,18 @@ struct StudioView: View {
 
     private var rightsSheet: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Produktionsmedium autorisieren")
+            Text("Einmalige Nutzungsverantwortung")
                 .font(.title2.bold())
 
-            Text(pendingURL?.lastPathComponent ?? "Produktionsmedium")
+            Text("Diese Erklärung gilt danach für den gesamten ausgewählten Blackstock-Arbeitsbereich.")
                 .foregroundStyle(.secondary)
 
-            Picker("Nutzungsgrundlage", selection: $rightsSelection) {
-                Text("Eigenes Material").tag(ProductionMediaAuthorization.owned)
-                Text("Lizenziert").tag(ProductionMediaAuthorization.licensed)
-                Text("Explizit autorisiert").tag(ProductionMediaAuthorization.explicitlyAuthorized)
-            }
-
-            TextField("Nachweis / Referenz, z. B. „eigene Aufnahme 18.09.2026“", text: $rightsEvidence)
-                .textFieldStyle(.roundedBorder)
-
             Toggle(isOn: $rightsConfirmed) {
-                Text("Ich bestätige, dass ich Eigentümer bin oder die nötigen Nutzungs-, Bearbeitungs- und Veröffentlichungsrechte besitze und für diese Angabe verantwortlich bin.")
+                Text("Ich verwende Blackstock nur für Inhalte, die ich bearbeiten und veröffentlichen darf, und übernehme die Verantwortung für diese Nutzung.")
                     .font(.callout)
             }
 
-            Text("Blackstock speichert Bestätigung und Nachweis als Produktions-Provenance. Diese Bestätigung ersetzt keine Plattformregeln und keine tatsächlich erforderliche Lizenz.")
+            Text("Blackstock verknüpft anschließend Opportunity, Projekt und Produktionsdatei automatisch. Es wird keine Lizenzprüfung behauptet und keine Lizenzdatei pro Video verlangt.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -1887,98 +1888,120 @@ struct StudioView: View {
                     pendingCaptureKind = nil
                 }
                 Spacer()
-                Button(
-                    pendingCaptureKind == .microphone
-                        ? "Im Projekt speichern"
-                        : "Importieren"
-                ) {
-                    guard let url = pendingURL else { return }
-                    let captureKind = pendingCaptureKind
-                    showRightsSheet = false
-
-                    Task {
-                        if captureKind == .microphone {
-                            let saved = await state.importSupplementalCapture(
-                                url: url,
-                                kind: .microphone,
-                                projectID: project.id,
-                                rightsBasis: rightsBasisLabel(
-                                    rightsSelection
-                                ),
-                                rightsEvidence: rightsEvidence,
-                                rightsConfirmed: rightsConfirmed
-                            )
-                            if saved,
-                               let persisted = state
-                                    .supplementalCaptures
-                                    .last(where: {
-                                        $0.kind == .microphone
-                                    }) {
-                                await BlackstockCaptureHardwareAudit
-                                    .recordPersistedCapture(
-                                        kind: .microphone,
-                                        fileURL:
-                                            persisted.fileURL,
-                                        projectID: project.id
-                                    )
-                                try? FileManager.default.removeItem(
-                                    at: url
-                                )
-                                BlackstockCaptureHardwareAudit
-                                    .recordTemporaryCleanup(
-                                        for: .microphone,
-                                        temporaryURL: url
-                                    )
-                            }
-                        } else {
-                            let previousAssetID = state.asset?.id
-                            await state.importMovie(
-                                url: url,
-                                projectID: project.id,
-                                authorization: rightsSelection,
-                                rightsEvidence: rightsEvidence,
-                                rightsConfirmed: rightsConfirmed
-                            )
-                            if let imported = state.asset,
-                               imported.id != previousAssetID {
-                                if let captureKind {
-                                    await BlackstockCaptureHardwareAudit
-                                        .recordPersistedCapture(
-                                            kind: captureKind,
-                                            fileURL:
-                                                imported.sourceURL,
-                                            projectID: project.id
-                                        )
-                                    try? FileManager.default.removeItem(
-                                        at: url
-                                    )
-                                    BlackstockCaptureHardwareAudit
-                                        .recordTemporaryCleanup(
-                                            for: captureKind,
-                                            temporaryURL: url
-                                        )
-                                }
-                                if currentStage == .production {
-                                    _ = session.advanceActiveProject(
-                                        to: .preview
-                                    )
-                                }
-                            }
-                        }
-
-                        pendingURL = nil
-                        pendingCaptureKind = nil
+                Button("Einmalig bestätigen & fortfahren") {
+                    guard rightsConfirmed else { return }
+                    guard session
+                        .setWorkspaceRightsResponsibilityAccepted(
+                            true
+                        ) else {
+                        return
                     }
+                    showRightsSheet = false
+                    importPendingMedia()
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(
-                    rightsEvidence.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    || !rightsConfirmed
-                )
+                .disabled(!rightsConfirmed)
             }
         }
         .padding(24)
         .frame(width: 520)
+    }
+
+    private func importPendingMedia() {
+        guard let url = pendingURL,
+              let attestation =
+                session.workspaceRightsAttestation,
+              attestation.permitsUserDirectedProduction else {
+            return
+        }
+
+        let captureKind = pendingCaptureKind
+        let sourceReference = opportunitySource
+        let sourceEvidence: String
+        if let sourceReference {
+            let providerReference =
+                sourceReference.externalID
+                ?? sourceReference.pageURL.absoluteString
+            sourceEvidence =
+                "Automatisch gebunden an "
+                + sourceReference.provider.rawValue
+                + ": "
+                + providerReference
+        } else {
+            sourceEvidence =
+                "Direkt dem Blackstock-Projekt als Produktionsmedium zugeordnet."
+        }
+
+        Task {
+            if captureKind == .microphone {
+                let saved = await state.importSupplementalCapture(
+                    url: url,
+                    kind: .microphone,
+                    projectID: project.id,
+                    rightsBasis:
+                        "Workspace-Nutzererklärung "
+                        + attestation.statementVersion,
+                    rightsEvidence: sourceEvidence,
+                    rightsConfirmed: true
+                )
+                if saved,
+                   let persisted = state.supplementalCaptures
+                    .last(where: { $0.kind == .microphone }) {
+                    await BlackstockCaptureHardwareAudit
+                        .recordPersistedCapture(
+                            kind: .microphone,
+                            fileURL: persisted.fileURL,
+                            projectID: project.id
+                        )
+                    try? FileManager.default.removeItem(at: url)
+                    BlackstockCaptureHardwareAudit
+                        .recordTemporaryCleanup(
+                            for: .microphone,
+                            temporaryURL: url
+                        )
+                }
+            } else {
+                let previousAssetID = state.asset?.id
+                await state.importMovie(
+                    url: url,
+                    projectID: project.id,
+                    authorization:
+                        .userDeclaredResponsibility,
+                    rightsEvidence:
+                        "Workspace-Nutzererklärung "
+                        + attestation.statementVersion
+                        + ". "
+                        + sourceEvidence,
+                    rightsConfirmed: true,
+                    originSource: sourceReference
+                )
+                if let imported = state.asset,
+                   imported.id != previousAssetID {
+                    if let captureKind {
+                        await BlackstockCaptureHardwareAudit
+                            .recordPersistedCapture(
+                                kind: captureKind,
+                                fileURL: imported.sourceURL,
+                                projectID: project.id
+                            )
+                        try? FileManager.default.removeItem(at: url)
+                        BlackstockCaptureHardwareAudit
+                            .recordTemporaryCleanup(
+                                for: captureKind,
+                                temporaryURL: url
+                            )
+                    }
+                    if currentStage == .production {
+                        _ = session.advanceActiveProject(
+                            to: .preview
+                        )
+                    }
+                }
+            }
+
+            pendingURL = nil
+            pendingCaptureKind = nil
+        }
     }
 
     @ViewBuilder
@@ -2097,6 +2120,8 @@ struct StudioView: View {
             return "Lizenziert"
         case .explicitlyAuthorized:
             return "Explizit autorisiert"
+        case .userDeclaredResponsibility:
+            return "Workspace-Nutzererklärung"
         case .unknown:
             return "Unbekannt"
         case .prohibited:
