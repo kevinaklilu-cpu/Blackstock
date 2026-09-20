@@ -34,7 +34,8 @@ else:
                 f"{path.relative_to(ROOT)}: moving *-latest runner labels are forbidden"
             )
 
-        if "runs-on: macos-26" in text:
+        macos_job_count = text.count("runs-on: macos-26")
+        if macos_job_count:
             if (
                 "DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer"
                 not in text
@@ -42,9 +43,11 @@ else:
                 errors.append(
                     f"{path.relative_to(ROOT)}: macos-26 workflows must pin Xcode 26.6"
                 )
-            if "Pinned macOS toolchain guard" not in text:
+            guard_count = text.count("- name: Pinned macOS toolchain guard")
+            if guard_count != macos_job_count:
                 errors.append(
-                    f"{path.relative_to(ROOT)}: macos-26 workflows must verify the pinned toolchain before execution"
+                    f"{path.relative_to(ROOT)}: expected one pinned toolchain guard "
+                    f"per macos-26 job ({macos_job_count}), found {guard_count}"
                 )
 
         if "permissions:\n  contents: read" not in text:
