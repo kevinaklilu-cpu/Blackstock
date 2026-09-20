@@ -85,7 +85,7 @@ final class LocalClipCandidateGeneratorTests: XCTestCase {
         XCTAssertGreaterThan(candidates.count, 1)
         XCTAssertTrue(
             candidates.allSatisfy {
-                $0.sourceRange.durationSeconds <= 35.7
+                $0.sourceRange.durationSeconds <= 35.000_001
             }
         )
     }
