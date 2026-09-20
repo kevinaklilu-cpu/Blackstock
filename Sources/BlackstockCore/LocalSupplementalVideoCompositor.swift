@@ -36,48 +36,24 @@ public actor LocalSupplementalVideoCompositor {
     ) async throws {
         let baseAsset = AVURLAsset(url: inputURL)
         let baseDuration = try await baseAsset.load(.duration)
-        let baseDurationSeconds = max(CMTimeGetSeconds(baseDuration), 0)
-        let baseVideoTracks = try await baseAsset.loadTracks(withMediaType: .video)
+        let baseDurationSeconds = max(
+            CMTimeGetSeconds(baseDuration),
+            0
+        )
+        let baseVideoTracks = try await baseAsset.loadTracks(
+            withMediaType: .video
+        )
         guard let baseVideoTrack = baseVideoTracks.first else {
-            throw LocalSupplementalVideoError.missingBaseVideoTrack
+            throw LocalSupplementalVideoError
+                .missingBaseVideoTrack
         }
 
-        let composition = AVMutableComposition()
-        guard let baseCompositionTrack =
-                composition.addMutableTrack(
-                    withMediaType: .video,
-                    preferredTrackID:
-                        kCMPersistentTrackID_Invalid
-                ) else {
-            throw LocalSupplementalVideoError.missingBaseVideoTrack
-        }
-        try baseCompositionTrack.insertTimeRange(
-            CMTimeRange(start: .zero, duration: baseDuration),
-            of: baseVideoTrack,
-            at: .zero
+        let baseNaturalSize = try await baseVideoTrack.load(
+            .naturalSize
         )
-
-        let baseAudioTracks = try await baseAsset.loadTracks(
-            withMediaType: .audio
+        let basePreferredTransform = try await baseVideoTrack.load(
+            .preferredTransform
         )
-        for sourceAudioTrack in baseAudioTracks {
-            guard let audioTrack = composition.addMutableTrack(
-                withMediaType: .audio,
-                preferredTrackID: kCMPersistentTrackID_Invalid
-            ) else {
-                throw LocalSupplementalVideoError.exportFailed(
-                    "Basisaudiospur konnte nicht angelegt werden."
-                )
-            }
-            try audioTrack.insertTimeRange(
-                CMTimeRange(start: .zero, duration: baseDuration),
-                of: sourceAudioTrack,
-                at: .zero
-            )
-        }
-
-        let baseNaturalSize = try await baseVideoTrack.load(.naturalSize)
-        let basePreferredTransform = try await baseVideoTrack.load(.preferredTransform)
         let baseBounds = CGRect(
             origin: .zero,
             size: baseNaturalSize
@@ -88,7 +64,8 @@ public actor LocalSupplementalVideoCompositor {
         )
         guard renderSize.width > 0,
               renderSize.height > 0 else {
-            throw LocalSupplementalVideoError.invalidBaseVideoSize
+            throw LocalSupplementalVideoError
+                .invalidBaseVideoSize
         }
 
         let baseTransform = Self.normalizedTransform(
@@ -98,24 +75,33 @@ public actor LocalSupplementalVideoCompositor {
         )
 
         struct PreparedInsert {
-            let track: AVMutableCompositionTrack
-            let startSeconds: Double
-            let endSeconds: Double
+            let order: Int
+            let captureID: UUID
+            let sourceTrack: AVAssetTrack
+            let sourceStartSeconds: Double
+            let timelineStartSeconds: Double
+            let timelineEndSeconds: Double
             let transform: CGAffineTransform
         }
 
         var prepared: [PreparedInsert] = []
-
-        for input in supplementalVideo {
+        for (order, input) in supplementalVideo.enumerated() {
             let asset = AVURLAsset(url: input.fileURL)
-            let tracks = try await asset.loadTracks(withMediaType: .video)
+            let tracks = try await asset.loadTracks(
+                withMediaType: .video
+            )
             guard let sourceTrack = tracks.first else {
                 throw LocalSupplementalVideoError
-                    .missingSupplementalVideoTrack(input.captureID)
+                    .missingSupplementalVideoTrack(
+                        input.captureID
+                    )
             }
 
             let sourceDuration = try await asset.load(.duration)
-            let sourceDurationSeconds = max(CMTimeGetSeconds(sourceDuration), 0)
+            let sourceDurationSeconds = max(
+                CMTimeGetSeconds(sourceDuration),
+                0
+            )
             let sourceStart = min(
                 max(input.sourceStartSeconds, 0),
                 sourceDurationSeconds
@@ -129,45 +115,29 @@ public actor LocalSupplementalVideoCompositor {
                 sourceDurationSeconds - sourceStart,
                 baseDurationSeconds - timelineStart
             )
-            guard durationSeconds >= 0.05 else { continue }
-
-            guard let compositionTrack = composition.addMutableTrack(
-                withMediaType: .video,
-                preferredTrackID: kCMPersistentTrackID_Invalid
-            ) else {
-                throw LocalSupplementalVideoError.exportFailed(
-                    "Zusätzliche Videospur konnte nicht angelegt werden."
-                )
+            guard durationSeconds >= 0.05 else {
+                continue
             }
 
-            try compositionTrack.insertTimeRange(
-                CMTimeRange(
-                    start: CMTime(
-                        seconds: sourceStart,
-                        preferredTimescale: 600
-                    ),
-                    duration: CMTime(
-                        seconds: durationSeconds,
-                        preferredTimescale: 600
-                    )
-                ),
-                of: sourceTrack,
-                at: CMTime(
-                    seconds: timelineStart,
-                    preferredTimescale: 600
-                )
+            let naturalSize = try await sourceTrack.load(
+                .naturalSize
             )
-
-            let naturalSize = try await sourceTrack.load(.naturalSize)
-            let preferredTransform = try await sourceTrack.load(.preferredTransform)
+            let preferredTransform = try await sourceTrack.load(
+                .preferredTransform
+            )
             prepared.append(
                 PreparedInsert(
-                    track: compositionTrack,
-                    startSeconds: timelineStart,
-                    endSeconds: timelineStart + durationSeconds,
+                    order: order,
+                    captureID: input.captureID,
+                    sourceTrack: sourceTrack,
+                    sourceStartSeconds: sourceStart,
+                    timelineStartSeconds: timelineStart,
+                    timelineEndSeconds:
+                        timelineStart + durationSeconds,
                     transform: Self.aspectFillTransform(
                         naturalSize: naturalSize,
-                        preferredTransform: preferredTransform,
+                        preferredTransform:
+                            preferredTransform,
                         renderSize: renderSize
                     )
                 )
@@ -178,77 +148,177 @@ public actor LocalSupplementalVideoCompositor {
             throw LocalSupplementalVideoError.noUsableInsert
         }
 
-        var boundaries: [Double] = [0, baseDurationSeconds]
+        var boundaries: [Double] = [
+            0,
+            baseDurationSeconds
+        ]
         for insert in prepared {
-            boundaries.append(insert.startSeconds)
-            boundaries.append(insert.endSeconds)
+            boundaries.append(
+                insert.timelineStartSeconds
+            )
+            boundaries.append(
+                insert.timelineEndSeconds
+            )
         }
-        boundaries = Array(Set(boundaries.map {
-            ($0 * 1_000).rounded() / 1_000
-        })).sorted()
+        boundaries = Array(
+            Set(
+                boundaries.map {
+                    ($0 * 1_000).rounded() / 1_000
+                }
+            )
+        ).sorted()
 
-        var instructions: [AVMutableVideoCompositionInstruction] = []
+        let composition = AVMutableComposition()
+        guard let outputVideoTrack =
+                composition.addMutableTrack(
+                    withMediaType: .video,
+                    preferredTrackID:
+                        kCMPersistentTrackID_Invalid
+                ) else {
+            throw LocalSupplementalVideoError
+                .missingBaseVideoTrack
+        }
+
+        let baseAudioTracks = try await baseAsset.loadTracks(
+            withMediaType: .audio
+        )
+        for sourceAudioTrack in baseAudioTracks {
+            guard let audioTrack =
+                    composition.addMutableTrack(
+                        withMediaType: .audio,
+                        preferredTrackID:
+                            kCMPersistentTrackID_Invalid
+                    ) else {
+                throw LocalSupplementalVideoError
+                    .exportFailed(
+                        "Basisaudiospur konnte nicht angelegt werden."
+                    )
+            }
+            try audioTrack.insertTimeRange(
+                CMTimeRange(
+                    start: .zero,
+                    duration: baseDuration
+                ),
+                of: sourceAudioTrack,
+                at: .zero
+            )
+        }
+
+        var instructions:
+            [AVMutableVideoCompositionInstruction] = []
+
         for index in 0..<(boundaries.count - 1) {
             let start = boundaries[index]
             let end = boundaries[index + 1]
-            guard end - start >= 0.001 else { continue }
+            let duration = end - start
+            guard duration >= 0.001 else {
+                continue
+            }
 
-            let instruction = AVMutableVideoCompositionInstruction()
-            instruction.timeRange = CMTimeRange(
-                start: CMTime(seconds: start, preferredTimescale: 600),
-                duration: CMTime(
-                    seconds: end - start,
+            let activeInsert = prepared
+                .filter {
+                    $0.timelineStartSeconds
+                        <= start + 0.0005
+                    && $0.timelineEndSeconds
+                        >= end - 0.0005
+                }
+                .max { $0.order < $1.order }
+
+            let sourceTrack: AVAssetTrack
+            let sourceStart: Double
+            let transform: CGAffineTransform
+
+            if let activeInsert {
+                sourceTrack = activeInsert.sourceTrack
+                sourceStart =
+                    activeInsert.sourceStartSeconds
+                    + start
+                    - activeInsert.timelineStartSeconds
+                transform = activeInsert.transform
+            } else {
+                sourceTrack = baseVideoTrack
+                sourceStart = start
+                transform = baseTransform
+            }
+
+            try outputVideoTrack.insertTimeRange(
+                CMTimeRange(
+                    start: CMTime(
+                        seconds: sourceStart,
+                        preferredTimescale: 600
+                    ),
+                    duration: CMTime(
+                        seconds: duration,
+                        preferredTimescale: 600
+                    )
+                ),
+                of: sourceTrack,
+                at: CMTime(
+                    seconds: start,
                     preferredTimescale: 600
                 )
             )
 
-            var layers: [AVMutableVideoCompositionLayerInstruction] = []
-            let active = prepared.filter {
-                $0.startSeconds < end - 0.0005
-                    && $0.endSeconds > start + 0.0005
-            }
-            for insert in active.reversed() {
-                let layer = AVMutableVideoCompositionLayerInstruction(
-                    assetTrack: insert.track
+            let instruction =
+                AVMutableVideoCompositionInstruction()
+            instruction.timeRange = CMTimeRange(
+                start: CMTime(
+                    seconds: start,
+                    preferredTimescale: 600
+                ),
+                duration: CMTime(
+                    seconds: duration,
+                    preferredTimescale: 600
                 )
-                layer.setTransform(insert.transform, at: .zero)
-                layers.append(layer)
-            }
-
-            let baseLayer = AVMutableVideoCompositionLayerInstruction(
-                assetTrack: baseCompositionTrack
             )
-            baseLayer.setTransform(baseTransform, at: .zero)
-            layers.append(baseLayer)
-            instruction.layerInstructions = layers
+            let layer =
+                AVMutableVideoCompositionLayerInstruction(
+                    assetTrack: outputVideoTrack
+                )
+            layer.setTransform(
+                transform,
+                at: instruction.timeRange.start
+            )
+            instruction.layerInstructions = [layer]
             instructions.append(instruction)
         }
 
         let videoComposition = AVMutableVideoComposition()
         videoComposition.instructions = instructions
         videoComposition.renderSize = renderSize
-        videoComposition.frameDuration = CMTime(value: 1, timescale: 30)
+        videoComposition.frameDuration = CMTime(
+            value: 1,
+            timescale: 30
+        )
 
         guard let exporter = AVAssetExportSession(
             asset: composition,
             presetName: preset.avPresetName
         ) else {
-            throw LocalSupplementalVideoError.exportSessionUnavailable
+            throw LocalSupplementalVideoError
+                .exportSessionUnavailable
         }
         guard exporter.supportedFileTypes.contains(.mp4) else {
-            throw LocalSupplementalVideoError.unsupportedOutputType
+            throw LocalSupplementalVideoError
+                .unsupportedOutputType
         }
 
-        if FileManager.default.fileExists(atPath: outputURL.path) {
-            try FileManager.default.removeItem(at: outputURL)
+        if FileManager.default.fileExists(
+            atPath: outputURL.path
+        ) {
+            try FileManager.default.removeItem(
+                at: outputURL
+            )
         }
         exporter.outputURL = outputURL
         exporter.outputFileType = .mp4
         exporter.shouldOptimizeForNetworkUse = true
         exporter.videoComposition = videoComposition
 
-        let box = SupplementalVideoExportSessionBox(exporter)
-        try await withCheckedThrowingContinuation { continuation in
+        let box =
+            SupplementalVideoExportSessionBox(exporter)
+        try await withCheckedThrowingContinuation {
+            continuation in
             box.session.exportAsynchronously {
                 let session = box.session
                 switch session.status {
@@ -256,23 +326,31 @@ public actor LocalSupplementalVideoCompositor {
                     continuation.resume()
                 case .failed, .cancelled:
                     continuation.resume(
-                        throwing: LocalSupplementalVideoError.exportFailed(
-                            session.error?.localizedDescription
-                                ?? "Video-Einblendung fehlgeschlagen."
-                        )
+                        throwing:
+                            LocalSupplementalVideoError
+                            .exportFailed(
+                                session.error?
+                                    .localizedDescription
+                                    ?? "Video-Einblendung fehlgeschlagen."
+                            )
                     )
                 default:
                     continuation.resume(
-                        throwing: LocalSupplementalVideoError.exportFailed(
-                            "Video-Einblendung endete im Zustand \(session.status.rawValue)."
-                        )
+                        throwing:
+                            LocalSupplementalVideoError
+                            .exportFailed(
+                                "Video-Einblendung endete im Zustand \(session.status.rawValue)."
+                            )
                     )
                 }
             }
         }
 
-        guard FileManager.default.fileExists(atPath: outputURL.path) else {
-            throw LocalSupplementalVideoError.missingOutput
+        guard FileManager.default.fileExists(
+            atPath: outputURL.path
+        ) else {
+            throw LocalSupplementalVideoError
+                .missingOutput
         }
     }
 
@@ -293,7 +371,10 @@ public actor LocalSupplementalVideoCompositor {
                 y: -bounds.minY
             )
         )
-        guard width > 0, height > 0 else { return transform }
+        guard width > 0,
+              height > 0 else {
+            return transform
+        }
         transform = transform.concatenating(
             CGAffineTransform(
                 scaleX: renderSize.width / width,
@@ -325,16 +406,14 @@ public actor LocalSupplementalVideoCompositor {
             renderSize.width / width,
             renderSize.height / height
         )
-        let cropX = max(
-            (width - renderSize.width / scale) / 2,
-            0
-        )
-        let cropY = max(
-            (height - renderSize.height / scale) / 2,
-            0
-        )
-        var transform = preferredTransform
-        transform = transform.concatenating(
+        let scaledWidth = width * scale
+        let scaledHeight = height * scale
+        let offsetX =
+            (renderSize.width - scaledWidth) / 2
+        let offsetY =
+            (renderSize.height - scaledHeight) / 2
+
+        var transform = preferredTransform.concatenating(
             CGAffineTransform(
                 translationX: -bounds.minX,
                 y: -bounds.minY
@@ -342,12 +421,15 @@ public actor LocalSupplementalVideoCompositor {
         )
         transform = transform.concatenating(
             CGAffineTransform(
-                translationX: -cropX,
-                y: -cropY
+                scaleX: scale,
+                y: scale
             )
         )
         transform = transform.concatenating(
-            CGAffineTransform(scaleX: scale, y: scale)
+            CGAffineTransform(
+                translationX: offsetX / scale,
+                y: offsetY / scale
+            )
         )
         return transform
     }
