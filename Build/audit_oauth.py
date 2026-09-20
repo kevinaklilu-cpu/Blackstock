@@ -65,7 +65,7 @@ CONTRACTS = {
         "allowedContentTypes: [.json]",
         "session.importOAuthJSON(from: url)",
         "session.removeImportedOAuthConfiguration()",
-        "werden vorhandene YouTube-Tokens und Scopes sofort aus dem macOS-Keychain entfernt",
+        "showOAuthImporter",
     ],
     "Sources/BlackstockApp/BlackstockKeychain.swift": [
         "kSecAttrAccessibleWhenUnlockedThisDeviceOnly",
