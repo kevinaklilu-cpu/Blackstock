@@ -87,11 +87,30 @@ public struct GoogleOAuthTokenSet: Codable, Sendable, Equatable {
     }
 }
 
-public enum GoogleOAuthError: Error, Equatable, Sendable {
+public enum GoogleOAuthError: Error, Equatable, Sendable, LocalizedError {
     case randomGenerationFailed
     case invalidAuthorizationResponse
     case stateMismatch
-    case tokenExchangeFailed(Int)
+    case tokenExchangeFailed(Int, String?, String?)
+
+    public var errorDescription: String? {
+        switch self {
+        case .randomGenerationFailed:
+            return "OAuth-Sicherheitswert konnte nicht erzeugt werden."
+        case .invalidAuthorizationResponse:
+            return "Google hat keine gültige Autorisierungsantwort geliefert."
+        case .stateMismatch:
+            return "Die Google-Autorisierungsantwort konnte nicht sicher zugeordnet werden."
+        case .tokenExchangeFailed(let status, let providerError, let providerDescription):
+            let detail = [providerError, providerDescription]
+                .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .joined(separator: ": ")
+            return detail.isEmpty
+                ? "Google-Token-Austausch fehlgeschlagen (HTTP \(status))."
+                : "Google-Token-Austausch fehlgeschlagen (HTTP \(status)): \(detail)"
+        }
+    }
 }
 
 public struct GoogleOAuthTokenExchange: Sendable {
@@ -100,6 +119,7 @@ public struct GoogleOAuthTokenExchange: Sendable {
     public func exchange(
         code: String,
         clientID: String,
+        clientSecret: String? = nil,
         redirectURI: URL,
         verifier: String,
         session: URLSession = .shared
@@ -107,13 +127,17 @@ public struct GoogleOAuthTokenExchange: Sendable {
         var request = URLRequest(url: URL(string: "https://oauth2.googleapis.com/token")!)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        let fields = [
+        var fields = [
             "code": code,
             "client_id": clientID,
             "redirect_uri": redirectURI.absoluteString,
             "grant_type": "authorization_code",
             "code_verifier": verifier
         ]
+        if let clientSecret,
+           !clientSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            fields["client_secret"] = clientSecret
+        }
         request.httpBody = fields
             .sorted { $0.key < $1.key }
             .map { key, value in "\(key.formURLEncoded)=\(value.formURLEncoded)" }
@@ -122,7 +146,15 @@ public struct GoogleOAuthTokenExchange: Sendable {
 
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
-            throw GoogleOAuthError.tokenExchangeFailed((response as? HTTPURLResponse)?.statusCode ?? -1)
+            let provider = try? JSONDecoder().decode(
+                GoogleOAuthProviderError.self,
+                from: data
+            )
+            throw GoogleOAuthError.tokenExchangeFailed(
+                (response as? HTTPURLResponse)?.statusCode ?? -1,
+                provider?.error,
+                provider?.errorDescription
+            )
         }
         return try JSONDecoder().decode(GoogleOAuthTokenSet.self, from: data)
     }
@@ -140,5 +172,16 @@ private extension Data {
 private extension String {
     var formURLEncoded: String {
         addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? self
+    }
+}
+
+
+private struct GoogleOAuthProviderError: Decodable {
+    let error: String?
+    let errorDescription: String?
+
+    enum CodingKeys: String, CodingKey {
+        case error
+        case errorDescription = "error_description"
     }
 }
