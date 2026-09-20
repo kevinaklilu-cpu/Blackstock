@@ -18,6 +18,16 @@ CONTRACTS = {
         'url.path == "/"',
         'fields[0] == "GET"',
     ],
+    "Sources/BlackstockApp/BlackstockUpdateChecker.swift": [
+        "ProductionUpdateURLPolicy.allows(",
+        "let finalURL = http.url",
+        "manifestURLMustUseHTTPS",
+    ],
+    "Sources/BlackstockApp/BlackstockUpdatePackageDownloader.swift": [
+        "ProductionUpdateURLPolicy.allows(",
+        "let finalURL = http.url",
+        "packageURLMustUseHTTPS",
+    ],
     "Sources/BlackstockApp/BlackstockKeychain.swift": [
         'kSecAttrAccessibleWhenUnlockedThisDeviceOnly',
         'kSecClassGenericPassword',
@@ -41,7 +51,16 @@ CONTRACTS = {
         "clearOAuthRuntimeAuthorizationState",
     ],
     "Sources/BlackstockCore/UpdateManifest.swift": [
-        'packageURL.scheme?.lowercased() == "https"',
+        "ProductionUpdateURLPolicy",
+        "ProductionUpdateURLPolicy.allows(",
+        "url.user == nil",
+        "url.password == nil",
+        "url.fragment == nil",
+        'host != "::1"',
+        '!host.hasSuffix(".local")',
+        '!host.hasSuffix(".invalid")',
+        '!host.hasSuffix(".example")',
+        '!host.hasSuffix(".test")',
         'Curve25519.Signing.PublicKey',
         'publicKey.isValidSignature',
         'manifest.sha256.count == 64',
@@ -55,6 +74,7 @@ CONTRACTS = {
 
 TEST_CONTRACTS = {
     "Tests/BlackstockCoreTests/UpdateManifestTests.swift": [
+        "testProductionUpdateURLPolicyRejectsUnsafeURLs",
         "testHTTPPackageURLIsRejectedEvenWithValidSignature",
         "testTamperedManifestSignatureIsRejected",
     ],
