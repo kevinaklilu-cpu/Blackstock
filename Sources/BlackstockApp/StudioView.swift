@@ -101,9 +101,9 @@ struct StudioView: View {
     private var header: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Studio")
+                Text("Editor")
                     .font(.title2.bold())
-                Text("Vorschau und non-destruktive Bearbeitung")
+                Text("Video schneiden und gestalten")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -163,12 +163,12 @@ struct StudioView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 7) {
-                    Text("Opportunity-Quelle")
+                    Text("Quelle")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                     if isLinkFirstClip {
                         Label(
-                            "Clip-Vorhaben",
+                            "Clip",
                             systemImage: "scissors"
                         )
                         .font(.caption2.weight(.semibold))
@@ -211,7 +211,7 @@ struct StudioView: View {
                             showImporter = true
                         } label: {
                             Label(
-                                "Produktionsvideo auswählen …",
+                                "Video auswählen …",
                                 systemImage: "folder"
                             )
                         }
@@ -245,14 +245,14 @@ struct StudioView: View {
                 } else {
                     Text(
                         hasBoundAuthorizedMedia
-                            ? "Die Produktionsdatei ist automatisch mit dieser Opportunity verknüpft."
+                            ? "Die Videodatei ist mit diesem Projekt verknüpft."
                             : resolution.explanation
                     )
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
 
-                DisclosureGroup("Quell-Provenance") {
+                DisclosureGroup("Quelldetails") {
                     Text(source.pageURL.absoluteString)
                         .font(.caption2.monospaced())
                         .textSelection(.enabled)
@@ -300,9 +300,9 @@ struct StudioView: View {
             Image(systemName: "film.stack")
                 .font(.largeTitle)
                 .foregroundStyle(.secondary)
-            Text("Autorisiertes Produktionsvideo hinzufügen")
+            Text("Video hinzufügen")
                 .font(.title2.bold())
-            Text("Nach deiner einmaligen Arbeitsbereich-Erklärung übernimmt Blackstock Produktionsmedien ohne zusätzlichen Lizenz-Upload in die Bearbeitung und bindet Quelle und Projekt automatisch.")
+            Text("Wähle eine Videodatei, die du verwenden darfst.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: 520)
@@ -383,13 +383,13 @@ struct StudioView: View {
 
                 if let artifact = state.renderArtifact {
                     HStack {
-                        Label("Render bereit", systemImage: "checkmark.seal.fill")
+                        Label("Video fertig", systemImage: "checkmark.seal.fill")
                             .font(.callout.weight(.semibold))
                         Spacer()
                         Text(String(artifact.sha256.prefix(12)) + "…")
                             .font(.caption.monospaced())
                             .foregroundStyle(.secondary)
-                        Button("Veröffentlichungspaket & Prüfung") {
+                        Button("Weiter zum Veröffentlichen") {
                             if currentStage == .editing {
                                 if session.advanceActiveProject(
                                     to: .packaging
@@ -429,10 +429,10 @@ struct StudioView: View {
 
     private var localClipCandidatesSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Lokale Clip-Kandidaten")
+            Text("Clip-Vorschläge")
                 .font(.headline)
 
-            Text("Blackstock analysiert das autorisierte Originalmedium lokal auf Sprachsegmente und gemessene Pausen. Die Vorschläge enthalten keine Erfolgs-, Qualitäts- oder Viralitätsnote und verändern den Schnitt erst nach deiner Auswahl.")
+            Text("Blackstock findet lokal passende Ausschnitte anhand von Sprache und Pausen. Du entscheidest, was übernommen wird.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -451,8 +451,8 @@ struct StudioView: View {
                     }
                     Label(
                         state.isGeneratingClipCandidates
-                            ? "Lokale Clip-Analyse läuft …"
-                            : "Clip-Kandidaten lokal finden",
+                            ? "Clips werden gesucht …"
+                            : "Clips finden",
                         systemImage: "scissors.badge.ellipsis"
                     )
                 }
@@ -478,7 +478,7 @@ struct StudioView: View {
                 id: \.element.id
             ) { index, candidate in
                 GroupBox(
-                    "Kandidat \(index + 1)"
+                    "Vorschlag \(index + 1)"
                 ) {
                     VStack(
                         alignment: .leading,
@@ -885,7 +885,7 @@ struct StudioView: View {
                                         }
                                     } label: {
                                         Label(
-                                            "Für Packaging verwenden",
+                                            "Zum Veröffentlichen verwenden",
                                             systemImage:
                                                 "shippingbox"
                                         )
@@ -1214,7 +1214,7 @@ struct StudioView: View {
                 Divider()
 
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Render")
+                    Text("Export")
                         .font(.headline)
 
                     Picker(
@@ -1247,7 +1247,7 @@ struct StudioView: View {
                                 ProgressView().controlSize(.small)
                             }
                             Label(
-                                state.isRendering ? "Render läuft …" : "Lokalen Render erstellen",
+                                state.isRendering ? "Video wird erstellt …" : "Video erstellen",
                                 systemImage: "film"
                             )
                         }
@@ -1255,7 +1255,7 @@ struct StudioView: View {
                     .buttonStyle(.borderedProminent)
                     .disabled(state.isRendering || !editingEnabled)
 
-                    Text("Blackstock rendert lokal auf dem Mac. Erst ein validiertes Render-Artefakt darf in Veröffentlichungspaket und Veröffentlichung weitergehen.")
+                    Text("Blackstock erstellt das Video lokal auf deinem Mac.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -2152,7 +2152,7 @@ struct StudioView: View {
                     .font(.callout)
             }
 
-            Text("Blackstock verknüpft anschließend Opportunity, Projekt und Produktionsdatei automatisch. Es wird keine Lizenzprüfung behauptet und keine Lizenzdatei pro Video verlangt.")
+            Text("Blackstock verknüpft Quelle, Projekt und Videodatei automatisch. Eine zusätzliche Lizenzdatei pro Video ist nicht nötig.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -2772,7 +2772,7 @@ struct StudioView: View {
                     }
                 }
             } else {
-                Text("Lade zuerst ein autorisiertes Produktionsmedium, um die Vorschau zu erzeugen.")
+                Text("Füge zuerst ein Video hinzu, um die Vorschau zu öffnen.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -2789,7 +2789,7 @@ struct StudioView: View {
 
     private func stageTitle(_ stage: BlackstockStage) -> String {
         switch stage {
-        case .production: return "Produktionsmedium vorbereiten"
+        case .production: return "Video hinzufügen"
         case .preview: return "Vorschau prüfen"
         case .storyboard: return "Storyboard strukturieren"
         case .editing: return "Video bearbeiten"
@@ -2828,7 +2828,7 @@ struct StudioView: View {
         case .storyboard:
             return "Lege die Beats und ihre Funktion fest. Danach wird die Bearbeitung freigeschaltet."
         case .editing:
-            return "Schnitt, Neuausrichtung, Untertitel, Audio-Prüfung und Rendering sind jetzt verfügbar."
+            return "Schnitt, Format, Untertitel und Audio sind jetzt verfügbar."
         case .packaging:
             return "Bearbeitung ist eingefroren; Metadaten, Vorschaubild, Untertitel und Prüfung folgen."
         case .review:
@@ -2838,7 +2838,7 @@ struct StudioView: View {
         case .published:
             return "Die YouTube-Video-ID ist gespeichert; Analytics kann zurückgeführt werden."
         case .discovery, .research, .analysis:
-            return "Dieser Projektstatus liegt vor der Produktionsphase."
+            return "Dieses Projekt ist noch nicht bereit für den Editor."
         }
     }
 
