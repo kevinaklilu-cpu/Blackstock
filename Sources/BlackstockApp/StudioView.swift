@@ -184,9 +184,7 @@ struct StudioView: View {
             VStack(spacing: 12) {
                 ZStack(alignment: .bottom) {
                     VideoPlayer(player: state.player)
-                        .accessibilityLabel(
-                            "Video-Vorschau des aktuellen Schnitts"
-                        )
+                        .accessibilityLabel("Video-Vorschau des aktuellen Schnitts")
 
                     if state.burnInCaptionsEnabled,
                        state.previewedLocalClipCandidateID == nil {
