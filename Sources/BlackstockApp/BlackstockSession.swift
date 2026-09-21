@@ -541,6 +541,7 @@ final class BlackstockSession: ObservableObject {
         tokenSet = nil
         cachedPublishingJournal = nil
         importedOAuthClientID = ""
+        originalMediaLibraryPath = ""
         onboardingComplete = !failures.isEmpty
         activeProject = nil
         activeOpportunitySource = nil
