@@ -98,6 +98,64 @@ struct OpportunityWorkspaceView: View {
                 )
             }
 
+            HStack(spacing: 10) {
+                Picker(
+                    "Kategorie",
+                    selection: $session.channelCategoryID
+                ) {
+                    ForEach(
+                        session.youtubeVideoCategories
+                            .filter(\.assignable)
+                    ) { category in
+                        Text(category.title)
+                            .tag(category.id)
+                    }
+                }
+                .pickerStyle(.menu)
+                .frame(minWidth: 190, idealWidth: 240)
+
+                Picker(
+                    "Region",
+                    selection: $session.channelRegionCode
+                ) {
+                    ForEach(session.youtubeRegions) { region in
+                        Text(region.name)
+                            .tag(region.code)
+                    }
+                }
+                .pickerStyle(.menu)
+                .frame(width: 170)
+
+                Picker(
+                    "Sprache",
+                    selection: $session.contentLanguage
+                ) {
+                    ForEach(session.youtubeLanguages) { language in
+                        Text(language.name)
+                            .tag(language.code)
+                    }
+                }
+                .pickerStyle(.menu)
+                .frame(width: 190)
+
+                Spacer()
+
+                if session.isLoadingYouTubeSetupOptions {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("YouTube-Parameter werden geladen …")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Label(
+                        "YouTube Data API",
+                        systemImage: "checkmark.seal"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+            }
+
             if let error = session.errorMessage {
                 Label(
                     error,
@@ -120,6 +178,7 @@ struct OpportunityWorkspaceView: View {
         .task {
             guard !hasLoadedInitially else { return }
             hasLoadedInitially = true
+            await session.ensureYouTubeDiscoveryOptionsLoaded()
             if session.opportunities.isEmpty,
                (
                     !session.channelCategoryID.isEmpty
@@ -144,6 +203,30 @@ struct OpportunityWorkspaceView: View {
         .onChange(of: session.opportunityContentFilter) { _ in
             guard hasLoadedInitially else { return }
             Task { await loadOpportunities() }
+        }
+        .onChange(of: session.channelCategoryID) { categoryID in
+            guard hasLoadedInitially else { return }
+            if let category =
+                    session.youtubeVideoCategories.first(
+                        where: { $0.id == categoryID }
+                    ) {
+                session.primaryTopic = category.title
+            }
+            Task { await loadOpportunities() }
+        }
+        .onChange(of: session.channelRegionCode) { _ in
+            guard hasLoadedInitially else { return }
+            Task {
+                await session.refreshYouTubeVideoCategories()
+                await loadOpportunities()
+            }
+        }
+        .onChange(of: session.contentLanguage) { _ in
+            guard hasLoadedInitially else { return }
+            Task {
+                await session.refreshYouTubeVideoCategories()
+                await loadOpportunities()
+            }
         }
     }
 
