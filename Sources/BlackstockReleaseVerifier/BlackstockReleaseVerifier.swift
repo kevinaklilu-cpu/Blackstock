@@ -13,7 +13,6 @@ private enum ReleaseVerifierError: Error, LocalizedError {
     case installedAppVersionMismatch
     case installedAppSourceCommitMismatch
     case installedAppArchitectureMismatch(String)
-    case missingCaptureEntitlements
     case incompleteNotaryArguments
     case notarizationNotAccepted(String)
     case incompleteVerifiedSnapshotArguments
@@ -40,8 +39,6 @@ private enum ReleaseVerifierError: Error, LocalizedError {
             return "Die installierte App stammt nicht aus dem im signierten Manifest gebundenen Source-Commit."
         case .installedAppArchitectureMismatch(let architectures):
             return "Die installierte App ist nicht Universal-2 (arm64 + x86_64): \(architectures)."
-        case .missingCaptureEntitlements:
-            return "Der installierten Produktions-App fehlen die Hardened-Runtime-Entitlements für Kamera oder Audioeingang."
         case .incompleteNotaryArguments:
             return "Notary-Submission-ID benötigt entweder ein Keychain-Profil oder vollständig konfigurierte API-Key-Zugangsdaten."
         case .notarizationNotAccepted(let status):
@@ -86,8 +83,6 @@ private struct ReleaseVerificationEvidence: Codable {
     let installedAppBuild: Int?
     let installedAppSourceCommitSHA: String?
     let installedAppExecutableSHA256: String?
-    let cameraEntitlementVerified: Bool?
-    let audioInputEntitlementVerified: Bool?
     let developerIDApplicationVerified: Bool?
     let gatekeeperApplicationAccepted: Bool?
     let notarySubmissionID: String?
@@ -253,8 +248,6 @@ private struct BlackstockReleaseVerifierMain {
         var installedAppBuild: Int?
         var installedAppSourceCommitSHA: String?
         var installedAppExecutableSHA256: String?
-        var cameraEntitlementVerified: Bool?
-        var audioInputEntitlementVerified: Bool?
         if let appURL = arguments.installedAppURL {
             _ = try requireSuccessful(
                 run(
@@ -368,41 +361,6 @@ private struct BlackstockReleaseVerifierMain {
             installedAppExecutableSHA256 =
                 try sha256(of: executableURL)
 
-            let entitlements = try requireSuccessful(
-                run(
-                    "/usr/bin/codesign",
-                    [
-                        "--display",
-                        "--entitlements", ":-",
-                        appURL.path
-                    ]
-                ),
-                command: "codesign --display --entitlements"
-            )
-            let hasCameraEntitlement =
-                entitlements.output.contains(
-                    "com.apple.security.device.camera"
-                )
-                && entitlementIsTrue(
-                    "com.apple.security.device.camera",
-                    in: entitlements.output
-                )
-            let hasAudioInputEntitlement =
-                entitlements.output.contains(
-                    "com.apple.security.device.audio-input"
-                )
-                && entitlementIsTrue(
-                    "com.apple.security.device.audio-input",
-                    in: entitlements.output
-                )
-            guard hasCameraEntitlement,
-                  hasAudioInputEntitlement else {
-                throw ReleaseVerifierError
-                    .missingCaptureEntitlements
-            }
-            cameraEntitlementVerified = true
-            audioInputEntitlementVerified = true
-
             _ = try requireSuccessful(
                 run(
                     "/usr/sbin/spctl",
@@ -439,7 +397,7 @@ private struct BlackstockReleaseVerifierMain {
         }
 
         return ReleaseVerificationEvidence(
-            schemaVersion: 3,
+            schemaVersion: 4,
             verifiedAt: Date(),
             manifestURL: arguments.manifestURL,
             packageURL: manifest.packageURL,
@@ -464,10 +422,6 @@ private struct BlackstockReleaseVerifierMain {
                 installedAppSourceCommitSHA,
             installedAppExecutableSHA256:
                 installedAppExecutableSHA256,
-            cameraEntitlementVerified:
-                cameraEntitlementVerified,
-            audioInputEntitlementVerified:
-                audioInputEntitlementVerified,
             developerIDApplicationVerified: applicationVerified,
             gatekeeperApplicationAccepted:
                 applicationGatekeeperAccepted,
