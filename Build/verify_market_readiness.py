@@ -11,7 +11,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 EXTERNAL_GATES = {
-    "Capture",
     "Signing",
     "Notarization",
     "Gatekeeper",
@@ -29,10 +28,9 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description=(
             "Verify Blackstock's internal release gates together with "
-            "real external capture, Apple release and in-app update evidence."
+            "real Apple release and in-app update evidence."
         )
     )
-    parser.add_argument("--capture-evidence", required=True)
     parser.add_argument("--production-release-evidence", required=True)
     parser.add_argument("--in-app-update-evidence", required=True)
     parser.add_argument("--output")
@@ -150,15 +148,6 @@ def main():
     require_internal_gates_pass(statuses)
 
     (
-        capture_path,
-        capture,
-        capture_raw,
-        capture_sha256,
-    ) = load_json(
-        args.capture_evidence,
-        "capture evidence",
-    )
-    (
         release_path,
         release,
         release_raw,
@@ -180,11 +169,6 @@ def main():
     with tempfile.TemporaryDirectory(
         prefix="blackstock-market-readiness-"
     ) as snapshot_directory:
-        capture_snapshot = write_snapshot(
-            snapshot_directory,
-            "capture-evidence.json",
-            capture_raw,
-        )
         release_snapshot = write_snapshot(
             snapshot_directory,
             "production-release-evidence.json",
@@ -197,10 +181,6 @@ def main():
         )
 
         run_validator(
-            "validate_capture_hardware_smoke.py",
-            capture_snapshot,
-        )
-        run_validator(
             "validate_production_release_evidence.py",
             release_snapshot,
         )
@@ -209,11 +189,6 @@ def main():
             updater_snapshot,
         )
 
-    require_source_unchanged(
-        capture_path,
-        capture_sha256,
-        "capture evidence",
-    )
     require_source_unchanged(
         release_path,
         release_sha256,
@@ -227,12 +202,7 @@ def main():
 
     if args.output:
         output_path = Path(args.output).expanduser().resolve()
-        evidence_paths = {
-            capture_path,
-            release_path,
-            updater_path,
-        }
-        if output_path in evidence_paths:
+        if output_path in {release_path, updater_path}:
             fail(
                 "market readiness output must not overwrite an evidence file"
             )
@@ -257,10 +227,6 @@ def main():
             "the same source update version"
         )
 
-    capture_version = normalize_version(
-        capture.get("blackstockVersion"),
-        "capture.blackstockVersion",
-    )
     release_version = normalize_version(
         release.get("targetVersion"),
         "release.targetVersion",
@@ -288,10 +254,6 @@ def main():
             "the same source update build"
         )
 
-    capture_build = as_positive_int(
-        capture.get("blackstockBuild"),
-        "capture.blackstockBuild",
-    )
     release_build = as_positive_int(
         release.get("targetBuild"),
         "release.targetBuild",
@@ -305,22 +267,15 @@ def main():
         "updater.observedInstalledBuild",
     )
 
-    versions = {
-        capture_version,
-        release_version,
-        updater_version,
-        observed_version,
-    }
-    builds = {
-        capture_build,
-        release_build,
-        updater_build,
-        observed_build,
-    }
-    if len(versions) != 1 or len(builds) != 1:
+    if len({release_version, updater_version, observed_version}) != 1:
         fail(
-            "capture, production release and updater evidence do not "
-            "refer to the same exact Blackstock version/build"
+            "production release and updater evidence do not refer to "
+            "the same exact Blackstock version"
+        )
+    if len({release_build, updater_build, observed_build}) != 1:
+        fail(
+            "production release and updater evidence do not refer to "
+            "the same exact Blackstock build"
         )
 
     if release.get("manifestURL") != updater.get("manifestURL"):
@@ -333,11 +288,14 @@ def main():
             "production release and in-app updater evidence use "
             "different package URLs"
         )
+    if release.get("packageSHA256") != updater.get("packageSHA256"):
+        fail(
+            "production release and updater evidence refer to different "
+            "package SHA-256 values"
+        )
+
     release_team_id = str(
         release.get("installerTeamID", "")
-    ).strip()
-    capture_team_id = str(
-        capture.get("applicationTeamID", "")
     ).strip()
     updater_team_id = str(
         updater.get("expectedInstallerTeamID", "")
@@ -347,18 +305,12 @@ def main():
     ).strip()
     if len({
         release_team_id,
-        capture_team_id,
         updater_team_id,
         updater_observed_team_id,
     }) != 1:
         fail(
-            "capture, production release and updater evidence use "
+            "production release and updater evidence use "
             "different Apple team IDs"
-        )
-    if release.get("packageSHA256") != updater.get("packageSHA256"):
-        fail(
-            "production release and updater evidence refer to different "
-            "package SHA-256 values"
         )
 
     updater_current_source_commit = normalize_source_commit(
@@ -370,10 +322,6 @@ def main():
         "updater.currentExecutableSHA256",
     )
 
-    capture_source_commit = normalize_source_commit(
-        capture.get("blackstockSourceCommitSHA"),
-        "capture.blackstockSourceCommitSHA",
-    )
     release_source_commit = normalize_source_commit(
         release.get("sourceCommitSHA"),
         "release.sourceCommitSHA",
@@ -390,23 +338,17 @@ def main():
         updater.get("observedInstalledSourceCommitSHA"),
         "updater.observedInstalledSourceCommitSHA",
     )
-    source_commits = {
-        capture_source_commit,
+    if len({
         release_source_commit,
         installed_source_commit,
         updater_target_source_commit,
         updater_observed_source_commit,
-    }
-    if len(source_commits) != 1:
+    }) != 1:
         fail(
-            "capture, production release and updater evidence do not "
-            "refer to the same exact source commit"
+            "production release and updater evidence do not refer to "
+            "the same exact target source commit"
         )
 
-    capture_executable_sha256 = normalize_sha256(
-        capture.get("applicationExecutableSHA256"),
-        "capture.applicationExecutableSHA256",
-    )
     release_executable_sha256 = normalize_sha256(
         release.get("installedAppExecutableSHA256"),
         "release.installedAppExecutableSHA256",
@@ -415,14 +357,10 @@ def main():
         updater.get("observedInstalledExecutableSHA256"),
         "updater.observedInstalledExecutableSHA256",
     )
-    if len({
-        capture_executable_sha256,
-        release_executable_sha256,
-        updater_executable_sha256,
-    }) != 1:
+    if release_executable_sha256 != updater_executable_sha256:
         fail(
-            "capture, production release and updater evidence do not "
-            "refer to the same exact installed Blackstock executable"
+            "production release and updater evidence do not refer to "
+            "the same installed Blackstock executable"
         )
 
     if release.get("installedAppPath") != "/Applications/Blackstock.app":
@@ -435,52 +373,16 @@ def main():
             "production release and updater evidence do not verify "
             "the same installed app path"
         )
-    if capture.get("installerReceiptPackageID") != updater.get(
-        "observedInstallerReceiptPackageID"
-    ):
-        fail(
-            "capture and updater evidence use different installer receipt package IDs"
-        )
-    if str(capture.get("installerReceiptVersion")) != str(
-        updater.get("observedInstallerReceiptVersion")
-    ):
-        fail(
-            "capture and updater evidence use different installer receipt versions"
-        )
 
-    try:
-        capture_receipt_installed_at = datetime.fromisoformat(
-            str(capture.get("installerReceiptInstalledAt", ""))
-                .replace("Z", "+00:00")
-        )
-        updater_receipt_reference_seconds = float(
-            updater.get("observedInstallerReceiptInstalledAt")
-        )
-        updater_receipt_installed_at = datetime.fromtimestamp(
-            updater_receipt_reference_seconds + 978_307_200,
-            tz=timezone.utc,
-        )
-    except (TypeError, ValueError, OverflowError):
-        fail("installer receipt installation timestamps are invalid")
-    if capture_receipt_installed_at.tzinfo is None:
-        fail("capture installer receipt installation timestamp must include timezone")
-    capture_receipt_installed_at = capture_receipt_installed_at.astimezone(
-        timezone.utc
-    )
-    receipt_delta = abs(
-        (
-            capture_receipt_installed_at
-            - updater_receipt_installed_at
-        ).total_seconds()
-    )
-    if receipt_delta > 1:
+    if updater.get("observedInstallerReceiptPackageID") != "de.blackstock.app":
+        fail("updater evidence has an unexpected installer receipt package ID")
+    if str(updater.get("observedInstallerReceiptVersion")) != release_version:
         fail(
-            "capture and updater evidence do not refer to the same "
-            "installer receipt installation"
+            "updater installer receipt version does not match target version"
         )
 
     report = {
-        "schemaVersion": 3,
+        "schemaVersion": 4,
         "ready": True,
         "verifiedAt": datetime.now(timezone.utc).isoformat().replace(
             "+00:00",
@@ -492,15 +394,6 @@ def main():
         "sourceAppExecutableSHA256": updater_current_executable_sha256,
         "sourceAppPath": updater.get("currentAppPath"),
         "sourceAppTeamID": updater.get("currentApplicationTeamID"),
-        "sourceInstallerReceiptPackageID": updater.get(
-            "currentInstallerReceiptPackageID"
-        ),
-        "sourceInstallerReceiptVersion": updater.get(
-            "currentInstallerReceiptVersion"
-        ),
-        "sourceInstallerReceiptInstalledAt": updater.get(
-            "currentInstallerReceiptInstalledAt"
-        ),
         "version": release_version,
         "build": release_build,
         "installerTeamID": release_team_id,
@@ -520,12 +413,6 @@ def main():
         "installerReceiptInstalledAt": updater.get(
             "observedInstallerReceiptInstalledAt"
         ),
-        "captureInstallerReceiptInstalledAt": capture.get(
-            "installerReceiptInstalledAt"
-        ),
-        "sameInstallationReceiptVerified": True,
-        "captureEvidence": str(capture_path),
-        "captureEvidenceSHA256": capture_sha256,
         "productionReleaseEvidence": str(release_path),
         "productionReleaseEvidenceSHA256": release_sha256,
         "inAppUpdateEvidence": str(updater_path),
