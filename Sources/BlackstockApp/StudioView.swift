@@ -371,7 +371,7 @@ struct StudioView: View {
                                 showSourceDownloader = true
                             } label: {
                                 Label(
-                                    "Downloader",
+                                    "Videoquelle beziehen",
                                     systemImage:
                                         "arrow.down.circle"
                                 )
@@ -564,7 +564,7 @@ struct StudioView: View {
                         showSourceDownloader = true
                     } label: {
                         Label(
-                            "Downloader",
+                            "Videoquelle beziehen",
                             systemImage:
                                 "arrow.down.circle.fill"
                         )
@@ -2564,10 +2564,10 @@ struct StudioView: View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Quelle herunterladen")
+                    Text("Videoquelle beziehen")
                         .font(.title2.bold())
                     Text(
-                        "Direkte oder autorisierte Medienquelle herunterladen und anschließend automatisch in Blackstock übernehmen."
+                        "Blackstock versucht zuerst, die passende Quelle automatisch zu finden. Falls nötig, kannst du hier eine direkte oder autorisierte Medienquelle laden."
                     )
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -2593,7 +2593,7 @@ struct StudioView: View {
             }
 
             VStack(alignment: .leading, spacing: 7) {
-                Text("Download-URL")
+                Text("Direkte Medienquelle")
                     .font(.caption.weight(.semibold))
                 TextField(
                     "https://…/video.mp4",
@@ -2602,7 +2602,7 @@ struct StudioView: View {
                 .textFieldStyle(.roundedBorder)
 
                 Text(
-                    "Hier gehört eine direkte oder von einem verbundenen Anbieter freigegebene Medien-URL hinein. Ein normaler youtube.com/watch-Link ist keine direkte Downloadquelle."
+                    "Nur nötig, wenn die Quelle nicht automatisch gefunden wurde. Verwende eine direkte oder von einem verbundenen Anbieter freigegebene Medien-URL."
                 )
                 .font(.caption2)
                 .foregroundStyle(.secondary)
