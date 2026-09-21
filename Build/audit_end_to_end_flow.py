@@ -40,6 +40,8 @@ checks = {
         "collectChannelAnalytics(",
         "YouTubeAnalyticsClient(",
         "GrowthLearningEngine()",
+        "resolveOriginalMedia(",
+        "originalMediaLibraryPath",
     ],
     "Sources/BlackstockApp/WorkspaceProductViews.swift": [
         "YouTubeEmbeddedPlayer(videoID:",
@@ -57,8 +59,9 @@ checks = {
         "state.renderAllSavedClipSelections(",
         "state.useSavedClipForPackaging(",
         "state.requestStopProcessing(",
-        "Schnittquelle hinzufügen",
+        "Originaldatei auswählen",
         "PackagingReviewView(",
+        "attemptAutomaticOriginalBinding()",
     ],
     "Sources/BlackstockApp/StudioState.swift": [
         "createAutomaticHighlights(",
@@ -88,6 +91,13 @@ checks = {
         "session.collectDueGrowthObservations(",
         "session.collectChannelAnalytics(",
         "session.loadPublishedComments(",
+    ],
+    "Sources/BlackstockCore/LocalOriginalMediaMatcher.swift": [
+        "LocalOriginalMediaMatcher",
+        "supportedExtensions",
+        "bestMatch(",
+        "videoID:",
+        "title:",
     ],
     "Sources/BlackstockCore/YouTubePublishingCoordinator.swift": [
         "uploadClient.upload(",
