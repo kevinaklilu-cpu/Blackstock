@@ -11,8 +11,7 @@ Für einen echten Produktionslauf werden benötigt:
 - funktionsfähiges Apple-Notary-Keychain-Profil,
 - privater Blackstock-Update-Signaturschlüssel außerhalb des Repositories,
 - öffentlicher Blackstock-Update-Schlüssel,
-- reale HTTPS-Manifest-URL,
-- reale HTTPS-Paket-URL,
+- Schreibzugriff des GitHub-Actions-Tokens auf Releases; Manifest- und Paket-HTTPS-URLs werden vom Produktionsworkflow kanonisch aus dem Repository und dem Release-Tag abgeleitet,
 - erwartete Apple-Team-ID,
 - eine ältere installierbare Blackstock-Version für den Update-Test.
 
@@ -31,7 +30,12 @@ Blackstock enthält zwei bewusst getrennte manuelle Workflows:
    - prüft `Accepted`, Stapling und Gatekeeper,
    - erzeugt das signierte Update-Manifest mit gebundenem `github.sha`,
    - bindet denselben Source-Commit in App-Bundle und Produktionsmetadaten,
-   - lädt das Release-Bundle als GitHub-Artefakt hoch.
+   - veröffentlicht `Blackstock.pkg` und `update-manifest.json` automatisch als GitHub Release,
+   - verwendet für die App den stabilen Produktions-Endpunkt `https://github.com/<owner>/<repo>/releases/latest/download/update-manifest.json`,
+   - verwendet im signierten Manifest eine unveränderliche, versions-/buildgebundene Paket-URL,
+   - lädt die soeben veröffentlichten Remote-Artefakte wieder über HTTPS, verifiziert und installiert exakt diese Bytes und erzeugt direkt `release-evidence.json`,
+   - entfernt den gerade veröffentlichten GitHub Release automatisch wieder, wenn Endpoint- oder Release-Verifikation fehlschlägt,
+   - lädt das Release-Bundle zusätzlich als GitHub-Actions-Artefakt hoch.
 
 2. **Blackstock Verify Published Release** (`.github/workflows/verify-published-release.yml`)
    - läuft erst **nach** Veröffentlichung von Manifest und Paket unter den realen HTTPS-URLs,
@@ -78,14 +82,13 @@ Vor dem Import der Apple-Zertifikate führt **Blackstock Production Release** au
 
 ### Workflow-Reihenfolge
 
-1. Production Release mit Zielversion, Build, zukünftiger Manifest-URL und Paket-URL starten.
-2. Das erzeugte `Blackstock.pkg` und `update-manifest.json` exakt unter diesen HTTPS-URLs veröffentlichen.
-3. Die Notary Submission ID aus `notary-response.json` übernehmen.
-4. Verify Published Release mit der realen Manifest-URL, einer älteren Ausgangsversion/-Build und genau dieser Submission ID starten.
-5. `release-evidence.json` archivieren.
-6. Auf einem realen Mac den vollständigen In-App-Updater-Versionswechsel durchführen und die von Blackstock erzeugte `update-evidence.json` sichern.
-7. Den realen Capture-Hardware-Smoke durchführen.
-8. Erst dann `Build/verify_market_readiness.py` über alle drei realen Evidenzdateien laufen lassen.
+1. **Blackstock Production Release** auf `main` nur mit Zielversion und positiver Build-Nummer starten.
+2. Der Workflow leitet Release-Tag, stabile Manifest-URL und unveränderliche Paket-URL selbst ab, baut/signiert/notarisiert das Universal-2-Paket und veröffentlicht GitHub Release + Manifest automatisch.
+3. Derselbe Lauf wartet, bis der stabile `releases/latest`-Manifest-Endpunkt genau die neue Version ausliefert, lädt Manifest/Paket remote erneut, verifiziert Signatur/Hash/Developer-ID/Notarisierung, installiert exakt die geprüften Bytes und erzeugt `release-evidence.json`.
+4. Der separate **Verify Published Release** Workflow bleibt als unabhängiger manueller Zweitnachweis verfügbar, ist für den normalen Releasepfad aber nicht mehr als Veröffentlichungs-Zwischenschritt nötig.
+5. Auf einem realen Mac den vollständigen In-App-Updater-Versionswechsel durchführen und die von Blackstock erzeugte `update-evidence.json` sichern.
+6. Den realen Capture-Hardware-Smoke durchführen.
+7. Erst dann `Build/verify_market_readiness.py` über alle drei realen Evidenzdateien laufen lassen.
 
 Die Canonical-CI prüft mit `Build/audit_production_release_workflows.py`, dass diese Trennung, die Secret-Bindung und der Ausschluss des CI-only E2E-Helpers aus Produktionspaketen erhalten bleiben.
 
