@@ -2465,9 +2465,30 @@ final class BlackstockSession: ObservableObject {
         let resolvedContentFilter =
             contentFilter ?? opportunityContentFilter
         opportunityContentFilter = resolvedContentFilter
-        UserDefaults.standard.set(
+        let defaults = UserDefaults.standard
+        defaults.set(
             resolvedContentFilter.rawValue,
             forKey: "blackstock.workspace.opportunityContentFilter"
+        )
+        defaults.set(
+            resolvedTimeWindow.rawValue,
+            forKey: "blackstock.workspace.opportunityTimeWindow"
+        )
+        defaults.set(
+            channelCategoryID,
+            forKey: "blackstock.workspace.channelCategoryID"
+        )
+        defaults.set(
+            channelRegionCode,
+            forKey: "blackstock.workspace.regionCode"
+        )
+        defaults.set(
+            contentLanguage,
+            forKey: "blackstock.workspace.contentLanguage"
+        )
+        defaults.set(
+            primaryTopic,
+            forKey: "blackstock.workspace.primaryTopic"
         )
 
         guard let channelID = workspaceChannelID else {
