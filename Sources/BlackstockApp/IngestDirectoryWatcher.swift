@@ -1,5 +1,6 @@
 #if os(macOS)
 import Darwin
+import Combine
 import Dispatch
 import Foundation
 
