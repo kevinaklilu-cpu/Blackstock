@@ -273,16 +273,32 @@ if package_script.count(entitlement_flag) < 2:
         "Developer ID and ad-hoc app signing paths"
     )
 
-developer_id_contract = "\n".join([
-    "  codesign --force --options runtime --timestamp \\",
-    '    --entitlements "$ROOT/Build/Blackstock.entitlements" \\',
-    '    --sign "$APP_SIGN_IDENTITY" "$APP"',
-])
-if developer_id_contract not in package_script:
+developer_id_start = package_script.find(
+    'if [[ -n "$APP_SIGN_IDENTITY" ]]; then'
+)
+developer_id_end = package_script.find(
+    "\nelse\n",
+    developer_id_start,
+)
+if developer_id_start < 0 or developer_id_end < 0:
     errors.append(
-        "Build/package.sh: Developer ID Application signing path must "
-        "include Hardened Runtime and capture entitlements"
+        "Build/package.sh: Developer ID Application signing branch is missing"
     )
+else:
+    developer_id_block = package_script[
+        developer_id_start:developer_id_end
+    ]
+    for marker in [
+        "codesign --force --options runtime --timestamp",
+        '--entitlements "$ROOT/Build/Blackstock.entitlements"',
+        '--sign "$APP_SIGN_IDENTITY" "$APP"',
+    ]:
+        if marker not in developer_id_block:
+            errors.append(
+                "Build/package.sh: Developer ID Application signing path must "
+                "include Hardened Runtime and capture entitlements"
+            )
+            break
 
 adhoc_contract = "\n".join([
     "  codesign --force --deep --options runtime \\",
