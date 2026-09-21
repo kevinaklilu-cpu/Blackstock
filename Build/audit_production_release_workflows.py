@@ -33,10 +33,9 @@ requirements = {
         "notary-response.json",
         "Developer-only helper leaked into production package.",
         "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
-        "parsed.username",
-        "parsed.fragment",
-        "host.endswith(\".local\")",
         "Cleanup signing material",
+        "https://github.com/${{ github.repository }}/releases/latest/download/update-manifest.json",
+        "https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}-build.${{ inputs.build }}/Blackstock.pkg",
         "contents: write",
         "releases/latest/download/update-manifest.json",
         "BLACKSTOCK_RELEASE_TAG",
@@ -199,6 +198,14 @@ production = (ROOT / ".github/workflows/production-release.yml").read_text(
 if "\n      manifest_url:\n" in production or "\n      package_url:\n" in production:
     errors.append(
         "production release workflow must derive canonical GitHub Release update URLs instead of asking for manual endpoint inputs"
+    )
+if "BLACKSTOCK_MANIFEST_URL: https://github.com/${{ github.repository }}/releases/latest/download/update-manifest.json" not in production:
+    errors.append(
+        "production workflow must derive the stable manifest URL from the current GitHub repository"
+    )
+if "BLACKSTOCK_PACKAGE_URL: https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}-build.${{ inputs.build }}/Blackstock.pkg" not in production:
+    errors.append(
+        "production workflow must derive an immutable version/build package URL from the current GitHub repository"
     )
 if "contents: write" not in production:
     errors.append(
