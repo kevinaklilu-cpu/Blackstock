@@ -15,6 +15,8 @@ struct StudioView: View {
     @StateObject private var state = StudioState()
     @StateObject private var sourceDownloader =
         SourceDownloadManager()
+    @StateObject private var ingestWatcher =
+        IngestDirectoryWatcher()
     @State private var pendingURL: URL?
     @State private var showOptionalCapture = false
     @State private var isResolvingAutomaticSource = false
@@ -67,7 +69,9 @@ struct StudioView: View {
             rightsSheet
         }
         .task(id: project.id) {
-            await state.loadWorkspace(projectID: project.id)
+            await state.loadWorkspace(
+                projectID: project.id
+            )
             if session.activeProject?.isPaused == true {
                 state.requestStopProcessing()
                 return
@@ -82,21 +86,23 @@ struct StudioView: View {
                 return
             }
 
-            while !Task.isCancelled,
-                  state.asset == nil,
-                  session.activeProject?.isPaused != true {
-                await attemptAutomaticOriginalBinding()
-                if state.asset != nil {
-                    break
+            if let ingestURL =
+                    session.automaticIngestDirectoryURL {
+                ingestWatcher.start(
+                    directoryURL: ingestURL
+                ) {
+                    Task { @MainActor in
+                        await attemptAutomaticOriginalBinding()
+                    }
                 }
-                try? await Task.sleep(
-                    for: .seconds(4)
-                )
             }
+
+            await attemptAutomaticOriginalBinding()
         }
         .onDisappear {
             activeProcessingTask?.cancel()
             activeProcessingTask = nil
+            ingestWatcher.stop()
         }
         .onChange(of: session.activeProject?.isPaused) { paused in
             if paused == true {
@@ -289,11 +295,11 @@ struct StudioView: View {
 
                     Text(
                         hasBoundAuthorizedMedia
-                            ? "Originalvideo bereit. Blackstock kann das Video jetzt automatisch analysieren und clippen."
+                            ? "Videoquelle bereit. Blackstock kann das Material jetzt analysieren und clippen."
                             : (
-                                session.originalMediaLibraryPath.isEmpty
-                                ? "Video ausgewählt. Lege einmalig deine Original-Mediathek fest oder wähle die Originaldatei direkt aus."
-                                : "Video ausgewählt. Blackstock sucht automatisch in deiner Original-Mediathek nach dem passenden Video."
+                                ingestWatcher.isWatching
+                                ? "Quellen-Monitor aktiv. Blackstock übernimmt passende Dateien aus dem Ingest-Ordner automatisch."
+                                : "Noch keine nutzbare Medienquelle gebunden. Öffne den Downloader, den Ingest-Ordner oder wähle eine alternative Quelle."
                             )
                     )
                     .font(.caption)
