@@ -160,7 +160,7 @@ final class ApprovedSourceProviderClientTests:
 
 private final class SourceProviderURLProtocol:
     URLProtocol {
-    static var handler:
+    nonisolated(unsafe) static var handler:
         ((URLRequest) throws -> (
             HTTPURLResponse,
             Data
