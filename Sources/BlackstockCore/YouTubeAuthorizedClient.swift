@@ -7,6 +7,8 @@ public struct YouTubeChannelIdentity: Codable, Sendable, Equatable, Identifiable
     public let avatarURL: URL?
     public let subscriberCount: Int?
     public let uploadsPlaylistID: String?
+    public let viewCount: Int?
+    public let videoCount: Int?
 
     public init(
         id: String,
@@ -14,7 +16,9 @@ public struct YouTubeChannelIdentity: Codable, Sendable, Equatable, Identifiable
         handle: String?,
         avatarURL: URL?,
         subscriberCount: Int?,
-        uploadsPlaylistID: String?
+        uploadsPlaylistID: String?,
+        viewCount: Int? = nil,
+        videoCount: Int? = nil
     ) {
         self.id = id
         self.title = title
@@ -22,6 +26,8 @@ public struct YouTubeChannelIdentity: Codable, Sendable, Equatable, Identifiable
         self.avatarURL = avatarURL
         self.subscriberCount = subscriberCount
         self.uploadsPlaylistID = uploadsPlaylistID
+        self.viewCount = viewCount
+        self.videoCount = videoCount
     }
 }
 
@@ -236,8 +242,17 @@ public struct YouTubeAuthorizedClient: Sendable {
                 title: $0.snippet.title,
                 handle: $0.snippet.customUrl,
                 avatarURL: $0.snippet.thumbnails?.defaultImage?.url,
-                subscriberCount: $0.statistics.flatMap { Int($0.subscriberCount ?? "") },
-                uploadsPlaylistID: $0.contentDetails?.relatedPlaylists.uploads
+                subscriberCount: $0.statistics.flatMap {
+                    Int($0.subscriberCount ?? "")
+                },
+                uploadsPlaylistID:
+                    $0.contentDetails?.relatedPlaylists.uploads,
+                viewCount: $0.statistics.flatMap {
+                    Int($0.viewCount ?? "")
+                },
+                videoCount: $0.statistics.flatMap {
+                    Int($0.videoCount ?? "")
+                }
             )
         }
     }
@@ -673,6 +688,8 @@ private struct ChannelSnippet: Decodable {
 }
 private struct ChannelStatistics: Decodable {
     let subscriberCount: String?
+    let viewCount: String?
+    let videoCount: String?
 }
 private struct ChannelContentDetails: Decodable {
     let relatedPlaylists: RelatedPlaylists
