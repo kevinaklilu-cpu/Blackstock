@@ -78,14 +78,16 @@ final class SourceDownloadManager:
               let task else {
             return
         }
-        task.cancel { [weak self] data in
-            DispatchQueue.main.async {
+        task.cancel(
+            byProducingResumeData: { [weak self] data in
+                DispatchQueue.main.async {
                 guard let self else { return }
                 self.resumeData = data
                 self.task = nil
-                self.state = .paused
+                    self.state = .paused
+                }
             }
-        }
+        )
     }
 
     func resume() {
