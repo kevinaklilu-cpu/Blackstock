@@ -1445,8 +1445,13 @@ struct StudioView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Divider()
-                supplementalCapturesSection
+                if !state.supplementalCaptures.isEmpty
+                    || session.productionIntent(
+                        for: project.id
+                    )?.isLinkFirstClip != true {
+                    Divider()
+                    supplementalCapturesSection
+                }
 
                 Divider()
 
