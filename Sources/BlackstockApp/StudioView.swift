@@ -20,6 +20,7 @@ struct StudioView: View {
     @State private var pendingURL: URL?
     @State private var showOptionalCapture = false
     @State private var isResolvingAutomaticSource = false
+    @State private var isAcquiringApprovedSource = false
     @State private var showSourceDownloader = false
     @State private var sourceDownloadURLText = ""
     @State private var sourceDownloadMessage: String?
@@ -365,19 +366,51 @@ struct StudioView: View {
                                 isResolvingAutomaticSource
                             )
 
-                            Button {
-                                sourceDownloadURLText = ""
-                                sourceDownloadMessage = nil
-                                showSourceDownloader = true
-                            } label: {
-                                Label(
-                                    "Videoquelle beziehen",
-                                    systemImage:
-                                        "arrow.down.circle"
+                            if session
+                                .canAutomaticallyAcquireYouTubeSource {
+                                Button {
+                                    Task {
+                                        await acquireApprovedSource(
+                                            source
+                                        )
+                                    }
+                                } label: {
+                                    HStack {
+                                        if isAcquiringApprovedSource {
+                                            ProgressView()
+                                                .controlSize(.mini)
+                                        }
+                                        Label(
+                                            isAcquiringApprovedSource
+                                                ? "Quelle wird bezogen …"
+                                                : "Automatisch beziehen",
+                                            systemImage:
+                                                "arrow.down.circle.fill"
+                                        )
+                                    }
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .controlSize(.small)
+                                .disabled(
+                                    isAcquiringApprovedSource
+                                    || sourceDownloader.state
+                                        == .downloading
                                 )
+                            } else {
+                                Button {
+                                    sourceDownloadURLText = ""
+                                    sourceDownloadMessage = nil
+                                    showSourceDownloader = true
+                                } label: {
+                                    Label(
+                                        "Videoquelle beziehen",
+                                        systemImage:
+                                            "arrow.down.circle"
+                                    )
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .controlSize(.small)
                             }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.small)
 
                             Menu {
 
@@ -2729,6 +2762,41 @@ struct StudioView: View {
         }
     }
 
+    private func acquireApprovedSource(
+        _ source: MediaSourceReference
+    ) async {
+        guard !isAcquiringApprovedSource else {
+            return
+        }
+
+        isAcquiringApprovedSource = true
+        sourceDownloadMessage = nil
+        defer {
+            isAcquiringApprovedSource = false
+        }
+
+        do {
+            guard let mediaURL =
+                    try await session
+                        .resolveApprovedSourceMediaURL(
+                            for: source
+                        ) else {
+                sourceDownloadMessage =
+                    "Für dieses Video ist aktuell kein freigegebener automatischer Source Provider verfügbar."
+                showSourceDownloader = true
+                return
+            }
+            startSourceDownload(
+                remoteURL: mediaURL
+            )
+        } catch {
+            sourceDownloadMessage =
+                "Die automatische Quelle konnte nicht bezogen werden: "
+                + error.localizedDescription
+            showSourceDownloader = true
+        }
+    }
+
     private func startSourceDownload() {
         sourceDownloadMessage = nil
         let rawValue = sourceDownloadURLText
@@ -2756,6 +2824,14 @@ struct StudioView: View {
             return
         }
 
+        startSourceDownload(
+            remoteURL: remoteURL
+        )
+    }
+
+    private func startSourceDownload(
+        remoteURL: URL
+    ) {
         guard let ingestDirectory =
                 session.automaticIngestDirectoryURL else {
             sourceDownloadMessage =
