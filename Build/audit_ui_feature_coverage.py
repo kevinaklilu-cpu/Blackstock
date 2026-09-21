@@ -107,6 +107,8 @@ requirements = {
         "SourceDownloadManager()",
         "IngestDirectoryWatcher()",
         "startIngestWatcher()",
+        "acquireApprovedSource(",
+        "Videoquelle beziehen",
     ],
     "Sources/BlackstockApp/PackagingReviewView.swift": [
         'GroupBox("YouTube-Metadaten")',
@@ -140,6 +142,11 @@ for relative, markers in requirements.items():
             )
 
 for relative, markers in {
+    "Sources/BlackstockCore/ApprovedSourceProviderClient.swift": [
+        "ApprovedSourceProviderClient",
+        "ApprovedSourceProviderRequest",
+        "ApprovedSourceProviderResponse",
+    ],
     "Sources/BlackstockApp/SourceDownloadManager.swift": [
         "URLSessionDownloadDelegate",
         "func pause()",
