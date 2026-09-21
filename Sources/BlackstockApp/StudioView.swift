@@ -86,17 +86,7 @@ struct StudioView: View {
                 return
             }
 
-            if let ingestURL =
-                    session.automaticIngestDirectoryURL {
-                ingestWatcher.start(
-                    directoryURL: ingestURL
-                ) {
-                    Task { @MainActor in
-                        await attemptAutomaticOriginalBinding()
-                    }
-                }
-            }
-
+            startIngestWatcher()
             await attemptAutomaticOriginalBinding()
         }
         .onDisappear {
@@ -305,6 +295,47 @@ struct StudioView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
+                    HStack(spacing: 8) {
+                        Label(
+                            ingestWatcher.isWatching
+                                ? "Quellen-Monitor aktiv"
+                                : "Quellen-Monitor pausiert",
+                            systemImage:
+                                ingestWatcher.isWatching
+                                ? "dot.radiowaves.left.and.right"
+                                : "pause.circle"
+                        )
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                        if let lastEventAt =
+                                ingestWatcher.lastEventAt {
+                            Text(
+                                "Letzte Änderung "
+                                + lastEventAt.formatted(
+                                    date: .omitted,
+                                    time: .shortened
+                                )
+                            )
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        }
+
+                        Button(
+                            ingestWatcher.isWatching
+                                ? "Pausieren"
+                                : "Starten"
+                        ) {
+                            if ingestWatcher.isWatching {
+                                ingestWatcher.stop()
+                            } else {
+                                startIngestWatcher()
+                            }
+                        }
+                        .buttonStyle(.link)
+                        .controlSize(.small)
+                    }
+
                     if clipPreparation.status
                             == .productionMediaRequired,
                        currentStage == .production {
@@ -334,20 +365,21 @@ struct StudioView: View {
                                 isResolvingAutomaticSource
                             )
 
-                            Menu {
-                                Button {
-                                    sourceDownloadURLText = ""
-                                    sourceDownloadMessage = nil
-                                    showSourceDownloader = true
-                                } label: {
-                                    Label(
-                                        "Downloadquelle öffnen",
-                                        systemImage:
-                                            "arrow.down.circle"
-                                    )
-                                }
+                            Button {
+                                sourceDownloadURLText = ""
+                                sourceDownloadMessage = nil
+                                showSourceDownloader = true
+                            } label: {
+                                Label(
+                                    "Downloader",
+                                    systemImage:
+                                        "arrow.down.circle"
+                                )
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
 
-                                Divider()
+                            Menu {
 
                                 Button {
                                     presentOriginalMediaLibraryPicker()
@@ -525,6 +557,19 @@ struct StudioView: View {
                     .disabled(
                         isResolvingAutomaticSource
                     )
+
+                    Button {
+                        sourceDownloadURLText = ""
+                        sourceDownloadMessage = nil
+                        showSourceDownloader = true
+                    } label: {
+                        Label(
+                            "Downloader",
+                            systemImage:
+                                "arrow.down.circle.fill"
+                        )
+                    }
+                    .buttonStyle(.borderedProminent)
 
                     if let ingestURL =
                             session.automaticIngestDirectoryURL {
@@ -2787,6 +2832,20 @@ struct StudioView: View {
         }
         .padding(24)
         .frame(width: 520)
+    }
+
+    private func startIngestWatcher() {
+        guard let ingestURL =
+                session.automaticIngestDirectoryURL else {
+            return
+        }
+        ingestWatcher.start(
+            directoryURL: ingestURL
+        ) {
+            Task { @MainActor in
+                await attemptAutomaticOriginalBinding()
+            }
+        }
     }
 
     private func attemptAutomaticOriginalBinding() async {
