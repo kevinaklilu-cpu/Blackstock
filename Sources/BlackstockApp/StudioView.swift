@@ -15,6 +15,7 @@ struct StudioView: View {
     @StateObject private var state = StudioState()
     @State private var pendingURL: URL?
     @State private var showOptionalCapture = false
+    @State private var isResolvingAutomaticSource = false
     @State private var pendingCaptureKind: CaptureKind?
     @State private var showRightsSheet = false
     @State private var rightsSelection: ProductionMediaAuthorization = .owned
@@ -118,12 +119,19 @@ struct StudioView: View {
             }
             Spacer()
 
-            Button {
-                presentVideoPicker()
-            } label: {
-                Label("Videodatei hinzufügen", systemImage: "plus")
+            if session.productionIntent(
+                for: project.id
+            )?.isLinkFirstClip != true {
+                Button {
+                    presentVideoPicker()
+                } label: {
+                    Label(
+                        "Videodatei hinzufügen",
+                        systemImage: "plus"
+                    )
+                }
+                .buttonStyle(.bordered)
             }
-            .buttonStyle(.bordered)
 
             if currentStage != .published {
                 Button {
@@ -255,16 +263,61 @@ struct StudioView: View {
                     if clipPreparation.status
                             == .productionMediaRequired,
                        currentStage == .production {
-                        Button {
-                            presentVideoPicker()
-                        } label: {
-                            Label(
-                                "Originaldatei auswählen",
-                                systemImage: "folder"
+                        HStack(spacing: 8) {
+                            Button {
+                                Task {
+                                    await attemptAutomaticOriginalBinding()
+                                }
+                            } label: {
+                                HStack {
+                                    if isResolvingAutomaticSource {
+                                        ProgressView()
+                                            .controlSize(.mini)
+                                    }
+                                    Label(
+                                        isResolvingAutomaticSource
+                                            ? "Quelle wird geprüft …"
+                                            : "Quelle erneut prüfen",
+                                        systemImage:
+                                            "arrow.clockwise"
+                                    )
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .disabled(
+                                isResolvingAutomaticSource
                             )
+
+                            Menu {
+                                Button {
+                                    presentOriginalMediaLibraryPicker()
+                                } label: {
+                                    Label(
+                                        "Lokale Mediathek verbinden",
+                                        systemImage:
+                                            "folder.badge.plus"
+                                    )
+                                }
+                                Button {
+                                    presentVideoPicker()
+                                } label: {
+                                    Label(
+                                        "Datei als alternative Quelle wählen",
+                                        systemImage:
+                                            "film.stack"
+                                    )
+                                }
+                            } label: {
+                                Label(
+                                    "Alternative Quelle",
+                                    systemImage:
+                                        "ellipsis.circle"
+                                )
+                            }
+                            .menuStyle(.borderlessButton)
+                            .controlSize(.small)
                         }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
                     }
 
                     if clipPreparation.status
@@ -382,9 +435,9 @@ struct StudioView: View {
                     .font(.title2.bold())
 
                 Text(
-                    session.originalMediaLibraryPath.isEmpty
-                        ? "Wähle einmalig deinen Originalvideo-Ordner in den Einstellungen oder füge die Originaldatei direkt hinzu. Danach erstellt Blackstock automatisch Highlights, Hochkantformat und Untertitel."
-                        : "Blackstock sucht automatisch in deiner Original-Mediathek nach diesem Video. Nur wenn kein eindeutiger Treffer gefunden wird, musst du die Datei einmalig auswählen."
+                    isResolvingAutomaticSource
+                        ? "Blackstock prüft gerade, ob eine automatisch nutzbare Medienquelle für dieses Video verfügbar ist."
+                        : "Das Video bleibt ausgewählt und deine einmalige Nutzungsbestätigung gilt weiter. Blackstock prüft verfügbare Quellen automatisch; nur wenn keine nutzbare Quelle vorliegt, kannst du optional eine alternative Quelle verbinden."
                 )
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
@@ -392,38 +445,54 @@ struct StudioView: View {
 
                 HStack(spacing: 10) {
                     Button {
-                        presentVideoPicker()
+                        Task {
+                            await attemptAutomaticOriginalBinding()
+                        }
                     } label: {
-                        Label(
-                            "Originaldatei auswählen",
-                            systemImage: "film.stack"
-                        )
+                        HStack {
+                            if isResolvingAutomaticSource {
+                                ProgressView()
+                                    .controlSize(.small)
+                            }
+                            Label(
+                                isResolvingAutomaticSource
+                                    ? "Quelle wird geprüft …"
+                                    : "Quelle erneut prüfen",
+                                systemImage: "arrow.clockwise"
+                            )
+                        }
                     }
                     .buttonStyle(.borderedProminent)
+                    .disabled(
+                        isResolvingAutomaticSource
+                    )
 
-                    if session.originalMediaLibraryPath.isEmpty {
+                    Menu {
                         Button {
                             presentOriginalMediaLibraryPicker()
                         } label: {
                             Label(
-                                "Originalvideo-Ordner wählen …",
-                                systemImage: "folder.badge.plus"
+                                "Lokale Mediathek verbinden",
+                                systemImage:
+                                    "folder.badge.plus"
                             )
                         }
-                        .buttonStyle(.bordered)
-                    } else {
                         Button {
-                            Task {
-                                await attemptAutomaticOriginalBinding()
-                            }
+                            presentVideoPicker()
                         } label: {
                             Label(
-                                "Mediathek erneut durchsuchen",
-                                systemImage: "arrow.clockwise"
+                                "Datei als alternative Quelle wählen",
+                                systemImage:
+                                    "film.stack"
                             )
                         }
-                        .buttonStyle(.bordered)
+                    } label: {
+                        Label(
+                            "Alternative Quelle",
+                            systemImage: "ellipsis.circle"
+                        )
                     }
+                    .menuStyle(.borderlessButton)
 
                     Button("Auf YouTube ansehen") {
                         NSWorkspace.shared.open(
@@ -2409,11 +2478,20 @@ struct StudioView: View {
               )?.isLinkFirstClip == true,
               let source = opportunitySource,
               session.workspaceRightsAttestation?
-                .permitsUserDirectedProduction == true,
-              let matchedURL = await session.resolveOriginalMedia(
-                for: project,
-                source: source
-              ) else {
+                .permitsUserDirectedProduction == true else {
+            return
+        }
+
+        isResolvingAutomaticSource = true
+        defer {
+            isResolvingAutomaticSource = false
+        }
+
+        guard let matchedURL =
+                await session.resolveOriginalMedia(
+                    for: project,
+                    source: source
+                ) else {
             return
         }
 
