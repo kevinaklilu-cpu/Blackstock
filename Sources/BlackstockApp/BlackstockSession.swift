@@ -94,6 +94,7 @@ final class BlackstockSession: ObservableObject {
     @Published private(set) var latestCommentsVideoID: String?
     @Published private(set) var importedOAuthClientID: String
     @Published private(set) var workspaceRightsResponsibilityAccepted: Bool
+    @Published private(set) var originalMediaLibraryPath: String
 
     private var tokenSet: GoogleOAuthTokenSet?
     private var tokenExpiresAt: Date?
@@ -178,6 +179,9 @@ final class BlackstockSession: ObservableObject {
         )
         importedOAuthClientID = BlackstockKeychain.read("google.oauth.importedClientID")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        originalMediaLibraryPath = UserDefaults.standard.string(
+            forKey: "blackstock.originalMediaLibraryPath"
+        ) ?? ""
         onboardingComplete = UserDefaults.standard.bool(forKey: "blackstock.firstRun.complete")
         workspaceRightsResponsibilityAccepted = false
         activeProject = Self.loadStoredProject()
@@ -251,6 +255,111 @@ final class BlackstockSession: ObservableObject {
 
     var hasImportedOAuthConfiguration: Bool {
         !importedClientID.isEmpty
+    }
+
+    var originalMediaLibraryURL: URL? {
+        let value = originalMediaLibraryPath.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        guard !value.isEmpty else { return nil }
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(
+            atPath: value,
+            isDirectory: &isDirectory
+        ),
+        isDirectory.boolValue else {
+            return nil
+        }
+        return URL(fileURLWithPath: value, isDirectory: true)
+    }
+
+    @discardableResult
+    func setOriginalMediaLibrary(
+        _ url: URL?
+    ) -> Bool {
+        guard let url else {
+            originalMediaLibraryPath = ""
+            UserDefaults.standard.removeObject(
+                forKey: "blackstock.originalMediaLibraryPath"
+            )
+            return true
+        }
+
+        let resolved = url
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(
+            atPath: resolved.path,
+            isDirectory: &isDirectory
+        ),
+        isDirectory.boolValue else {
+            errorMessage =
+                "Der ausgewählte Originalvideo-Ordner ist nicht verfügbar."
+            return false
+        }
+
+        originalMediaLibraryPath = resolved.path
+        UserDefaults.standard.set(
+            resolved.path,
+            forKey: "blackstock.originalMediaLibraryPath"
+        )
+        errorMessage = nil
+        return true
+    }
+
+    func resolveOriginalMedia(
+        for project: BlackstockProject,
+        source: MediaSourceReference?
+    ) async -> URL? {
+        guard let root = originalMediaLibraryURL else {
+            return nil
+        }
+        let title = project.title
+        let videoID = source?.externalID
+
+        return await Task.detached(priority: .utility) {
+            let fileManager = FileManager.default
+            let keys: [URLResourceKey] = [
+                .isRegularFileKey
+            ]
+            guard let enumerator = fileManager.enumerator(
+                at: root,
+                includingPropertiesForKeys: keys,
+                options: [
+                    .skipsHiddenFiles,
+                    .skipsPackageDescendants
+                ]
+            ) else {
+                return nil
+            }
+
+            var candidates: [URL] = []
+            while let candidate = enumerator.nextObject() as? URL {
+                if candidates.count >= 5_000 {
+                    break
+                }
+                guard LocalOriginalMediaMatcher
+                    .supportedExtensions
+                    .contains(
+                        candidate.pathExtension.lowercased()
+                    ) else {
+                    continue
+                }
+                if let values = try? candidate.resourceValues(
+                    forKeys: Set(keys)
+                ),
+                values.isRegularFile == true {
+                    candidates.append(candidate)
+                }
+            }
+
+            return LocalOriginalMediaMatcher().bestMatch(
+                videoID: videoID,
+                title: title,
+                fileURLs: candidates
+            )
+        }.value
     }
 
     var projects: [BlackstockProject] {
