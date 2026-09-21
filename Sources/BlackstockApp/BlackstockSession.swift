@@ -809,6 +809,15 @@ final class BlackstockSession: ObservableObject {
             )
     }
 
+    var workspaceChannel: YouTubeChannelIdentity? {
+        guard let channelID = workspaceChannelID else {
+            return nil
+        }
+        return channels.first {
+            $0.id == channelID
+        }
+    }
+
     var workspaceRightsAttestation:
         WorkspaceRightsAttestation? {
         guard let channelID =
@@ -1154,12 +1163,14 @@ final class BlackstockSession: ObservableObject {
     }
 
     func authorizeAnalytics() async {
-        guard let project = activeProject else {
-            errorMessage = "Kein aktives Projekt für Analytics vorhanden."
+        guard let channelID = workspaceChannelID else {
+            errorMessage =
+                "Kein YouTube-Kanal für Analytics verbunden."
             return
         }
         guard !effectiveClientID.isEmpty else {
-            errorMessage = "Keine Google-OAuth-Konfiguration verfügbar."
+            errorMessage =
+                "Keine Google-OAuth-Konfiguration verfügbar."
             return
         }
 
@@ -1170,24 +1181,29 @@ final class BlackstockSession: ObservableObject {
         do {
             let currentPlan = analyticsScopePlan()
             if currentPlan?.state == .alreadyAuthorized {
-                let accessToken = try await validatedAnalyticsAccessToken(
-                    targetChannelID: project.targetChannelID
-                )
-                let identities = try await YouTubeAuthorizedClient(
-                    accessToken: accessToken
-                ).myChannels()
+                let accessToken =
+                    try await validatedAnalyticsAccessToken(
+                        targetChannelID: channelID
+                    )
+                let identities =
+                    try await YouTubeAuthorizedClient(
+                        accessToken: accessToken
+                    ).myChannels()
                 guard identities.contains(where: {
-                    $0.id == project.targetChannelID
+                    $0.id == channelID
                 }) else {
                     analyticsAuthorizedChannelID = nil
-                    errorMessage = "Die Analytics-Autorisierung gehört nicht zum Projekt-Zielkanal."
+                    errorMessage =
+                        "Die Analytics-Autorisierung gehört nicht zum verbundenen Kanal."
                     return
                 }
-                analyticsAuthorizedChannelID = project.targetChannelID
+                channels = identities
+                analyticsAuthorizedChannelID = channelID
                 return
             }
 
-            let requestedScopes = currentPlan?.scopesForAuthorization
+            let requestedScopes =
+                currentPlan?.scopesForAuthorization
                 ?? Set([
                     GoogleOAuthScope.youtubeReadOnly,
                     .analyticsReadOnly
@@ -1199,57 +1215,71 @@ final class BlackstockSession: ObservableObject {
 
             guard let grantedScopeString = tokens.scope else {
                 analyticsAuthorizedChannelID = nil
-                errorMessage = "Google hat keine verifizierbare Scope-Liste zurückgegeben. Analytics bleibt gesperrt."
+                errorMessage =
+                    "Google hat keine verifizierbare Scope-Liste zurückgegeben. Analytics bleibt gesperrt."
                 return
             }
 
-            let granted = GoogleOAuthScopePlanner.parseGrantedScopes(
-                grantedScopeString
-            )
+            let granted =
+                GoogleOAuthScopePlanner.parseGrantedScopes(
+                    grantedScopeString
+                )
             guard requestedScopes.isSubset(of: granted) else {
                 analyticsAuthorizedChannelID = nil
-                errorMessage = "Nicht alle für Analytics benötigten Google-Berechtigungen wurden gewährt."
+                errorMessage =
+                    "Nicht alle für Analytics benötigten Google-Berechtigungen wurden gewährt."
                 return
             }
 
-            let identities = try await YouTubeAuthorizedClient(
-                accessToken: tokens.accessToken
-            ).myChannels()
+            let identities =
+                try await YouTubeAuthorizedClient(
+                    accessToken: tokens.accessToken
+                ).myChannels()
             guard identities.contains(where: {
-                $0.id == project.targetChannelID
+                $0.id == channelID
             }) else {
                 analyticsAuthorizedChannelID = nil
-                errorMessage = "Die Analytics-Sitzung enthält nicht den Projekt-Zielkanal."
+                errorMessage =
+                    "Die Analytics-Sitzung enthält nicht den verbundenen Kanal."
                 return
             }
 
             try BlackstockKeychain.write(
                 tokens.accessToken,
-                account: "youtube.\(project.targetChannelID).accessToken"
+                account:
+                    "youtube.\(channelID).accessToken"
             )
-            if let refresh = tokens.refreshToken, !refresh.isEmpty {
+            if let refresh = tokens.refreshToken,
+               !refresh.isEmpty {
                 try BlackstockKeychain.write(
                     refresh,
-                    account: "youtube.\(project.targetChannelID).refreshToken"
+                    account:
+                        "youtube.\(channelID).refreshToken"
                 )
             }
             try BlackstockKeychain.write(
                 grantedScopeString,
-                account: "youtube.\(project.targetChannelID).scopes"
+                account:
+                    "youtube.\(channelID).scopes"
             )
             try BlackstockKeychain.write(
                 effectiveClientID,
-                account: "youtube.\(project.targetChannelID).oauthClientID"
+                account:
+                    "youtube.\(channelID).oauthClientID"
             )
 
             cacheRuntimeToken(
                 tokens,
-                fallbackScopeString: connectedOAuthScopeString
+                fallbackScopeString:
+                    connectedOAuthScopeString
             )
-            analyticsAuthorizedChannelID = project.targetChannelID
+            channels = identities
+            analyticsAuthorizedChannelID = channelID
         } catch {
             analyticsAuthorizedChannelID = nil
-            errorMessage = "Analytics-Autorisierung fehlgeschlagen: \(describe(error))"
+            errorMessage =
+                "Analytics-Autorisierung fehlgeschlagen: "
+                + describe(error)
         }
     }
 
@@ -1369,6 +1399,22 @@ final class BlackstockSession: ObservableObject {
                 try await validatedAnalyticsAccessToken(
                     targetChannelID: channelID
                 )
+            let identities =
+                try await YouTubeAuthorizedClient(
+                    accessToken: accessToken
+                ).myChannels()
+            guard identities.contains(where: {
+                $0.id == channelID
+            }) else {
+                errorMessage =
+                    "Analytics-Abruf gestoppt: Der verbundene Kanal stimmt nicht mit der Google-Sitzung überein."
+                return
+            }
+            channels = identities
+            if selectedChannelID == nil {
+                selectedChannelID = channelID
+            }
+
             let calendar = Calendar(
                 identifier: .gregorian
             )
