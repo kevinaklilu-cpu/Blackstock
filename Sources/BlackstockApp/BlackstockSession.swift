@@ -1151,6 +1151,38 @@ final class BlackstockSession: ObservableObject {
         }
     }
 
+    func refreshWorkspaceChannelIdentity() async {
+        guard let channelID = workspaceChannelID else {
+            return
+        }
+
+        do {
+            let accessToken =
+                try await validatedReadOnlyAccessToken(
+                    targetChannelID: channelID
+                )
+            let identities =
+                try await YouTubeAuthorizedClient(
+                    accessToken: accessToken
+                ).myChannels()
+            guard identities.contains(where: {
+                $0.id == channelID
+            }) else {
+                errorMessage =
+                    "Der verbundene YouTube-Kanal ist in der aktuellen Google-Sitzung nicht verfügbar."
+                return
+            }
+            channels = identities
+            if selectedChannelID == nil {
+                selectedChannelID = channelID
+            }
+        } catch {
+            errorMessage =
+                "Kanaldaten konnten nicht aktualisiert werden: "
+                + describe(error)
+        }
+    }
+
     func analyticsScopePlan() -> GoogleOAuthScopePlan? {
         guard let channelID = workspaceChannelID else { return nil }
         let storedScopes = BlackstockKeychain.read(
