@@ -37,7 +37,9 @@ final class ApprovedSourceProviderClientTests:
             let body = try JSONDecoder().decode(
                 ApprovedSourceProviderRequest.self,
                 from: try XCTUnwrap(
-                    request.httpBody
+                    SourceProviderURLProtocol.bodyData(
+                        from: request
+                    )
                 )
             )
             XCTAssertEqual(
@@ -165,6 +167,43 @@ private final class SourceProviderURLProtocol:
             HTTPURLResponse,
             Data
         ))?
+
+    static func bodyData(
+        from request: URLRequest
+    ) -> Data? {
+        if let body = request.httpBody {
+            return body
+        }
+        guard let stream = request.httpBodyStream else {
+            return nil
+        }
+
+        stream.open()
+        defer { stream.close() }
+
+        var data = Data()
+        let bufferSize = 1024
+        let buffer =
+            UnsafeMutablePointer<UInt8>.allocate(
+                capacity: bufferSize
+            )
+        defer { buffer.deallocate() }
+
+        while stream.hasBytesAvailable {
+            let count = stream.read(
+                buffer,
+                maxLength: bufferSize
+            )
+            if count < 0 {
+                return nil
+            }
+            if count == 0 {
+                break
+            }
+            data.append(buffer, count: count)
+        }
+        return data
+    }
 
     override class func canInit(
         with request: URLRequest
