@@ -55,6 +55,8 @@ public struct OpportunityProjectFactory: Sendable {
             provider: .youtube,
             pageURL: URL(string: "https://www.youtube.com/watch?v=\(videoID)")!,
             externalID: videoID,
+            creatorProvidedSourceURLs:
+                opportunity.creatorProvidedSourceURLs,
             discoveredAt: opportunity.retrievedAt
         )
 
