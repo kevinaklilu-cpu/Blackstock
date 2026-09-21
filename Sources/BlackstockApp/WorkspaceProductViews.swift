@@ -35,6 +35,20 @@ struct OpportunityWorkspaceView: View {
                 }
 
                 Picker(
+                    "Format",
+                    selection: $session.opportunityContentFilter
+                ) {
+                    ForEach(
+                        OpportunityContentFilter.allCases,
+                        id: \.self
+                    ) { filter in
+                        Text(filter.germanTitle).tag(filter)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 300)
+
+                Picker(
                     "Zeitraum",
                     selection: $session.opportunityTimeWindow
                 ) {
@@ -127,12 +141,16 @@ struct OpportunityWorkspaceView: View {
             guard hasLoadedInitially else { return }
             Task { await loadOpportunities() }
         }
+        .onChange(of: session.opportunityContentFilter) { _ in
+            guard hasLoadedInitially else { return }
+            Task { await loadOpportunities() }
+        }
     }
 
     private var header: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Videos")
+                Text("Entdecken")
                     .font(.largeTitle.bold())
                 Text(
                     session.primaryTopic.isEmpty
@@ -210,9 +228,19 @@ struct OpportunityWorkspaceView: View {
                     Text(item.title)
                         .font(.headline)
                         .lineLimit(2)
-                    Text(item.channelTitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 7) {
+                        Text(item.channelTitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(item.contentKind.germanTitle.uppercased())
+                            .font(.caption2.weight(.bold))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(
+                                Color.primary.opacity(0.07),
+                                in: Capsule()
+                            )
+                    }
 
                     HStack(spacing: 10) {
                         if let views = item.metrics.viewCount {
@@ -430,6 +458,26 @@ struct OpportunityWorkspaceView: View {
         _ item: YouTubeOpportunityCandidate
     ) -> some View {
         HStack(spacing: 8) {
+            metricChip(
+                "Format",
+                item.contentKind.germanTitle,
+                systemImage:
+                    item.contentKind == .live
+                    ? "dot.radiowaves.left.and.right"
+                    : (
+                        item.contentKind == .short
+                        ? "rectangle.portrait"
+                        : "play.rectangle"
+                    )
+            )
+            if let durationSeconds = item.durationSeconds,
+               item.contentKind != .live {
+                metricChip(
+                    "Dauer",
+                    compactDuration(durationSeconds),
+                    systemImage: "clock"
+                )
+            }
             if let views = item.metrics.viewCount {
                 metricChip(
                     "Views",
@@ -496,10 +544,30 @@ struct OpportunityWorkspaceView: View {
         await session.loadWorkspaceOpportunities(
             query: query,
             order: sortMode,
-            timeWindow: session.opportunityTimeWindow
+            timeWindow: session.opportunityTimeWindow,
+            contentFilter: session.opportunityContentFilter
         )
         selectedOpportunityID =
             session.opportunities.first?.id
+    }
+
+    private func compactDuration(_ seconds: Int) -> String {
+        let minutes = seconds / 60
+        let remainder = seconds % 60
+        if minutes >= 60 {
+            let hours = minutes / 60
+            return String(
+                format: "%d:%02d:%02d",
+                hours,
+                minutes % 60,
+                remainder
+            )
+        }
+        return String(
+            format: "%d:%02d",
+            minutes,
+            remainder
+        )
     }
 
     private func compactNumber(_ value: Int) -> String {
