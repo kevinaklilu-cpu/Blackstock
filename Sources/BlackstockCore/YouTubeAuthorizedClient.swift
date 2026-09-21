@@ -418,6 +418,7 @@ public struct YouTubeAuthorizedClient: Sendable {
         timeWindow: OpportunityTimeWindow = .allTime,
         maxResults: Int = 12,
         order: OpportunitySortMode = .relevance,
+        contentFilter: OpportunityContentFilter = .all,
         session: URLSession = .shared,
         now: Date = Date()
     ) async throws -> [YouTubeOpportunityCandidate] {
@@ -437,6 +438,8 @@ public struct YouTubeAuthorizedClient: Sendable {
         }
 
         if timeWindow == .allTime,
+           contentFilter != .live,
+           contentFilter != .shorts,
            (order == .relevance || order == .views) {
             let popular = try await mostPopularOpportunityCandidates(
                 categoryID: trimmedCategoryID,
@@ -445,8 +448,20 @@ public struct YouTubeAuthorizedClient: Sendable {
                 session: session,
                 now: now
             )
-            if !popular.isEmpty {
-                return popular
+            let filteredPopular = popular.filter {
+                switch contentFilter {
+                case .all:
+                    return true
+                case .videos:
+                    return $0.contentKind == .video
+                case .shorts:
+                    return $0.contentKind == .short
+                case .live:
+                    return $0.contentKind == .live
+                }
+            }
+            if !filteredPopular.isEmpty {
+                return filteredPopular
             }
         }
 
@@ -466,6 +481,7 @@ public struct YouTubeAuthorizedClient: Sendable {
                 publishedAfter: publishedAfter,
                 maxResults: maxResults,
                 order: boundedOrder,
+                contentFilter: contentFilter,
                 session: session,
                 now: now
             )
@@ -484,6 +500,7 @@ public struct YouTubeAuthorizedClient: Sendable {
             publishedAfter: publishedAfter,
             maxResults: maxResults,
             order: boundedOrder,
+            contentFilter: contentFilter,
             session: session,
             now: now
         )
@@ -502,7 +519,7 @@ public struct YouTubeAuthorizedClient: Sendable {
         components.queryItems = [
             .init(
                 name: "part",
-                value: "snippet,statistics,status"
+                value: "snippet,statistics,status,contentDetails,liveStreamingDetails"
             ),
             .init(name: "chart", value: "mostPopular"),
             .init(name: "regionCode", value: regionCode),
@@ -540,6 +557,15 @@ public struct YouTubeAuthorizedClient: Sendable {
                     "mostPopular:category:\(categoryID):region:\(regionCode)",
                 retrievedAt: now,
                 embeddable: video.status?.embeddable,
+                contentKind: Self.contentKind(
+                    video: video,
+                    durationSeconds: Self.durationSeconds(
+                        from: video.contentDetails?.duration
+                    )
+                ),
+                durationSeconds: Self.durationSeconds(
+                    from: video.contentDetails?.duration
+                ),
                 metrics: YouTubeOpportunityMetrics(
                     viewCount: video.statistics.flatMap {
                         Int($0.viewCount ?? "")
@@ -564,7 +590,10 @@ public struct YouTubeAuthorizedClient: Sendable {
         guard !ids.isEmpty else { return [:] }
         var c = URLComponents(string: "https://www.googleapis.com/youtube/v3/videos")!
         c.queryItems = [
-            .init(name: "part", value: "statistics,status"),
+            .init(
+                name: "part",
+                value: "statistics,status,contentDetails,liveStreamingDetails"
+            ),
             .init(name: "id", value: ids.joined(separator: ","))
         ]
         let data = try await perform(c.url!, session: session)
