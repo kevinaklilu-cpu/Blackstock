@@ -228,6 +228,8 @@ struct StudioView: View {
         let hasBoundAuthorizedMedia =
             state.asset?.originSource?.id == source.id
             && state.asset?.mayEnterProduction == true
+        let creatorSourceURL =
+            source.creatorProvidedSourceURLs?.first
         let clipPreparation =
             OpportunityClipPreparationPlanner().snapshot(
                 source: source,
@@ -284,9 +286,13 @@ struct StudioView: View {
                         hasBoundAuthorizedMedia
                             ? "Videoquelle bereit. Blackstock kann das Material jetzt analysieren und clippen."
                             : (
-                                ingestWatcher.isWatching
-                                ? "Quellen-Monitor aktiv. Blackstock übernimmt passende Dateien aus dem Ingest-Ordner automatisch."
-                                : "Noch keine nutzbare Medienquelle gebunden. Öffne den Downloader, den Ingest-Ordner oder wähle eine alternative Quelle."
+                                creatorSourceURL != nil
+                                ? "Der Creator hat eine direkte Medienquelle verlinkt. Du kannst sie kontrolliert in Blackstock herunterladen."
+                                : (
+                                    ingestWatcher.isWatching
+                                    ? "Quellen-Monitor aktiv. Blackstock übernimmt passende Dateien aus dem Ingest-Ordner automatisch."
+                                    : "Noch keine nutzbare Medienquelle gebunden. Öffne den Downloader, den Ingest-Ordner oder wähle eine alternative Quelle."
+                                )
                             )
                     )
                     .font(.caption)
@@ -362,19 +368,36 @@ struct StudioView: View {
                                 isResolvingAutomaticSource
                             )
 
-                            Button {
-                                sourceDownloadURLText = ""
-                                sourceDownloadMessage = nil
-                                showSourceDownloader = true
-                            } label: {
-                                Label(
-                                    "Downloader",
-                                    systemImage:
-                                        "arrow.down.circle"
-                                )
+                            if let creatorSourceURL {
+                                Button {
+                                    sourceDownloadURLText =
+                                        creatorSourceURL.absoluteString
+                                    sourceDownloadMessage = nil
+                                    showSourceDownloader = true
+                                } label: {
+                                    Label(
+                                        "Creator-Quelle laden",
+                                        systemImage:
+                                            "arrow.down.circle.fill"
+                                    )
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .controlSize(.small)
+                            } else {
+                                Button {
+                                    sourceDownloadURLText = ""
+                                    sourceDownloadMessage = nil
+                                    showSourceDownloader = true
+                                } label: {
+                                    Label(
+                                        "Downloader",
+                                        systemImage:
+                                            "arrow.down.circle"
+                                    )
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .controlSize(.small)
                             }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.small)
 
                             Menu {
 
@@ -2539,6 +2562,19 @@ struct StudioView: View {
                             .font(.caption2.monospaced())
                             .foregroundStyle(.secondary)
                             .textSelection(.enabled)
+
+                        if let creatorURL =
+                                source.creatorProvidedSourceURLs?.first {
+                            Label(
+                                "Creator-Quelle erkannt",
+                                systemImage: "link.badge.plus"
+                            )
+                            .font(.caption.weight(.semibold))
+                            Text(creatorURL.absoluteString)
+                                .font(.caption2.monospaced())
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                        }
                     }
                     .frame(
                         maxWidth: .infinity,
