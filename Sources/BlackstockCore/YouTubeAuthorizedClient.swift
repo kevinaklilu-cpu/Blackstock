@@ -67,6 +67,8 @@ public struct YouTubeOpportunityCandidate: Codable, Sendable, Equatable, Identif
     public let query: String
     public let retrievedAt: Date
     public let embeddable: Bool?
+    public let contentKind: YouTubeOpportunityContentKind
+    public let durationSeconds: Int?
     public let metrics: YouTubeOpportunityMetrics
 
     public init(
@@ -79,6 +81,8 @@ public struct YouTubeOpportunityCandidate: Codable, Sendable, Equatable, Identif
         query: String,
         retrievedAt: Date,
         embeddable: Bool?,
+        contentKind: YouTubeOpportunityContentKind = .video,
+        durationSeconds: Int? = nil,
         metrics: YouTubeOpportunityMetrics
     ) {
         self.id = videoID
@@ -91,7 +95,39 @@ public struct YouTubeOpportunityCandidate: Codable, Sendable, Equatable, Identif
         self.query = query
         self.retrievedAt = retrievedAt
         self.embeddable = embeddable
+        self.contentKind = contentKind
+        self.durationSeconds = durationSeconds
         self.metrics = metrics
+    }
+}
+
+public enum OpportunityContentFilter: String, Codable, Sendable, CaseIterable, Hashable {
+    case all
+    case shorts
+    case videos
+    case live
+
+    public var germanTitle: String {
+        switch self {
+        case .all: return "Alle"
+        case .shorts: return "Shorts"
+        case .videos: return "Videos"
+        case .live: return "Live"
+        }
+    }
+}
+
+public enum YouTubeOpportunityContentKind: String, Codable, Sendable, Equatable {
+    case short
+    case video
+    case live
+
+    public var germanTitle: String {
+        switch self {
+        case .short: return "Short"
+        case .video: return "Video"
+        case .live: return "Live"
+        }
     }
 }
 
@@ -481,6 +517,51 @@ public struct YouTubeAuthorizedClient: Sendable {
         return Dictionary(uniqueKeysWithValues: response.items.map { ($0.id, $0) })
     }
 
+    private static func contentKind(
+        video: VideoItem?,
+        durationSeconds: Int?
+    ) -> YouTubeOpportunityContentKind {
+        if video?.liveStreamingDetails != nil {
+            return .live
+        }
+        if let durationSeconds,
+           durationSeconds > 0,
+           durationSeconds <= 180 {
+            return .short
+        }
+        return .video
+    }
+
+    private static func durationSeconds(
+        from rawValue: String?
+    ) -> Int? {
+        guard let rawValue,
+              rawValue.hasPrefix("PT") else {
+            return nil
+        }
+
+        var digits = ""
+        var total = 0
+        for character in rawValue.dropFirst(2) {
+            if character.isNumber {
+                digits.append(character)
+                continue
+            }
+            guard let value = Int(digits) else {
+                digits = ""
+                continue
+            }
+            switch character {
+            case "H": total += value * 3_600
+            case "M": total += value * 60
+            case "S": total += value
+            default: break
+            }
+            digits = ""
+        }
+        return total > 0 ? total : nil
+    }
+
     private func perform(_ url: URL, session: URLSession) async throws -> Data {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
@@ -524,6 +605,15 @@ private struct VideoItem: Decodable {
     let snippet: SearchSnippet?
     let statistics: VideoStatistics?
     let status: VideoStatus?
+    let contentDetails: VideoContentDetails?
+    let liveStreamingDetails: VideoLiveStreamingDetails?
+}
+private struct VideoContentDetails: Decodable {
+    let duration: String?
+}
+private struct VideoLiveStreamingDetails: Decodable {
+    let actualStartTime: Date?
+    let scheduledStartTime: Date?
 }
 private struct VideoStatistics: Decodable {
     let viewCount: String?
