@@ -283,6 +283,29 @@ final class BlackstockSession: ObservableObject {
         return URL(fileURLWithPath: value, isDirectory: true)
     }
 
+    var automaticIngestDirectoryURL: URL? {
+        guard let downloads = FileManager.default.urls(
+            for: .downloadsDirectory,
+            in: .userDomainMask
+        ).first else {
+            return nil
+        }
+
+        let directory = downloads.appendingPathComponent(
+            "Blackstock Ingest",
+            isDirectory: true
+        )
+        do {
+            try FileManager.default.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true
+            )
+            return directory
+        } catch {
+            return nil
+        }
+    }
+
     @discardableResult
     func setOriginalMediaLibrary(
         _ url: URL?
@@ -322,45 +345,69 @@ final class BlackstockSession: ObservableObject {
         for project: BlackstockProject,
         source: MediaSourceReference?
     ) async -> URL? {
-        guard let root = originalMediaLibraryURL else {
+        var roots: [URL] = []
+        if let automaticIngestDirectoryURL {
+            roots.append(automaticIngestDirectoryURL)
+        }
+        if let originalMediaLibraryURL,
+           !roots.contains(originalMediaLibraryURL) {
+            roots.append(originalMediaLibraryURL)
+        }
+        guard !roots.isEmpty else {
             return nil
         }
+
         let title = project.title
         let videoID = source?.externalID
 
         return await Task.detached(priority: .utility) {
             let fileManager = FileManager.default
             let keys: [URLResourceKey] = [
-                .isRegularFileKey
+                .isRegularFileKey,
+                .fileSizeKey,
+                .contentModificationDateKey
             ]
-            guard let enumerator = fileManager.enumerator(
-                at: root,
-                includingPropertiesForKeys: keys,
-                options: [
-                    .skipsHiddenFiles,
-                    .skipsPackageDescendants
-                ]
-            ) else {
-                return nil
-            }
 
             var candidates: [URL] = []
-            while let candidate = enumerator.nextObject() as? URL {
-                if candidates.count >= 5_000 {
-                    break
-                }
-                guard LocalOriginalMediaMatcher
-                    .supportedExtensions
-                    .contains(
-                        candidate.pathExtension.lowercased()
-                    ) else {
+            for root in roots {
+                guard let enumerator = fileManager.enumerator(
+                    at: root,
+                    includingPropertiesForKeys: keys,
+                    options: [
+                        .skipsHiddenFiles,
+                        .skipsPackageDescendants
+                    ]
+                ) else {
                     continue
                 }
-                if let values = try? candidate.resourceValues(
-                    forKeys: Set(keys)
-                ),
-                values.isRegularFile == true {
+
+                while let candidate =
+                        enumerator.nextObject() as? URL {
+                    if candidates.count >= 5_000 {
+                        break
+                    }
+                    guard LocalOriginalMediaMatcher
+                        .supportedExtensions
+                        .contains(
+                            candidate
+                                .pathExtension
+                                .lowercased()
+                        ) else {
+                        continue
+                    }
+                    guard let values =
+                            try? candidate.resourceValues(
+                                forKeys: Set(keys)
+                            ),
+                          values.isRegularFile == true,
+                          (values.fileSize ?? 0) > 0 else {
+                        continue
+                    }
                     candidates.append(candidate)
+                }
+
+                if candidates.count >= 5_000 {
+                    break
                 }
             }
 
@@ -371,6 +418,7 @@ final class BlackstockSession: ObservableObject {
             )
         }.value
     }
+
 
     var projects: [BlackstockProject] {
         Self.loadStoredProjects()
