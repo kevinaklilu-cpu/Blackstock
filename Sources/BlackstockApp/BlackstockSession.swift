@@ -2123,6 +2123,34 @@ final class BlackstockSession: ObservableObject {
         syncStructuredStrategyFields()
     }
 
+    func ensureYouTubeDiscoveryOptionsLoaded() async {
+        guard let channelID =
+                selectedChannelID ?? workspaceChannelID else {
+            return
+        }
+        guard youtubeLanguages.isEmpty
+                || youtubeRegions.isEmpty
+                || youtubeVideoCategories.isEmpty else {
+            return
+        }
+
+        errorMessage = nil
+        do {
+            let accessToken =
+                try await channelSetupAccessToken(
+                    targetChannelID: channelID
+                )
+            try await loadYouTubeChannelSetupOptions(
+                channelID: channelID,
+                accessToken: accessToken
+            )
+        } catch {
+            errorMessage =
+                "YouTube-Suchparameter konnten nicht geladen werden: "
+                + describe(error)
+        }
+    }
+
     func refreshYouTubeVideoCategories() async {
         guard let channelID =
             selectedChannelID ?? workspaceChannelID,
