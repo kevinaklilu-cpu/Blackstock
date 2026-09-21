@@ -849,4 +849,489 @@ struct ProjectLibraryView: View {
         )
     }
 }
+
+struct ChannelAnalyticsWorkspaceView: View {
+    @ObservedObject var session: BlackstockSession
+
+    @State private var days = 28
+
+    private let periods = [7, 28, 90]
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                header
+                channelIdentityCard
+
+                if analyticsConnected {
+                    periodMetrics
+                    performanceDetails
+                } else {
+                    connectCard
+                }
+
+                if let error = session.errorMessage {
+                    Label(
+                        error,
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                }
+            }
+            .frame(
+                maxWidth: 1180,
+                alignment: .leading
+            )
+            .padding(28)
+        }
+        .background(BlackstockDesign.canvas)
+        .task {
+            await session.refreshWorkspaceChannelIdentity()
+            if analyticsConnected {
+                await session.collectChannelAnalytics(
+                    days: days
+                )
+            }
+        }
+        .onChange(of: days) { _ in
+            guard analyticsConnected else { return }
+            Task {
+                await session.collectChannelAnalytics(
+                    days: days
+                )
+            }
+        }
+    }
+
+    private var analyticsConnected: Bool {
+        guard let channelID =
+                session.workspaceChannelID else {
+            return false
+        }
+        return session.analyticsAuthorizedChannelID
+            == channelID
+    }
+
+    private var header: some View {
+        HStack(alignment: .center, spacing: 18) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Analyse")
+                    .font(.largeTitle.bold())
+                Text(
+                    "YouTube Studio-KPIs für deinen verbundenen Kanal"
+                )
+                .font(.title3)
+                .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            if analyticsConnected {
+                Picker(
+                    "Zeitraum",
+                    selection: $days
+                ) {
+                    ForEach(periods, id: \.self) {
+                        Text("\($0) Tage").tag($0)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 270)
+
+                Button {
+                    Task {
+                        await session
+                            .collectChannelAnalytics(
+                                days: days
+                            )
+                    }
+                } label: {
+                    HStack {
+                        if session.isCollectingAnalytics {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                        Label(
+                            "Aktualisieren",
+                            systemImage:
+                                "arrow.clockwise"
+                        )
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(
+                    session.isCollectingAnalytics
+                )
+            }
+        }
+    }
+
+    private var channelIdentityCard: some View {
+        HStack(spacing: 18) {
+            if let avatarURL =
+                    session.workspaceChannel?.avatarURL {
+                AsyncImage(url: avatarURL) { image in
+                    image.resizable().scaledToFill()
+                } placeholder: {
+                    Circle()
+                        .fill(
+                            Color.primary.opacity(0.08)
+                        )
+                }
+                .frame(width: 68, height: 68)
+                .clipShape(Circle())
+            } else {
+                ZStack {
+                    Circle()
+                        .fill(
+                            Color.primary.opacity(0.08)
+                        )
+                    Image(systemName: "person.crop.circle")
+                        .font(.title)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(width: 68, height: 68)
+            }
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(
+                    session.workspaceChannel?.title
+                    ?? "Verbundener YouTube-Kanal"
+                )
+                .font(.title2.bold())
+
+                if let handle =
+                        session.workspaceChannel?.handle,
+                   !handle.isEmpty {
+                    Text(handle)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let channelID =
+                        session.workspaceChannelID {
+                    Text(channelID)
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.tertiary)
+                }
+            }
+
+            Spacer()
+
+            if analyticsConnected {
+                Label(
+                    "Analytics verbunden",
+                    systemImage:
+                        "checkmark.seal.fill"
+                )
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            }
+        }
+        .padding(20)
+        .blackstockSurface(raised: true)
+    }
+
+    @ViewBuilder
+    private var periodMetrics: some View {
+        let channel = session.workspaceChannel
+        let analytics = session.latestChannelAnalytics
+
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Kanalübersicht")
+                .font(.title2.bold())
+
+            LazyVGrid(
+                columns: [
+                    GridItem(
+                        .adaptive(
+                            minimum: 180,
+                            maximum: 260
+                        ),
+                        spacing: 12
+                    )
+                ],
+                spacing: 12
+            ) {
+                metricCard(
+                    title: "Abonnenten",
+                    value: compactNumber(
+                        channel?.subscriberCount
+                    ),
+                    systemImage: "person.2.fill"
+                )
+                metricCard(
+                    title: "Gesamtviews",
+                    value: compactNumber(
+                        channel?.viewCount
+                    ),
+                    systemImage: "play.rectangle.fill"
+                )
+                metricCard(
+                    title: "Videos",
+                    value: compactNumber(
+                        channel?.videoCount
+                    ),
+                    systemImage: "rectangle.stack.fill"
+                )
+                metricCard(
+                    title: "Views · \(days) Tage",
+                    value: compactNumber(
+                        analytics?.views
+                    ),
+                    systemImage: "chart.line.uptrend.xyaxis"
+                )
+                metricCard(
+                    title: "Netto-Abonnenten",
+                    value: signedNumber(
+                        analytics?.netSubscribers
+                    ),
+                    systemImage:
+                        "person.badge.plus"
+                )
+                metricCard(
+                    title: "Wiedergabezeit",
+                    value: watchHours(
+                        analytics?
+                            .estimatedMinutesWatched
+                    ),
+                    systemImage: "clock.fill"
+                )
+            }
+
+            if let analytics {
+                Text(
+                    analytics.startDate
+                    + " – "
+                    + analytics.endDate
+                    + " · YouTube Analytics API"
+                )
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var performanceDetails: some View {
+        if let analytics =
+                session.latestChannelAnalytics {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Performance")
+                    .font(.title2.bold())
+
+                LazyVGrid(
+                    columns: [
+                        GridItem(
+                            .adaptive(
+                                minimum: 180,
+                                maximum: 260
+                            ),
+                            spacing: 12
+                        )
+                    ],
+                    spacing: 12
+                ) {
+                    metricCard(
+                        title: "Likes",
+                        value: compactNumber(
+                            analytics.likes
+                        ),
+                        systemImage:
+                            "hand.thumbsup.fill"
+                    )
+                    metricCard(
+                        title: "Kommentare",
+                        value: compactNumber(
+                            analytics.comments
+                        ),
+                        systemImage:
+                            "bubble.left.and.bubble.right.fill"
+                    )
+                    metricCard(
+                        title: "Shares",
+                        value: compactNumber(
+                            analytics.shares
+                        ),
+                        systemImage: "arrowshape.turn.up.right.fill"
+                    )
+                    metricCard(
+                        title: "Ø Wiedergabedauer",
+                        value: duration(
+                            analytics.averageViewDuration
+                        ),
+                        systemImage: "timer"
+                    )
+                    metricCard(
+                        title: "Ø angesehen",
+                        value: percentage(
+                            analytics.averageViewPercentage
+                        ),
+                        systemImage: "percent"
+                    )
+                    metricCard(
+                        title: "Engaged Views",
+                        value: compactNumber(
+                            analytics.engagedViews
+                        ),
+                        systemImage:
+                            "eye.fill"
+                    )
+                }
+
+                Text(
+                    "YouTube Analytics kann zeitversetzt sein. Blackstock zeigt keine erfundenen Nullwerte, wenn YouTube für einen Zeitraum noch keine Daten liefert."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var connectCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                Image(
+                    systemName:
+                        "chart.bar.xaxis.ascending"
+                )
+                .font(.title2)
+                .foregroundStyle(
+                    BlackstockDesign.accent
+                )
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("YouTube Analytics verbinden")
+                        .font(.headline)
+                    Text(
+                        "Lies Kanal- und Performance-KPIs direkt aus deinem verbundenen YouTube-Konto."
+                    )
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                }
+            }
+
+            Button {
+                Task {
+                    await session.authorizeAnalytics()
+                    if analyticsConnected {
+                        await session
+                            .collectChannelAnalytics(
+                                days: days
+                            )
+                    }
+                }
+            } label: {
+                HStack {
+                    if session.isAuthorizingAnalytics {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                    Label(
+                        session.isAuthorizingAnalytics
+                            ? "Google wird verbunden …"
+                            : "Analytics aktivieren",
+                        systemImage: "key.fill"
+                    )
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(session.isAuthorizingAnalytics)
+        }
+        .padding(20)
+        .blackstockSurface(raised: true)
+    }
+
+    private func metricCard(
+        title: String,
+        value: String,
+        systemImage: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Image(systemName: systemImage)
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+
+            Text(value)
+                .font(
+                    .title2.bold()
+                        .monospacedDigit()
+                )
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(
+            maxWidth: .infinity,
+            minHeight: 96,
+            alignment: .leading
+        )
+        .padding(16)
+        .blackstockSurface(raised: true)
+    }
+
+    private func compactNumber(
+        _ value: Int?
+    ) -> String {
+        guard let value else { return "—" }
+        if abs(value) >= 1_000_000 {
+            return String(
+                format: "%.1fM",
+                Double(value) / 1_000_000
+            )
+        }
+        if abs(value) >= 1_000 {
+            return String(
+                format: "%.1fK",
+                Double(value) / 1_000
+            )
+        }
+        return String(value)
+    }
+
+    private func signedNumber(
+        _ value: Int?
+    ) -> String {
+        guard let value else { return "—" }
+        return value > 0
+            ? "+\(compactNumber(value))"
+            : compactNumber(value)
+    }
+
+    private func watchHours(
+        _ minutes: Double?
+    ) -> String {
+        guard let minutes else { return "—" }
+        return String(
+            format: "%.1f Std.",
+            minutes / 60
+        )
+    }
+
+    private func duration(
+        _ seconds: Double?
+    ) -> String {
+        guard let seconds else { return "—" }
+        let rounded = max(Int(seconds.rounded()), 0)
+        return String(
+            format: "%d:%02d",
+            rounded / 60,
+            rounded % 60
+        )
+    }
+
+    private func percentage(
+        _ value: Double?
+    ) -> String {
+        guard let value else { return "—" }
+        return String(
+            format: "%.1f%%",
+            value
+        )
+    }
+}
+
 #endif
