@@ -20,6 +20,7 @@ public struct MediaSourceReference: Codable, Sendable, Equatable, Identifiable {
     public let provider: MediaSourceProvider
     public let pageURL: URL
     public let externalID: String?
+    public let creatorProvidedSourceURLs: [URL]?
     public let discoveredAt: Date
 
     public init(
@@ -27,12 +28,14 @@ public struct MediaSourceReference: Codable, Sendable, Equatable, Identifiable {
         provider: MediaSourceProvider,
         pageURL: URL,
         externalID: String?,
+        creatorProvidedSourceURLs: [URL]? = nil,
         discoveredAt: Date
     ) {
         self.id = id
         self.provider = provider
         self.pageURL = pageURL
         self.externalID = externalID
+        self.creatorProvidedSourceURLs = creatorProvidedSourceURLs
         self.discoveredAt = discoveredAt
     }
 }
