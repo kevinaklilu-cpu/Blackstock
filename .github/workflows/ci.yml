@@ -62,173 +62,8 @@ jobs:
         run: python3 Build/audit_ui_feature_coverage.py
       - name: End-to-end product flow audit
         run: python3 Build/audit_end_to_end_flow.py
-      - name: Capture foundation audit
+      - name: YouTube-only source permission audit
         run: python3 Build/audit_capture.py
-      - name: Capture hardware evidence validator audit
-        run: |
-          set -euo pipefail
-          EVIDENCE="$RUNNER_TEMP/capture-hardware-smoke.json"
-          PROJECT_ID="00000000-0000-0000-0000-000000000101"
-          RECORDING_LAUNCH_ID="00000000-0000-0000-0000-000000000201"
-          PROJECT_ROOT="$HOME/Library/Application Support/Blackstock/Projects/$PROJECT_ID"
-          MEDIA_DIR="$PROJECT_ROOT/Media"
-          CAPTURE_DIR="$PROJECT_ROOT/Captures"
-          mkdir -p "$MEDIA_DIR" "$CAPTURE_DIR"
-          CAMERA="$MEDIA_DIR/00000000-0000-0000-0000-000000000401.mov"
-          MICROPHONE="$CAPTURE_DIR/00000000-0000-0000-0000-000000000402.m4a"
-          SCREEN="$MEDIA_DIR/00000000-0000-0000-0000-000000000403.mp4"
-          printf x > "$CAMERA"
-          printf x > "$MICROPHONE"
-          printf x > "$SCREEN"
-
-          cat > "$EVIDENCE" <<JSON
-          {
-            "schemaVersion": 6,
-            "testedAt": "2026-09-19T20:00:00Z",
-            "blackstockVersion": "1.0.0",
-            "blackstockBuild": "100",
-            "blackstockSourceCommitSHA": "1111111111111111111111111111111111111111",
-            "macOSVersion": "macOS 26.6.2",
-            "hardwareModel": "MacBookProTest",
-            "installedFromPackage": true,
-            "installerReceiptPackageID": "de.blackstock.app",
-            "installerReceiptVersion": "1.0.0",
-            "installerReceiptInstalledAt": "2026-09-02T00:00:03Z",
-            "installerReceiptVerified": true,
-            "applicationTeamID": "ABC123TEAM",
-            "developerIDApplicationVerified": true,
-            "applicationExecutableSHA256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-            "camera": {
-              "permissionGranted": true,
-              "recordingCreated": true,
-              "durationSeconds": 5.2,
-              "persistedToProject": true,
-              "videoTrackPresent": true,
-              "projectID": "$PROJECT_ID",
-              "recordedLaunchID": "$RECORDING_LAUNCH_ID",
-              "persistedFilePath": "$CAMERA",
-              "persistedFileSHA256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
-            },
-            "microphone": {
-              "permissionGranted": true,
-              "recordingCreated": true,
-              "durationSeconds": 5.1,
-              "persistedToProject": true,
-              "decodedSamples": 24000,
-              "projectID": "$PROJECT_ID",
-              "recordedLaunchID": "$RECORDING_LAUNCH_ID",
-              "persistedFilePath": "$MICROPHONE",
-              "persistedFileSHA256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
-            },
-            "screen": {
-              "permissionGranted": true,
-              "recordingCreated": true,
-              "durationSeconds": 5.4,
-              "persistedToProject": true,
-              "videoTrackPresent": true,
-              "projectID": "$PROJECT_ID",
-              "recordedLaunchID": "$RECORDING_LAUNCH_ID",
-              "persistedFilePath": "$SCREEN",
-              "persistedFileSHA256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
-            },
-            "systemAudio": {
-              "permissionGranted": true,
-              "recordingCreated": true,
-              "durationSeconds": 5.4,
-              "persistedToProject": true,
-              "decodedSamples": 48000,
-              "projectID": "$PROJECT_ID",
-              "recordedLaunchID": "$RECORDING_LAUNCH_ID",
-              "persistedFilePath": "$SCREEN",
-              "persistedFileSHA256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
-            },
-            "deniedPermissionHardStopPassed": true,
-            "temporaryCleanupPassed": true,
-            "appRestartPersistencePassed": true,
-            "restartVerifiedLaunchID": "00000000-0000-0000-0000-000000000301",
-            "deniedPermissionKinds": [
-              "camera",
-              "microphone",
-              "screen",
-              "systemAudio"
-            ],
-            "temporaryCleanupKinds": [
-              "camera",
-              "microphone",
-              "screen",
-              "systemAudio"
-            ]
-          }
-          JSON
-          python3 Build/validate_capture_hardware_smoke.py "$EVIDENCE"
-          cp "$EVIDENCE" "$RUNNER_TEMP/capture-hardware-smoke-valid.json"
-
-          python3 - "$EVIDENCE" <<'PY'
-          import json, sys
-          path = sys.argv[1]
-          data = json.load(open(path))
-          data["systemAudio"]["decodedSamples"] = 0
-          json.dump(data, open(path, "w"))
-          PY
-          if python3 Build/validate_capture_hardware_smoke.py "$EVIDENCE"; then
-            echo "Invalid capture hardware evidence was unexpectedly accepted." >&2
-            exit 1
-          fi
-
-          cp "$RUNNER_TEMP/capture-hardware-smoke-valid.json" "$EVIDENCE"
-          python3 - "$EVIDENCE" <<'PY'
-          import json, sys
-          path = sys.argv[1]
-          data = json.load(open(path))
-          data["camera"]["durationSeconds"] = float("nan")
-          json.dump(data, open(path, "w"))
-          PY
-          if python3 Build/validate_capture_hardware_smoke.py "$EVIDENCE"; then
-            echo "Non-finite capture evidence was unexpectedly accepted." >&2
-            exit 1
-          fi
-
-          cp "$RUNNER_TEMP/capture-hardware-smoke-valid.json" "$EVIDENCE"
-          OUTSIDE="$RUNNER_TEMP/00000000-0000-0000-0000-000000000499.mov"
-          cp "$CAMERA" "$OUTSIDE"
-          python3 - "$EVIDENCE" "$OUTSIDE" <<'PY'
-          import json, sys
-          path, outside = sys.argv[1], sys.argv[2]
-          data = json.load(open(path))
-          data["camera"]["persistedFilePath"] = outside
-          json.dump(data, open(path, "w"))
-          PY
-          if python3 Build/validate_capture_hardware_smoke.py "$EVIDENCE"; then
-            echo "Off-project capture evidence path was unexpectedly accepted." >&2
-            exit 1
-          fi
-
-          cp "$RUNNER_TEMP/capture-hardware-smoke-valid.json" "$EVIDENCE"
-          python3 - "$EVIDENCE" <<'PY'
-          import json, sys
-          path = sys.argv[1]
-          data = json.load(open(path))
-          data["microphone"]["recordedLaunchID"] = "00000000-0000-0000-0000-000000000299"
-          json.dump(data, open(path, "w"))
-          PY
-          if python3 Build/validate_capture_hardware_smoke.py "$EVIDENCE"; then
-            echo "Mixed recording-launch capture evidence was unexpectedly accepted." >&2
-            exit 1
-          fi
-
-          cp "$RUNNER_TEMP/capture-hardware-smoke-valid.json" "$EVIDENCE"
-          python3 - "$EVIDENCE" <<'PY'
-          import json, sys
-          path = sys.argv[1]
-          data = json.load(open(path))
-          data["microphone"]["projectID"] = "00000000-0000-0000-0000-000000000199"
-          json.dump(data, open(path, "w"))
-          PY
-          if python3 Build/validate_capture_hardware_smoke.py "$EVIDENCE"; then
-            echo "Mismatched project-bound capture evidence was unexpectedly accepted." >&2
-            exit 1
-          fi
-
       - name: Professional audio audit
         run: python3 Build/audit_audio.py
       - name: Clean-machine E2E contract audit
@@ -239,7 +74,7 @@ jobs:
           EVIDENCE="$RUNNER_TEMP/release-evidence.json"
           cat > "$EVIDENCE" <<'JSON'
           {
-            "schemaVersion": 3,
+            "schemaVersion": 4,
             "verifiedAt": "2026-09-19T20:00:00Z",
             "manifestURL": "https://updates.blackstock.app/update-manifest.json",
             "packageURL": "https://updates.blackstock.app/Blackstock.pkg",
@@ -261,8 +96,6 @@ jobs:
             "installedAppBuild": 100,
             "installedAppSourceCommitSHA": "1111111111111111111111111111111111111111",
             "installedAppExecutableSHA256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-            "cameraEntitlementVerified": true,
-            "audioInputEntitlementVerified": true,
             "developerIDApplicationVerified": true,
             "gatekeeperApplicationAccepted": true,
             "notarySubmissionID": "00000000-0000-0000-0000-000000000001",
@@ -445,110 +278,19 @@ jobs:
           set -euo pipefail
           ROOT="$RUNNER_TEMP/market-readiness"
           mkdir -p "$ROOT"
-          PROJECT_ID="00000000-0000-0000-0000-000000000101"
-          RECORDING_LAUNCH_ID="00000000-0000-0000-0000-000000000201"
-          PROJECT_ROOT="$HOME/Library/Application Support/Blackstock/Projects/$PROJECT_ID"
-          MEDIA_DIR="$PROJECT_ROOT/Media"
-          CAPTURE_DIR="$PROJECT_ROOT/Captures"
-          mkdir -p "$MEDIA_DIR" "$CAPTURE_DIR"
-          CAMERA="$MEDIA_DIR/00000000-0000-0000-0000-000000000401.mov"
-          MICROPHONE="$CAPTURE_DIR/00000000-0000-0000-0000-000000000402.m4a"
-          SCREEN="$MEDIA_DIR/00000000-0000-0000-0000-000000000403.mp4"
-          printf x > "$CAMERA"
-          printf x > "$MICROPHONE"
-          printf x > "$SCREEN"
-          HASH="$(shasum -a 256 "$CAMERA" | awk '{print $1}')"
 
-          python3 - "$ROOT" "$HASH" "$CAMERA" "$MICROPHONE" "$SCREEN" "$PROJECT_ID" "$RECORDING_LAUNCH_ID" <<'PY'
+          python3 - "$ROOT" <<'PY'
           import json
           import pathlib
           import sys
 
           root = pathlib.Path(sys.argv[1])
-          capture_hash = sys.argv[2]
-          camera_path = pathlib.Path(sys.argv[3])
-          microphone_path = pathlib.Path(sys.argv[4])
-          screen_path = pathlib.Path(sys.argv[5])
-          project_id = sys.argv[6]
-          recording_launch_id = sys.argv[7]
           package_hash = "a" * 64
           executable_hash = "c" * 64
           source_commit = "1" * 40
 
-          capture = {
-              "schemaVersion": 6,
-              "testedAt": "2026-09-19T20:00:00Z",
-              "blackstockVersion": "1.0.0",
-              "blackstockBuild": "100",
-              "blackstockSourceCommitSHA": source_commit,
-              "macOSVersion": "macOS 26.6.2",
-              "hardwareModel": "MacBookProTest",
-              "installedFromPackage": True,
-              "installerReceiptPackageID": "de.blackstock.app",
-              "installerReceiptVersion": "1.0.0",
-              "installerReceiptInstalledAt": "2026-09-02T00:00:03Z",
-              "installerReceiptVerified": True,
-              "applicationTeamID": "ABC123TEAM",
-              "developerIDApplicationVerified": True,
-              "applicationExecutableSHA256": executable_hash,
-              "camera": {
-                  "permissionGranted": True,
-                  "recordingCreated": True,
-                  "durationSeconds": 5.2,
-                  "persistedToProject": True,
-                  "videoTrackPresent": True,
-                  "projectID": project_id,
-                  "recordedLaunchID": recording_launch_id,
-                  "persistedFilePath": str(camera_path),
-                  "persistedFileSHA256": capture_hash,
-              },
-              "microphone": {
-                  "permissionGranted": True,
-                  "recordingCreated": True,
-                  "durationSeconds": 5.1,
-                  "persistedToProject": True,
-                  "decodedSamples": 24000,
-                  "projectID": project_id,
-                  "recordedLaunchID": recording_launch_id,
-                  "persistedFilePath": str(microphone_path),
-                  "persistedFileSHA256": capture_hash,
-              },
-              "screen": {
-                  "permissionGranted": True,
-                  "recordingCreated": True,
-                  "durationSeconds": 5.4,
-                  "persistedToProject": True,
-                  "videoTrackPresent": True,
-                  "projectID": project_id,
-                  "recordedLaunchID": recording_launch_id,
-                  "persistedFilePath": str(screen_path),
-                  "persistedFileSHA256": capture_hash,
-              },
-              "systemAudio": {
-                  "permissionGranted": True,
-                  "recordingCreated": True,
-                  "durationSeconds": 5.4,
-                  "persistedToProject": True,
-                  "decodedSamples": 48000,
-                  "projectID": project_id,
-                  "recordedLaunchID": recording_launch_id,
-                  "persistedFilePath": str(screen_path),
-                  "persistedFileSHA256": capture_hash,
-              },
-              "deniedPermissionHardStopPassed": True,
-              "temporaryCleanupPassed": True,
-              "appRestartPersistencePassed": True,
-              "restartVerifiedLaunchID": "00000000-0000-0000-0000-000000000301",
-              "deniedPermissionKinds": [
-                  "camera", "microphone", "screen", "systemAudio"
-              ],
-              "temporaryCleanupKinds": [
-                  "camera", "microphone", "screen", "systemAudio"
-              ],
-          }
-
           release = {
-              "schemaVersion": 3,
+              "schemaVersion": 4,
               "verifiedAt": "2026-09-19T20:00:00Z",
               "manifestURL": "https://updates.blackstock.app/update-manifest.json",
               "packageURL": "https://updates.blackstock.app/Blackstock.pkg",
@@ -570,8 +312,6 @@ jobs:
               "installedAppBuild": 100,
               "installedAppSourceCommitSHA": source_commit,
               "installedAppExecutableSHA256": executable_hash,
-              "cameraEntitlementVerified": True,
-              "audioInputEntitlementVerified": True,
               "developerIDApplicationVerified": True,
               "gatekeeperApplicationAccepted": True,
               "notarySubmissionID": "00000000-0000-0000-0000-000000000001",
@@ -620,162 +360,28 @@ jobs:
               },
           }
 
-          (root / "capture.json").write_text(json.dumps(capture))
           (root / "release.json").write_text(json.dumps(release))
           (root / "updater.json").write_text(json.dumps(updater))
           PY
 
-          CAPTURE_EVIDENCE_SHA="$(shasum -a 256 "$ROOT/capture.json" | awk '{print $1}')"
           RELEASE_EVIDENCE_SHA="$(shasum -a 256 "$ROOT/release.json" | awk '{print $1}')"
           UPDATER_EVIDENCE_SHA="$(shasum -a 256 "$ROOT/updater.json" | awk '{print $1}')"
 
           python3 Build/verify_market_readiness.py \
-            --capture-evidence "$ROOT/capture.json" \
             --production-release-evidence "$ROOT/release.json" \
             --in-app-update-evidence "$ROOT/updater.json" \
             --output "$ROOT/market-readiness.json"
+
           grep -q '"ready": true' "$ROOT/market-readiness.json"
-          grep -q '"schemaVersion": 3' "$ROOT/market-readiness.json"
-          test "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["captureEvidenceSHA256"])' "$ROOT/market-readiness.json")" = "$CAPTURE_EVIDENCE_SHA"
+          grep -q '"schemaVersion": 4' "$ROOT/market-readiness.json"
           test "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["productionReleaseEvidenceSHA256"])' "$ROOT/market-readiness.json")" = "$RELEASE_EVIDENCE_SHA"
           test "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["inAppUpdateEvidenceSHA256"])' "$ROOT/market-readiness.json")" = "$UPDATER_EVIDENCE_SHA"
 
           if python3 Build/verify_market_readiness.py \
-            --capture-evidence "$ROOT/capture.json" \
             --production-release-evidence "$ROOT/release.json" \
             --in-app-update-evidence "$ROOT/updater.json" \
-            --output "$ROOT/capture.json"; then
-            echo "Market readiness unexpectedly allowed output to overwrite capture evidence." >&2
-            exit 1
-          fi
-          grep -q '"sourceAppPath": "/Applications/Blackstock.app"' "$ROOT/market-readiness.json"
-          grep -q '"installedAppPath": "/Applications/Blackstock.app"' "$ROOT/market-readiness.json"
-          grep -q '"sourceInstallerReceiptVersion": "0.9.0"' "$ROOT/market-readiness.json"
-          grep -q '"installerReceiptVersion": "1.0.0"' "$ROOT/market-readiness.json"
-          grep -q '"sourceInstallerReceiptInstalledAt"' "$ROOT/market-readiness.json"
-          grep -q '"installerReceiptInstalledAt"' "$ROOT/market-readiness.json"
-          grep -q '"sameInstallationReceiptVerified": true' "$ROOT/market-readiness.json"
-
-          python3 - "$ROOT/capture.json" <<'PY'
-          import json
-          import sys
-          path = sys.argv[1]
-          data = json.load(open(path))
-          data["installerReceiptInstalledAt"] = "2026-09-02T00:01:03Z"
-          json.dump(data, open(path, "w"))
-          PY
-
-          if python3 Build/verify_market_readiness.py \
-            --capture-evidence "$ROOT/capture.json" \
-            --production-release-evidence "$ROOT/release.json" \
-            --in-app-update-evidence "$ROOT/updater.json"; then
-            echo "Different capture/updater installer receipt instances were unexpectedly accepted." >&2
-            exit 1
-          fi
-
-          python3 - "$ROOT/capture.json" <<'PY'
-          import json
-          import sys
-          path = sys.argv[1]
-          data = json.load(open(path))
-          data["installerReceiptInstalledAt"] = "2026-09-02T00:00:03Z"
-          json.dump(data, open(path, "w"))
-          PY
-
-          python3 - "$ROOT/capture.json" <<'PY'
-          import json
-          import sys
-          path = sys.argv[1]
-          data = json.load(open(path))
-          data["applicationTeamID"] = "OTHERTEAM"
-          json.dump(data, open(path, "w"))
-          PY
-
-          if python3 Build/verify_market_readiness.py \
-            --capture-evidence "$ROOT/capture.json" \
-            --production-release-evidence "$ROOT/release.json" \
-            --in-app-update-evidence "$ROOT/updater.json"; then
-            echo "Cross-team capture mismatch was unexpectedly accepted." >&2
-            exit 1
-          fi
-
-          python3 - "$ROOT/capture.json" <<'PY'
-          import json
-          import sys
-          path = sys.argv[1]
-          data = json.load(open(path))
-          data["applicationTeamID"] = "ABC123TEAM"
-          json.dump(data, open(path, "w"))
-          PY
-
-          python3 - "$ROOT/updater.json" <<'PY'
-          import json
-          import sys
-          path = sys.argv[1]
-          data = json.load(open(path))
-          data["value"]["packageSHA256"] = "b" * 64
-          json.dump(data, open(path, "w"))
-          PY
-
-          if python3 Build/verify_market_readiness.py \
-            --capture-evidence "$ROOT/capture.json" \
-            --production-release-evidence "$ROOT/release.json" \
-            --in-app-update-evidence "$ROOT/updater.json"; then
-            echo "Cross-release mismatch was unexpectedly accepted." >&2
-            exit 1
-          fi
-
-          python3 - "$ROOT/updater.json" <<'PY'
-          import json
-          import sys
-          path = sys.argv[1]
-          data = json.load(open(path))
-          data["value"]["packageSHA256"] = "a" * 64
-          data["value"]["observedInstalledSourceCommitSHA"] = "2" * 40
-          json.dump(data, open(path, "w"))
-          PY
-
-          if python3 Build/verify_market_readiness.py \
-            --capture-evidence "$ROOT/capture.json" \
-            --production-release-evidence "$ROOT/release.json" \
-            --in-app-update-evidence "$ROOT/updater.json"; then
-            echo "Source-commit mismatch was unexpectedly accepted." >&2
-            exit 1
-          fi
-
-          python3 - "$ROOT/updater.json" <<'PY'
-          import json
-          import sys
-          path = sys.argv[1]
-          data = json.load(open(path))
-          data["value"]["observedInstalledSourceCommitSHA"] = "1" * 40
-          data["value"]["observedInstalledExecutableSHA256"] = "d" * 64
-          json.dump(data, open(path, "w"))
-          PY
-
-          if python3 Build/verify_market_readiness.py \
-            --capture-evidence "$ROOT/capture.json" \
-            --production-release-evidence "$ROOT/release.json" \
-            --in-app-update-evidence "$ROOT/updater.json"; then
-            echo "Executable mismatch was unexpectedly accepted." >&2
-            exit 1
-          fi
-
-          python3 - "$ROOT/updater.json" <<'PY'
-          import json
-          import sys
-          path = sys.argv[1]
-          data = json.load(open(path))
-          data["value"]["observedInstalledExecutableSHA256"] = "c" * 64
-          data["value"]["currentBuild"] = 89
-          json.dump(data, open(path, "w"))
-          PY
-
-          if python3 Build/verify_market_readiness.py \
-            --capture-evidence "$ROOT/capture.json" \
-            --production-release-evidence "$ROOT/release.json" \
-            --in-app-update-evidence "$ROOT/updater.json"; then
-            echo "Source update build mismatch was unexpectedly accepted." >&2
+            --output "$ROOT/release.json"; then
+            echo "Market readiness unexpectedly allowed output to overwrite release evidence." >&2
             exit 1
           fi
 
