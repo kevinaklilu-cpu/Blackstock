@@ -37,6 +37,18 @@ requirements = {
         "parsed.fragment",
         "host.endswith(\".local\")",
         "Cleanup signing material",
+        "contents: write",
+        "releases/latest/download/update-manifest.json",
+        "BLACKSTOCK_RELEASE_TAG",
+        "Resolve previous production baseline",
+        "Publish production GitHub Release",
+        "gh release create",
+        "--latest",
+        "Wait for published update endpoint",
+        "Verify published release and installed production app",
+        "validate_production_release_evidence.py",
+        "Roll back failed published release",
+        "gh release delete",
     ],
     ".github/workflows/verify-published-release.yml": [
         "workflow_dispatch:",
@@ -184,6 +196,19 @@ for relative, markers in requirements.items():
 production = (ROOT / ".github/workflows/production-release.yml").read_text(
     encoding="utf-8"
 )
+if "manifest_url:" in production or "package_url:" in production:
+    errors.append(
+        "production release workflow must derive canonical GitHub Release update URLs instead of asking for manual endpoint inputs"
+    )
+if "contents: write" not in production:
+    errors.append(
+        "production release workflow needs contents: write to publish GitHub Releases"
+    )
+if "releases/latest/download/update-manifest.json" not in production:
+    errors.append(
+        "production app must be built with the stable latest-release manifest endpoint"
+    )
+
 if "BLACKSTOCK_GOOGLE_OAUTH_CLIENT_SECRET" in production:
     errors.append(
         "desktop OAuth client_secret must not be required or injected into the production package workflow"
@@ -203,6 +228,10 @@ for marker, expected in [
     ("- name: Verify update signing key pair", 1),
     ("- name: Build sign and notarize production package", 1),
     ("- name: Generate signed production update manifest", 1),
+    ("- name: Publish production GitHub Release", 1),
+    ("- name: Wait for published update endpoint", 1),
+    ("- name: Verify published release and installed production app", 1),
+    ("- name: Roll back failed published release", 1),
     ("- name: Upload production release bundle", 1),
     ("- name: Cleanup signing material", 1),
 ]:
