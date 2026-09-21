@@ -45,6 +45,9 @@ requirements = {
         "BlackstockUpdateInstallationPreflight()",
         "NSWorkspace.shared.open(",
         "BlackstockCaptureHardwareAudit.loadEvidence(",
+        'GroupBox("Original-Mediathek")',
+        "chooseOriginalMediaLibrary()",
+        "session.setOriginalMediaLibrary(",
     ],
     "Sources/BlackstockApp/CaptureCapabilityPanel.swift": [
         "cameraRecorder.startRecording(",
@@ -93,6 +96,8 @@ requirements = {
         "state.renderAllSavedClipSelections(",
         "state.exportRenderedSavedClips(",
         "state.useSavedClipForPackaging(",
+        "attemptAutomaticOriginalBinding()",
+        "session.resolveOriginalMedia(",
     ],
     "Sources/BlackstockApp/PackagingReviewView.swift": [
         'GroupBox("YouTube-Metadaten")',

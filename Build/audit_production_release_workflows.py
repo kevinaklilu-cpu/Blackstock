@@ -33,10 +33,21 @@ requirements = {
         "notary-response.json",
         "Developer-only helper leaked into production package.",
         "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
-        "parsed.username",
-        "parsed.fragment",
-        "host.endswith(\".local\")",
         "Cleanup signing material",
+        "https://github.com/${{ github.repository }}/releases/latest/download/update-manifest.json",
+        "https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}-build.${{ inputs.build }}/Blackstock.pkg",
+        "contents: write",
+        "releases/latest/download/update-manifest.json",
+        "BLACKSTOCK_RELEASE_TAG",
+        "Resolve previous production baseline",
+        "Publish production GitHub Release",
+        "gh release create",
+        "--latest",
+        "Wait for published update endpoint",
+        "Verify published release and installed production app",
+        "validate_production_release_evidence.py",
+        "Roll back failed published release",
+        "gh release delete",
     ],
     ".github/workflows/verify-published-release.yml": [
         "workflow_dispatch:",
@@ -184,6 +195,27 @@ for relative, markers in requirements.items():
 production = (ROOT / ".github/workflows/production-release.yml").read_text(
     encoding="utf-8"
 )
+if "\n      manifest_url:\n" in production or "\n      package_url:\n" in production:
+    errors.append(
+        "production release workflow must derive canonical GitHub Release update URLs instead of asking for manual endpoint inputs"
+    )
+if "BLACKSTOCK_MANIFEST_URL: https://github.com/${{ github.repository }}/releases/latest/download/update-manifest.json" not in production:
+    errors.append(
+        "production workflow must derive the stable manifest URL from the current GitHub repository"
+    )
+if "BLACKSTOCK_PACKAGE_URL: https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}-build.${{ inputs.build }}/Blackstock.pkg" not in production:
+    errors.append(
+        "production workflow must derive an immutable version/build package URL from the current GitHub repository"
+    )
+if "contents: write" not in production:
+    errors.append(
+        "production release workflow needs contents: write to publish GitHub Releases"
+    )
+if "releases/latest/download/update-manifest.json" not in production:
+    errors.append(
+        "production app must be built with the stable latest-release manifest endpoint"
+    )
+
 if "BLACKSTOCK_GOOGLE_OAUTH_CLIENT_SECRET" in production:
     errors.append(
         "desktop OAuth client_secret must not be required or injected into the production package workflow"
@@ -203,6 +235,10 @@ for marker, expected in [
     ("- name: Verify update signing key pair", 1),
     ("- name: Build sign and notarize production package", 1),
     ("- name: Generate signed production update manifest", 1),
+    ("- name: Publish production GitHub Release", 1),
+    ("- name: Wait for published update endpoint", 1),
+    ("- name: Verify published release and installed production app", 1),
+    ("- name: Roll back failed published release", 1),
     ("- name: Upload production release bundle", 1),
     ("- name: Cleanup signing material", 1),
 ]:

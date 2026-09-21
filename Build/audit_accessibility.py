@@ -9,7 +9,7 @@ CRITICAL = {
     "Sources/BlackstockApp/FirstRunView.swift": [
         'accessibilityLabel("YouTube-Region")',
         'accessibilityLabel("YouTube-Content-Sprache")',
-        'accessibilityLabel("YouTube-Video-Kategorie")',
+        'accessibilityLabel("Video-Kategorie")',
         'accessibilityLabel("Trend-Zeitraum")',
         'accessibilityLabel("YouTube-Zielgruppe")',
         'accessibilityLabel("Video-Zeitraum")',

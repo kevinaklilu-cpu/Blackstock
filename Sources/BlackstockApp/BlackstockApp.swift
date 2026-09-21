@@ -1154,6 +1154,50 @@ private struct SettingsView: View {
                 Text("Diese Aktion meldet Blackstock lokal ab. Sie widerruft keine Berechtigung im Google-Konto und löscht keine Projektdateien.")
             }
 
+            GroupBox("Original-Mediathek") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(
+                        session.originalMediaLibraryPath.isEmpty
+                            ? "Noch kein Ordner ausgewählt."
+                            : session.originalMediaLibraryPath
+                    )
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .lineLimit(2)
+
+                    HStack(spacing: 10) {
+                        Button {
+                            chooseOriginalMediaLibrary()
+                        } label: {
+                            Label(
+                                session.originalMediaLibraryPath.isEmpty
+                                    ? "Originalvideo-Ordner wählen …"
+                                    : "Originalvideo-Ordner ändern …",
+                                systemImage: "folder.badge.plus"
+                            )
+                        }
+
+                        Button(
+                            "Ordnerzuordnung entfernen",
+                            role: .destructive
+                        ) {
+                            _ = session.setOriginalMediaLibrary(nil)
+                        }
+                        .disabled(
+                            session.originalMediaLibraryPath.isEmpty
+                        )
+                    }
+
+                    Text(
+                        "Blackstock durchsucht diesen Ordner lokal nach dem passenden Original, wenn du ein YouTube-Video als Clip auswählst. Ein eindeutiger Treffer wird automatisch ans Projekt gebunden; sonst bleibt die manuelle Dateiauswahl als Fallback."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 6)
+            }
             GroupBox("Updates") {
                 VStack(alignment: .leading, spacing: 10) {
                     Button {
@@ -1275,7 +1319,12 @@ private struct SettingsView: View {
                                     BlackstockUpdateAudit.recordInstallerOpened(
                                         manifest: manifest
                                     )
-                                    updateStatusMessage = "SHA-256 und Developer-ID-Installer-Team wurden unmittelbar vor der Übergabe erneut verifiziert. Das Paket wurde an den macOS-Installer übergeben; die Installation erfolgt erst nach deiner Bestätigung im System-Installer."
+                                    updateStatusMessage = "Das Update wurde erneut verifiziert und an den macOS-Installer übergeben. Blackstock wird jetzt beendet, damit die neue Version sauber installiert werden kann."
+                                    DispatchQueue.main.asyncAfter(
+                                        deadline: .now() + 0.4
+                                    ) {
+                                        NSApp.terminate(nil)
+                                    }
                                 } catch {
                                     try? FileManager.default.removeItem(
                                         at: verifiedUpdatePackageURL
@@ -1285,7 +1334,7 @@ private struct SettingsView: View {
                                 }
                             } label: {
                                 Label(
-                                    "Verifiziertes Paket im macOS-Installer öffnen",
+                                    "Update installieren und Blackstock schließen",
                                     systemImage: "shippingbox"
                                 )
                             }
@@ -1576,6 +1625,21 @@ private struct SettingsView: View {
         }
     }
 
+    private func chooseOriginalMediaLibrary() {
+        let panel = NSOpenPanel()
+        panel.title = "Originalvideo-Ordner auswählen"
+        panel.prompt = "Ordner verwenden"
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true
+
+        guard panel.runModal() == .OK,
+              let url = panel.url else {
+            return
+        }
+        _ = session.setOriginalMediaLibrary(url)
+    }
     private func captureEvidenceDetail(
         _ evidence: CaptureHardwarePathEvidence,
         kind: CaptureKind

@@ -64,6 +64,8 @@ struct StudioView: View {
             await state.loadWorkspace(projectID: project.id)
             if session.activeProject?.isPaused == true {
                 state.requestStopProcessing()
+            } else if state.asset == nil {
+                await attemptAutomaticOriginalBinding()
             }
         }
         .onDisappear {
@@ -240,8 +242,12 @@ struct StudioView: View {
 
                     Text(
                         hasBoundAuthorizedMedia
-                            ? "Schnittquelle bereit. Blackstock kann das Video jetzt automatisch analysieren und clippen."
-                            : "Video ausgewählt. Sobald die verarbeitbare Schnittquelle bereitsteht, startet Blackstock den automatischen Clip-Workflow."
+                            ? "Originalvideo bereit. Blackstock kann das Video jetzt automatisch analysieren und clippen."
+                            : (
+                                session.originalMediaLibraryPath.isEmpty
+                                ? "Video ausgewählt. Lege einmalig deine Original-Mediathek fest oder wähle die Originaldatei direkt aus."
+                                : "Video ausgewählt. Blackstock sucht automatisch in deiner Original-Mediathek nach dem passenden Video."
+                            )
                     )
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -253,7 +259,7 @@ struct StudioView: View {
                             presentVideoPicker()
                         } label: {
                             Label(
-                                "Schnittquelle hinzufügen",
+                                "Originaldatei auswählen",
                                 systemImage: "folder"
                             )
                         }
@@ -376,7 +382,9 @@ struct StudioView: View {
                     .font(.title2.bold())
 
                 Text(
-                    "Sobald die verarbeitbare Originaldatei für dieses Video bereitsteht, erstellt Blackstock automatisch Highlights, Hochkantformat und Untertitel."
+                    session.originalMediaLibraryPath.isEmpty
+                        ? "Wähle einmalig deinen Originalvideo-Ordner in den Einstellungen oder füge die Originaldatei direkt hinzu. Danach erstellt Blackstock automatisch Highlights, Hochkantformat und Untertitel."
+                        : "Blackstock sucht automatisch in deiner Original-Mediathek nach diesem Video. Nur wenn kein eindeutiger Treffer gefunden wird, musst du die Datei einmalig auswählen."
                 )
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
@@ -387,11 +395,35 @@ struct StudioView: View {
                         presentVideoPicker()
                     } label: {
                         Label(
-                            "Schnittquelle hinzufügen",
+                            "Originaldatei auswählen",
                             systemImage: "film.stack"
                         )
                     }
                     .buttonStyle(.borderedProminent)
+
+                    if session.originalMediaLibraryPath.isEmpty {
+                        Button {
+                            presentOriginalMediaLibraryPicker()
+                        } label: {
+                            Label(
+                                "Originalvideo-Ordner wählen …",
+                                systemImage: "folder.badge.plus"
+                            )
+                        }
+                        .buttonStyle(.bordered)
+                    } else {
+                        Button {
+                            Task {
+                                await attemptAutomaticOriginalBinding()
+                            }
+                        } label: {
+                            Label(
+                                "Mediathek erneut durchsuchen",
+                                systemImage: "arrow.clockwise"
+                            )
+                        }
+                        .buttonStyle(.bordered)
+                    }
 
                     Button("Auf YouTube ansehen") {
                         NSWorkspace.shared.open(
@@ -2368,6 +2400,46 @@ struct StudioView: View {
         }
         .padding(24)
         .frame(width: 520)
+    }
+
+    private func attemptAutomaticOriginalBinding() async {
+        guard state.asset == nil,
+              session.productionIntent(
+                for: project.id
+              )?.isLinkFirstClip == true,
+              let source = opportunitySource,
+              session.workspaceRightsAttestation?
+                .permitsUserDirectedProduction == true,
+              let matchedURL = await session.resolveOriginalMedia(
+                for: project,
+                source: source
+              ) else {
+            return
+        }
+
+        pendingURL = matchedURL
+        pendingCaptureKind = nil
+        importPendingMedia()
+    }
+
+    private func presentOriginalMediaLibraryPicker() {
+        let panel = NSOpenPanel()
+        panel.title = "Originalvideo-Ordner auswählen"
+        panel.prompt = "Ordner verwenden"
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true
+
+        guard panel.runModal() == .OK,
+              let url = panel.url,
+              session.setOriginalMediaLibrary(url) else {
+            return
+        }
+
+        Task {
+            await attemptAutomaticOriginalBinding()
+        }
     }
 
     private func presentVideoPicker() {

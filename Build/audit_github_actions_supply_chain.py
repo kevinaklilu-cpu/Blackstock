@@ -9,6 +9,7 @@ PIN_PATTERN = re.compile(r"^[^\s@]+/[^\s@]+@[0-9a-fA-F]{40}(?:\s+#.*)?$")
 USES_PATTERN = re.compile(r"^\s*-?\s*uses:\s*([^\s]+(?:\s+#.*)?)\s*$")
 
 errors = []
+WRITE_ALLOWED_WORKFLOW = Path(".github/workflows/production-release.yml")
 if not WORKFLOWS.is_dir():
     errors.append(".github/workflows directory is missing")
 else:
@@ -55,15 +56,31 @@ else:
                     f"per pinned macOS job ({macos_job_count}), found {guard_count}"
                 )
 
-        if "permissions:\n  contents: read" not in text:
+        relative = path.relative_to(ROOT)
+        write_allowed = relative == WRITE_ALLOWED_WORKFLOW
+        required_permission = (
+            "permissions:\n  contents: write"
+            if write_allowed
+            else "permissions:\n  contents: read"
+        )
+        if required_permission not in text:
             errors.append(
-                f"{path.relative_to(ROOT)}: workflow must declare top-level "
-                "permissions with contents: read"
+                f"{relative}: workflow must declare the expected top-level "
+                f"permission ({'contents: write' if write_allowed else 'contents: read'})"
+            )
+        if write_allowed and (
+            "pull_request:" in text
+            or "pull_request_target:" in text
+            or re.search(r"(?m)^\s*push:\s*$", text)
+        ):
+            errors.append(
+                f"{relative}: the sole write-capable workflow must remain "
+                "manual workflow_dispatch only"
             )
 
         for permission_line_number, permission_line in enumerate(lines, 1):
             normalized = permission_line.strip().lower()
-            if (
+            is_write_permission = (
                 normalized == "permissions: write-all"
                 or re.fullmatch(
                     r"[a-z0-9_-]+:\s*write(?:\s*#.*)?",
@@ -73,7 +90,12 @@ else:
                     normalized.startswith("permissions:")
                     and "write" in normalized
                 )
-            ):
+            )
+            allowed_release_write = (
+                write_allowed
+                and normalized == "contents: write"
+            )
+            if is_write_permission and not allowed_release_write:
                 errors.append(
                     f"{path.relative_to(ROOT)}:{permission_line_number}: "
                     f"write-capable GITHUB_TOKEN permission is forbidden: "
@@ -132,5 +154,6 @@ print(
     "GitHub Actions supply-chain audit passed: every external workflow "
     "dependency is pinned to an immutable 40-character commit SHA, "
     "checkout credentials are not persisted, runner/toolchain versions are "
-    "pinned, and workflow token permissions remain read-only."
+    "pinned; token permissions remain read-only except for the explicit "
+    "manual production-release workflow, which may use only contents: write."
 )
