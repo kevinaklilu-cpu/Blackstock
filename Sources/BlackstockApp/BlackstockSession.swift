@@ -68,6 +68,7 @@ final class BlackstockSession: ObservableObject {
     @Published var channelCategoryID = ""
     @Published var opportunityTimeWindow:
         OpportunityTimeWindow = .allTime
+    @Published var opportunityContentFilter: OpportunityContentFilter = .all
     @Published var channelAudienceSetting:
         YouTubeChannelAudienceSetting = .perVideo
     @Published var isLoadingYouTubeSetupOptions = false
@@ -220,6 +221,15 @@ final class BlackstockSession: ObservableObject {
                 rawValue: rawTimeWindow
            ) {
             opportunityTimeWindow = savedTimeWindow
+        }
+        if let rawContentFilter =
+            UserDefaults.standard.string(
+                forKey: "blackstock.workspace.opportunityContentFilter"
+            ),
+           let savedContentFilter = OpportunityContentFilter(
+                rawValue: rawContentFilter
+           ) {
+            opportunityContentFilter = savedContentFilter
         }
         if let rawAudience = UserDefaults.standard.string(
             forKey: "blackstock.workspace.channelAudience"
@@ -2290,13 +2300,21 @@ final class BlackstockSession: ObservableObject {
     func loadWorkspaceOpportunities(
         query: String,
         order: OpportunitySortMode,
-        timeWindow: OpportunityTimeWindow? = nil
+        timeWindow: OpportunityTimeWindow? = nil,
+        contentFilter: OpportunityContentFilter? = nil
     ) async {
         let resolvedQuery = query.trimmingCharacters(
             in: .whitespacesAndNewlines
         )
         let resolvedTimeWindow =
             timeWindow ?? opportunityTimeWindow
+        let resolvedContentFilter =
+            contentFilter ?? opportunityContentFilter
+        opportunityContentFilter = resolvedContentFilter
+        UserDefaults.standard.set(
+            resolvedContentFilter.rawValue,
+            forKey: "blackstock.workspace.opportunityContentFilter"
+        )
 
         guard let channelID = workspaceChannelID else {
             errorMessage = "Kein YouTube-Kanal ist verbunden."
@@ -2328,7 +2346,8 @@ final class BlackstockSession: ObservableObject {
                         relevanceLanguage: contentLanguage,
                         timeWindow: resolvedTimeWindow,
                         maxResults: 20,
-                        order: order
+                        order: order,
+                        contentFilter: resolvedContentFilter
                     )
             } else {
                 guard !resolvedQuery.isEmpty else {
@@ -2353,7 +2372,8 @@ final class BlackstockSession: ObservableObject {
                             resolvedTimeWindow
                                 .publishedAfter(now: Date()),
                         maxResults: 20,
-                        order: order
+                        order: order,
+                        contentFilter: resolvedContentFilter
                     )
             }
 
@@ -2490,6 +2510,10 @@ final class BlackstockSession: ObservableObject {
             forKey: "blackstock.workspace.opportunityTimeWindow"
         )
         UserDefaults.standard.set(
+            opportunityContentFilter.rawValue,
+            forKey: "blackstock.workspace.opportunityContentFilter"
+        )
+        UserDefaults.standard.set(
             channelAudienceSetting.rawValue,
             forKey: "blackstock.workspace.channelAudience"
         )
@@ -2517,6 +2541,10 @@ final class BlackstockSession: ObservableObject {
         UserDefaults.standard.set(
             opportunityTimeWindow.rawValue,
             forKey: "blackstock.workspace.opportunityTimeWindow"
+        )
+        UserDefaults.standard.set(
+            opportunityContentFilter.rawValue,
+            forKey: "blackstock.workspace.opportunityContentFilter"
         )
         UserDefaults.standard.set(
             channelAudienceSetting.rawValue,
