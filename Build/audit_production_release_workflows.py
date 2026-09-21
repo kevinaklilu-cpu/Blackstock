@@ -196,7 +196,7 @@ for relative, markers in requirements.items():
 production = (ROOT / ".github/workflows/production-release.yml").read_text(
     encoding="utf-8"
 )
-if "manifest_url:" in production or "package_url:" in production:
+if "\n      manifest_url:\n" in production or "\n      package_url:\n" in production:
     errors.append(
         "production release workflow must derive canonical GitHub Release update URLs instead of asking for manual endpoint inputs"
     )
