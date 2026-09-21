@@ -3283,7 +3283,10 @@ struct StudioView: View {
                     .padding(.vertical, 3)
                 }
 
-                if state.asset != nil {
+                if state.asset != nil,
+                   session.productionIntent(
+                        for: project.id
+                   )?.isLinkFirstClip != true {
                     Divider()
                     Button {
                         showOptionalCapture.toggle()
@@ -3316,11 +3319,19 @@ struct StudioView: View {
                         }
                         .padding(.top, 8)
                     }
-                }
 
-                Text("Zusätzliche Audio-, Kamera- oder Bildschirmspuren sind optional und werden nur verwendet, wenn du sie ausdrücklich hinzufügst.")
+                    Text(
+                        "Eigene Kamera-, Mikrofon- oder Bildschirmaufnahmen sind nur für selbst produzierte Projekte verfügbar."
+                    )
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+                } else if state.supplementalCaptures.isEmpty {
+                    Text(
+                        "Für diesen YouTube-Clip sind keine Kamera-, Mikrofon- oder Bildschirmrechte erforderlich."
+                    )
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 4)
