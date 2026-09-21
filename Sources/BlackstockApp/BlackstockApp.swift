@@ -1275,7 +1275,12 @@ private struct SettingsView: View {
                                     BlackstockUpdateAudit.recordInstallerOpened(
                                         manifest: manifest
                                     )
-                                    updateStatusMessage = "SHA-256 und Developer-ID-Installer-Team wurden unmittelbar vor der Übergabe erneut verifiziert. Das Paket wurde an den macOS-Installer übergeben; die Installation erfolgt erst nach deiner Bestätigung im System-Installer."
+                                    updateStatusMessage = "Das Update wurde erneut verifiziert und an den macOS-Installer übergeben. Blackstock wird jetzt beendet, damit die neue Version sauber installiert werden kann."
+                                    DispatchQueue.main.asyncAfter(
+                                        deadline: .now() + 0.4
+                                    ) {
+                                        NSApp.terminate(nil)
+                                    }
                                 } catch {
                                     try? FileManager.default.removeItem(
                                         at: verifiedUpdatePackageURL
@@ -1285,7 +1290,7 @@ private struct SettingsView: View {
                                 }
                             } label: {
                                 Label(
-                                    "Verifiziertes Paket im macOS-Installer öffnen",
+                                    "Update installieren und Blackstock schließen",
                                     systemImage: "shippingbox"
                                 )
                             }
