@@ -75,7 +75,14 @@ public struct YouTubeOpportunityCandidate: Codable, Sendable, Equatable, Identif
     public let embeddable: Bool?
     public let contentKind: YouTubeOpportunityContentKind
     public let durationSeconds: Int?
+    public let description: String?
     public let metrics: YouTubeOpportunityMetrics
+
+    public var creatorProvidedSourceURLs: [URL] {
+        Self.directMediaURLs(
+            in: description ?? ""
+        )
+    }
 
     public init(
         videoID: String,
@@ -89,6 +96,7 @@ public struct YouTubeOpportunityCandidate: Codable, Sendable, Equatable, Identif
         embeddable: Bool?,
         contentKind: YouTubeOpportunityContentKind = .video,
         durationSeconds: Int? = nil,
+        description: String? = nil,
         metrics: YouTubeOpportunityMetrics
     ) {
         self.id = videoID
@@ -103,7 +111,67 @@ public struct YouTubeOpportunityCandidate: Codable, Sendable, Equatable, Identif
         self.embeddable = embeddable
         self.contentKind = contentKind
         self.durationSeconds = durationSeconds
+        self.description = description
         self.metrics = metrics
+    }
+
+    private static func directMediaURLs(
+        in text: String
+    ) -> [URL] {
+        let supportedExtensions: Set<String> = [
+            "mp4", "mov", "m4v"
+        ]
+        let pattern = #"https?://[^\s<>()\[\]{}\"']+"#
+        guard let regex = try? NSRegularExpression(
+            pattern: pattern,
+            options: [.caseInsensitive]
+        ) else {
+            return []
+        }
+
+        let range = NSRange(
+            text.startIndex..<text.endIndex,
+            in: text
+        )
+        var seen = Set<String>()
+        return regex.matches(
+            in: text,
+            options: [],
+            range: range
+        ).compactMap { match in
+            guard let swiftRange = Range(
+                match.range,
+                in: text
+            ) else {
+                return nil
+            }
+            var raw = String(text[swiftRange])
+            while let last = raw.last,
+                  ".,;:!?".contains(last) {
+                raw.removeLast()
+            }
+            guard let url = URL(string: raw),
+                  let scheme = url.scheme?.lowercased(),
+                  scheme == "https" || scheme == "http",
+                  !Self.isYouTubeHost(url.host),
+                  supportedExtensions.contains(
+                    url.pathExtension.lowercased()
+                  ),
+                  seen.insert(url.absoluteString).inserted else {
+                return nil
+            }
+            return url
+        }
+    }
+
+    private static func isYouTubeHost(
+        _ host: String?
+    ) -> Bool {
+        let value = host?.lowercased() ?? ""
+        return value == "youtube.com"
+            || value.hasSuffix(".youtube.com")
+            || value == "youtu.be"
+            || value.hasSuffix(".youtu.be")
     }
 }
 
@@ -420,6 +488,7 @@ public struct YouTubeAuthorizedClient: Sendable {
                 embeddable: video?.status?.embeddable,
                 contentKind: contentKind,
                 durationSeconds: durationSeconds,
+                description: item.snippet.description,
                 metrics: metrics
             )
         }
@@ -581,6 +650,7 @@ public struct YouTubeAuthorizedClient: Sendable {
                 durationSeconds: Self.durationSeconds(
                     from: video.contentDetails?.duration
                 ),
+                description: snippet.description,
                 metrics: YouTubeOpportunityMetrics(
                     viewCount: video.statistics.flatMap {
                         Int($0.viewCount ?? "")
@@ -746,6 +816,7 @@ private struct SearchSnippet: Decodable {
     let publishedAt: Date?
     let channelId: String
     let title: String
+    let description: String?
     let channelTitle: String
     let thumbnails: ThumbnailSet?
 }
