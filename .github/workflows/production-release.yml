@@ -11,20 +11,15 @@ on:
         description: "Positive Build-Nummer"
         required: true
         type: string
-      manifest_url:
-        description: "Reale HTTPS-URL des veröffentlichten update-manifest.json"
-        required: true
-        type: string
-      package_url:
-        description: "Reale HTTPS-URL des veröffentlichten Blackstock.pkg"
-        required: true
-        type: string
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+  BLACKSTOCK_RELEASE_TAG: v${{ inputs.version }}-build.${{ inputs.build }}
+  BLACKSTOCK_MANIFEST_URL: https://github.com/${{ github.repository }}/releases/latest/download/update-manifest.json
+  BLACKSTOCK_PACKAGE_URL: https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}-build.${{ inputs.build }}/Blackstock.pkg
 
 concurrency:
   group: blackstock-production-release
