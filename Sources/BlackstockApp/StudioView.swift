@@ -242,8 +242,12 @@ struct StudioView: View {
 
                     Text(
                         hasBoundAuthorizedMedia
-                            ? "Schnittquelle bereit. Blackstock kann das Video jetzt automatisch analysieren und clippen."
-                            : "Video ausgewählt. Sobald die verarbeitbare Schnittquelle bereitsteht, startet Blackstock den automatischen Clip-Workflow."
+                            ? "Originalvideo bereit. Blackstock kann das Video jetzt automatisch analysieren und clippen."
+                            : (
+                                session.originalMediaLibraryPath.isEmpty
+                                ? "Video ausgewählt. Lege einmalig deine Original-Mediathek fest oder wähle die Originaldatei direkt aus."
+                                : "Video ausgewählt. Blackstock sucht automatisch in deiner Original-Mediathek nach dem passenden Video."
+                            )
                     )
                     .font(.caption)
                     .foregroundStyle(.secondary)
