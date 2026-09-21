@@ -13,9 +13,14 @@ struct StudioView: View {
     let contentLanguage: String
 
     @StateObject private var state = StudioState()
+    @StateObject private var sourceDownloader =
+        SourceDownloadManager()
     @State private var pendingURL: URL?
     @State private var showOptionalCapture = false
     @State private var isResolvingAutomaticSource = false
+    @State private var showSourceDownloader = false
+    @State private var sourceDownloadURLText = ""
+    @State private var sourceDownloadMessage: String?
     @State private var pendingCaptureKind: CaptureKind?
     @State private var showRightsSheet = false
     @State private var rightsSelection: ProductionMediaAuthorization = .owned
@@ -101,6 +106,20 @@ struct StudioView: View {
             } else {
                 state.resumeProcessing()
             }
+        }
+        .sheet(isPresented: $showSourceDownloader) {
+            sourceDownloaderSheet
+        }
+        .onChange(
+            of: sourceDownloader.lastCompletedURL
+        ) { completedURL in
+            guard let completedURL else {
+                return
+            }
+            pendingURL = completedURL
+            pendingCaptureKind = nil
+            importPendingMedia()
+            showSourceDownloader = false
         }
         .sheet(isPresented: $showPackagingReview) {
             if let asset = state.asset,
@@ -311,6 +330,20 @@ struct StudioView: View {
 
                             Menu {
                                 Button {
+                                    sourceDownloadURLText = ""
+                                    sourceDownloadMessage = nil
+                                    showSourceDownloader = true
+                                } label: {
+                                    Label(
+                                        "Downloadquelle öffnen",
+                                        systemImage:
+                                            "arrow.down.circle"
+                                    )
+                                }
+
+                                Divider()
+
+                                Button {
                                     presentOriginalMediaLibraryPicker()
                                 } label: {
                                     Label(
@@ -503,6 +536,20 @@ struct StudioView: View {
                     }
 
                     Menu {
+                        Button {
+                            sourceDownloadURLText = ""
+                            sourceDownloadMessage = nil
+                            showSourceDownloader = true
+                        } label: {
+                            Label(
+                                "Downloadquelle öffnen",
+                                systemImage:
+                                    "arrow.down.circle"
+                            )
+                        }
+
+                        Divider()
+
                         Button {
                             presentOriginalMediaLibraryPicker()
                         } label: {
@@ -2455,6 +2502,236 @@ struct StudioView: View {
             in: .whitespacesAndNewlines
         )
         return text.isEmpty ? nil : text
+    }
+
+    private var sourceDownloaderSheet: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Quelle herunterladen")
+                        .font(.title2.bold())
+                    Text(
+                        "Direkte oder autorisierte Medienquelle herunterladen und anschließend automatisch in Blackstock übernehmen."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+
+            if let source = opportunitySource {
+                GroupBox("Ausgewähltes Video") {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(project.title)
+                            .font(.headline)
+                        Text(source.pageURL.absoluteString)
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+                    .frame(
+                        maxWidth: .infinity,
+                        alignment: .leading
+                    )
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 7) {
+                Text("Download-URL")
+                    .font(.caption.weight(.semibold))
+                TextField(
+                    "https://…/video.mp4",
+                    text: $sourceDownloadURLText
+                )
+                .textFieldStyle(.roundedBorder)
+
+                Text(
+                    "Hier gehört eine direkte oder von einem verbundenen Anbieter freigegebene Medien-URL hinein. Ein normaler youtube.com/watch-Link ist keine direkte Downloadquelle."
+                )
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Label(
+                        sourceDownloader.state.germanTitle,
+                        systemImage: downloadStateIcon
+                    )
+                    .font(.callout.weight(.semibold))
+                    Spacer()
+                    Text(
+                        String(
+                            format: "%.0f%%",
+                            sourceDownloader.progress * 100
+                        )
+                    )
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                }
+
+                ProgressView(
+                    value: sourceDownloader.progress
+                )
+
+                if let destination =
+                        sourceDownloader.destinationURL {
+                    Text(
+                        "Ziel: " + destination.path
+                    )
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                }
+            }
+
+            if let sourceDownloadMessage {
+                Label(
+                    sourceDownloadMessage,
+                    systemImage:
+                        "exclamationmark.triangle"
+                )
+                .font(.caption)
+                .foregroundStyle(.red)
+            }
+
+            Divider()
+
+            HStack {
+                Button("Schließen") {
+                    showSourceDownloader = false
+                }
+
+                Spacer()
+
+                switch sourceDownloader.state {
+                case .downloading:
+                    Button("Pausieren") {
+                        sourceDownloader.pause()
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button(
+                        "Abbrechen",
+                        role: .destructive
+                    ) {
+                        sourceDownloader.cancel()
+                    }
+                    .buttonStyle(.bordered)
+
+                case .paused:
+                    Button("Fortsetzen") {
+                        sourceDownloader.resume()
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    Button(
+                        "Abbrechen",
+                        role: .destructive
+                    ) {
+                        sourceDownloader.cancel()
+                    }
+                    .buttonStyle(.bordered)
+
+                default:
+                    Button {
+                        startSourceDownload()
+                    } label: {
+                        Label(
+                            "Herunterladen",
+                            systemImage:
+                                "arrow.down.circle.fill"
+                        )
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(
+                        sourceDownloadURLText
+                            .trimmingCharacters(
+                                in: .whitespacesAndNewlines
+                            )
+                            .isEmpty
+                    )
+                }
+            }
+        }
+        .padding(24)
+        .frame(width: 620)
+    }
+
+    private var downloadStateIcon: String {
+        switch sourceDownloader.state {
+        case .idle:
+            return "arrow.down.circle"
+        case .downloading:
+            return "arrow.down.circle.fill"
+        case .paused:
+            return "pause.circle.fill"
+        case .completed:
+            return "checkmark.circle.fill"
+        case .failed:
+            return "exclamationmark.triangle.fill"
+        }
+    }
+
+    private func startSourceDownload() {
+        sourceDownloadMessage = nil
+        let rawValue = sourceDownloadURLText
+            .trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+        guard let remoteURL = URL(
+            string: rawValue
+        ),
+        let scheme = remoteURL.scheme?.lowercased(),
+        scheme == "https" || scheme == "http" else {
+            sourceDownloadMessage =
+                "Gib eine gültige HTTP- oder HTTPS-Download-URL ein."
+            return
+        }
+
+        let host = remoteURL.host?
+            .lowercased() ?? ""
+        if host == "youtube.com"
+            || host.hasSuffix(".youtube.com")
+            || host == "youtu.be"
+            || host.hasSuffix(".youtu.be") {
+            sourceDownloadMessage =
+                "Ein normaler YouTube-Watch-Link ist keine direkte Medien-Downloadquelle. Verwende eine direkte oder autorisierte Medien-URL."
+            return
+        }
+
+        guard let ingestDirectory =
+                session.automaticIngestDirectoryURL else {
+            sourceDownloadMessage =
+                "Der Blackstock-Ingest-Ordner konnte nicht erstellt werden."
+            return
+        }
+
+        var fileName = remoteURL
+            .lastPathComponent
+            .trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+        if fileName.isEmpty
+            || fileName == "/" {
+            fileName =
+                (opportunitySource?.externalID
+                    ?? UUID().uuidString)
+                + ".mp4"
+        }
+        if URL(
+            fileURLWithPath: fileName
+        ).pathExtension.isEmpty {
+            fileName += ".mp4"
+        }
+
+        let destination = ingestDirectory
+            .appendingPathComponent(fileName)
+
+        sourceDownloader.start(
+            remoteURL: remoteURL,
+            destinationURL: destination
+        )
     }
 
     private var rightsSheet: some View {
