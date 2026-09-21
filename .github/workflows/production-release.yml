@@ -209,7 +209,7 @@ jobs:
           BLACKSTOCK_NOTARY_KEY_ID: ${{ secrets.BLACKSTOCK_NOTARY_KEY_ID }}
           BLACKSTOCK_NOTARY_ISSUER: ${{ secrets.BLACKSTOCK_NOTARY_ISSUER }}
           BLACKSTOCK_NOTARY_EVIDENCE_PATH: ${{ runner.temp }}/dist/notary-response.json
-          BLACKSTOCK_UPDATE_MANIFEST_URL: ${{ inputs.manifest_url }}
+          BLACKSTOCK_UPDATE_MANIFEST_URL: ${{ env.BLACKSTOCK_MANIFEST_URL }}
           BLACKSTOCK_UPDATE_PUBLIC_KEY_BASE64: ${{ secrets.BLACKSTOCK_UPDATE_PUBLIC_KEY_BASE64 }}
           BLACKSTOCK_UPDATE_INSTALLER_TEAM_ID: ${{ secrets.BLACKSTOCK_APPLE_TEAM_ID }}
           BLACKSTOCK_INCLUDE_E2E_SMOKE: "0"
@@ -233,7 +233,7 @@ jobs:
           BLACKSTOCK_UPDATE_PRIVATE_KEY_BASE64: ${{ secrets.BLACKSTOCK_UPDATE_PRIVATE_KEY_BASE64 }}
         run: |
           set -euo pipefail
-          swift Build/generate_update_manifest.swift             --package "$RUNNER_TEMP/dist/Blackstock.pkg"             --package-url "${{ inputs.package_url }}"             --version "${{ inputs.version }}"             --build "${{ inputs.build }}"             --source-commit-sha "${{ github.sha }}"             --output "$RUNNER_TEMP/dist/update-manifest.json"
+          swift Build/generate_update_manifest.swift             --package "$RUNNER_TEMP/dist/Blackstock.pkg"             --package-url "$BLACKSTOCK_PACKAGE_URL"             --version "${{ inputs.version }}"             --build "${{ inputs.build }}"             --source-commit-sha "${{ github.sha }}"             --output "$RUNNER_TEMP/dist/update-manifest.json"
 
           test -s "$RUNNER_TEMP/dist/update-manifest.json"
 
@@ -243,7 +243,7 @@ jobs:
           SOURCE_COMMIT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          python3 - "$RUNNER_TEMP/dist" "${{ inputs.manifest_url }}" "$TEAM_ID" "$SOURCE_COMMIT_SHA" <<'PY'
+          python3 - "$RUNNER_TEMP/dist" "$BLACKSTOCK_MANIFEST_URL" "$TEAM_ID" "$SOURCE_COMMIT_SHA" "$BLACKSTOCK_PACKAGE_URL" <<'PY'
           import hashlib
           import json
           import pathlib
@@ -253,6 +253,7 @@ jobs:
           manifest_url = sys.argv[2]
           team_id = sys.argv[3]
           source_commit_sha = sys.argv[4]
+          package_url = sys.argv[5]
 
           manifest = json.loads(
               (root / "update-manifest.json").read_text()
@@ -262,7 +263,7 @@ jobs:
 
           if manifest["sha256"] != digest:
               raise SystemExit("manifest SHA-256 does not match package")
-          if manifest["packageURL"] != "${{ inputs.package_url }}":
+          if manifest["packageURL"] != package_url:
               raise SystemExit("manifest packageURL mismatch")
           if manifest["sourceCommitSHA"] != source_commit_sha.lower():
               raise SystemExit("manifest sourceCommitSHA mismatch")
