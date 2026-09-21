@@ -145,6 +145,24 @@ if [[ -n "$SIGNING_KEYCHAIN" ]]; then
     echo "Configured signing keychain does not exist: $SIGNING_KEYCHAIN" >&2
     exit 1
   fi
+
+  # Never trigger a chain of interactive password prompts from the packaging
+  # script. Local developers configure/unlock once through
+  # Build/configure_signing_keychain.sh; CI unlocks its temporary keychain
+  # before reaching this script.
+  if ! security show-keychain-info "$SIGNING_KEYCHAIN" >/dev/null 2>&1; then
+    cat >&2 <<EOF
+Blackstock signing keychain is locked or unavailable:
+  $SIGNING_KEYCHAIN
+
+Run once before local signed builds:
+  Build/configure_signing_keychain.sh
+
+Blackstock aborts here instead of causing repeated macOS password prompts.
+EOF
+    exit 1
+  fi
+
   CODESIGN_KEYCHAIN_ARGS=(--keychain "$SIGNING_KEYCHAIN")
   PRODUCTBUILD_KEYCHAIN_ARGS=(--keychain "$SIGNING_KEYCHAIN")
 fi
