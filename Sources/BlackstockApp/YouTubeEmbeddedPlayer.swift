@@ -14,13 +14,10 @@ struct YouTubeEmbeddedPlayer: NSViewRepresentable {
         func webView(
             _ webView: WKWebView,
             decidePolicyFor navigationAction:
-                WKNavigationAction,
-            decisionHandler:
-                @escaping (WKNavigationActionPolicy) -> Void
-        ) {
+                WKNavigationAction
+        ) async -> WKNavigationActionPolicy {
             guard let url = navigationAction.request.url else {
-                decisionHandler(.allow)
-                return
+                return .allow
             }
 
             if navigationAction.navigationType == .linkActivated,
@@ -28,11 +25,10 @@ struct YouTubeEmbeddedPlayer: NSViewRepresentable {
                host.contains("youtube.com"),
                !url.path.hasPrefix("/embed/") {
                 NSWorkspace.shared.open(url)
-                decisionHandler(.cancel)
-                return
+                return .cancel
             }
 
-            decisionHandler(.allow)
+            return .allow
         }
 
         func webView(
