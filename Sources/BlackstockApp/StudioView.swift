@@ -557,9 +557,17 @@ struct StudioView: View {
                     .font(.title2.bold())
 
                 Text(
-                    isResolvingAutomaticSource
-                        ? "Blackstock prüft gerade verfügbare lokale Quellen für dieses Video."
-                        : "Das Video bleibt ausgewählt und deine einmalige Nutzungsbestätigung gilt weiter. Speichere eine passende Videodatei in „Downloads/Blackstock Ingest“ – Blackstock erkennt sie automatisch und setzt den Clip-Workflow ohne weiteren Dateidialog fort."
+                    isAcquiringApprovedSource
+                        ? "Blackstock bezieht die freigegebene Videoquelle und übergibt sie anschließend automatisch an den Schnitt."
+                        : (
+                            isResolvingAutomaticSource
+                            ? "Blackstock prüft gerade bereits verfügbare Quellen für dieses Video."
+                            : (
+                                session.canAutomaticallyAcquireYouTubeSource
+                                ? "Das Video ist ausgewählt. Blackstock kann die freigegebene Quelle automatisch beziehen und danach direkt mit Analyse und Schnitt fortfahren."
+                                : "Das Video ist ausgewählt. Blackstock prüft lokale und autorisierte Quellen automatisch; Ingest-Ordner, Mediathek oder direkte Medienquelle bleiben als Fallback verfügbar."
+                            )
+                        )
                 )
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
@@ -589,18 +597,49 @@ struct StudioView: View {
                         isResolvingAutomaticSource
                     )
 
-                    Button {
-                        sourceDownloadURLText = ""
-                        sourceDownloadMessage = nil
-                        showSourceDownloader = true
-                    } label: {
-                        Label(
-                            "Videoquelle beziehen",
-                            systemImage:
-                                "arrow.down.circle.fill"
+                    if session
+                        .canAutomaticallyAcquireYouTubeSource {
+                        Button {
+                            Task {
+                                await acquireApprovedSource(
+                                    source
+                                )
+                            }
+                        } label: {
+                            HStack {
+                                if isAcquiringApprovedSource {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                }
+                                Label(
+                                    isAcquiringApprovedSource
+                                        ? "Quelle wird bezogen …"
+                                        : "Automatisch beziehen",
+                                    systemImage:
+                                        "arrow.down.circle.fill"
+                                )
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(
+                            isAcquiringApprovedSource
+                            || sourceDownloader.state
+                                == .downloading
                         )
+                    } else {
+                        Button {
+                            sourceDownloadURLText = ""
+                            sourceDownloadMessage = nil
+                            showSourceDownloader = true
+                        } label: {
+                            Label(
+                                "Videoquelle beziehen",
+                                systemImage:
+                                    "arrow.down.circle.fill"
+                            )
+                        }
+                        .buttonStyle(.borderedProminent)
                     }
-                    .buttonStyle(.borderedProminent)
 
                     if let ingestURL =
                             session.automaticIngestDirectoryURL {
