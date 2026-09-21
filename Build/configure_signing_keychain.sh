@@ -23,10 +23,6 @@ fi
 
 security unlock-keychain   -p "$KEYCHAIN_PASSWORD"   "$KEYCHAIN"
 
-# Keep the user's login keychain usable for the full login session.
-# The keychain still locks on logout according to macOS session semantics.
-security set-keychain-settings   -u   "$KEYCHAIN"
-
 # Allow Apple's signing tools to use signing private keys without asking for
 # the login password on every codesign/productbuild invocation.
 security set-key-partition-list   -S apple-tool:,apple:,codesign:   -s   -k "$KEYCHAIN_PASSWORD"   "$KEYCHAIN"
