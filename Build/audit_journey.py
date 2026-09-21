@@ -238,7 +238,10 @@ if app_path.is_file():
     compact_app = " ".join(app.split())
     if "if session.activeProject?.stage.journeyGuidance .recommendedSurface == .studio" not in compact_app:
         errors.append("Studio navigation must remain capability/stage gated")
-    if 'project.stage == .research\n                || project.stage == .analysis' not in app:
+    if (
+        "project.stage == .research || project.stage == .analysis"
+        not in compact_app
+    ):
         errors.append("Research and analysis must expose guided overview UI")
     if 'project.stage == .published' not in app:
         errors.append("Published stage must expose learning UI")
