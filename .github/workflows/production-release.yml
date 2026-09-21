@@ -359,6 +359,64 @@ jobs:
                   f"published update endpoint did not converge: {last_error}"
               )
           PY
+      - name: Verify published release and installed production app
+        env:
+          PUBLIC_KEY: ${{ secrets.BLACKSTOCK_UPDATE_PUBLIC_KEY_BASE64 }}
+          TEAM_ID: ${{ secrets.BLACKSTOCK_APPLE_TEAM_ID }}
+          NOTARY_KEY_ID: ${{ secrets.BLACKSTOCK_NOTARY_KEY_ID }}
+          NOTARY_ISSUER: ${{ secrets.BLACKSTOCK_NOTARY_ISSUER }}
+        run: |
+          set -euo pipefail
+          swift build -c release --product BlackstockReleaseVerifier
+          BIN_DIR="$(swift build -c release --show-bin-path)"
+          NOTARY_SUBMISSION_ID="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["id"])' "$RUNNER_TEMP/dist/notary-response.json")"
+
+          "$BIN_DIR/BlackstockReleaseVerifier" \
+            --manifest-url "$BLACKSTOCK_MANIFEST_URL" \
+            --public-key-base64 "$PUBLIC_KEY" \
+            --installer-team-id "$TEAM_ID" \
+            --current-version "$BLACKSTOCK_PREVIOUS_VERSION" \
+            --current-build "$BLACKSTOCK_PREVIOUS_BUILD" \
+            --notary-submission-id "$NOTARY_SUBMISSION_ID" \
+            --notary-key "$BLACKSTOCK_NOTARY_KEY_PATH" \
+            --notary-key-id "$NOTARY_KEY_ID" \
+            --notary-issuer "$NOTARY_ISSUER" \
+            --verified-manifest-output "$RUNNER_TEMP/verified-update-manifest.json" \
+            --verified-package-output "$RUNNER_TEMP/Blackstock-published.pkg" \
+            --output "$RUNNER_TEMP/preinstall-release-evidence.json"
+
+          sudo rm -rf /Applications/Blackstock.app
+          sudo installer -pkg "$RUNNER_TEMP/Blackstock-published.pkg" -target /
+
+          "$BIN_DIR/BlackstockReleaseVerifier" \
+            --manifest-url "$BLACKSTOCK_MANIFEST_URL" \
+            --public-key-base64 "$PUBLIC_KEY" \
+            --installer-team-id "$TEAM_ID" \
+            --current-version "$BLACKSTOCK_PREVIOUS_VERSION" \
+            --current-build "$BLACKSTOCK_PREVIOUS_BUILD" \
+            --verified-manifest-input "$RUNNER_TEMP/verified-update-manifest.json" \
+            --verified-package-input "$RUNNER_TEMP/Blackstock-published.pkg" \
+            --installed-app "/Applications/Blackstock.app" \
+            --notary-submission-id "$NOTARY_SUBMISSION_ID" \
+            --notary-key "$BLACKSTOCK_NOTARY_KEY_PATH" \
+            --notary-key-id "$NOTARY_KEY_ID" \
+            --notary-issuer "$NOTARY_ISSUER" \
+            --output "$RUNNER_TEMP/release-evidence.json"
+
+          python3 Build/validate_production_release_evidence.py "$RUNNER_TEMP/release-evidence.json"
+
+          APP_BIN="/Applications/Blackstock.app/Contents/MacOS/Blackstock"
+          LOG="$RUNNER_TEMP/production-app-launch.log"
+          "$APP_BIN" >"$LOG" 2>&1 &
+          pid=$!
+          sleep 3
+          if ! kill -0 "$pid" 2>/dev/null; then
+            cat "$LOG" || true
+            echo "Installed production app exited during launch smoke." >&2
+            exit 1
+          fi
+          kill -TERM "$pid"
+          wait "$pid" || true
       - name: Upload production release bundle
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -370,6 +428,10 @@ jobs:
             ${{ runner.temp }}/dist/notary-response.json
             ${{ runner.temp }}/dist/production-build-metadata.json
             ${{ runner.temp }}/dist/pkg-signature.txt
+            ${{ runner.temp }}/release-evidence.json
+            ${{ runner.temp }}/preinstall-release-evidence.json
+            ${{ runner.temp }}/verified-update-manifest.json
+            ${{ runner.temp }}/production-app-launch.log
           retention-days: 30
           if-no-files-found: error
 
