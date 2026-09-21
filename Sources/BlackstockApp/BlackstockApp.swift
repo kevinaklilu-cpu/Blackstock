@@ -365,110 +365,498 @@ private struct OverviewView: View {
     let onOpenStudio: () -> Void
     let onNavigate: (String) -> Void
 
+    private struct WorkflowStep: Identifiable {
+        let id: Int
+        let title: String
+        let systemImage: String
+    }
+
+    private var workflowSteps: [WorkflowStep] {
+        [
+            .init(
+                id: 0,
+                title: "Entdecken",
+                systemImage: "play.rectangle.fill"
+            ),
+            .init(
+                id: 1,
+                title: "Projekt",
+                systemImage: "folder.fill"
+            ),
+            .init(
+                id: 2,
+                title: "Editor",
+                systemImage: "scissors"
+            ),
+            .init(
+                id: 3,
+                title: "Review",
+                systemImage: "checkmark.seal.fill"
+            ),
+            .init(
+                id: 4,
+                title: "Upload",
+                systemImage: "arrow.up.circle.fill"
+            ),
+            .init(
+                id: 5,
+                title: "Analyse",
+                systemImage: "chart.line.uptrend.xyaxis"
+            )
+        ]
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text("Start")
-                .font(.largeTitle.bold())
-            Text("Öffne dein aktuelles Projekt oder suche ein neues Video.")
-                .font(.title3)
-                .foregroundStyle(.secondary)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                dashboardHeader
+                dashboardMetrics
+                workflowCard
+                activeProjectCard
 
-            if let project = session.activeProject {
-                let guidance = project.stage.journeyGuidance
+                if let project = session.activeProject,
+                   project.stage == .research
+                    || project.stage == .analysis {
+                    ResearchAnalysisJourneyView(
+                        session: session,
+                        project: project
+                    )
+                }
 
-                GroupBox("Aktuelles Projekt") {
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack(alignment: .firstTextBaseline) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(project.title)
-                                    .font(.headline)
-                                Text(guidance.title)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Text(
-                                "Schritt \(project.stage.canonicalProgressPosition) von \(BlackstockStage.canonicalProgressCount)"
-                            )
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                        }
-
-                        ProgressView(
-                            value: Double(
-                                project.stage.canonicalProgressPosition
-                            ),
-                            total: Double(
-                                BlackstockStage.canonicalProgressCount
-                            )
-                        )
-                        .accessibilityLabel("Projektfortschritt")
-                        .accessibilityValue(
-                            "Schritt \(project.stage.canonicalProgressPosition) von \(BlackstockStage.canonicalProgressCount)"
-                        )
-
-                        Text(guidance.purpose)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-
-                        Divider()
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Als Nächstes")
-                                .font(.caption.weight(.semibold))
-                            Text(guidance.nextAction)
-                                .font(.callout)
-                        }
-
-                        if guidance.recommendedSurface == .studio {
-                            Button {
-                                onOpenStudio()
-                            } label: {
-                                Label(
-                                    "Im Editor fortfahren",
-                                    systemImage: "arrow.right.circle.fill"
-                                )
-                            }
-                            .buttonStyle(.borderedProminent)
-                        } else if guidance.recommendedSurface == .overview {
-                            Label(
-                                project.stage == .published
-                                    ? "Du bist bereits im passenden Bereich Veröffentlicht / Lernen."
-                                    : "Der nächste Schritt wird direkt hier in der Übersicht bearbeitet.",
-                                systemImage: "checkmark.circle"
-                            )
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 6)
+                if let project = session.activeProject,
+                   project.stage == .published,
+                   let record = session.loadPublishedRecord(
+                        projectID: project.id
+                   ) {
+                    growthLoopCard(
+                        project: project,
+                        record: record
+                    )
                 }
             }
-
-            if let project = session.activeProject,
-               project.stage == .research
-                || project.stage == .analysis {
-                ResearchAnalysisJourneyView(
-                    session: session,
-                    project: project
+            .frame(
+                maxWidth: 1180,
+                alignment: .leading
+            )
+            .padding(28)
+        }
+        .background(BlackstockDesign.canvas)
+        .task {
+            await session.refreshWorkspaceChannelIdentity()
+            if session.analyticsAuthorizedChannelID
+                    == session.workspaceChannelID,
+               session.latestChannelAnalytics == nil {
+                await session.collectChannelAnalytics(
+                    days: 28
                 )
             }
+        }
+    }
 
-            if let project = session.activeProject,
-               project.stage == .published,
-               let record = session.loadPublishedRecord(
-                    projectID: project.id
-               ) {
-                growthLoopCard(
-                    project: project,
-                    record: record
+    private var dashboardHeader: some View {
+        HStack(alignment: .center, spacing: 18) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Creator Dashboard")
+                    .font(.largeTitle.bold())
+                Text(
+                    session.workspaceChannel?.title
+                    ?? "Dein Blackstock-Workflow"
                 )
+                .font(.title3)
+                .foregroundStyle(.secondary)
             }
 
             Spacer()
+
+            Button {
+                onNavigate("Chancen")
+            } label: {
+                Label(
+                    "Entdecken",
+                    systemImage: "sparkle.magnifyingglass"
+                )
+            }
+            .buttonStyle(.bordered)
+
+            Button {
+                onNavigate("Analyse")
+            } label: {
+                Label(
+                    "Kanal analysieren",
+                    systemImage: "chart.line.uptrend.xyaxis"
+                )
+            }
+            .buttonStyle(.borderedProminent)
         }
-        .padding(28)
+    }
+
+    private var dashboardMetrics: some View {
+        LazyVGrid(
+            columns: [
+                GridItem(
+                    .adaptive(
+                        minimum: 190,
+                        maximum: 280
+                    ),
+                    spacing: 12
+                )
+            ],
+            spacing: 12
+        ) {
+            dashboardMetric(
+                title: "Abonnenten",
+                value: compactDashboardNumber(
+                    session.workspaceChannel?.subscriberCount
+                ),
+                systemImage: "person.2.fill"
+            )
+            dashboardMetric(
+                title: "Views · 28 Tage",
+                value: compactDashboardNumber(
+                    session.latestChannelAnalytics?.views
+                ),
+                systemImage: "play.rectangle.fill"
+            )
+            dashboardMetric(
+                title: "Projekte",
+                value: String(session.projects.count),
+                systemImage: "folder.fill"
+            )
+            dashboardMetric(
+                title: "Aktueller Schritt",
+                value:
+                    session.activeProject?
+                        .stage.journeyGuidance.title
+                    ?? "Bereit",
+                systemImage: "bolt.fill"
+            )
+        }
+    }
+
+    private var workflowCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Workflow")
+                        .font(.title2.bold())
+                    Text(
+                        "Von der YouTube-Idee bis Upload und Lernschleife"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if let project = session.activeProject {
+                    Text(
+                        "Schritt "
+                        + String(
+                            currentWorkflowIndex(
+                                for: project.stage
+                            ) + 1
+                        )
+                        + " / "
+                        + String(workflowSteps.count)
+                    )
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                }
+            }
+
+            HStack(spacing: 8) {
+                ForEach(workflowSteps) { step in
+                    let activeIndex =
+                        session.activeProject.map {
+                            currentWorkflowIndex(
+                                for: $0.stage
+                            )
+                        } ?? 0
+                    let isCurrent =
+                        step.id == activeIndex
+                    let isComplete =
+                        step.id < activeIndex
+
+                    VStack(spacing: 8) {
+                        ZStack {
+                            Circle()
+                                .fill(
+                                    isCurrent || isComplete
+                                    ? BlackstockDesign
+                                        .selectedFill
+                                    : Color.primary
+                                        .opacity(0.035)
+                                )
+                                .frame(
+                                    width: 38,
+                                    height: 38
+                                )
+                            Image(
+                                systemName:
+                                    isComplete
+                                    ? "checkmark"
+                                    : step.systemImage
+                            )
+                            .font(
+                                .caption.weight(.bold)
+                            )
+                            .foregroundStyle(
+                                isCurrent
+                                ? BlackstockDesign.accent
+                                : .secondary
+                            )
+                        }
+
+                        Text(step.title)
+                            .font(
+                                .caption.weight(
+                                    isCurrent
+                                    ? .semibold
+                                    : .regular
+                                )
+                            )
+                            .foregroundStyle(
+                                isCurrent
+                                ? .primary
+                                : .secondary
+                            )
+                    }
+                    .frame(
+                        maxWidth: .infinity
+                    )
+
+                    if step.id
+                        < workflowSteps.count - 1 {
+                        Rectangle()
+                            .fill(
+                                step.id < activeIndex
+                                ? BlackstockDesign
+                                    .selectedBorder
+                                : Color.primary
+                                    .opacity(0.08)
+                            )
+                            .frame(
+                                height: 2
+                            )
+                            .frame(maxWidth: 36)
+                    }
+                }
+            }
+        }
+        .padding(20)
+        .blackstockSurface(raised: true)
+    }
+
+    @ViewBuilder
+    private var activeProjectCard: some View {
+        if let project = session.activeProject {
+            let guidance = project.stage.journeyGuidance
+
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("Aktuelles Projekt")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        Text(project.title)
+                            .font(.title2.bold())
+                            .lineLimit(2)
+                        Text(guidance.purpose)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Text(guidance.title.uppercased())
+                        .font(.caption2.weight(.bold))
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(
+                            BlackstockDesign.selectedFill,
+                            in: Capsule()
+                        )
+                }
+
+                ProgressView(
+                    value: Double(
+                        project.stage
+                            .canonicalProgressPosition
+                    ),
+                    total: Double(
+                        BlackstockStage
+                            .canonicalProgressCount
+                    )
+                )
+                .accessibilityLabel("Projektfortschritt")
+
+                HStack {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Als Nächstes")
+                            .font(.caption.weight(.semibold))
+                        Text(guidance.nextAction)
+                            .font(.callout)
+                    }
+
+                    Spacer()
+
+                    if guidance.recommendedSurface == .studio {
+                        Button {
+                            onOpenStudio()
+                        } label: {
+                            Label(
+                                project.stage == .review
+                                    || project.stage == .publishing
+                                    ? "Upload fortsetzen"
+                                    : "Im Editor fortfahren",
+                                systemImage: "arrow.right.circle.fill"
+                            )
+                        }
+                        .buttonStyle(.borderedProminent)
+                    } else if project.stage == .published {
+                        Button {
+                            onNavigate("Analyse")
+                        } label: {
+                            Label(
+                                "Ergebnisse ansehen",
+                                systemImage: "chart.bar.fill"
+                            )
+                        }
+                        .buttonStyle(.borderedProminent)
+                    } else {
+                        Button {
+                            onNavigate("Projekte")
+                        } label: {
+                            Label(
+                                "Projekt öffnen",
+                                systemImage: "folder"
+                            )
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
+            }
+            .padding(20)
+            .blackstockSurface(raised: true)
+        } else {
+            HStack(spacing: 16) {
+                ZStack {
+                    RoundedRectangle(
+                        cornerRadius: 14,
+                        style: .continuous
+                    )
+                    .fill(
+                        BlackstockDesign.selectedFill
+                    )
+                    Image(
+                        systemName:
+                            "play.rectangle.fill"
+                    )
+                    .font(.title)
+                    .foregroundStyle(
+                        BlackstockDesign.accent
+                    )
+                }
+                .frame(width: 62, height: 62)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Neues Video starten")
+                        .font(.headline)
+                    Text(
+                        "Entdecke ein Video, erstelle Clips und veröffentliche das Ergebnis direkt auf deinem YouTube-Kanal."
+                    )
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Button {
+                    onNavigate("Chancen")
+                } label: {
+                    Label(
+                        "Video entdecken",
+                        systemImage: "arrow.right"
+                    )
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .padding(20)
+            .blackstockSurface(raised: true)
+        }
+    }
+
+    private func dashboardMetric(
+        title: String,
+        value: String,
+        systemImage: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Image(systemName: systemImage)
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+
+            Text(value)
+                .font(
+                    .title2.bold()
+                        .monospacedDigit()
+                )
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(
+            maxWidth: .infinity,
+            minHeight: 92,
+            alignment: .leading
+        )
+        .padding(16)
+        .blackstockSurface(raised: true)
+    }
+
+    private func compactDashboardNumber(
+        _ value: Int?
+    ) -> String {
+        guard let value else { return "—" }
+        if abs(value) >= 1_000_000 {
+            return String(
+                format: "%.1fM",
+                Double(value) / 1_000_000
+            )
+        }
+        if abs(value) >= 1_000 {
+            return String(
+                format: "%.1fK",
+                Double(value) / 1_000
+            )
+        }
+        return String(value)
+    }
+
+    private func currentWorkflowIndex(
+        for stage: BlackstockStage
+    ) -> Int {
+        switch stage {
+        case .discovery:
+            return 0
+        case .research, .analysis:
+            return 1
+        case .production,
+             .preview,
+             .storyboard,
+             .editing,
+             .packaging:
+            return 2
+        case .review:
+            return 3
+        case .publishing:
+            return 4
+        case .published:
+            return 5
+        }
     }
 
     @ViewBuilder
