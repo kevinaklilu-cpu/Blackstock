@@ -18,12 +18,10 @@ struct StudioView: View {
     @StateObject private var ingestWatcher =
         IngestDirectoryWatcher()
     @State private var pendingURL: URL?
-    @State private var showOptionalCapture = false
     @State private var isResolvingAutomaticSource = false
     @State private var showSourceDownloader = false
     @State private var sourceDownloadURLText = ""
     @State private var sourceDownloadMessage: String?
-    @State private var pendingCaptureKind: CaptureKind?
     @State private var showRightsSheet = false
     @State private var rightsSelection: ProductionMediaAuthorization = .owned
     @State private var rightsEvidence = ""
@@ -113,7 +111,6 @@ struct StudioView: View {
                 return
             }
             pendingURL = completedURL
-            pendingCaptureKind = nil
             importPendingMedia()
             showSourceDownloader = false
         }
@@ -659,39 +656,6 @@ struct StudioView: View {
                     presentVideoPicker()
                 }
                 .buttonStyle(.borderedProminent)
-
-                Button {
-                    showOptionalCapture.toggle()
-                } label: {
-                    Label(
-                        showOptionalCapture
-                            ? "Eigene Aufnahme ausblenden"
-                            : "Optionale Aufnahme",
-                        systemImage:
-                            showOptionalCapture
-                            ? "chevron.up"
-                            : "video.badge.plus"
-                    )
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-
-                if showOptionalCapture {
-                    CaptureCapabilityPanel { url, kind in
-                        pendingURL = url
-                        pendingCaptureKind = kind
-                        if session.workspaceRightsAttestation?
-                            .permitsUserDirectedProduction
-                            == true {
-                            importPendingMedia()
-                        } else {
-                            rightsConfirmed = false
-                            showRightsSheet = true
-                        }
-                    }
-                    .frame(maxWidth: 620)
-                    .padding(.top, 4)
-                }
 
                 Spacer()
             }
@@ -1446,10 +1410,6 @@ struct StudioView: View {
                 }
 
                 Divider()
-                supplementalCapturesSection
-
-                Divider()
-
                 storyboardSection
 
                 Divider()
@@ -2805,14 +2765,7 @@ struct StudioView: View {
             HStack {
                 Button("Abbrechen", role: .cancel) {
                     showRightsSheet = false
-                    if pendingCaptureKind != nil,
-                       let pendingURL {
-                        try? FileManager.default.removeItem(
-                            at: pendingURL
-                        )
-                    }
                     pendingURL = nil
-                    pendingCaptureKind = nil
                 }
                 Spacer()
                 Button("Einmalig bestätigen & fortfahren") {
@@ -2873,7 +2826,6 @@ struct StudioView: View {
         }
 
         pendingURL = matchedURL
-        pendingCaptureKind = nil
         importPendingMedia()
     }
 
@@ -2912,7 +2864,6 @@ struct StudioView: View {
         }
 
         pendingURL = url
-        pendingCaptureKind = nil
 
         if session.workspaceRightsAttestation?
             .permitsUserDirectedProduction == true {
@@ -2931,7 +2882,6 @@ struct StudioView: View {
             return
         }
 
-        let captureKind = pendingCaptureKind
         let sourceReference = opportunitySource
         let sourceEvidence: String
         if let sourceReference {
@@ -2949,396 +2899,53 @@ struct StudioView: View {
         }
 
         Task {
-            let isSupplementalCapture =
-                captureKind == .microphone
-                || captureKind == .systemAudio
-                || (
-                    state.asset != nil
-                    && (
-                        captureKind == .camera
-                        || captureKind == .screen
+            let previousAssetID = state.asset?.id
+            await state.importMovie(
+                url: url,
+                projectID: project.id,
+                authorization:
+                    .userDeclaredResponsibility,
+                rightsEvidence:
+                    "Arbeitsbereich-Nutzererklärung "
+                    + attestation.statementVersion
+                    + ". "
+                    + sourceEvidence,
+                rightsConfirmed: true,
+                originSource: sourceReference
+            )
+
+            if let imported = state.asset,
+               imported.id != previousAssetID,
+               currentStage == .production {
+                if session.productionIntent(
+                    for: project.id
+                )?.isLinkFirstClip == true {
+                    guard session.advanceActiveProject(
+                        to: .preview
+                    ) else { return }
+                    guard session.advanceActiveProject(
+                        to: .storyboard
+                    ) else { return }
+                    state.loadStoryboard(
+                        projectID: project.id
                     )
-                )
+                    guard session.advanceActiveProject(
+                        to: .editing
+                    ) else { return }
 
-            if isSupplementalCapture,
-               let captureKind {
-                let saved = await state.importSupplementalCapture(
-                    url: url,
-                    kind: captureKind,
-                    projectID: project.id,
-                    rightsBasis:
-                        "Arbeitsbereich-Nutzererklärung "
-                        + attestation.statementVersion,
-                    rightsEvidence: sourceEvidence,
-                    rightsConfirmed: true
-                )
-                if saved,
-                   let persisted = state.supplementalCaptures.last(
-                    where: { $0.kind == captureKind }
-                   ) {
-                    await BlackstockCaptureHardwareAudit
-                        .recordPersistedCapture(
-                            kind: captureKind,
-                            fileURL: persisted.fileURL,
-                            projectID: project.id
-                        )
-                    try? FileManager.default.removeItem(at: url)
-                    BlackstockCaptureHardwareAudit
-                        .recordTemporaryCleanup(
-                            for: captureKind,
-                            temporaryURL: url
-                        )
-                }
-            } else {
-                let previousAssetID = state.asset?.id
-                await state.importMovie(
-                    url: url,
-                    projectID: project.id,
-                    authorization:
-                        .userDeclaredResponsibility,
-                    rightsEvidence:
-                        "Arbeitsbereich-Nutzererklärung "
-                        + attestation.statementVersion
-                        + ". "
-                        + sourceEvidence,
-                    rightsConfirmed: true,
-                    originSource: sourceReference
-                )
-                if let imported = state.asset,
-                   imported.id != previousAssetID {
-                    if let captureKind {
-                        await BlackstockCaptureHardwareAudit
-                            .recordPersistedCapture(
-                                kind: captureKind,
-                                fileURL: imported.sourceURL,
-                                projectID: project.id
-                            )
-                        try? FileManager.default.removeItem(at: url)
-                        BlackstockCaptureHardwareAudit
-                            .recordTemporaryCleanup(
-                                for: captureKind,
-                                temporaryURL: url
-                            )
-                    }
-                    if currentStage == .production {
-                        if session.productionIntent(
-                            for: project.id
-                        )?.isLinkFirstClip == true {
-                            guard session.advanceActiveProject(
-                                to: .preview
-                            ) else { return }
-                            guard session.advanceActiveProject(
-                                to: .storyboard
-                            ) else { return }
-                            state.loadStoryboard(
-                                projectID: project.id
-                            )
-                            guard session.advanceActiveProject(
-                                to: .editing
-                            ) else { return }
-
-                            state.resumeProcessing()
-                            await state.createAutomaticHighlights(
-                                localeIdentifier:
-                                    speechLocaleIdentifier
-                            )
-                        } else {
-                            _ = session.advanceActiveProject(
-                                to: .preview
-                            )
-                        }
-                    }
+                    state.resumeProcessing()
+                    await state.createAutomaticHighlights(
+                        localeIdentifier:
+                            speechLocaleIdentifier
+                    )
+                } else {
+                    _ = session.advanceActiveProject(
+                        to: .preview
+                    )
                 }
             }
 
             pendingURL = nil
-            pendingCaptureKind = nil
-        }
-    }
-
-    @ViewBuilder
-    private var supplementalCapturesSection: some View {
-        GroupBox("Zusätzliche Aufnahmen") {
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(state.supplementalCaptures) { capture in
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 8) {
-                            Image(
-                                systemName:
-                                    supplementalCaptureIcon(
-                                        capture.kind
-                                    )
-                            )
-                            .accessibilityHidden(true)
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(capture.kind.germanTitle)
-                                    .font(.caption.weight(.semibold))
-                                Text(capture.fileURL.lastPathComponent)
-                                    .font(.caption2.monospaced())
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                                Text(capture.rightsEvidence)
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(2)
-                            }
-                            Spacer()
-                            Label(
-                                "Nutzererklärung vorhanden",
-                                systemImage: "checkmark.shield"
-                            )
-                            .font(.caption2)
-                        }
-
-                        if capture.kind == .microphone
-                            || capture.kind == .systemAudio {
-                            let setting = state.supplementalAudioSetting(
-                                for: capture.id
-                            )
-
-                            Toggle(
-                                "Im finalen Render mischen",
-                                isOn: Binding(
-                                    get: {
-                                        state.supplementalAudioSetting(
-                                            for: capture.id
-                                        ).enabled
-                                    },
-                                    set: {
-                                        state.setSupplementalAudioEnabled(
-                                            captureID: capture.id,
-                                            enabled: $0
-                                        )
-                                    }
-                                )
-                            )
-                            .font(.caption)
-                            .disabled(!editingEnabled)
-
-                            HStack(spacing: 10) {
-                                Text("Lautstärke")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-
-                                Slider(
-                                    value: Binding(
-                                        get: {
-                                            state.supplementalAudioSetting(
-                                                for: capture.id
-                                            ).volume
-                                        },
-                                        set: {
-                                            state.setSupplementalAudioVolume(
-                                                captureID: capture.id,
-                                                volume: $0
-                                            )
-                                        }
-                                    ),
-                                    in: 0...1,
-                                    step: 0.05
-                                )
-                                .disabled(
-                                    !editingEnabled
-                                    || !setting.enabled
-                                )
-
-                                Text(
-                                    "\(Int((setting.volume * 100).rounded())) %"
-                                )
-                                .font(.caption2.monospacedDigit())
-                                .frame(width: 42, alignment: .trailing)
-                            }
-                        }
-
-                        if capture.kind == .camera
-                            || capture.kind == .screen {
-                            let setting =
-                                state.supplementalVideoSetting(
-                                    for: capture.id
-                                )
-                            let outputDuration = max(
-                                state.currentOutputDurationSeconds,
-                                0.1
-                            )
-                            let sourceDuration = max(
-                                capture.durationSeconds ?? 5,
-                                0.1
-                            )
-
-                            Toggle(
-                                "Als visuelle Einblendung verwenden",
-                                isOn: Binding(
-                                    get: {
-                                        state.supplementalVideoSetting(
-                                            for: capture.id
-                                        ).enabled
-                                    },
-                                    set: {
-                                        state.setSupplementalVideoEnabled(
-                                            captureID: capture.id,
-                                            enabled: $0
-                                        )
-                                    }
-                                )
-                            )
-                            .font(.caption)
-                            .disabled(!editingEnabled)
-
-                            HStack {
-                                Text("Einblendung ab")
-                                Spacer()
-                                Text(
-                                    timeLabel(
-                                        setting.timelineStartSeconds
-                                    )
-                                )
-                                .font(.caption2.monospacedDigit())
-                            }
-                            Slider(
-                                value: Binding(
-                                    get: {
-                                        min(
-                                            setting.timelineStartSeconds,
-                                            outputDuration
-                                        )
-                                    },
-                                    set: {
-                                        state.setSupplementalVideoTimelineStart(
-                                            captureID: capture.id,
-                                            seconds: $0
-                                        )
-                                    }
-                                ),
-                                in: 0...outputDuration
-                            )
-                            .disabled(!editingEnabled || !setting.enabled)
-
-                            HStack {
-                                Text("Quelle ab")
-                                Spacer()
-                                Text(
-                                    timeLabel(
-                                        setting.sourceStartSeconds
-                                    )
-                                )
-                                .font(.caption2.monospacedDigit())
-                            }
-                            Slider(
-                                value: Binding(
-                                    get: {
-                                        min(
-                                            setting.sourceStartSeconds,
-                                            sourceDuration
-                                        )
-                                    },
-                                    set: {
-                                        state.setSupplementalVideoSourceStart(
-                                            captureID: capture.id,
-                                            seconds: $0
-                                        )
-                                    }
-                                ),
-                                in: 0...sourceDuration
-                            )
-                            .disabled(!editingEnabled || !setting.enabled)
-
-                            HStack {
-                                Text("Dauer")
-                                Spacer()
-                                Text(
-                                    timeLabel(
-                                        setting.durationSeconds
-                                    )
-                                )
-                                .font(.caption2.monospacedDigit())
-                            }
-                            Slider(
-                                value: Binding(
-                                    get: {
-                                        min(
-                                            max(
-                                                setting.durationSeconds,
-                                                0.05
-                                            ),
-                                            max(sourceDuration, 0.05)
-                                        )
-                                    },
-                                    set: {
-                                        state.setSupplementalVideoDuration(
-                                            captureID: capture.id,
-                                            seconds: $0
-                                        )
-                                    }
-                                ),
-                                in: 0.05...max(sourceDuration, 0.05)
-                            )
-                            .disabled(!editingEnabled || !setting.enabled)
-
-                            Text("Die Einblendung ersetzt nur das Bild im gewählten Zeitfenster; der Hauptton läuft weiter. Zu lange Bereiche werden beim Rendern automatisch an Quell- und Videolänge begrenzt.")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(.vertical, 3)
-                }
-
-                if state.asset != nil {
-                    Divider()
-                    Button {
-                        showOptionalCapture.toggle()
-                    } label: {
-                        Label(
-                            showOptionalCapture
-                                ? "Aufnahme ausblenden"
-                                : "Eigene Aufnahme hinzufügen",
-                            systemImage:
-                                showOptionalCapture
-                                ? "chevron.up"
-                                : "video.badge.plus"
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-
-                    if showOptionalCapture {
-                        CaptureCapabilityPanel { url, kind in
-                            pendingURL = url
-                            pendingCaptureKind = kind
-                            if session.workspaceRightsAttestation?
-                                .permitsUserDirectedProduction
-                                == true {
-                                importPendingMedia()
-                            } else {
-                                rightsConfirmed = false
-                                showRightsSheet = true
-                            }
-                        }
-                        .padding(.top, 8)
-                    }
-                }
-
-                Text("Zusätzliche Audio-, Kamera- oder Bildschirmspuren sind optional und werden nur verwendet, wenn du sie ausdrücklich hinzufügst.")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 4)
-        }
-    }
-
-    private func supplementalCaptureIcon(
-        _ kind: CaptureKind
-    ) -> String {
-        switch kind {
-        case .camera:
-            return "video.fill"
-        case .microphone:
-            return "mic.fill"
-        case .screen:
-            return "rectangle.on.rectangle"
-        case .systemAudio:
-            return "waveform"
         }
     }
 
