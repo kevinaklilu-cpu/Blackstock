@@ -250,6 +250,7 @@ public struct YouTubeAuthorizedClient: Sendable {
         publishedAfter: Date? = nil,
         maxResults: Int = 12,
         order: OpportunitySortMode = .relevance,
+        contentFilter: OpportunityContentFilter = .all,
         session: URLSession = .shared,
         now: Date = Date()
     ) async throws -> [YouTubeOpportunityCandidate] {
@@ -270,8 +271,18 @@ public struct YouTubeAuthorizedClient: Sendable {
             .init(
                 name: "videoEmbeddable",
                 value: "true"
+            ),
+            .init(
+                name: "videoSyndicated",
+                value: "true"
             )
         ]
+        if contentFilter == .live {
+            queryItems.append(
+                .init(name: "eventType", value: "live")
+            )
+        }
+
         let trimmedQuery = query.trimmingCharacters(
             in: .whitespacesAndNewlines
         )
@@ -318,22 +329,62 @@ public struct YouTubeAuthorizedClient: Sendable {
         }
         search.queryItems = queryItems
 
-        let searchData = try await perform(search.url!, session: session)
-        let searchResponse = try JSONDecoder.youtube.decode(SearchListResponse.self, from: searchData)
-        let searchItems = searchResponse.items.compactMap { item -> SearchItem? in
+        let searchData = try await perform(
+            search.url!,
+            session: session
+        )
+        let searchResponse = try JSONDecoder.youtube.decode(
+            SearchListResponse.self,
+            from: searchData
+        )
+        let searchItems = searchResponse.items.compactMap {
+            item -> SearchItem? in
             item.id.videoId == nil ? nil : item
         }
 
         let videoIDs = searchItems.compactMap(\.id.videoId)
-        let videos = try await loadVideoDetails(ids: videoIDs, session: session)
+        let videos = try await loadVideoDetails(
+            ids: videoIDs,
+            session: session
+        )
 
         return searchItems.compactMap { item in
-            guard let videoID = item.id.videoId else { return nil }
+            guard let videoID = item.id.videoId else {
+                return nil
+            }
             let video = videos[videoID]
+            let durationSeconds = Self.durationSeconds(
+                from: video?.contentDetails?.duration
+            )
+            let contentKind = Self.contentKind(
+                video: video,
+                durationSeconds: durationSeconds
+            )
+            let matchesFilter: Bool
+            switch contentFilter {
+            case .all:
+                matchesFilter = true
+            case .shorts:
+                matchesFilter = contentKind == .short
+            case .videos:
+                matchesFilter = contentKind == .video
+            case .live:
+                matchesFilter = contentKind == .live
+            }
+            guard matchesFilter else {
+                return nil
+            }
+
             let metrics = YouTubeOpportunityMetrics(
-                viewCount: video?.statistics.flatMap { Int($0.viewCount ?? "") },
-                likeCount: video?.statistics.flatMap { Int($0.likeCount ?? "") },
-                commentCount: video?.statistics.flatMap { Int($0.commentCount ?? "") },
+                viewCount: video?.statistics.flatMap {
+                    Int($0.viewCount ?? "")
+                },
+                likeCount: video?.statistics.flatMap {
+                    Int($0.likeCount ?? "")
+                },
+                commentCount: video?.statistics.flatMap {
+                    Int($0.commentCount ?? "")
+                },
                 publishedAt: item.snippet.publishedAt,
                 retrievedAt: now
             )
@@ -344,12 +395,16 @@ public struct YouTubeAuthorizedClient: Sendable {
                 channelID: item.snippet.channelId,
                 channelTitle: item.snippet.channelTitle,
                 publishedAt: item.snippet.publishedAt,
-                thumbnailURL: item.snippet.thumbnails?.medium?.url ?? item.snippet.thumbnails?.defaultImage?.url,
+                thumbnailURL:
+                    item.snippet.thumbnails?.medium?.url
+                    ?? item.snippet.thumbnails?.defaultImage?.url,
                 query: trimmedQuery.isEmpty
                     ? "category:\(categoryID ?? "all")"
                     : trimmedQuery,
                 retrievedAt: now,
                 embeddable: video?.status?.embeddable,
+                contentKind: contentKind,
+                durationSeconds: durationSeconds,
                 metrics: metrics
             )
         }
