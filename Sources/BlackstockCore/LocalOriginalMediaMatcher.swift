@@ -2,7 +2,7 @@ import Foundation
 
 public struct LocalOriginalMediaMatcher: Sendable {
     public static let supportedExtensions: Set<String> = [
-        "mov", "mp4", "m4v", "avi", "mkv", "webm"
+        "mov", "mp4", "m4v"
     ]
 
     public init() {}
