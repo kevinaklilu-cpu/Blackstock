@@ -9,7 +9,8 @@ checks = {
         "if session.onboardingComplete",
         "FirstRunView(session: session)",
         "WorkspaceShell(",
-        "GroupBox(\"Aktuelles Projekt\")",
+        "Text(\"Creator Dashboard\")",
+        "workflowSteps",
         "ResearchAnalysisJourneyView(",
         "session.completeResearch(",
         "session.completeAnalysis(",
@@ -19,6 +20,8 @@ checks = {
         'title: "Editor öffnen"',
         'Label("Entdecken", systemImage: "play.rectangle.fill")',
         'Label("Projekte", systemImage: "folder.fill")',
+        'Label("Analyse", systemImage: "chart.line.uptrend.xyaxis")',
+        "ChannelAnalyticsWorkspaceView(",
         "BlackstockBrandMark(width: 34)",
         ".navigationSplitViewColumnWidth(",
         "OpportunityWorkspaceView(",
@@ -235,7 +238,10 @@ if app_path.is_file():
     compact_app = " ".join(app.split())
     if "if session.activeProject?.stage.journeyGuidance .recommendedSurface == .studio" not in compact_app:
         errors.append("Studio navigation must remain capability/stage gated")
-    if 'project.stage == .research\n                || project.stage == .analysis' not in app:
+    if (
+        "project.stage == .research || project.stage == .analysis"
+        not in compact_app
+    ):
         errors.append("Research and analysis must expose guided overview UI")
     if 'project.stage == .published' not in app:
         errors.append("Published stage must expose learning UI")

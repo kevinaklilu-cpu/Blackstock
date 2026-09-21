@@ -12,6 +12,7 @@ OAUTH_CLIENT_ID="${BLACKSTOCK_GOOGLE_OAUTH_CLIENT_ID:-}"
 PUBLIC_PUBLISHING_APPROVED="${BLACKSTOCK_YOUTUBE_PUBLIC_PUBLISHING_APPROVED:-0}"
 APP_SIGN_IDENTITY="${BLACKSTOCK_CODESIGN_IDENTITY:-}"
 INSTALLER_SIGN_IDENTITY="${BLACKSTOCK_INSTALLER_IDENTITY:-}"
+SIGNING_KEYCHAIN="${BLACKSTOCK_SIGNING_KEYCHAIN:-}"
 NOTARY_PROFILE="${BLACKSTOCK_NOTARY_KEYCHAIN_PROFILE:-}"
 NOTARY_KEY_PATH="${BLACKSTOCK_NOTARY_KEY_PATH:-}"
 NOTARY_KEY_ID="${BLACKSTOCK_NOTARY_KEY_ID:-}"
@@ -137,11 +138,41 @@ PLIST
 /usr/libexec/PlistBuddy -c "Print :CFBundleIconFile" "$APP/Contents/Info.plist" | grep -qx "Blackstock.icns"
 test -s "$APP/Contents/Resources/Blackstock.icns"
 
+CODESIGN_KEYCHAIN_ARGS=()
+PRODUCTBUILD_KEYCHAIN_ARGS=()
+if [[ -n "$SIGNING_KEYCHAIN" ]]; then
+  if [[ ! -f "$SIGNING_KEYCHAIN" ]]; then
+    echo "Configured signing keychain does not exist: $SIGNING_KEYCHAIN" >&2
+    exit 1
+  fi
+
+  # Never trigger a chain of interactive password prompts from the packaging
+  # script. Local developers configure/unlock once through
+  # Build/configure_signing_keychain.sh; CI unlocks its temporary keychain
+  # before reaching this script.
+  if ! security show-keychain-info "$SIGNING_KEYCHAIN" >/dev/null 2>&1; then
+    cat >&2 <<EOF
+Blackstock signing keychain is locked or unavailable:
+  $SIGNING_KEYCHAIN
+
+Run once before local signed builds:
+  Build/configure_signing_keychain.sh
+
+Blackstock aborts here instead of causing repeated macOS password prompts.
+EOF
+    exit 1
+  fi
+
+  CODESIGN_KEYCHAIN_ARGS=(--keychain "$SIGNING_KEYCHAIN")
+  PRODUCTBUILD_KEYCHAIN_ARGS=(--keychain "$SIGNING_KEYCHAIN")
+fi
+
 if [[ -n "$APP_SIGN_IDENTITY" ]]; then
   if [[ "$INCLUDE_E2E_SMOKE" == "1" ]]; then
-    codesign --force --options runtime --timestamp --sign "$APP_SIGN_IDENTITY" "$APP/Contents/Helpers/BlackstockE2ESmoke"
+    codesign --force --options runtime --timestamp       "${CODESIGN_KEYCHAIN_ARGS[@]}"       --sign "$APP_SIGN_IDENTITY"       "$APP/Contents/Helpers/BlackstockE2ESmoke"
   fi
   codesign --force --options runtime --timestamp \
+    "${CODESIGN_KEYCHAIN_ARGS[@]}" \
     --entitlements "$ROOT/Build/Blackstock.entitlements" \
     --sign "$APP_SIGN_IDENTITY" "$APP"
 else
@@ -166,7 +197,7 @@ COMPONENT="$WORK/Blackstock-component.pkg"
 pkgbuild --root "$PAYLOAD" --install-location / --identifier "$BUNDLE_ID" --version "$VERSION" "$COMPONENT"
 
 if [[ -n "$INSTALLER_SIGN_IDENTITY" ]]; then
-  productbuild --sign "$INSTALLER_SIGN_IDENTITY" --package "$COMPONENT" "$OUT/Blackstock.pkg"
+  productbuild     "${PRODUCTBUILD_KEYCHAIN_ARGS[@]}"     --sign "$INSTALLER_SIGN_IDENTITY"     --package "$COMPONENT"     "$OUT/Blackstock.pkg"
 else
   productbuild --package "$COMPONENT" "$OUT/Blackstock.pkg"
 fi

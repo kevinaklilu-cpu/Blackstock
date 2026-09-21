@@ -68,6 +68,7 @@ final class BlackstockSession: ObservableObject {
     @Published var channelCategoryID = ""
     @Published var opportunityTimeWindow:
         OpportunityTimeWindow = .allTime
+    @Published var opportunityContentFilter: OpportunityContentFilter = .all
     @Published var channelAudienceSetting:
         YouTubeChannelAudienceSetting = .perVideo
     @Published var isLoadingYouTubeSetupOptions = false
@@ -221,6 +222,15 @@ final class BlackstockSession: ObservableObject {
            ) {
             opportunityTimeWindow = savedTimeWindow
         }
+        if let rawContentFilter =
+            UserDefaults.standard.string(
+                forKey: "blackstock.workspace.opportunityContentFilter"
+            ),
+           let savedContentFilter = OpportunityContentFilter(
+                rawValue: rawContentFilter
+           ) {
+            opportunityContentFilter = savedContentFilter
+        }
         if let rawAudience = UserDefaults.standard.string(
             forKey: "blackstock.workspace.channelAudience"
         ),
@@ -273,6 +283,29 @@ final class BlackstockSession: ObservableObject {
         return URL(fileURLWithPath: value, isDirectory: true)
     }
 
+    var automaticIngestDirectoryURL: URL? {
+        guard let downloads = FileManager.default.urls(
+            for: .downloadsDirectory,
+            in: .userDomainMask
+        ).first else {
+            return nil
+        }
+
+        let directory = downloads.appendingPathComponent(
+            "Blackstock Ingest",
+            isDirectory: true
+        )
+        do {
+            try FileManager.default.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true
+            )
+            return directory
+        } catch {
+            return nil
+        }
+    }
+
     @discardableResult
     func setOriginalMediaLibrary(
         _ url: URL?
@@ -312,45 +345,69 @@ final class BlackstockSession: ObservableObject {
         for project: BlackstockProject,
         source: MediaSourceReference?
     ) async -> URL? {
-        guard let root = originalMediaLibraryURL else {
+        var roots: [URL] = []
+        if let automaticIngestDirectoryURL {
+            roots.append(automaticIngestDirectoryURL)
+        }
+        if let originalMediaLibraryURL,
+           !roots.contains(originalMediaLibraryURL) {
+            roots.append(originalMediaLibraryURL)
+        }
+        guard !roots.isEmpty else {
             return nil
         }
+
         let title = project.title
         let videoID = source?.externalID
 
         return await Task.detached(priority: .utility) {
             let fileManager = FileManager.default
             let keys: [URLResourceKey] = [
-                .isRegularFileKey
+                .isRegularFileKey,
+                .fileSizeKey,
+                .contentModificationDateKey
             ]
-            guard let enumerator = fileManager.enumerator(
-                at: root,
-                includingPropertiesForKeys: keys,
-                options: [
-                    .skipsHiddenFiles,
-                    .skipsPackageDescendants
-                ]
-            ) else {
-                return nil
-            }
 
             var candidates: [URL] = []
-            while let candidate = enumerator.nextObject() as? URL {
-                if candidates.count >= 5_000 {
-                    break
-                }
-                guard LocalOriginalMediaMatcher
-                    .supportedExtensions
-                    .contains(
-                        candidate.pathExtension.lowercased()
-                    ) else {
+            for root in roots {
+                guard let enumerator = fileManager.enumerator(
+                    at: root,
+                    includingPropertiesForKeys: keys,
+                    options: [
+                        .skipsHiddenFiles,
+                        .skipsPackageDescendants
+                    ]
+                ) else {
                     continue
                 }
-                if let values = try? candidate.resourceValues(
-                    forKeys: Set(keys)
-                ),
-                values.isRegularFile == true {
+
+                while let candidate =
+                        enumerator.nextObject() as? URL {
+                    if candidates.count >= 5_000 {
+                        break
+                    }
+                    guard LocalOriginalMediaMatcher
+                        .supportedExtensions
+                        .contains(
+                            candidate
+                                .pathExtension
+                                .lowercased()
+                        ) else {
+                        continue
+                    }
+                    guard let values =
+                            try? candidate.resourceValues(
+                                forKeys: Set(keys)
+                            ),
+                          values.isRegularFile == true,
+                          (values.fileSize ?? 0) > 0 else {
+                        continue
+                    }
                     candidates.append(candidate)
+                }
+
+                if candidates.count >= 5_000 {
+                    break
                 }
             }
 
@@ -361,6 +418,7 @@ final class BlackstockSession: ObservableObject {
             )
         }.value
     }
+
 
     var projects: [BlackstockProject] {
         Self.loadStoredProjects()
@@ -799,6 +857,15 @@ final class BlackstockSession: ObservableObject {
             )
     }
 
+    var workspaceChannel: YouTubeChannelIdentity? {
+        guard let channelID = workspaceChannelID else {
+            return nil
+        }
+        return channels.first {
+            $0.id == channelID
+        }
+    }
+
     var workspaceRightsAttestation:
         WorkspaceRightsAttestation? {
         guard let channelID =
@@ -1132,6 +1199,38 @@ final class BlackstockSession: ObservableObject {
         }
     }
 
+    func refreshWorkspaceChannelIdentity() async {
+        guard let channelID = workspaceChannelID else {
+            return
+        }
+
+        do {
+            let accessToken =
+                try await validatedReadOnlyAccessToken(
+                    targetChannelID: channelID
+                )
+            let identities =
+                try await YouTubeAuthorizedClient(
+                    accessToken: accessToken
+                ).myChannels()
+            guard identities.contains(where: {
+                $0.id == channelID
+            }) else {
+                errorMessage =
+                    "Der verbundene YouTube-Kanal ist in der aktuellen Google-Sitzung nicht verfügbar."
+                return
+            }
+            channels = identities
+            if selectedChannelID == nil {
+                selectedChannelID = channelID
+            }
+        } catch {
+            errorMessage =
+                "Kanaldaten konnten nicht aktualisiert werden: "
+                + describe(error)
+        }
+    }
+
     func analyticsScopePlan() -> GoogleOAuthScopePlan? {
         guard let channelID = workspaceChannelID else { return nil }
         let storedScopes = BlackstockKeychain.read(
@@ -1144,12 +1243,14 @@ final class BlackstockSession: ObservableObject {
     }
 
     func authorizeAnalytics() async {
-        guard let project = activeProject else {
-            errorMessage = "Kein aktives Projekt für Analytics vorhanden."
+        guard let channelID = workspaceChannelID else {
+            errorMessage =
+                "Kein YouTube-Kanal für Analytics verbunden."
             return
         }
         guard !effectiveClientID.isEmpty else {
-            errorMessage = "Keine Google-OAuth-Konfiguration verfügbar."
+            errorMessage =
+                "Keine Google-OAuth-Konfiguration verfügbar."
             return
         }
 
@@ -1160,24 +1261,29 @@ final class BlackstockSession: ObservableObject {
         do {
             let currentPlan = analyticsScopePlan()
             if currentPlan?.state == .alreadyAuthorized {
-                let accessToken = try await validatedAnalyticsAccessToken(
-                    targetChannelID: project.targetChannelID
-                )
-                let identities = try await YouTubeAuthorizedClient(
-                    accessToken: accessToken
-                ).myChannels()
+                let accessToken =
+                    try await validatedAnalyticsAccessToken(
+                        targetChannelID: channelID
+                    )
+                let identities =
+                    try await YouTubeAuthorizedClient(
+                        accessToken: accessToken
+                    ).myChannels()
                 guard identities.contains(where: {
-                    $0.id == project.targetChannelID
+                    $0.id == channelID
                 }) else {
                     analyticsAuthorizedChannelID = nil
-                    errorMessage = "Die Analytics-Autorisierung gehört nicht zum Projekt-Zielkanal."
+                    errorMessage =
+                        "Die Analytics-Autorisierung gehört nicht zum verbundenen Kanal."
                     return
                 }
-                analyticsAuthorizedChannelID = project.targetChannelID
+                channels = identities
+                analyticsAuthorizedChannelID = channelID
                 return
             }
 
-            let requestedScopes = currentPlan?.scopesForAuthorization
+            let requestedScopes =
+                currentPlan?.scopesForAuthorization
                 ?? Set([
                     GoogleOAuthScope.youtubeReadOnly,
                     .analyticsReadOnly
@@ -1189,57 +1295,71 @@ final class BlackstockSession: ObservableObject {
 
             guard let grantedScopeString = tokens.scope else {
                 analyticsAuthorizedChannelID = nil
-                errorMessage = "Google hat keine verifizierbare Scope-Liste zurückgegeben. Analytics bleibt gesperrt."
+                errorMessage =
+                    "Google hat keine verifizierbare Scope-Liste zurückgegeben. Analytics bleibt gesperrt."
                 return
             }
 
-            let granted = GoogleOAuthScopePlanner.parseGrantedScopes(
-                grantedScopeString
-            )
+            let granted =
+                GoogleOAuthScopePlanner.parseGrantedScopes(
+                    grantedScopeString
+                )
             guard requestedScopes.isSubset(of: granted) else {
                 analyticsAuthorizedChannelID = nil
-                errorMessage = "Nicht alle für Analytics benötigten Google-Berechtigungen wurden gewährt."
+                errorMessage =
+                    "Nicht alle für Analytics benötigten Google-Berechtigungen wurden gewährt."
                 return
             }
 
-            let identities = try await YouTubeAuthorizedClient(
-                accessToken: tokens.accessToken
-            ).myChannels()
+            let identities =
+                try await YouTubeAuthorizedClient(
+                    accessToken: tokens.accessToken
+                ).myChannels()
             guard identities.contains(where: {
-                $0.id == project.targetChannelID
+                $0.id == channelID
             }) else {
                 analyticsAuthorizedChannelID = nil
-                errorMessage = "Die Analytics-Sitzung enthält nicht den Projekt-Zielkanal."
+                errorMessage =
+                    "Die Analytics-Sitzung enthält nicht den verbundenen Kanal."
                 return
             }
 
             try BlackstockKeychain.write(
                 tokens.accessToken,
-                account: "youtube.\(project.targetChannelID).accessToken"
+                account:
+                    "youtube.\(channelID).accessToken"
             )
-            if let refresh = tokens.refreshToken, !refresh.isEmpty {
+            if let refresh = tokens.refreshToken,
+               !refresh.isEmpty {
                 try BlackstockKeychain.write(
                     refresh,
-                    account: "youtube.\(project.targetChannelID).refreshToken"
+                    account:
+                        "youtube.\(channelID).refreshToken"
                 )
             }
             try BlackstockKeychain.write(
                 grantedScopeString,
-                account: "youtube.\(project.targetChannelID).scopes"
+                account:
+                    "youtube.\(channelID).scopes"
             )
             try BlackstockKeychain.write(
                 effectiveClientID,
-                account: "youtube.\(project.targetChannelID).oauthClientID"
+                account:
+                    "youtube.\(channelID).oauthClientID"
             )
 
             cacheRuntimeToken(
                 tokens,
-                fallbackScopeString: connectedOAuthScopeString
+                fallbackScopeString:
+                    connectedOAuthScopeString
             )
-            analyticsAuthorizedChannelID = project.targetChannelID
+            channels = identities
+            analyticsAuthorizedChannelID = channelID
         } catch {
             analyticsAuthorizedChannelID = nil
-            errorMessage = "Analytics-Autorisierung fehlgeschlagen: \(describe(error))"
+            errorMessage =
+                "Analytics-Autorisierung fehlgeschlagen: "
+                + describe(error)
         }
     }
 
@@ -1359,6 +1479,22 @@ final class BlackstockSession: ObservableObject {
                 try await validatedAnalyticsAccessToken(
                     targetChannelID: channelID
                 )
+            let identities =
+                try await YouTubeAuthorizedClient(
+                    accessToken: accessToken
+                ).myChannels()
+            guard identities.contains(where: {
+                $0.id == channelID
+            }) else {
+                errorMessage =
+                    "Analytics-Abruf gestoppt: Der verbundene Kanal stimmt nicht mit der Google-Sitzung überein."
+                return
+            }
+            channels = identities
+            if selectedChannelID == nil {
+                selectedChannelID = channelID
+            }
+
             let calendar = Calendar(
                 identifier: .gregorian
             )
@@ -2035,6 +2171,34 @@ final class BlackstockSession: ObservableObject {
         syncStructuredStrategyFields()
     }
 
+    func ensureYouTubeDiscoveryOptionsLoaded() async {
+        guard let channelID =
+                selectedChannelID ?? workspaceChannelID else {
+            return
+        }
+        guard youtubeLanguages.isEmpty
+                || youtubeRegions.isEmpty
+                || youtubeVideoCategories.isEmpty else {
+            return
+        }
+
+        errorMessage = nil
+        do {
+            let accessToken =
+                try await channelSetupAccessToken(
+                    targetChannelID: channelID
+                )
+            try await loadYouTubeChannelSetupOptions(
+                channelID: channelID,
+                accessToken: accessToken
+            )
+        } catch {
+            errorMessage =
+                "YouTube-Suchparameter konnten nicht geladen werden: "
+                + describe(error)
+        }
+    }
+
     func refreshYouTubeVideoCategories() async {
         guard let channelID =
             selectedChannelID ?? workspaceChannelID,
@@ -2290,13 +2454,42 @@ final class BlackstockSession: ObservableObject {
     func loadWorkspaceOpportunities(
         query: String,
         order: OpportunitySortMode,
-        timeWindow: OpportunityTimeWindow? = nil
+        timeWindow: OpportunityTimeWindow? = nil,
+        contentFilter: OpportunityContentFilter? = nil
     ) async {
         let resolvedQuery = query.trimmingCharacters(
             in: .whitespacesAndNewlines
         )
         let resolvedTimeWindow =
             timeWindow ?? opportunityTimeWindow
+        let resolvedContentFilter =
+            contentFilter ?? opportunityContentFilter
+        opportunityContentFilter = resolvedContentFilter
+        let defaults = UserDefaults.standard
+        defaults.set(
+            resolvedContentFilter.rawValue,
+            forKey: "blackstock.workspace.opportunityContentFilter"
+        )
+        defaults.set(
+            resolvedTimeWindow.rawValue,
+            forKey: "blackstock.workspace.opportunityTimeWindow"
+        )
+        defaults.set(
+            channelCategoryID,
+            forKey: "blackstock.workspace.channelCategoryID"
+        )
+        defaults.set(
+            channelRegionCode,
+            forKey: "blackstock.workspace.regionCode"
+        )
+        defaults.set(
+            contentLanguage,
+            forKey: "blackstock.workspace.contentLanguage"
+        )
+        defaults.set(
+            primaryTopic,
+            forKey: "blackstock.workspace.primaryTopic"
+        )
 
         guard let channelID = workspaceChannelID else {
             errorMessage = "Kein YouTube-Kanal ist verbunden."
@@ -2328,7 +2521,8 @@ final class BlackstockSession: ObservableObject {
                         relevanceLanguage: contentLanguage,
                         timeWindow: resolvedTimeWindow,
                         maxResults: 20,
-                        order: order
+                        order: order,
+                        contentFilter: resolvedContentFilter
                     )
             } else {
                 guard !resolvedQuery.isEmpty else {
@@ -2353,7 +2547,8 @@ final class BlackstockSession: ObservableObject {
                             resolvedTimeWindow
                                 .publishedAfter(now: Date()),
                         maxResults: 20,
-                        order: order
+                        order: order,
+                        contentFilter: resolvedContentFilter
                     )
             }
 
@@ -2490,6 +2685,10 @@ final class BlackstockSession: ObservableObject {
             forKey: "blackstock.workspace.opportunityTimeWindow"
         )
         UserDefaults.standard.set(
+            opportunityContentFilter.rawValue,
+            forKey: "blackstock.workspace.opportunityContentFilter"
+        )
+        UserDefaults.standard.set(
             channelAudienceSetting.rawValue,
             forKey: "blackstock.workspace.channelAudience"
         )
@@ -2517,6 +2716,10 @@ final class BlackstockSession: ObservableObject {
         UserDefaults.standard.set(
             opportunityTimeWindow.rawValue,
             forKey: "blackstock.workspace.opportunityTimeWindow"
+        )
+        UserDefaults.standard.set(
+            opportunityContentFilter.rawValue,
+            forKey: "blackstock.workspace.opportunityContentFilter"
         )
         UserDefaults.standard.set(
             channelAudienceSetting.rawValue,

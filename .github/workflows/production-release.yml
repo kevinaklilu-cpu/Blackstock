@@ -160,7 +160,7 @@ jobs:
 
           security import "$RUNNER_TEMP/installer-cert.p12"             -k "$KEYCHAIN"             -P "$INSTALLER_CERT_PASSWORD"             -A             -T /usr/bin/productbuild             -T /usr/bin/productsign             -T /usr/bin/security
 
-          security set-key-partition-list             -S apple-tool:,apple:             -s             -k "$KEYCHAIN_PASSWORD"             "$KEYCHAIN"
+          security set-key-partition-list             -S apple-tool:,apple:,codesign:             -s             -k "$KEYCHAIN_PASSWORD"             "$KEYCHAIN"
 
           security find-identity -v "$KEYCHAIN"
 
@@ -206,6 +206,7 @@ jobs:
           BLACKSTOCK_GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.BLACKSTOCK_GOOGLE_OAUTH_CLIENT_ID }}
           BLACKSTOCK_CODESIGN_IDENTITY: ${{ secrets.BLACKSTOCK_CODESIGN_IDENTITY }}
           BLACKSTOCK_INSTALLER_IDENTITY: ${{ secrets.BLACKSTOCK_INSTALLER_IDENTITY }}
+          BLACKSTOCK_SIGNING_KEYCHAIN: ${{ env.BLACKSTOCK_RELEASE_KEYCHAIN }}
           BLACKSTOCK_NOTARY_KEY_ID: ${{ secrets.BLACKSTOCK_NOTARY_KEY_ID }}
           BLACKSTOCK_NOTARY_ISSUER: ${{ secrets.BLACKSTOCK_NOTARY_ISSUER }}
           BLACKSTOCK_NOTARY_EVIDENCE_PATH: ${{ runner.temp }}/dist/notary-response.json

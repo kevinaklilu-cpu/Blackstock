@@ -1,18 +1,34 @@
 #if os(macOS)
 import Foundation
+import LocalAuthentication
 import Security
 
 enum BlackstockKeychain {
     private static let service = "de.blackstock.app"
 
+    private static func nonInteractiveContext() -> LAContext {
+        let context = LAContext()
+        context.interactionNotAllowed = true
+        return context
+    }
+
+    private static func nonInteractiveQuery(
+        _ base: [String: Any]
+    ) -> [String: Any] {
+        var query = base
+        query[kSecUseAuthenticationContext as String] =
+            nonInteractiveContext()
+        return query
+    }
+
     static func read(_ account: String) -> String {
-        let query: [String: Any] = [
+        let query = nonInteractiveQuery([
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
-        ]
+        ])
         var result: CFTypeRef?
         guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
               let data = result as? Data,
@@ -22,11 +38,11 @@ enum BlackstockKeychain {
 
     static func write(_ value: String, account: String) throws {
         let data = Data(value.utf8)
-        let lookup: [String: Any] = [
+        let lookup = nonInteractiveQuery([
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account
-        ]
+        ])
 
         let updateStatus = SecItemUpdate(
             lookup as CFDictionary,
@@ -41,10 +57,14 @@ enum BlackstockKeychain {
             throw KeychainError.status(updateStatus)
         }
 
-        var insert = lookup
-        insert[kSecValueData as String] = data
-        insert[kSecAttrAccessible as String] =
-            kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        var insert: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecValueData as String: data,
+            kSecAttrAccessible as String:
+                kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        ]
         let addStatus = SecItemAdd(
             insert as CFDictionary,
             nil
@@ -57,12 +77,12 @@ enum BlackstockKeychain {
 
     @discardableResult
     static func deleteAccounts(withPrefix prefix: String) throws -> Int {
-        let query: [String: Any] = [
+        let query = nonInteractiveQuery([
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecReturnAttributes as String: true,
             kSecMatchLimit as String: kSecMatchLimitAll
-        ]
+        ])
         var result: CFTypeRef?
         let status = SecItemCopyMatching(
             query as CFDictionary,
@@ -88,11 +108,11 @@ enum BlackstockKeychain {
     }
 
     static func delete(_ account: String) throws {
-        let query: [String: Any] = [
+        let query = nonInteractiveQuery([
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account
-        ]
+        ])
         let status = SecItemDelete(query as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw KeychainError.status(status)

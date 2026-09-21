@@ -21,6 +21,10 @@ requirements = {
     "Sources/BlackstockApp/WorkspaceProductViews.swift": [
         "session.loadWorkspaceOpportunities(",
         "OpportunityTimeWindow.allCases",
+        "OpportunityContentFilter.allCases",
+        "session.youtubeVideoCategories",
+        "session.youtubeRegions",
+        "session.youtubeLanguages",
         "session.useOpportunity(",
         "session.useOpportunityAsClip(",
         "session.setWorkspaceRightsResponsibilityAccepted(",
@@ -36,6 +40,8 @@ requirements = {
         "session.collectDueGrowthObservations(",
         "session.collectChannelAnalytics(",
         "session.authorizeAnalytics(",
+        "ChannelAnalyticsWorkspaceView(",
+        'Text("Creator Dashboard")',
         "session.loadPublishedComments(",
         "session.exportLocalPrivacyData(",
         "session.revokeGoogleAuthorization(",
@@ -98,6 +104,9 @@ requirements = {
         "state.useSavedClipForPackaging(",
         "attemptAutomaticOriginalBinding()",
         "session.resolveOriginalMedia(",
+        "SourceDownloadManager()",
+        "IngestDirectoryWatcher()",
+        "startIngestWatcher()",
     ],
     "Sources/BlackstockApp/PackagingReviewView.swift": [
         'GroupBox("YouTube-Metadaten")',
@@ -128,6 +137,33 @@ for relative, markers in requirements.items():
         if compact_marker not in compact:
             errors.append(
                 f"{relative}: missing active UI wiring marker: {marker}"
+            )
+
+for relative, markers in {
+    "Sources/BlackstockApp/SourceDownloadManager.swift": [
+        "URLSessionDownloadDelegate",
+        "func pause()",
+        "func resume()",
+        "func cancel()",
+        "didWriteData",
+        "didFinishDownloadingTo",
+    ],
+    "Sources/BlackstockApp/IngestDirectoryWatcher.swift": [
+        "DispatchSource.makeFileSystemObjectSource",
+        "func start(",
+        "func stop()",
+    ],
+}.items():
+    path = ROOT / relative
+    if not path.is_file():
+        errors.append(f"missing UI support surface: {relative}")
+        continue
+    compact = re.sub(r"\s+", "", path.read_text(encoding="utf-8"))
+    for marker in markers:
+        compact_marker = re.sub(r"\s+", "", marker)
+        if compact_marker not in compact:
+            errors.append(
+                f"{relative}: missing active UI support marker: {marker}"
             )
 
 # These are intentionally implementation helpers, not separate buttons.

@@ -32,6 +32,9 @@ CONTRACTS = {
         'kSecAttrAccessibleWhenUnlockedThisDeviceOnly',
         'kSecClassGenericPassword',
         'private static let service = "de.blackstock.app"',
+        "LAContext()",
+        "interactionNotAllowed = true",
+        "kSecUseAuthenticationContext",
     ],
     "Sources/BlackstockCore/OAuthClientConfiguration.swift": [
         "parseGoogleDesktopJSON",

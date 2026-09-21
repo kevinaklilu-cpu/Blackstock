@@ -22,6 +22,10 @@ REQUIRED = {
         'name: "publishedAfter"',
         'name: "chart", value: "mostPopular"',
         'name: "videoEmbeddable"',
+        'name: "videoSyndicated"',
+        'name: "eventType", value: "live"',
+        "OpportunityContentFilter",
+        "YouTubeOpportunityContentKind",
         "OpportunityTimeWindow",
     ],
     "Sources/BlackstockApp/FirstRunView.swift": [
@@ -34,14 +38,13 @@ REQUIRED = {
         "YouTubeEmbeddedPlayer(videoID:",
     ],
     "Sources/BlackstockApp/YouTubeEmbeddedPlayer.swift": [
-        "WKScriptMessageHandler",
-        "strict-origin-when-cross-origin",
-        "https://blackstock.app",
-        "onError",
-        "101",
-        "150",
-        "153",
-        "Auf YouTube ansehen",
+        "https://www.youtube.com/embed/",
+        'forHTTPHeaderField: "Referer"',
+        "https://blackstock.app/",
+        ".allowsContentJavaScript = true",
+        "didFailProvisionalNavigation",
+        "didFail navigation:",
+        "YouTube-Vorschau nicht verfügbar",
     ],
     "Tests/BlackstockCoreTests/OpportunityTransparencyTests.swift": [
         "testMissingYouTubeSignalsStayMissingInsteadOfBeingEstimated",
@@ -72,4 +75,4 @@ if errors:
         print(f"- {error}", file=sys.stderr)
     sys.exit(1)
 
-print("Discovery audit passed: channel-category discovery uses YouTube mostPopular or bounded publishedAfter windows with provider ordering, playback and missing-data honesty.")
+print("Discovery audit passed: channel-category discovery uses YouTube parameters, content-format filtering, identified embedded playback, provider ordering and missing-data honesty.")

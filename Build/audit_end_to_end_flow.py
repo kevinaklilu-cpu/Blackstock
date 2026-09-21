@@ -59,9 +59,12 @@ checks = {
         "state.renderAllSavedClipSelections(",
         "state.useSavedClipForPackaging(",
         "state.requestStopProcessing(",
-        "Originaldatei auswählen",
+        "Downloader",
+        "SourceDownloadManager()",
+        "IngestDirectoryWatcher()",
         "PackagingReviewView(",
         "attemptAutomaticOriginalBinding()",
+        "startIngestWatcher()",
     ],
     "Sources/BlackstockApp/StudioState.swift": [
         "createAutomaticHighlights(",
@@ -91,6 +94,19 @@ checks = {
         "session.collectDueGrowthObservations(",
         "session.collectChannelAnalytics(",
         "session.loadPublishedComments(",
+    ],
+    "Sources/BlackstockApp/SourceDownloadManager.swift": [
+        "URLSessionDownloadDelegate",
+        "byProducingResumeData:",
+        "withResumeData:",
+        "didWriteData",
+        "didFinishDownloadingTo",
+    ],
+    "Sources/BlackstockApp/IngestDirectoryWatcher.swift": [
+        "DispatchSource.makeFileSystemObjectSource",
+        ".write",
+        ".extend",
+        "lastEventAt",
     ],
     "Sources/BlackstockCore/LocalOriginalMediaMatcher.swift": [
         "LocalOriginalMediaMatcher",

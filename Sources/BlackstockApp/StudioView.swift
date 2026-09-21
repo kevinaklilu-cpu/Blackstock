@@ -13,8 +13,16 @@ struct StudioView: View {
     let contentLanguage: String
 
     @StateObject private var state = StudioState()
+    @StateObject private var sourceDownloader =
+        SourceDownloadManager()
+    @StateObject private var ingestWatcher =
+        IngestDirectoryWatcher()
     @State private var pendingURL: URL?
     @State private var showOptionalCapture = false
+    @State private var isResolvingAutomaticSource = false
+    @State private var showSourceDownloader = false
+    @State private var sourceDownloadURLText = ""
+    @State private var sourceDownloadMessage: String?
     @State private var pendingCaptureKind: CaptureKind?
     @State private var showRightsSheet = false
     @State private var rightsSelection: ProductionMediaAuthorization = .owned
@@ -61,16 +69,30 @@ struct StudioView: View {
             rightsSheet
         }
         .task(id: project.id) {
-            await state.loadWorkspace(projectID: project.id)
+            await state.loadWorkspace(
+                projectID: project.id
+            )
             if session.activeProject?.isPaused == true {
                 state.requestStopProcessing()
-            } else if state.asset == nil {
-                await attemptAutomaticOriginalBinding()
+                return
             }
+
+            guard state.asset == nil,
+                  session.productionIntent(
+                    for: project.id
+                  )?.isLinkFirstClip == true,
+                  session.workspaceRightsAttestation?
+                    .permitsUserDirectedProduction == true else {
+                return
+            }
+
+            startIngestWatcher()
+            await attemptAutomaticOriginalBinding()
         }
         .onDisappear {
             activeProcessingTask?.cancel()
             activeProcessingTask = nil
+            ingestWatcher.stop()
         }
         .onChange(of: session.activeProject?.isPaused) { paused in
             if paused == true {
@@ -80,6 +102,20 @@ struct StudioView: View {
             } else {
                 state.resumeProcessing()
             }
+        }
+        .sheet(isPresented: $showSourceDownloader) {
+            sourceDownloaderSheet
+        }
+        .onChange(
+            of: sourceDownloader.lastCompletedURL
+        ) { completedURL in
+            guard let completedURL else {
+                return
+            }
+            pendingURL = completedURL
+            pendingCaptureKind = nil
+            importPendingMedia()
+            showSourceDownloader = false
         }
         .sheet(isPresented: $showPackagingReview) {
             if let asset = state.asset,
@@ -118,12 +154,19 @@ struct StudioView: View {
             }
             Spacer()
 
-            Button {
-                presentVideoPicker()
-            } label: {
-                Label("Videodatei hinzufügen", systemImage: "plus")
+            if session.productionIntent(
+                for: project.id
+            )?.isLinkFirstClip != true {
+                Button {
+                    presentVideoPicker()
+                } label: {
+                    Label(
+                        "Videodatei hinzufügen",
+                        systemImage: "plus"
+                    )
+                }
+                .buttonStyle(.bordered)
             }
-            .buttonStyle(.bordered)
 
             if currentStage != .published {
                 Button {
@@ -242,29 +285,130 @@ struct StudioView: View {
 
                     Text(
                         hasBoundAuthorizedMedia
-                            ? "Originalvideo bereit. Blackstock kann das Video jetzt automatisch analysieren und clippen."
+                            ? "Videoquelle bereit. Blackstock kann das Material jetzt analysieren und clippen."
                             : (
-                                session.originalMediaLibraryPath.isEmpty
-                                ? "Video ausgewählt. Lege einmalig deine Original-Mediathek fest oder wähle die Originaldatei direkt aus."
-                                : "Video ausgewählt. Blackstock sucht automatisch in deiner Original-Mediathek nach dem passenden Video."
+                                ingestWatcher.isWatching
+                                ? "Quellen-Monitor aktiv. Blackstock übernimmt passende Dateien aus dem Ingest-Ordner automatisch."
+                                : "Noch keine nutzbare Medienquelle gebunden. Öffne den Downloader, den Ingest-Ordner oder wähle eine alternative Quelle."
                             )
                     )
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
+                    HStack(spacing: 8) {
+                        Label(
+                            ingestWatcher.isWatching
+                                ? "Quellen-Monitor aktiv"
+                                : "Quellen-Monitor pausiert",
+                            systemImage:
+                                ingestWatcher.isWatching
+                                ? "dot.radiowaves.left.and.right"
+                                : "pause.circle"
+                        )
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                        if let lastEventAt =
+                                ingestWatcher.lastEventAt {
+                            Text(
+                                "Letzte Änderung "
+                                + lastEventAt.formatted(
+                                    date: .omitted,
+                                    time: .shortened
+                                )
+                            )
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        }
+
+                        Button(
+                            ingestWatcher.isWatching
+                                ? "Pausieren"
+                                : "Starten"
+                        ) {
+                            if ingestWatcher.isWatching {
+                                ingestWatcher.stop()
+                            } else {
+                                startIngestWatcher()
+                            }
+                        }
+                        .buttonStyle(.link)
+                        .controlSize(.small)
+                    }
+
                     if clipPreparation.status
                             == .productionMediaRequired,
                        currentStage == .production {
-                        Button {
-                            presentVideoPicker()
-                        } label: {
-                            Label(
-                                "Originaldatei auswählen",
-                                systemImage: "folder"
+                        HStack(spacing: 8) {
+                            Button {
+                                Task {
+                                    await attemptAutomaticOriginalBinding()
+                                }
+                            } label: {
+                                HStack {
+                                    if isResolvingAutomaticSource {
+                                        ProgressView()
+                                            .controlSize(.mini)
+                                    }
+                                    Label(
+                                        isResolvingAutomaticSource
+                                            ? "Quelle wird geprüft …"
+                                            : "Quelle erneut prüfen",
+                                        systemImage:
+                                            "arrow.clockwise"
+                                    )
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .disabled(
+                                isResolvingAutomaticSource
                             )
+
+                            Button {
+                                sourceDownloadURLText = ""
+                                sourceDownloadMessage = nil
+                                showSourceDownloader = true
+                            } label: {
+                                Label(
+                                    "Downloader",
+                                    systemImage:
+                                        "arrow.down.circle"
+                                )
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+
+                            Menu {
+
+                                Button {
+                                    presentOriginalMediaLibraryPicker()
+                                } label: {
+                                    Label(
+                                        "Lokale Mediathek verbinden",
+                                        systemImage:
+                                            "folder.badge.plus"
+                                    )
+                                }
+                                Button {
+                                    presentVideoPicker()
+                                } label: {
+                                    Label(
+                                        "Datei als alternative Quelle wählen",
+                                        systemImage:
+                                            "film.stack"
+                                    )
+                                }
+                            } label: {
+                                Label(
+                                    "Alternative Quelle",
+                                    systemImage:
+                                        "ellipsis.circle"
+                                )
+                            }
+                            .menuStyle(.borderlessButton)
+                            .controlSize(.small)
                         }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
                     }
 
                     if clipPreparation.status
@@ -382,9 +526,9 @@ struct StudioView: View {
                     .font(.title2.bold())
 
                 Text(
-                    session.originalMediaLibraryPath.isEmpty
-                        ? "Wähle einmalig deinen Originalvideo-Ordner in den Einstellungen oder füge die Originaldatei direkt hinzu. Danach erstellt Blackstock automatisch Highlights, Hochkantformat und Untertitel."
-                        : "Blackstock sucht automatisch in deiner Original-Mediathek nach diesem Video. Nur wenn kein eindeutiger Treffer gefunden wird, musst du die Datei einmalig auswählen."
+                    isResolvingAutomaticSource
+                        ? "Blackstock prüft gerade verfügbare lokale Quellen für dieses Video."
+                        : "Das Video bleibt ausgewählt und deine einmalige Nutzungsbestätigung gilt weiter. Speichere eine passende Videodatei in „Downloads/Blackstock Ingest“ – Blackstock erkennt sie automatisch und setzt den Clip-Workflow ohne weiteren Dateidialog fort."
                 )
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
@@ -392,38 +536,96 @@ struct StudioView: View {
 
                 HStack(spacing: 10) {
                     Button {
-                        presentVideoPicker()
+                        Task {
+                            await attemptAutomaticOriginalBinding()
+                        }
+                    } label: {
+                        HStack {
+                            if isResolvingAutomaticSource {
+                                ProgressView()
+                                    .controlSize(.small)
+                            }
+                            Label(
+                                isResolvingAutomaticSource
+                                    ? "Quelle wird geprüft …"
+                                    : "Quelle erneut prüfen",
+                                systemImage: "arrow.clockwise"
+                            )
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(
+                        isResolvingAutomaticSource
+                    )
+
+                    Button {
+                        sourceDownloadURLText = ""
+                        sourceDownloadMessage = nil
+                        showSourceDownloader = true
                     } label: {
                         Label(
-                            "Originaldatei auswählen",
-                            systemImage: "film.stack"
+                            "Downloader",
+                            systemImage:
+                                "arrow.down.circle.fill"
                         )
                     }
                     .buttonStyle(.borderedProminent)
 
-                    if session.originalMediaLibraryPath.isEmpty {
+                    if let ingestURL =
+                            session.automaticIngestDirectoryURL {
                         Button {
-                            presentOriginalMediaLibraryPicker()
-                        } label: {
-                            Label(
-                                "Originalvideo-Ordner wählen …",
-                                systemImage: "folder.badge.plus"
+                            NSWorkspace.shared.activateFileViewerSelecting(
+                                [ingestURL]
                             )
-                        }
-                        .buttonStyle(.bordered)
-                    } else {
-                        Button {
-                            Task {
-                                await attemptAutomaticOriginalBinding()
-                            }
                         } label: {
                             Label(
-                                "Mediathek erneut durchsuchen",
-                                systemImage: "arrow.clockwise"
+                                "Ingest-Ordner öffnen",
+                                systemImage: "folder.fill"
                             )
                         }
                         .buttonStyle(.bordered)
                     }
+
+                    Menu {
+                        Button {
+                            sourceDownloadURLText = ""
+                            sourceDownloadMessage = nil
+                            showSourceDownloader = true
+                        } label: {
+                            Label(
+                                "Downloadquelle öffnen",
+                                systemImage:
+                                    "arrow.down.circle"
+                            )
+                        }
+
+                        Divider()
+
+                        Button {
+                            presentOriginalMediaLibraryPicker()
+                        } label: {
+                            Label(
+                                "Lokale Mediathek verbinden",
+                                systemImage:
+                                    "folder.badge.plus"
+                            )
+                        }
+                        Button {
+                            presentVideoPicker()
+                        } label: {
+                            Label(
+                                "Datei als alternative Quelle wählen",
+                                systemImage:
+                                    "film.stack"
+                            )
+                        }
+                    } label: {
+                        Label(
+                            "Alternative Quelle",
+                            systemImage: "ellipsis.circle"
+                        )
+                    }
+                    .menuStyle(.borderlessButton)
 
                     Button("Auf YouTube ansehen") {
                         NSWorkspace.shared.open(
@@ -2353,6 +2555,236 @@ struct StudioView: View {
         return text.isEmpty ? nil : text
     }
 
+    private var sourceDownloaderSheet: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Quelle herunterladen")
+                        .font(.title2.bold())
+                    Text(
+                        "Direkte oder autorisierte Medienquelle herunterladen und anschließend automatisch in Blackstock übernehmen."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+
+            if let source = opportunitySource {
+                GroupBox("Ausgewähltes Video") {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(project.title)
+                            .font(.headline)
+                        Text(source.pageURL.absoluteString)
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+                    .frame(
+                        maxWidth: .infinity,
+                        alignment: .leading
+                    )
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 7) {
+                Text("Download-URL")
+                    .font(.caption.weight(.semibold))
+                TextField(
+                    "https://…/video.mp4",
+                    text: $sourceDownloadURLText
+                )
+                .textFieldStyle(.roundedBorder)
+
+                Text(
+                    "Hier gehört eine direkte oder von einem verbundenen Anbieter freigegebene Medien-URL hinein. Ein normaler youtube.com/watch-Link ist keine direkte Downloadquelle."
+                )
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Label(
+                        sourceDownloader.state.germanTitle,
+                        systemImage: downloadStateIcon
+                    )
+                    .font(.callout.weight(.semibold))
+                    Spacer()
+                    Text(
+                        String(
+                            format: "%.0f%%",
+                            sourceDownloader.progress * 100
+                        )
+                    )
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                }
+
+                ProgressView(
+                    value: sourceDownloader.progress
+                )
+
+                if let destination =
+                        sourceDownloader.destinationURL {
+                    Text(
+                        "Ziel: " + destination.path
+                    )
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                }
+            }
+
+            if let sourceDownloadMessage {
+                Label(
+                    sourceDownloadMessage,
+                    systemImage:
+                        "exclamationmark.triangle"
+                )
+                .font(.caption)
+                .foregroundStyle(.red)
+            }
+
+            Divider()
+
+            HStack {
+                Button("Schließen") {
+                    showSourceDownloader = false
+                }
+
+                Spacer()
+
+                switch sourceDownloader.state {
+                case .downloading:
+                    Button("Pausieren") {
+                        sourceDownloader.pause()
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button(
+                        "Abbrechen",
+                        role: .destructive
+                    ) {
+                        sourceDownloader.cancel()
+                    }
+                    .buttonStyle(.bordered)
+
+                case .paused:
+                    Button("Fortsetzen") {
+                        sourceDownloader.resume()
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    Button(
+                        "Abbrechen",
+                        role: .destructive
+                    ) {
+                        sourceDownloader.cancel()
+                    }
+                    .buttonStyle(.bordered)
+
+                default:
+                    Button {
+                        startSourceDownload()
+                    } label: {
+                        Label(
+                            "Herunterladen",
+                            systemImage:
+                                "arrow.down.circle.fill"
+                        )
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(
+                        sourceDownloadURLText
+                            .trimmingCharacters(
+                                in: .whitespacesAndNewlines
+                            )
+                            .isEmpty
+                    )
+                }
+            }
+        }
+        .padding(24)
+        .frame(width: 620)
+    }
+
+    private var downloadStateIcon: String {
+        switch sourceDownloader.state {
+        case .idle:
+            return "arrow.down.circle"
+        case .downloading:
+            return "arrow.down.circle.fill"
+        case .paused:
+            return "pause.circle.fill"
+        case .completed:
+            return "checkmark.circle.fill"
+        case .failed:
+            return "exclamationmark.triangle.fill"
+        }
+    }
+
+    private func startSourceDownload() {
+        sourceDownloadMessage = nil
+        let rawValue = sourceDownloadURLText
+            .trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+        guard let remoteURL = URL(
+            string: rawValue
+        ),
+        let scheme = remoteURL.scheme?.lowercased(),
+        scheme == "https" || scheme == "http" else {
+            sourceDownloadMessage =
+                "Gib eine gültige HTTP- oder HTTPS-Download-URL ein."
+            return
+        }
+
+        let host = remoteURL.host?
+            .lowercased() ?? ""
+        if host == "youtube.com"
+            || host.hasSuffix(".youtube.com")
+            || host == "youtu.be"
+            || host.hasSuffix(".youtu.be") {
+            sourceDownloadMessage =
+                "Ein normaler YouTube-Watch-Link ist keine direkte Medien-Downloadquelle. Verwende eine direkte oder autorisierte Medien-URL."
+            return
+        }
+
+        guard let ingestDirectory =
+                session.automaticIngestDirectoryURL else {
+            sourceDownloadMessage =
+                "Der Blackstock-Ingest-Ordner konnte nicht erstellt werden."
+            return
+        }
+
+        var fileName = remoteURL
+            .lastPathComponent
+            .trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+        if fileName.isEmpty
+            || fileName == "/" {
+            fileName =
+                (opportunitySource?.externalID
+                    ?? UUID().uuidString)
+                + ".mp4"
+        }
+        if URL(
+            fileURLWithPath: fileName
+        ).pathExtension.isEmpty {
+            fileName += ".mp4"
+        }
+
+        let destination = ingestDirectory
+            .appendingPathComponent(fileName)
+
+        sourceDownloader.start(
+            remoteURL: remoteURL,
+            destinationURL: destination
+        )
+    }
+
     private var rightsSheet: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Einmalige Nutzungsverantwortung")
@@ -2402,6 +2834,20 @@ struct StudioView: View {
         .frame(width: 520)
     }
 
+    private func startIngestWatcher() {
+        guard let ingestURL =
+                session.automaticIngestDirectoryURL else {
+            return
+        }
+        ingestWatcher.start(
+            directoryURL: ingestURL
+        ) {
+            Task { @MainActor in
+                await attemptAutomaticOriginalBinding()
+            }
+        }
+    }
+
     private func attemptAutomaticOriginalBinding() async {
         guard state.asset == nil,
               session.productionIntent(
@@ -2409,11 +2855,20 @@ struct StudioView: View {
               )?.isLinkFirstClip == true,
               let source = opportunitySource,
               session.workspaceRightsAttestation?
-                .permitsUserDirectedProduction == true,
-              let matchedURL = await session.resolveOriginalMedia(
-                for: project,
-                source: source
-              ) else {
+                .permitsUserDirectedProduction == true else {
+            return
+        }
+
+        isResolvingAutomaticSource = true
+        defer {
+            isResolvingAutomaticSource = false
+        }
+
+        guard let matchedURL =
+                await session.resolveOriginalMedia(
+                    for: project,
+                    source: source
+                ) else {
             return
         }
 

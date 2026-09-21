@@ -7,6 +7,8 @@ public struct YouTubeChannelIdentity: Codable, Sendable, Equatable, Identifiable
     public let avatarURL: URL?
     public let subscriberCount: Int?
     public let uploadsPlaylistID: String?
+    public let viewCount: Int?
+    public let videoCount: Int?
 
     public init(
         id: String,
@@ -14,7 +16,9 @@ public struct YouTubeChannelIdentity: Codable, Sendable, Equatable, Identifiable
         handle: String?,
         avatarURL: URL?,
         subscriberCount: Int?,
-        uploadsPlaylistID: String?
+        uploadsPlaylistID: String?,
+        viewCount: Int? = nil,
+        videoCount: Int? = nil
     ) {
         self.id = id
         self.title = title
@@ -22,6 +26,8 @@ public struct YouTubeChannelIdentity: Codable, Sendable, Equatable, Identifiable
         self.avatarURL = avatarURL
         self.subscriberCount = subscriberCount
         self.uploadsPlaylistID = uploadsPlaylistID
+        self.viewCount = viewCount
+        self.videoCount = videoCount
     }
 }
 
@@ -67,6 +73,8 @@ public struct YouTubeOpportunityCandidate: Codable, Sendable, Equatable, Identif
     public let query: String
     public let retrievedAt: Date
     public let embeddable: Bool?
+    public let contentKind: YouTubeOpportunityContentKind
+    public let durationSeconds: Int?
     public let metrics: YouTubeOpportunityMetrics
 
     public init(
@@ -79,6 +87,8 @@ public struct YouTubeOpportunityCandidate: Codable, Sendable, Equatable, Identif
         query: String,
         retrievedAt: Date,
         embeddable: Bool?,
+        contentKind: YouTubeOpportunityContentKind = .video,
+        durationSeconds: Int? = nil,
         metrics: YouTubeOpportunityMetrics
     ) {
         self.id = videoID
@@ -91,7 +101,39 @@ public struct YouTubeOpportunityCandidate: Codable, Sendable, Equatable, Identif
         self.query = query
         self.retrievedAt = retrievedAt
         self.embeddable = embeddable
+        self.contentKind = contentKind
+        self.durationSeconds = durationSeconds
         self.metrics = metrics
+    }
+}
+
+public enum OpportunityContentFilter: String, Codable, Sendable, CaseIterable, Hashable {
+    case all
+    case shorts
+    case videos
+    case live
+
+    public var germanTitle: String {
+        switch self {
+        case .all: return "Alle"
+        case .shorts: return "Shorts"
+        case .videos: return "Videos"
+        case .live: return "Live"
+        }
+    }
+}
+
+public enum YouTubeOpportunityContentKind: String, Codable, Sendable, Equatable {
+    case short
+    case video
+    case live
+
+    public var germanTitle: String {
+        switch self {
+        case .short: return "Shorts-Kandidat"
+        case .video: return "Video"
+        case .live: return "Live"
+        }
     }
 }
 
@@ -200,8 +242,17 @@ public struct YouTubeAuthorizedClient: Sendable {
                 title: $0.snippet.title,
                 handle: $0.snippet.customUrl,
                 avatarURL: $0.snippet.thumbnails?.defaultImage?.url,
-                subscriberCount: $0.statistics.flatMap { Int($0.subscriberCount ?? "") },
-                uploadsPlaylistID: $0.contentDetails?.relatedPlaylists.uploads
+                subscriberCount: $0.statistics.flatMap {
+                    Int($0.subscriberCount ?? "")
+                },
+                uploadsPlaylistID:
+                    $0.contentDetails?.relatedPlaylists.uploads,
+                viewCount: $0.statistics.flatMap {
+                    Int($0.viewCount ?? "")
+                },
+                videoCount: $0.statistics.flatMap {
+                    Int($0.videoCount ?? "")
+                }
             )
         }
     }
@@ -214,6 +265,7 @@ public struct YouTubeAuthorizedClient: Sendable {
         publishedAfter: Date? = nil,
         maxResults: Int = 12,
         order: OpportunitySortMode = .relevance,
+        contentFilter: OpportunityContentFilter = .all,
         session: URLSession = .shared,
         now: Date = Date()
     ) async throws -> [YouTubeOpportunityCandidate] {
@@ -234,8 +286,18 @@ public struct YouTubeAuthorizedClient: Sendable {
             .init(
                 name: "videoEmbeddable",
                 value: "true"
+            ),
+            .init(
+                name: "videoSyndicated",
+                value: "true"
             )
         ]
+        if contentFilter == .live {
+            queryItems.append(
+                .init(name: "eventType", value: "live")
+            )
+        }
+
         let trimmedQuery = query.trimmingCharacters(
             in: .whitespacesAndNewlines
         )
@@ -282,22 +344,62 @@ public struct YouTubeAuthorizedClient: Sendable {
         }
         search.queryItems = queryItems
 
-        let searchData = try await perform(search.url!, session: session)
-        let searchResponse = try JSONDecoder.youtube.decode(SearchListResponse.self, from: searchData)
-        let searchItems = searchResponse.items.compactMap { item -> SearchItem? in
+        let searchData = try await perform(
+            search.url!,
+            session: session
+        )
+        let searchResponse = try JSONDecoder.youtube.decode(
+            SearchListResponse.self,
+            from: searchData
+        )
+        let searchItems = searchResponse.items.compactMap {
+            item -> SearchItem? in
             item.id.videoId == nil ? nil : item
         }
 
         let videoIDs = searchItems.compactMap(\.id.videoId)
-        let videos = try await loadVideoDetails(ids: videoIDs, session: session)
+        let videos = try await loadVideoDetails(
+            ids: videoIDs,
+            session: session
+        )
 
         return searchItems.compactMap { item in
-            guard let videoID = item.id.videoId else { return nil }
+            guard let videoID = item.id.videoId else {
+                return nil
+            }
             let video = videos[videoID]
+            let durationSeconds = Self.durationSeconds(
+                from: video?.contentDetails?.duration
+            )
+            let contentKind = Self.contentKind(
+                video: video,
+                durationSeconds: durationSeconds
+            )
+            let matchesFilter: Bool
+            switch contentFilter {
+            case .all:
+                matchesFilter = true
+            case .shorts:
+                matchesFilter = contentKind == .short
+            case .videos:
+                matchesFilter = contentKind == .video
+            case .live:
+                matchesFilter = contentKind == .live
+            }
+            guard matchesFilter else {
+                return nil
+            }
+
             let metrics = YouTubeOpportunityMetrics(
-                viewCount: video?.statistics.flatMap { Int($0.viewCount ?? "") },
-                likeCount: video?.statistics.flatMap { Int($0.likeCount ?? "") },
-                commentCount: video?.statistics.flatMap { Int($0.commentCount ?? "") },
+                viewCount: video?.statistics.flatMap {
+                    Int($0.viewCount ?? "")
+                },
+                likeCount: video?.statistics.flatMap {
+                    Int($0.likeCount ?? "")
+                },
+                commentCount: video?.statistics.flatMap {
+                    Int($0.commentCount ?? "")
+                },
                 publishedAt: item.snippet.publishedAt,
                 retrievedAt: now
             )
@@ -308,12 +410,16 @@ public struct YouTubeAuthorizedClient: Sendable {
                 channelID: item.snippet.channelId,
                 channelTitle: item.snippet.channelTitle,
                 publishedAt: item.snippet.publishedAt,
-                thumbnailURL: item.snippet.thumbnails?.medium?.url ?? item.snippet.thumbnails?.defaultImage?.url,
+                thumbnailURL:
+                    item.snippet.thumbnails?.medium?.url
+                    ?? item.snippet.thumbnails?.defaultImage?.url,
                 query: trimmedQuery.isEmpty
                     ? "category:\(categoryID ?? "all")"
                     : trimmedQuery,
                 retrievedAt: now,
                 embeddable: video?.status?.embeddable,
+                contentKind: contentKind,
+                durationSeconds: durationSeconds,
                 metrics: metrics
             )
         }
@@ -327,6 +433,7 @@ public struct YouTubeAuthorizedClient: Sendable {
         timeWindow: OpportunityTimeWindow = .allTime,
         maxResults: Int = 12,
         order: OpportunitySortMode = .relevance,
+        contentFilter: OpportunityContentFilter = .all,
         session: URLSession = .shared,
         now: Date = Date()
     ) async throws -> [YouTubeOpportunityCandidate] {
@@ -346,6 +453,8 @@ public struct YouTubeAuthorizedClient: Sendable {
         }
 
         if timeWindow == .allTime,
+           contentFilter != .live,
+           contentFilter != .shorts,
            (order == .relevance || order == .views) {
             let popular = try await mostPopularOpportunityCandidates(
                 categoryID: trimmedCategoryID,
@@ -354,8 +463,20 @@ public struct YouTubeAuthorizedClient: Sendable {
                 session: session,
                 now: now
             )
-            if !popular.isEmpty {
-                return popular
+            let filteredPopular = popular.filter {
+                switch contentFilter {
+                case .all:
+                    return true
+                case .videos:
+                    return $0.contentKind == .video
+                case .shorts:
+                    return $0.contentKind == .short
+                case .live:
+                    return $0.contentKind == .live
+                }
+            }
+            if !filteredPopular.isEmpty {
+                return filteredPopular
             }
         }
 
@@ -375,6 +496,7 @@ public struct YouTubeAuthorizedClient: Sendable {
                 publishedAfter: publishedAfter,
                 maxResults: maxResults,
                 order: boundedOrder,
+                contentFilter: contentFilter,
                 session: session,
                 now: now
             )
@@ -393,6 +515,7 @@ public struct YouTubeAuthorizedClient: Sendable {
             publishedAfter: publishedAfter,
             maxResults: maxResults,
             order: boundedOrder,
+            contentFilter: contentFilter,
             session: session,
             now: now
         )
@@ -411,7 +534,7 @@ public struct YouTubeAuthorizedClient: Sendable {
         components.queryItems = [
             .init(
                 name: "part",
-                value: "snippet,statistics,status"
+                value: "snippet,statistics,status,contentDetails,liveStreamingDetails"
             ),
             .init(name: "chart", value: "mostPopular"),
             .init(name: "regionCode", value: regionCode),
@@ -449,6 +572,15 @@ public struct YouTubeAuthorizedClient: Sendable {
                     "mostPopular:category:\(categoryID):region:\(regionCode)",
                 retrievedAt: now,
                 embeddable: video.status?.embeddable,
+                contentKind: Self.contentKind(
+                    video: video,
+                    durationSeconds: Self.durationSeconds(
+                        from: video.contentDetails?.duration
+                    )
+                ),
+                durationSeconds: Self.durationSeconds(
+                    from: video.contentDetails?.duration
+                ),
                 metrics: YouTubeOpportunityMetrics(
                     viewCount: video.statistics.flatMap {
                         Int($0.viewCount ?? "")
@@ -473,12 +605,60 @@ public struct YouTubeAuthorizedClient: Sendable {
         guard !ids.isEmpty else { return [:] }
         var c = URLComponents(string: "https://www.googleapis.com/youtube/v3/videos")!
         c.queryItems = [
-            .init(name: "part", value: "statistics,status"),
+            .init(
+                name: "part",
+                value: "statistics,status,contentDetails,liveStreamingDetails"
+            ),
             .init(name: "id", value: ids.joined(separator: ","))
         ]
         let data = try await perform(c.url!, session: session)
         let response = try JSONDecoder.youtube.decode(VideoListResponse.self, from: data)
         return Dictionary(uniqueKeysWithValues: response.items.map { ($0.id, $0) })
+    }
+
+    private static func contentKind(
+        video: VideoItem?,
+        durationSeconds: Int?
+    ) -> YouTubeOpportunityContentKind {
+        if video?.liveStreamingDetails != nil {
+            return .live
+        }
+        if let durationSeconds,
+           durationSeconds > 0,
+           durationSeconds <= 180 {
+            return .short
+        }
+        return .video
+    }
+
+    private static func durationSeconds(
+        from rawValue: String?
+    ) -> Int? {
+        guard let rawValue,
+              rawValue.hasPrefix("PT") else {
+            return nil
+        }
+
+        var digits = ""
+        var total = 0
+        for character in rawValue.dropFirst(2) {
+            if character.isNumber {
+                digits.append(character)
+                continue
+            }
+            guard let value = Int(digits) else {
+                digits = ""
+                continue
+            }
+            switch character {
+            case "H": total += value * 3_600
+            case "M": total += value * 60
+            case "S": total += value
+            default: break
+            }
+            digits = ""
+        }
+        return total > 0 ? total : nil
     }
 
     private func perform(_ url: URL, session: URLSession) async throws -> Data {
@@ -508,6 +688,8 @@ private struct ChannelSnippet: Decodable {
 }
 private struct ChannelStatistics: Decodable {
     let subscriberCount: String?
+    let viewCount: String?
+    let videoCount: String?
 }
 private struct ChannelContentDetails: Decodable {
     let relatedPlaylists: RelatedPlaylists
@@ -524,6 +706,15 @@ private struct VideoItem: Decodable {
     let snippet: SearchSnippet?
     let statistics: VideoStatistics?
     let status: VideoStatus?
+    let contentDetails: VideoContentDetails?
+    let liveStreamingDetails: VideoLiveStreamingDetails?
+}
+private struct VideoContentDetails: Decodable {
+    let duration: String?
+}
+private struct VideoLiveStreamingDetails: Decodable {
+    let actualStartTime: Date?
+    let scheduledStartTime: Date?
 }
 private struct VideoStatistics: Decodable {
     let viewCount: String?
