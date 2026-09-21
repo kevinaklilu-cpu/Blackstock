@@ -391,11 +391,35 @@ struct StudioView: View {
                         presentVideoPicker()
                     } label: {
                         Label(
-                            "Schnittquelle hinzufügen",
+                            "Originaldatei auswählen",
                             systemImage: "film.stack"
                         )
                     }
                     .buttonStyle(.borderedProminent)
+
+                    if session.originalMediaLibraryPath.isEmpty {
+                        Button {
+                            presentOriginalMediaLibraryPicker()
+                        } label: {
+                            Label(
+                                "Originalvideo-Ordner wählen …",
+                                systemImage: "folder.badge.plus"
+                            )
+                        }
+                        .buttonStyle(.bordered)
+                    } else {
+                        Button {
+                            Task {
+                                await attemptAutomaticOriginalBinding()
+                            }
+                        } label: {
+                            Label(
+                                "Mediathek erneut durchsuchen",
+                                systemImage: "arrow.clockwise"
+                            )
+                        }
+                        .buttonStyle(.bordered)
+                    }
 
                     Button("Auf YouTube ansehen") {
                         NSWorkspace.shared.open(
@@ -2392,6 +2416,26 @@ struct StudioView: View {
         pendingURL = matchedURL
         pendingCaptureKind = nil
         importPendingMedia()
+    }
+
+    private func presentOriginalMediaLibraryPicker() {
+        let panel = NSOpenPanel()
+        panel.title = "Originalvideo-Ordner auswählen"
+        panel.prompt = "Ordner verwenden"
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true
+
+        guard panel.runModal() == .OK,
+              let url = panel.url,
+              session.setOriginalMediaLibrary(url) else {
+            return
+        }
+
+        Task {
+            await attemptAutomaticOriginalBinding()
+        }
     }
 
     private func presentVideoPicker() {
