@@ -174,7 +174,6 @@ final class BlackstockSession: ObservableObject {
 
     init() {
         BlackstockUpdateAudit.reconcilePostUpdateLaunch()
-        BlackstockCaptureHardwareAudit.reconcilePostRestart()
         _ = try? PrivacyRetentionEnforcer().purgeExpiredUpdatePackages(
             in: FileManager.default.temporaryDirectory
         )
