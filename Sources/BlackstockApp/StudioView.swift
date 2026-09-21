@@ -65,8 +65,28 @@ struct StudioView: View {
             await state.loadWorkspace(projectID: project.id)
             if session.activeProject?.isPaused == true {
                 state.requestStopProcessing()
-            } else if state.asset == nil {
+                return
+            }
+
+            guard state.asset == nil,
+                  session.productionIntent(
+                    for: project.id
+                  )?.isLinkFirstClip == true,
+                  session.workspaceRightsAttestation?
+                    .permitsUserDirectedProduction == true else {
+                return
+            }
+
+            while !Task.isCancelled,
+                  state.asset == nil,
+                  session.activeProject?.isPaused != true {
                 await attemptAutomaticOriginalBinding()
+                if state.asset != nil {
+                    break
+                }
+                try? await Task.sleep(
+                    for: .seconds(4)
+                )
             }
         }
         .onDisappear {
@@ -436,8 +456,8 @@ struct StudioView: View {
 
                 Text(
                     isResolvingAutomaticSource
-                        ? "Blackstock prüft gerade, ob eine automatisch nutzbare Medienquelle für dieses Video verfügbar ist."
-                        : "Das Video bleibt ausgewählt und deine einmalige Nutzungsbestätigung gilt weiter. Blackstock prüft verfügbare Quellen automatisch; nur wenn keine nutzbare Quelle vorliegt, kannst du optional eine alternative Quelle verbinden."
+                        ? "Blackstock prüft gerade verfügbare lokale Quellen für dieses Video."
+                        : "Das Video bleibt ausgewählt und deine einmalige Nutzungsbestätigung gilt weiter. Speichere eine passende Videodatei in „Downloads/Blackstock Ingest“ – Blackstock erkennt sie automatisch und setzt den Clip-Workflow ohne weiteren Dateidialog fort."
                 )
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
@@ -466,6 +486,21 @@ struct StudioView: View {
                     .disabled(
                         isResolvingAutomaticSource
                     )
+
+                    if let ingestURL =
+                            session.automaticIngestDirectoryURL {
+                        Button {
+                            NSWorkspace.shared.activateFileViewerSelecting(
+                                [ingestURL]
+                            )
+                        } label: {
+                            Label(
+                                "Ingest-Ordner öffnen",
+                                systemImage: "folder.fill"
+                            )
+                        }
+                        .buttonStyle(.bordered)
+                    }
 
                     Menu {
                         Button {
