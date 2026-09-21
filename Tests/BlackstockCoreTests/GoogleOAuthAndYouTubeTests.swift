@@ -707,7 +707,7 @@ final class GoogleOAuthAndYouTubeTests: XCTestCase {
             XCTAssertEqual(values["videoCategoryId"], "17")
             XCTAssertEqual(
                 values["part"],
-                "snippet,statistics,status"
+                "snippet,statistics,status,contentDetails,liveStreamingDetails"
             )
 
             let response = HTTPURLResponse(
