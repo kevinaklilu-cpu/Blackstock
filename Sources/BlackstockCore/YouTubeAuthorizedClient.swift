@@ -130,7 +130,7 @@ public enum YouTubeOpportunityContentKind: String, Codable, Sendable, Equatable 
 
     public var germanTitle: String {
         switch self {
-        case .short: return "Short"
+        case .short: return "Shorts-Kandidat"
         case .video: return "Video"
         case .live: return "Live"
         }
