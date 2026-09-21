@@ -300,6 +300,65 @@ jobs:
           grep -q "(${TEAM_ID})" "$RUNNER_TEMP/dist/pkg-signature.txt"
           xcrun stapler validate "$RUNNER_TEMP/dist/Blackstock.pkg"
 
+      - name: Publish production GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          BUILD: ${{ inputs.build }}
+        run: |
+          set -euo pipefail
+          gh release create "$BLACKSTOCK_RELEASE_TAG" \
+            "$RUNNER_TEMP/dist/Blackstock.pkg#Blackstock.pkg" \
+            "$RUNNER_TEMP/dist/Blackstock.pkg.sha256#Blackstock.pkg.sha256" \
+            "$RUNNER_TEMP/dist/update-manifest.json#update-manifest.json" \
+            --target "$GITHUB_SHA" \
+            --title "Blackstock $VERSION (Build $BUILD)" \
+            --notes "Signed and notarized Blackstock production release." \
+            --latest
+
+      - name: Wait for published update endpoint
+        env:
+          VERSION: ${{ inputs.version }}
+          BUILD: ${{ inputs.build }}
+        run: |
+          set -euo pipefail
+          python3 - "$BLACKSTOCK_MANIFEST_URL" "$VERSION" "$BUILD" <<'PY'
+          import json
+          import sys
+          import time
+          import urllib.request
+
+          url, version, build = sys.argv[1], sys.argv[2], int(sys.argv[3])
+          last_error = None
+          for _ in range(18):
+              try:
+                  request = urllib.request.Request(
+                      url,
+                      headers={
+                          "Accept": "application/json",
+                          "Cache-Control": "no-cache",
+                          "User-Agent": "Blackstock-Release-Pipeline",
+                      },
+                  )
+                  with urllib.request.urlopen(request, timeout=20) as response:
+                      manifest = json.load(response)
+                  if (
+                      str(manifest.get("version")) == version
+                      and int(manifest.get("build", -1)) == build
+                  ):
+                      print("Published update endpoint is serving the new release.")
+                      break
+                  last_error = RuntimeError(
+                      f"endpoint still serves {manifest.get('version')} build {manifest.get('build')}"
+                  )
+              except Exception as error:
+                  last_error = error
+              time.sleep(5)
+          else:
+              raise SystemExit(
+                  f"published update endpoint did not converge: {last_error}"
+              )
+          PY
       - name: Upload production release bundle
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
