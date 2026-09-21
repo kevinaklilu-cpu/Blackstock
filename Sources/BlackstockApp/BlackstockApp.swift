@@ -71,6 +71,8 @@ private struct WorkspaceShell: View {
                         .tag("Chancen")
                     Label("Projekte", systemImage: "folder.fill")
                         .tag("Projekte")
+                    Label("Analyse", systemImage: "chart.line.uptrend.xyaxis")
+                        .tag("Analyse")
                     if session.activeProject?.stage.journeyGuidance
                         .recommendedSurface == .studio {
                         Label("Editor", systemImage: "scissors")
@@ -120,6 +122,10 @@ private struct WorkspaceShell: View {
                         selection = "Chancen"
                     }
                 )
+            case "Analyse":
+                ChannelAnalyticsWorkspaceView(
+                    session: session
+                )
             case "Studio":
                 if let project = session.activeProject {
                     StudioView(
@@ -131,7 +137,8 @@ private struct WorkspaceShell: View {
                 } else {
                     OverviewView(
                         session: session,
-                        onOpenStudio: { selection = "Studio" }
+                        onOpenStudio: { selection = "Studio" },
+                        onNavigate: { selection = $0 }
                     )
                 }
             case "Einstellungen":
@@ -139,7 +146,8 @@ private struct WorkspaceShell: View {
             default:
                 OverviewView(
                     session: session,
-                    onOpenStudio: { selection = "Studio" }
+                    onOpenStudio: { selection = "Studio" },
+                    onNavigate: { selection = $0 }
                 )
             }
         }
@@ -235,6 +243,15 @@ private struct CommandPaletteView: View {
                 subtitle: "Gespeicherte Projekte",
                 systemImage: "tray.full",
                 destination: "Projekte",
+                isDestructive: false
+            )
+,
+            .init(
+                id: "analytics",
+                title: "Analyse öffnen",
+                subtitle: "Kanal-KPIs und YouTube Analytics",
+                systemImage: "chart.line.uptrend.xyaxis",
+                destination: "Analyse",
                 isDestructive: false
             )
         ]
@@ -346,6 +363,7 @@ private struct CommandPaletteView: View {
 private struct OverviewView: View {
     @ObservedObject var session: BlackstockSession
     let onOpenStudio: () -> Void
+    let onNavigate: (String) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
