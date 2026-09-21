@@ -43,14 +43,16 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
           BUILD: ${{ inputs.build }}
-          MANIFEST_URL: ${{ inputs.manifest_url }}
-          PACKAGE_URL: ${{ inputs.package_url }}
         run: |
           set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || {
+            echo "Production releases must run from main." >&2
+            exit 1
+          }
+
           python3 - <<'PY'
           import os
           import re
-          from urllib.parse import urlparse
 
           version = os.environ["VERSION"].strip()
           build = os.environ["BUILD"].strip()
@@ -58,29 +60,39 @@ jobs:
               raise SystemExit("version must be numeric dotted notation")
           if not build.isdigit() or int(build) <= 0:
               raise SystemExit("build must be a positive integer")
-
-          for key in ["MANIFEST_URL", "PACKAGE_URL"]:
-              value = os.environ[key].strip()
-              parsed = urlparse(value)
-              if parsed.scheme.lower() != "https" or not parsed.hostname:
-                  raise SystemExit(f"{key} must be an absolute HTTPS URL")
-              host = parsed.hostname.rstrip(".").lower()
-              if (
-                  host == "localhost"
-                  or host == "::1"
-                  or host.startswith("127.")
-                  or host.endswith(".local")
-                  or host.endswith(".invalid")
-                  or host.endswith(".example")
-                  or host.endswith(".test")
-              ):
-                  raise SystemExit(f"{key} must use a real production host")
-              if parsed.username is not None or parsed.password is not None:
-                  raise SystemExit(f"{key} must not contain embedded credentials")
-              if parsed.fragment:
-                  raise SystemExit(f"{key} must not contain a fragment")
           PY
 
+      - name: Resolve previous production baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "$BLACKSTOCK_RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release tag already exists: $BLACKSTOCK_RELEASE_TAG" >&2
+            exit 1
+          fi
+
+          PREVIOUS_VERSION="0.0.0"
+          PREVIOUS_BUILD="1"
+          PREVIOUS_TAG="$(gh release view --json tagName --jq .tagName 2>/dev/null || true)"
+          if [[ -n "$PREVIOUS_TAG" ]]; then
+            PREVIOUS_DIR="$RUNNER_TEMP/previous-release"
+            mkdir -p "$PREVIOUS_DIR"
+            if gh release download "$PREVIOUS_TAG" --pattern update-manifest.json --dir "$PREVIOUS_DIR" >/dev/null 2>&1; then
+              read -r PREVIOUS_VERSION PREVIOUS_BUILD < <(
+                python3 - "$PREVIOUS_DIR/update-manifest.json" <<'PY'
+          import json
+          import pathlib
+          import sys
+          manifest = json.loads(pathlib.Path(sys.argv[1]).read_text())
+          print(manifest["version"], manifest["build"])
+          PY
+              )
+            fi
+          fi
+
+          echo "BLACKSTOCK_PREVIOUS_VERSION=$PREVIOUS_VERSION" >> "$GITHUB_ENV"
+          echo "BLACKSTOCK_PREVIOUS_BUILD=$PREVIOUS_BUILD" >> "$GITHUB_ENV"
       - name: Validate required production secrets
         env:
           APP_CERT: ${{ secrets.BLACKSTOCK_APP_CERT_P12_BASE64 }}
