@@ -49,8 +49,6 @@ required = [
     "installedAppBuild",
     "installedAppSourceCommitSHA",
     "installedAppExecutableSHA256",
-    "cameraEntitlementVerified",
-    "audioInputEntitlementVerified",
     "developerIDApplicationVerified",
     "gatekeeperApplicationAccepted",
     "notarySubmissionID",
@@ -60,7 +58,7 @@ for key in required:
     if key not in data:
         fail(f"missing field: {key}")
 
-if data["schemaVersion"] != 3:
+if data["schemaVersion"] != 4:
     fail("unsupported schemaVersion")
 
 try:
@@ -151,8 +149,6 @@ for key in [
     "developerIDInstallerVerified",
     "staplerValidated",
     "gatekeeperInstallerAccepted",
-    "cameraEntitlementVerified",
-    "audioInputEntitlementVerified",
     "developerIDApplicationVerified",
     "gatekeeperApplicationAccepted",
 ]:
