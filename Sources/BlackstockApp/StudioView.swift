@@ -26,8 +26,6 @@ struct StudioView: View {
     @State private var sourceDownloadMessage: String?
     @State private var pendingCaptureKind: CaptureKind?
     @State private var showRightsSheet = false
-    @State private var rightsSelection: ProductionMediaAuthorization = .owned
-    @State private var rightsEvidence = ""
     @State private var rightsConfirmed = false
     @State private var showPackagingReview = false
     @State private var showClipExportFolderImporter = false
