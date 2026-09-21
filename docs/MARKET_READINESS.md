@@ -4,14 +4,11 @@ Blackstock darf erst als marktreif gelten, wenn **interne Release-Gates** und **
 
 ## Finale Prüfung
 
-Nach Abschluss des realen Hardware-Smokes, des echten Apple-Produktionsreleases und des echten In-App-Updates:
+Nach Abschluss des echten Apple-Produktionsreleases und eines echten In-App-Updates:
 
 ```bash
 python3 Build/verify_market_readiness.py \
-  --capture-evidence \
-  "$HOME/Library/Application Support/Blackstock/Diagnostics/capture-hardware-smoke.json" \
-  --production-release-evidence \
-  "./release-evidence.json" \
+  --production-release-evidence "./release-evidence.json" \
   --in-app-update-evidence \
   "$HOME/Library/Application Support/Blackstock/Update/update-evidence.json" \
   --output "./market-readiness.json"
@@ -23,72 +20,36 @@ Nur ein erfolgreicher Lauf schreibt:
 
 ## Was geprüft wird
 
-Der Verifier liest zuerst `docs/RELEASE_GATES.md`. Alle Gates außer den fünf realweltabhängigen Gates müssen bereits `PASS` sein:
+Der Verifier liest zuerst `docs/RELEASE_GATES.md`. Alle Gates außer den vier realweltabhängigen Gates müssen bereits `PASS` sein:
 
-- Capture
 - Signing
 - Notarization
 - Gatekeeper
 - Updater
 
-Danach werden die drei realen Evidenzdateien jeweils mit ihren eigenen fail-closed Validatoren geprüft:
+Danach werden die beiden realen Evidenzdateien mit ihren fail-closed Validatoren geprüft:
 
-- `Build/validate_capture_hardware_smoke.py`
 - `Build/validate_production_release_evidence.py`
 - `Build/validate_in_app_update_evidence.py`
 
-Alle Evidence-Dateien werden als striktes JSON behandelt. Nicht standardkonforme numerische Werte wie `NaN`, `Infinity` oder `-Infinity` werden abgelehnt; numerische Capture-Dauern und Updater-Zeitstempel müssen zusätzlich endlich sein. Produktions-Manifest- und Paket-URLs unterliegen in Core-Verifier, In-App-Updater, Release-Verifier und Offline-Validatoren derselben Produktions-HTTPS-Regel; der In-App-Updater prüft zusätzlich die nach Redirects tatsächlich erreichte finale URL.
+Produktions-Manifest- und Paket-URLs unterliegen in Core-Verifier, In-App-Updater, Release-Verifier und Offline-Validatoren derselben Produktions-HTTPS-Regel. Der In-App-Updater prüft zusätzlich die nach Redirects tatsächlich erreichte finale URL.
 
-Anschließend bindet der Readiness-Verifier die Nachweise **untereinander**.
-
-Für die finale Prüfung werden die drei Evidence-Dateien jeweils genau einmal als Bytes eingelesen. Die Einzelvalidatoren arbeiten auf temporären byteidentischen Snapshots statt die ursprünglichen Dateien erneut zu öffnen. Nach Abschluss der Validatoren wird zusätzlich geprüft, dass sich keine Quelldatei während der Verifikation verändert hat. Der finale Report enthält den SHA-256 jeder tatsächlich geprüften Evidence-Datei.
-
-Der Ausgabepfad des Readiness-Reports darf keine der drei Evidence-Dateien überschreiben. Der Report wird außerdem atomar über eine temporäre Datei geschrieben und erst nach vollständigem Schreiben an den Zielpfad verschoben.
+Für die finale Prüfung werden beide Evidence-Dateien jeweils genau einmal als Bytes eingelesen. Die Einzelvalidatoren arbeiten auf temporären byteidentischen Snapshots. Nach Abschluss wird zusätzlich geprüft, dass sich keine Quelldatei während der Verifikation verändert hat. Der finale Report enthält den SHA-256 jeder tatsächlich geprüften Evidence-Datei.
 
 ## Cross-Binding
 
-Alle Nachweise müssen zu demselben Release gehören.
+Beide Nachweise müssen zu demselben Release gehören. Der Verifier verlangt deshalb:
 
-Der Verifier verlangt deshalb:
-
-- identische Ausgangsversion des Update-Pfads zwischen Published-Release-Verifikation und realem In-App-Update,
-- identischen Ausgangs-Build dieses Update-Pfads,
-- gemessenen Source-Commit und SHA-256 des tatsächlich gestarteten Quell-Executables der älteren Produktions-App,
-- Quell-App unter `/Applications/Blackstock.app` mit erfolgreicher `codesign --verify --deep --strict`-Prüfung, erwarteter Apple-Team-ID und passendem Installer-Receipt `de.blackstock.app`,
-- identische Blackstock-Zielversion,
-- identischen Ziel-Build,
-- identische Produktions-Manifest-URL,
-- identische Paket-URL,
+- identische Ausgangsversion und identischen Ausgangs-Build des Update-Pfads,
+- gemessenen Source-Commit und SHA-256 der tatsächlich gestarteten Quell-App,
+- identische Blackstock-Zielversion und identischen Ziel-Build,
+- identische Produktions-Manifest-URL und Paket-URL,
 - identischen SHA-256 des Release-Pakets,
-- identischen Git-Source-Commit-SHA zwischen Capture-Hardware-Evidenz, signiertem Produktionsrelease, installierter App und In-App-Updater-Evidenz,
-- identischen SHA-256 des tatsächlich installierten Blackstock-Executables zwischen Capture-Smoke, veröffentlichtem Release und nach dem In-App-Update gestarteter App,
-- identische Apple-Team-ID zwischen der tatsächlich signierten Capture-App, dem Produktionsrelease, der vom Updater erwarteten Team-ID und der nach dem Update tatsächlich gestarteten Developer-ID-App,
-- identischen Installer-Receipt `de.blackstock.app` samt Zielversion **und identischem Installationszeitpunkt** zwischen Capture-Smoke und Post-Update-Start; damit müssen beide Nachweise auf derselben konkreten Zielinstallation beruhen,
-- identischen installierten App-Pfad `/Applications/Blackstock.app` zwischen Published-Release-Verifikation und echtem Updater-E2E.
-
-Damit kann zum Beispiel kein erfolgreicher Hardware-Smoke von Build 100 mit einem signierten Build 101 oder einem Update-Paket eines anderen Hashes kombiniert werden.
-
-## Capture-Evidenz
-
-Die reale Capture-Evidenz wird von Blackstock selbst erzeugt. Sie enthält für Kamera, Mikrofon, Bildschirm und Systemaudio unter anderem:
-
-- Berechtigungsstatus,
-- reale Aufnahmedauer,
-- technisch erkannte Video-/Audiospuren,
-- projektgebundene persistierte Datei,
-- kanonischer Projektpfad unter `~/Library/Application Support/Blackstock/Projects/<projectID>/Media` bzw. `Captures`, nach Symlink-Auflösung,
-- UUID-basierter importierter Asset-Dateiname und Übereinstimmung des Pfad-Projekts mit `projectID`,
-- SHA-256 dieser Datei,
-- gemeinsame Aufnahme-Launch-ID für alle vier kanonischen Capture-Pfade,
-- Source-Commit-SHA des installierten Blackstock-Bundles,
-- gültiger macOS-Installer-Receipt `de.blackstock.app` für exakt dieselbe App-Version inklusive des von `pkgutil` gemeldeten Installationszeitpunkts,
-- erfolgreiche `codesign --verify --deep --strict`-Prüfung der laufenden App plus tatsächliche `Developer ID Application`-Team-ID,
-- SHA-256 des tatsächlich laufenden Blackstock-Executables,
-- Restart-Launch-ID,
-- Hard-Stop-Nachweis bei verweigerter Berechtigung,
-- Temp-Cleanup-Nachweis.
-
-Der Validator liest die persistierten Dateien erneut und prüft ihre SHA-256-Werte.
+- identischen Ziel-Source-Commit zwischen signiertem Produktionsrelease, installierter App und In-App-Updater-Evidenz,
+- identischen SHA-256 des tatsächlich installierten Blackstock-Executables zwischen Published-Release-Verifikation und nach dem In-App-Update gestarteter App,
+- identische Apple-Team-ID zwischen Produktionsrelease, erwarteter Updater-Team-ID und tatsächlich gestarteter Developer-ID-App,
+- installierte Ziel-App unter `/Applications/Blackstock.app`,
+- passenden Installer-Receipt `de.blackstock.app` für die Zielversion.
 
 ## Apple-Release-Evidenz
 
@@ -102,7 +63,10 @@ Der Validator liest die persistierten Dateien erneut und prüft ihre SHA-256-Wer
 - Apple-Team-ID,
 - Notarisierungsstatus `Accepted`,
 - Stapling,
-- Gatekeeper für Installer und installierte App.
+- Gatekeeper für Installer und installierte App,
+- Universal-2-App mit arm64 und x86_64.
+
+Blackstock benötigt für seinen YouTube-Clip-Workflow **keine Kamera- oder Mikrofon-Entitlements**. Diese sind daher weder Teil des Produktionspakets noch Teil des Release-Nachweises.
 
 ## In-App-Updater-Evidenz
 
@@ -117,17 +81,17 @@ Blackstock selbst protokolliert den tatsächlichen App-Pfad:
 7. SHA-256 des tatsächlich gestarteten Executables,
 8. exakter Bundle-Pfad `/Applications/Blackstock.app`,
 9. erfolgreiche `codesign --verify --deep --strict`-Prüfung plus tatsächliche `Developer ID Application`-Team-ID,
-10. passender macOS-Installer-Receipt `de.blackstock.app` für exakt die Zielversion und ein Installationszeitpunkt, der nach dem Installer-Handoff liegt, neuer als der Quell-Receipt ist und mit dem späteren Capture-Smoke übereinstimmt.
+10. passender macOS-Installer-Receipt `de.blackstock.app` für die Zielversion.
 
 ## CI-Regel
 
-Die Canonical-CI testet ausschließlich den **Vertrag des Verifiers** mit synthetischen Fixtures. Diese Fixtures sind niemals Produktionsnachweis und dürfen die fünf externen Gates nicht auf PASS setzen.
+Die Canonical-CI testet ausschließlich den **Vertrag des Verifiers** mit synthetischen Fixtures. Diese Fixtures sind niemals Produktionsnachweis und dürfen die vier externen Gates nicht auf PASS setzen.
 
-Die CI-Negativtests verwenden absichtlich widersprüchliche Paket-Hashes **und separat einen abweichenden beobachteten Source-Commit** zwischen Release- und Updater-Evidenz. Der Market-Readiness-Verifier muss beide Fälle ablehnen.
+Der aktive Blackstock-Produktpfad ist YouTube-first: Entdecken → Quelle → Analyse → Clip → Render → Review → Upload → Analytics. Kamera-, Mikrofon-, Bildschirm- und Systemaudio-Aufnahme sind kein Release-Gate und werden vom ausgelieferten App-Bundle nicht angefordert.
 
 ## Statusregel
 
-Solange keine drei realen, gegenseitig konsistenten Evidenzdateien vorliegen, bleibt:
+Solange kein echtes signiertes/notarisiertes Produktionsrelease und kein dazu passender realer In-App-Update-Nachweis vorliegen, bleibt:
 
 **STATUS: NOCH NICHT MARKTREIF**
 
