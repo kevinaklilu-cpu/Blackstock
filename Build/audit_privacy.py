@@ -26,6 +26,8 @@ REQUIRED = {
         "revokeGoogleAuthorization",
         "exportLocalPrivacyData",
         "PrivacyRetentionEnforcer().purgeExpiredUpdatePackages",
+        'originalMediaLibraryPath = ""',
+        '"blackstock.originalMediaLibraryPath"',
     ],
     "Sources/BlackstockApp/BlackstockApp.swift": [
         "Google-Berechtigung widerrufen",
