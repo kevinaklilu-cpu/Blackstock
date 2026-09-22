@@ -524,7 +524,7 @@ struct OpportunityWorkspaceView: View {
                     }
                 } label: {
                     Label(
-                        "Clip erstellen",
+                        "Video schneiden",
                         systemImage: "scissors"
                     )
                 }

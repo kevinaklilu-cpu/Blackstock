@@ -35,7 +35,7 @@ checks = {
     "Sources/BlackstockApp/WorkspaceProductViews.swift": [
         "struct OpportunityWorkspaceView",
         "Neues Projekt",
-        "Clip erstellen",
+        "Video schneiden",
         "struct ProjectLibraryView",
         "Video finden",
         "session.projects",

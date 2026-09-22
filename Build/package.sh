@@ -98,8 +98,14 @@ require_universal_binary() {
   done
 }
 
+python3 Build/prepare_download_tools.py
 APP="$WORK/Blackstock.app"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Helpers"
+cp "$ROOT/.build/download-tools/yt-dlp" "$APP/Contents/Helpers/yt-dlp"
+cp "$ROOT/.build/download-tools/deno" "$APP/Contents/Helpers/deno"
+cp "$ROOT/Build/DownloadTools-NOTICE.md" "$APP/Contents/Resources/DownloadTools-NOTICE.md"
+require_universal_binary "$APP/Contents/Helpers/yt-dlp"
+require_universal_binary "$APP/Contents/Helpers/deno"
 swift Build/generate_app_icon.swift "$APP/Contents/Resources/Blackstock.icns"
 test -s "$APP/Contents/Resources/Blackstock.icns"
 lipo -create   "$ARM64_BIN_DIR/Blackstock"   "$X86_64_BIN_DIR/Blackstock"   -output "$APP/Contents/MacOS/Blackstock"
@@ -175,6 +181,17 @@ EOF
   PRODUCTBUILD_KEYCHAIN_ARGS=(--keychain "$SIGNING_KEYCHAIN")
 fi
 
+for helper in yt-dlp deno; do
+  if [[ -n "$APP_SIGN_IDENTITY" ]]; then
+    codesign --force --options runtime --timestamp "${CODESIGN_KEYCHAIN_ARGS[@]}" \
+      --entitlements "$ROOT/Build/DownloadTools.entitlements" \
+      --sign "$APP_SIGN_IDENTITY" "$APP/Contents/Helpers/$helper"
+  else
+    codesign --force --options runtime --entitlements "$ROOT/Build/DownloadTools.entitlements" \
+      --sign - "$APP/Contents/Helpers/$helper"
+  fi
+done
+
 if [[ -n "$APP_SIGN_IDENTITY" ]]; then
   if [[ "$INCLUDE_E2E_SMOKE" == "1" ]]; then
     codesign --force --options runtime --timestamp       "${CODESIGN_KEYCHAIN_ARGS[@]}"       --sign "$APP_SIGN_IDENTITY"       "$APP/Contents/Helpers/BlackstockE2ESmoke"
@@ -187,7 +204,7 @@ else
   if [[ "$INCLUDE_E2E_SMOKE" == "1" ]]; then
     codesign --force --sign - "$APP/Contents/Helpers/BlackstockE2ESmoke"
   fi
-  codesign --force --deep --options runtime \
+  codesign --force --options runtime \
     --entitlements "$ROOT/Build/Blackstock.entitlements" \
     --sign - "$APP"
 fi

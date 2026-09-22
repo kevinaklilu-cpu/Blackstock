@@ -23,6 +23,7 @@ struct StudioView: View {
     @State private var isAcquiringApprovedSource = false
     @State private var showSourceDownloader = false
     @State private var sourceDownloadURLText = ""
+    @State private var downloadProjectID: UUID?
     @State private var sourceDownloadMessage: String?
     @State private var pendingCaptureKind: CaptureKind?
     @State private var showRightsSheet = false
@@ -68,6 +69,10 @@ struct StudioView: View {
             rightsSheet
         }
         .task(id: project.id) {
+            if downloadProjectID != nil && downloadProjectID != project.id {
+                sourceDownloader.reset()
+                downloadProjectID = nil
+            }
             await state.loadWorkspace(
                 projectID: project.id
             )
@@ -87,6 +92,10 @@ struct StudioView: View {
 
             startIngestWatcher()
             await attemptAutomaticOriginalBinding()
+            if state.asset == nil, let source = opportunitySource,
+               sourceDownloader.state == .idle {
+                await acquireApprovedSource(source)
+            }
         }
         .onDisappear {
             activeProcessingTask?.cancel()
@@ -108,13 +117,18 @@ struct StudioView: View {
         .onChange(
             of: sourceDownloader.lastCompletedURL
         ) { completedURL in
-            guard let completedURL else {
+            guard let completedURL, downloadProjectID == project.id else {
                 return
             }
             pendingURL = completedURL
             pendingCaptureKind = nil
-            importPendingMedia()
             showSourceDownloader = false
+            if session.workspaceRightsAttestation?.permitsUserDirectedProduction == true {
+                importPendingMedia()
+            } else {
+                rightsConfirmed = false
+                showRightsSheet = true
+            }
         }
         .sheet(isPresented: $showPackagingReview) {
             if let asset = state.asset,
@@ -223,7 +237,8 @@ struct StudioView: View {
     private func sourceContext(_ source: MediaSourceReference) -> some View {
         let resolution = MediaSourceResolver().resolve(
             source,
-            approvedProvider: nil
+            approvedProvider: session.approvedSourceProviderAuthorization,
+            localYouTubeDownloaderAvailable: SourceDownloadManager.youtubeExecutable != nil
         )
         let isLinkFirstClip =
             session.productionIntent(for: project.id)?.isLinkFirstClip == true
@@ -391,12 +406,13 @@ struct StudioView: View {
                                 .controlSize(.small)
                                 .disabled(
                                     isAcquiringApprovedSource
-                                    || sourceDownloader.state
-                                        == .downloading
+                                    || sourceDownloader.state == .downloading
+                                    || sourceDownloader.state == .paused
+                                    || sourceDownloader.state == .processing
                                 )
                             } else {
                                 Button {
-                                    sourceDownloadURLText = ""
+                                    sourceDownloadURLText = opportunitySource?.pageURL.absoluteString ?? ""
                                     sourceDownloadMessage = nil
                                     showSourceDownloader = true
                                 } label: {
@@ -558,13 +574,13 @@ struct StudioView: View {
 
                 Text(
                     isAcquiringApprovedSource
-                        ? "Blackstock bezieht die freigegebene Videoquelle und übergibt sie anschließend automatisch an den Schnitt."
+                        ? "Blackstock lädt die Videoquelle herunter und übergibt sie anschließend automatisch an den Schnitt."
                         : (
                             isResolvingAutomaticSource
                             ? "Blackstock prüft gerade bereits verfügbare Quellen für dieses Video."
                             : (
                                 session.canAutomaticallyAcquireYouTubeSource
-                                ? "Das Video ist ausgewählt. Blackstock kann die freigegebene Quelle automatisch beziehen und danach direkt mit Analyse und Schnitt fortfahren."
+                                ? "Das Video wird auf deinen Mac geladen und anschließend im Schnitt-Player geöffnet."
                                 : "Das Video ist ausgewählt. Blackstock prüft lokale und autorisierte Quellen automatisch; Ingest-Ordner, Mediathek oder direkte Medienquelle bleiben als Fallback verfügbar."
                             )
                         )
@@ -623,12 +639,13 @@ struct StudioView: View {
                         .buttonStyle(.borderedProminent)
                         .disabled(
                             isAcquiringApprovedSource
-                            || sourceDownloader.state
-                                == .downloading
+                            || sourceDownloader.state == .downloading
+                            || sourceDownloader.state == .paused
+                            || sourceDownloader.state == .processing
                         )
                     } else {
                         Button {
-                            sourceDownloadURLText = ""
+                            sourceDownloadURLText = opportunitySource?.pageURL.absoluteString ?? ""
                             sourceDownloadMessage = nil
                             showSourceDownloader = true
                         } label: {
@@ -658,7 +675,7 @@ struct StudioView: View {
 
                     Menu {
                         Button {
-                            sourceDownloadURLText = ""
+                            sourceDownloadURLText = opportunitySource?.pageURL.absoluteString ?? ""
                             sourceDownloadMessage = nil
                             showSourceDownloader = true
                         } label: {
@@ -2637,7 +2654,7 @@ struct StudioView: View {
                     Text("Videoquelle beziehen")
                         .font(.title2.bold())
                     Text(
-                        "Blackstock versucht zuerst, die passende Quelle automatisch zu finden. Falls nötig, kannst du hier eine direkte oder autorisierte Medienquelle laden."
+                        "Lade das ausgewählte Video auf deinen Mac. Nach dem Download wird die Datei automatisch an den Schnitt übergeben."
                     )
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -2663,16 +2680,16 @@ struct StudioView: View {
             }
 
             VStack(alignment: .leading, spacing: 7) {
-                Text("Direkte Medienquelle")
+                Text("YouTube-Link oder direkte Medienquelle")
                     .font(.caption.weight(.semibold))
                 TextField(
-                    "https://…/video.mp4",
+                    "https://www.youtube.com/watch?v=…",
                     text: $sourceDownloadURLText
                 )
                 .textFieldStyle(.roundedBorder)
 
                 Text(
-                    "Nur nötig, wenn die Quelle nicht automatisch gefunden wurde. Verwende eine direkte oder von einem verbundenen Anbieter freigegebene Medien-URL."
+                    "Füge einen YouTube-Link oder einen direkten Videolink ein. Lade nur Inhalte, die du verwenden darfst."
                 )
                 .font(.caption2)
                 .foregroundStyle(.secondary)
@@ -2711,6 +2728,10 @@ struct StudioView: View {
                 }
             }
 
+            if case .failed(let message) = sourceDownloader.state {
+                Text(message).font(.caption).foregroundStyle(.red).textSelection(.enabled)
+            }
+
             if let sourceDownloadMessage {
                 Label(
                     sourceDownloadMessage,
@@ -2745,6 +2766,8 @@ struct StudioView: View {
                     }
                     .buttonStyle(.bordered)
 
+                case .processing:
+                    Button("Abbrechen", role: .destructive) { sourceDownloader.cancel() }
                 case .paused:
                     Button("Fortsetzen") {
                         sourceDownloader.resume()
@@ -2790,6 +2813,8 @@ struct StudioView: View {
             return "arrow.down.circle"
         case .downloading:
             return "arrow.down.circle.fill"
+        case .processing:
+            return "film.stack"
         case .paused:
             return "pause.circle.fill"
         case .completed:
@@ -2810,6 +2835,13 @@ struct StudioView: View {
         sourceDownloadMessage = nil
         defer {
             isAcquiringApprovedSource = false
+        }
+
+        if source.provider == .youtube, SourceDownloadManager.youtubeExecutable != nil {
+            sourceDownloadURLText = source.pageURL.absoluteString
+            showSourceDownloader = true
+            startSourceDownload(remoteURL: source.pageURL)
+            return
         }
 
         do {
@@ -2850,17 +2882,6 @@ struct StudioView: View {
             return
         }
 
-        let host = remoteURL.host?
-            .lowercased() ?? ""
-        if host == "youtube.com"
-            || host.hasSuffix(".youtube.com")
-            || host == "youtu.be"
-            || host.hasSuffix(".youtu.be") {
-            sourceDownloadMessage =
-                "Ein normaler YouTube-Watch-Link ist keine direkte Medien-Downloadquelle. Verwende eine direkte oder autorisierte Medien-URL."
-            return
-        }
-
         startSourceDownload(
             remoteURL: remoteURL
         )
@@ -2894,9 +2915,19 @@ struct StudioView: View {
             fileName += ".mp4"
         }
 
+        if YouTubeDownloadRequest.accepts(remoteURL) {
+            let sourceID = (opportunitySource?.externalID ?? "youtube")
+                .filter { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") }
+            fileName = sourceID + "-" + UUID().uuidString + ".mp4"
+        }
+        if !YouTubeDownloadRequest.accepts(remoteURL) {
+            fileName = UUID().uuidString + "-" + fileName
+        }
         let destination = ingestDirectory
             .appendingPathComponent(fileName)
 
+        downloadProjectID = project.id
+        showSourceDownloader = true
         sourceDownloader.start(
             remoteURL: remoteURL,
             destinationURL: destination

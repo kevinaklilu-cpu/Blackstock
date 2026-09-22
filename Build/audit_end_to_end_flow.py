@@ -46,7 +46,7 @@ checks = {
     "Sources/BlackstockApp/WorkspaceProductViews.swift": [
         "YouTubeEmbeddedPlayer(videoID:",
         "session.useOpportunityAsClip(",
-        "Clip erstellen",
+        "Video schneiden",
         "Projekt pausieren",
         "Projekt löschen",
         "Auf YouTube ansehen",

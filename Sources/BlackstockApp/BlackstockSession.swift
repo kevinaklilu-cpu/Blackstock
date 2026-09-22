@@ -336,9 +336,10 @@ final class BlackstockSession: ObservableObject {
     }
 
     var canAutomaticallyAcquireYouTubeSource: Bool {
-        approvedSourceProviderAuthorization?
-            .mayIngestYouTubeLinks == true
-        && approvedSourceProviderEndpointURL != nil
+        SourceDownloadManager.youtubeExecutable != nil || (
+            approvedSourceProviderAuthorization?.mayIngestYouTubeLinks == true
+            && approvedSourceProviderEndpointURL != nil
+        )
     }
 
     func resolveApprovedSourceMediaURL(
