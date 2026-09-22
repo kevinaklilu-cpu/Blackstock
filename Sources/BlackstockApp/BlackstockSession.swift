@@ -1898,9 +1898,14 @@ final class BlackstockSession: ObservableObject {
     ) -> PublishPreparationSnapshot? {
         do {
             let store = try projectWorkspaceStore()
-            if let snapshot = try store.loadPublishPreparation(
-                projectID: projectID
-            ) {
+            let loadResult = try store
+                .loadPublishPreparationWithRecovery(
+                    projectID: projectID
+                )
+            if let snapshot = loadResult.snapshot {
+                if loadResult.recoveredFromBackup {
+                    errorMessage = "Die gespeicherte Veröffentlichungsprüfung war beschädigt. Blackstock hat den letzten validierten lokalen Backup-Stand wiederhergestellt."
+                }
                 return snapshot
             }
 
@@ -1924,6 +1929,7 @@ final class BlackstockSession: ObservableObject {
             UserDefaults.standard.removeObject(forKey: key)
             return snapshot
         } catch {
+            errorMessage = "Die gespeicherte Veröffentlichungsprüfung konnte nicht sicher geladen oder wiederhergestellt werden: \(describe(error))"
             return nil
         }
     }
