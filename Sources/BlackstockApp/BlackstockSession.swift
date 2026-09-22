@@ -1271,7 +1271,7 @@ final class BlackstockSession: ObservableObject {
                 to: .published,
                 at: Date()
             ) else {
-                errorMessage = "Upload war erfolgreich, aber der lokale Projektstatus konnte nicht auf PUBLISHED gesetzt werden."
+                errorMessage = "Upload war erfolgreich, aber der lokale Projektstatus konnte nicht auf „veröffentlicht“ gesetzt werden."
                 lastPublishingResult = result
                 return
             }
