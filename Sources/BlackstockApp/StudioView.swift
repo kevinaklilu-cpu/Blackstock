@@ -20,13 +20,12 @@ struct StudioView: View {
     @State private var pendingURL: URL?
     @State private var showOptionalCapture = false
     @State private var isResolvingAutomaticSource = false
+    @State private var isAcquiringApprovedSource = false
     @State private var showSourceDownloader = false
     @State private var sourceDownloadURLText = ""
     @State private var sourceDownloadMessage: String?
     @State private var pendingCaptureKind: CaptureKind?
     @State private var showRightsSheet = false
-    @State private var rightsSelection: ProductionMediaAuthorization = .owned
-    @State private var rightsEvidence = ""
     @State private var rightsConfirmed = false
     @State private var showPackagingReview = false
     @State private var showClipExportFolderImporter = false
@@ -365,19 +364,51 @@ struct StudioView: View {
                                 isResolvingAutomaticSource
                             )
 
-                            Button {
-                                sourceDownloadURLText = ""
-                                sourceDownloadMessage = nil
-                                showSourceDownloader = true
-                            } label: {
-                                Label(
-                                    "Downloader",
-                                    systemImage:
-                                        "arrow.down.circle"
+                            if session
+                                .canAutomaticallyAcquireYouTubeSource {
+                                Button {
+                                    Task {
+                                        await acquireApprovedSource(
+                                            source
+                                        )
+                                    }
+                                } label: {
+                                    HStack {
+                                        if isAcquiringApprovedSource {
+                                            ProgressView()
+                                                .controlSize(.mini)
+                                        }
+                                        Label(
+                                            isAcquiringApprovedSource
+                                                ? "Quelle wird bezogen …"
+                                                : "Automatisch beziehen",
+                                            systemImage:
+                                                "arrow.down.circle.fill"
+                                        )
+                                    }
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .controlSize(.small)
+                                .disabled(
+                                    isAcquiringApprovedSource
+                                    || sourceDownloader.state
+                                        == .downloading
                                 )
+                            } else {
+                                Button {
+                                    sourceDownloadURLText = ""
+                                    sourceDownloadMessage = nil
+                                    showSourceDownloader = true
+                                } label: {
+                                    Label(
+                                        "Videoquelle beziehen",
+                                        systemImage:
+                                            "arrow.down.circle"
+                                    )
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .controlSize(.small)
                             }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.small)
 
                             Menu {
 
@@ -526,9 +557,17 @@ struct StudioView: View {
                     .font(.title2.bold())
 
                 Text(
-                    isResolvingAutomaticSource
-                        ? "Blackstock prüft gerade verfügbare lokale Quellen für dieses Video."
-                        : "Das Video bleibt ausgewählt und deine einmalige Nutzungsbestätigung gilt weiter. Speichere eine passende Videodatei in „Downloads/Blackstock Ingest“ – Blackstock erkennt sie automatisch und setzt den Clip-Workflow ohne weiteren Dateidialog fort."
+                    isAcquiringApprovedSource
+                        ? "Blackstock bezieht die freigegebene Videoquelle und übergibt sie anschließend automatisch an den Schnitt."
+                        : (
+                            isResolvingAutomaticSource
+                            ? "Blackstock prüft gerade bereits verfügbare Quellen für dieses Video."
+                            : (
+                                session.canAutomaticallyAcquireYouTubeSource
+                                ? "Das Video ist ausgewählt. Blackstock kann die freigegebene Quelle automatisch beziehen und danach direkt mit Analyse und Schnitt fortfahren."
+                                : "Das Video ist ausgewählt. Blackstock prüft lokale und autorisierte Quellen automatisch; Ingest-Ordner, Mediathek oder direkte Medienquelle bleiben als Fallback verfügbar."
+                            )
+                        )
                 )
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
@@ -558,18 +597,49 @@ struct StudioView: View {
                         isResolvingAutomaticSource
                     )
 
-                    Button {
-                        sourceDownloadURLText = ""
-                        sourceDownloadMessage = nil
-                        showSourceDownloader = true
-                    } label: {
-                        Label(
-                            "Downloader",
-                            systemImage:
-                                "arrow.down.circle.fill"
+                    if session
+                        .canAutomaticallyAcquireYouTubeSource {
+                        Button {
+                            Task {
+                                await acquireApprovedSource(
+                                    source
+                                )
+                            }
+                        } label: {
+                            HStack {
+                                if isAcquiringApprovedSource {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                }
+                                Label(
+                                    isAcquiringApprovedSource
+                                        ? "Quelle wird bezogen …"
+                                        : "Automatisch beziehen",
+                                    systemImage:
+                                        "arrow.down.circle.fill"
+                                )
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(
+                            isAcquiringApprovedSource
+                            || sourceDownloader.state
+                                == .downloading
                         )
+                    } else {
+                        Button {
+                            sourceDownloadURLText = ""
+                            sourceDownloadMessage = nil
+                            showSourceDownloader = true
+                        } label: {
+                            Label(
+                                "Videoquelle beziehen",
+                                systemImage:
+                                    "arrow.down.circle.fill"
+                            )
+                        }
+                        .buttonStyle(.borderedProminent)
                     }
-                    .buttonStyle(.borderedProminent)
 
                     if let ingestURL =
                             session.automaticIngestDirectoryURL {
@@ -1445,8 +1515,13 @@ struct StudioView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Divider()
-                supplementalCapturesSection
+                if !state.supplementalCaptures.isEmpty
+                    || session.productionIntent(
+                        for: project.id
+                    )?.isLinkFirstClip != true {
+                    Divider()
+                    supplementalCapturesSection
+                }
 
                 Divider()
 
@@ -2559,10 +2634,10 @@ struct StudioView: View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Quelle herunterladen")
+                    Text("Videoquelle beziehen")
                         .font(.title2.bold())
                     Text(
-                        "Direkte oder autorisierte Medienquelle herunterladen und anschließend automatisch in Blackstock übernehmen."
+                        "Blackstock versucht zuerst, die passende Quelle automatisch zu finden. Falls nötig, kannst du hier eine direkte oder autorisierte Medienquelle laden."
                     )
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -2588,7 +2663,7 @@ struct StudioView: View {
             }
 
             VStack(alignment: .leading, spacing: 7) {
-                Text("Download-URL")
+                Text("Direkte Medienquelle")
                     .font(.caption.weight(.semibold))
                 TextField(
                     "https://…/video.mp4",
@@ -2597,7 +2672,7 @@ struct StudioView: View {
                 .textFieldStyle(.roundedBorder)
 
                 Text(
-                    "Hier gehört eine direkte oder von einem verbundenen Anbieter freigegebene Medien-URL hinein. Ein normaler youtube.com/watch-Link ist keine direkte Downloadquelle."
+                    "Nur nötig, wenn die Quelle nicht automatisch gefunden wurde. Verwende eine direkte oder von einem verbundenen Anbieter freigegebene Medien-URL."
                 )
                 .font(.caption2)
                 .foregroundStyle(.secondary)
@@ -2724,6 +2799,41 @@ struct StudioView: View {
         }
     }
 
+    private func acquireApprovedSource(
+        _ source: MediaSourceReference
+    ) async {
+        guard !isAcquiringApprovedSource else {
+            return
+        }
+
+        isAcquiringApprovedSource = true
+        sourceDownloadMessage = nil
+        defer {
+            isAcquiringApprovedSource = false
+        }
+
+        do {
+            guard let mediaURL =
+                    try await session
+                        .resolveApprovedSourceMediaURL(
+                            for: source
+                        ) else {
+                sourceDownloadMessage =
+                    "Für dieses Video ist aktuell kein freigegebener automatischer Source Provider verfügbar."
+                showSourceDownloader = true
+                return
+            }
+            startSourceDownload(
+                remoteURL: mediaURL
+            )
+        } catch {
+            sourceDownloadMessage =
+                "Die automatische Quelle konnte nicht bezogen werden: "
+                + error.localizedDescription
+            showSourceDownloader = true
+        }
+    }
+
     private func startSourceDownload() {
         sourceDownloadMessage = nil
         let rawValue = sourceDownloadURLText
@@ -2751,6 +2861,14 @@ struct StudioView: View {
             return
         }
 
+        startSourceDownload(
+            remoteURL: remoteURL
+        )
+    }
+
+    private func startSourceDownload(
+        remoteURL: URL
+    ) {
         guard let ingestDirectory =
                 session.automaticIngestDirectoryURL else {
             sourceDownloadMessage =
@@ -3283,7 +3401,10 @@ struct StudioView: View {
                     .padding(.vertical, 3)
                 }
 
-                if state.asset != nil {
+                if state.asset != nil,
+                   session.productionIntent(
+                        for: project.id
+                   )?.isLinkFirstClip != true {
                     Divider()
                     Button {
                         showOptionalCapture.toggle()
@@ -3316,11 +3437,19 @@ struct StudioView: View {
                         }
                         .padding(.top, 8)
                     }
-                }
 
-                Text("Zusätzliche Audio-, Kamera- oder Bildschirmspuren sind optional und werden nur verwendet, wenn du sie ausdrücklich hinzufügst.")
+                    Text(
+                        "Eigene Kamera-, Mikrofon- oder Bildschirmaufnahmen sind nur für selbst produzierte Projekte verfügbar."
+                    )
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+                } else if state.supplementalCaptures.isEmpty {
+                    Text(
+                        "Für diesen YouTube-Clip sind keine Kamera-, Mikrofon- oder Bildschirmrechte erforderlich."
+                    )
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 4)

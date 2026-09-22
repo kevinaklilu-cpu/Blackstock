@@ -283,6 +283,92 @@ final class BlackstockSession: ObservableObject {
         return URL(fileURLWithPath: value, isDirectory: true)
     }
 
+    var approvedSourceProviderAuthorization:
+        RemoteIngestProviderAuthorization? {
+        guard let providerID =
+                Bundle.main.object(
+                    forInfoDictionaryKey:
+                        "BlackstockApprovedSourceProviderID"
+                ) as? String,
+              !providerID.trimmingCharacters(
+                    in: .whitespacesAndNewlines
+              ).isEmpty,
+              let approvalReference =
+                Bundle.main.object(
+                    forInfoDictionaryKey:
+                        "BlackstockApprovedSourceProviderYouTubeApprovalReference"
+                ) as? String,
+              !approvalReference.trimmingCharacters(
+                    in: .whitespacesAndNewlines
+              ).isEmpty,
+              let verifiedAtRaw =
+                Bundle.main.object(
+                    forInfoDictionaryKey:
+                        "BlackstockApprovedSourceProviderVerifiedAt"
+                ) as? String,
+              let verifiedAt =
+                ISO8601DateFormatter().date(
+                    from: verifiedAtRaw
+                ) else {
+            return nil
+        }
+
+        return RemoteIngestProviderAuthorization(
+            providerID: providerID,
+            supportsYouTubeLinks: true,
+            youtubeWrittenApprovalReference:
+                approvalReference,
+            verifiedAt: verifiedAt
+        )
+    }
+
+    var approvedSourceProviderEndpointURL: URL? {
+        guard let raw =
+                Bundle.main.object(
+                    forInfoDictionaryKey:
+                        "BlackstockApprovedSourceProviderEndpoint"
+                ) as? String,
+              let url = URL(string: raw),
+              url.scheme?.lowercased() == "https" else {
+            return nil
+        }
+        return url
+    }
+
+    var canAutomaticallyAcquireYouTubeSource: Bool {
+        approvedSourceProviderAuthorization?
+            .mayIngestYouTubeLinks == true
+        && approvedSourceProviderEndpointURL != nil
+    }
+
+    func resolveApprovedSourceMediaURL(
+        for source: MediaSourceReference
+    ) async throws -> URL? {
+        guard source.provider == .youtube,
+              let authorization =
+                approvedSourceProviderAuthorization,
+              authorization.mayIngestYouTubeLinks,
+              let endpoint =
+                approvedSourceProviderEndpointURL else {
+            return nil
+        }
+
+        let token = BlackstockKeychain.read(
+            "sourceProvider."
+            + authorization.providerID
+            + ".bearerToken"
+        )
+
+        return try await ApprovedSourceProviderClient()
+            .resolve(
+                source: source,
+                endpointURL: endpoint,
+                bearerToken:
+                    token.isEmpty ? nil : token
+            )
+            .mediaURL
+    }
+
     var automaticIngestDirectoryURL: URL? {
         guard let downloads = FileManager.default.urls(
             for: .downloadsDirectory,
