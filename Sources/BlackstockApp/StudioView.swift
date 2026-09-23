@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import CryptoKit
 import SwiftUI
 import AVFoundation
 import AVKit
@@ -2729,6 +2730,12 @@ struct StudioView: View {
                 }
             }
 
+            if sourceDownloader.recoveredDownload {
+                Text("Gespeicherte Download-Dateien werden weiterverwendet. Bereits geladene Abschnitte müssen nicht erneut geladen werden.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             if case .failed(let message) = sourceDownloader.state {
                 Text(message).font(.caption).foregroundStyle(.red).textSelection(.enabled)
             }
@@ -2919,7 +2926,9 @@ struct StudioView: View {
         if YouTubeDownloadRequest.accepts(remoteURL) {
             let sourceID = (opportunitySource?.externalID ?? "youtube")
                 .filter { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") }
-            fileName = sourceID + "-" + UUID().uuidString + ".mp4"
+            let sourceKey = SHA256.hash(data: Data(remoteURL.absoluteString.utf8))
+                .prefix(8).map { String(format: "%02x", $0) }.joined()
+            fileName = sourceID + "-" + project.id.uuidString + "-" + sourceKey + ".mp4"
         }
         if !YouTubeDownloadRequest.accepts(remoteURL) {
             fileName = UUID().uuidString + "-" + fileName

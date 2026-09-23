@@ -66,6 +66,8 @@ jobs:
         run: python3 Build/audit_capture.py
       - name: Keychain and ingest interaction regression
         run: bash Build/test_local_interaction.sh
+      - name: Download recovery regression
+        run: bash Build/test_download_recovery.sh
       - name: Capture hardware evidence validator audit
         run: |
           set -euo pipefail

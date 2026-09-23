@@ -9,7 +9,7 @@ import BlackstockCore
         precondition(YouTubeDownloadRequest.progress("BLACKSTOCK_PROGRESS: 42.5%") == 0.425)
         precondition(YouTubeDownloadRequest.progress("BLACKSTOCK_PROGRESS: nan%") == nil)
         let destination = URL(fileURLWithPath: CommandLine.arguments[1])
-        let manager = SourceDownloadManager()
+        var manager = SourceDownloadManager()
         let watcher = IngestDirectoryWatcher()
         var ingestEvents = 0
         watcher.start(directoryURL: destination.deletingLastPathComponent()) { ingestEvents += 1 }
@@ -22,6 +22,7 @@ import BlackstockCore
         print("CANCEL_RESTART_PASS")
         manager.start(remoteURL: URL(string: "https://www.youtube.com/watch?v=aqz-KE-bpKQ")!, destinationURL: destination)
         var paused = false
+        var recovered = false
         for tick in 0..<600 {
             try await Task.sleep(nanoseconds: 1_000_000_000)
             if tick == 7, manager.state == .downloading {
@@ -32,6 +33,15 @@ import BlackstockCore
                 precondition(manager.state == .downloading)
                 paused = true
                 print("PAUSE_RESUME_PASS")
+            }
+            if paused, !recovered, manager.state == .downloading, manager.progress > 0.1 {
+                manager.cancel()
+                // Recreate the manager: no in-memory task or resume data survives.
+                try await Task.sleep(nanoseconds: 1_000_000_000)
+                manager = SourceDownloadManager()
+                manager.start(remoteURL: URL(string: "https://www.youtube.com/watch?v=aqz-KE-bpKQ")!, destinationURL: destination)
+                recovered = true
+                print("NEW_MANAGER_RECOVERY_STARTED")
             }
             if tick % 10 == 0 { print("STATE", manager.state, manager.progress) }
             if case .failed(let message) = manager.state { fatalError(message) }
@@ -58,6 +68,8 @@ import BlackstockCore
                     print("DECODE_PASS", second)
                 }
                 precondition(ingestEvents > 0)
+                precondition(recovered)
+                print("NEW_MANAGER_RECOVERY_PASS")
                 print("INGEST_WATCHER_PASS", ingestEvents)
                 print("DOWNLOAD_MUX_PASS", duration, destination.path, "pause tested:", paused)
                 return

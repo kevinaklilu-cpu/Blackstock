@@ -15,7 +15,12 @@ Browser-Cookies werden nicht gelesen; private, gesperrte oder nicht verfügbare
 Videos werden als Fehler angezeigt. Downloadfehler sind wiederholbar. Eine
 laufende Übertragung wird beim Projektwechsel abgebrochen, damit ihre Datei
 nicht im falschen Projekt landet. Teil-Dateien liegen außerhalb des beobachteten
-Imports und werden nach Abbruch bzw. Verarbeitung gelöscht.
+Imports. Bei Unterbrechung bleiben sie erhalten. Beim erneuten Öffnen desselben
+Projekts verwendet Blackstock die Teildateien für dieselbe Quell-URL weiter;
+ein anderes Video erhält einen getrennten Zwischenstand. Jede Wiederaufnahme
+arbeitet mit einer neuen Kopie, damit ein nach einem Absturz noch laufender
+Downloadprozess keine aktuellen Dateien verändert. Nach erfolgreicher
+Verarbeitung werden die Zwischenstände dieser Quelle gelöscht.
 
 ## Build und Test
 
@@ -28,7 +33,9 @@ alternativ erkannt.
 
 `Build/test_youtube_download.sh` testet mit dem öffentlichen Big-Buck-Bunny-Video
 den tatsächlichen Download, Abbruch/Neustart, Pause/Fortsetzen, MP4-Ausgabe,
-Bild-/Tonspuren und deren Dauer. Der Test braucht Netzwerkzugriff und etwa
+Bild-/Tonspuren und deren Dauer sowie Wiederaufnahme mit einer neuen Download-Instanz.
+`Build/test_download_recovery.sh` prüft ohne Netzwerk den Erhalt der Teildateien
+und die Trennung unterschiedlicher Quellen. Der Test braucht Netzwerkzugriff und etwa
 260 MB für die fertige Testdatei. `swift test` führt zusätzlich die Unit-Tests
 aus und benötigt eine Xcode-Installation mit XCTest.
 

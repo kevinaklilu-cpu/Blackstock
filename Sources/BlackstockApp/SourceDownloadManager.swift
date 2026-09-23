@@ -1,5 +1,6 @@
 #if os(macOS)
 import Combine
+import CryptoKit
 import Foundation
 import BlackstockCore
 
@@ -34,6 +35,7 @@ final class SourceDownloadManager:
     @Published private(set) var bytesExpected: Int64 = 0
     @Published private(set) var destinationURL: URL?
     @Published private(set) var lastCompletedURL: URL?
+    @Published private(set) var recoveredDownload = false
 
     private var assemblyTask: Task<Void, Never>?
     private var youtubeProcess: Process?
@@ -79,6 +81,7 @@ final class SourceDownloadManager:
         self.remoteURL = remoteURL
         pendingDestinationURL = destinationURL
         lastCompletedURL = nil
+        recoveredDownload = false
         progress = 0
         bytesReceived = 0
         bytesExpected = 0
@@ -176,12 +179,34 @@ final class SourceDownloadManager:
         let pipe = Pipe()
         process.executableURL = executable
         // Download outside the watched ingest folder until the file is complete.
-        let staging = destination.deletingLastPathComponent()
+        let identity = destination.standardizedFileURL.path + "\n" + remoteURL.absoluteString
+        let key = SHA256.hash(data: Data(identity.utf8)).map { String(format: "%02x", $0) }.joined()
+        let recoveryRoot = destination.deletingLastPathComponent()
             .appendingPathComponent(".downloads", isDirectory: true)
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+            .appendingPathComponent(key, isDirectory: true)
+        let staging = recoveryRoot.appendingPathComponent(UUID().uuidString, isDirectory: true)
         do {
-            try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+            let manager = FileManager.default
+            let previous = (try? manager.contentsOfDirectory(
+                at: recoveryRoot, includingPropertiesForKeys: [.creationDateKey]
+            ))?.sorted {
+                ((try? $0.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast)
+                    > ((try? $1.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast)
+            }.first
+            try manager.createDirectory(at: staging, withIntermediateDirectories: true)
+            // A fresh attempt snapshots partial tracks. An orphaned downloader from
+            // a crashed app cannot write into this attempt's files.
+            if let previous {
+                for file in try manager.contentsOfDirectory(at: previous, includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey]) {
+                    let values = try file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+                    guard values.isRegularFile == true, values.isSymbolicLink != true,
+                          file.lastPathComponent != "video.mp4" else { continue }
+                    try manager.copyItem(at: file, to: staging.appendingPathComponent(file.lastPathComponent))
+                    recoveredDownload = true
+                }
+            }
         } catch {
+            try? FileManager.default.removeItem(at: staging)
             state = .failed(error.localizedDescription)
             return
         }
@@ -222,23 +247,21 @@ final class SourceDownloadManager:
             pipe.fileHandleForReading.readabilityHandler = nil
             DispatchQueue.main.async {
                 guard let self, self.youtubeGeneration == generation else {
-                    try? FileManager.default.removeItem(at: staging)
                     return
                 }
                 self.youtubeProcess = nil
                 guard finished.terminationStatus == 0 else {
-                    try? FileManager.default.removeItem(at: staging)
                     self.state = .failed("YouTube-Download fehlgeschlagen. " + self.youtubeDiagnostic)
                     return
                 }
                 self.state = .processing
                 self.assemblyTask = Task { @MainActor in
-                    defer { try? FileManager.default.removeItem(at: staging) }
                     do {
                         try await YouTubeMediaAssembler.assemble(directory: staging, output: output)
                         try Task.checkCancellation()
                         guard self.youtubeGeneration == generation else { return }
                         try FileManager.default.moveItem(at: output, to: destination)
+                        try? FileManager.default.removeItem(at: recoveryRoot)
                         self.progress = 1
                         self.pendingDestinationURL = nil
                         self.state = .completed
