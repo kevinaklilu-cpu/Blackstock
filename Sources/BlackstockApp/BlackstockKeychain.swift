@@ -1,11 +1,37 @@
 #if os(macOS)
 import Foundation
+import Combine
 import LocalAuthentication
 import Security
 
 enum BlackstockKeychain {
     private static let service = "de.blackstock.app"
     private static let interactionLock = NSRecursiveLock()
+    @MainActor static let accessIssue = CurrentValueSubject<String?, Never>(nil)
+    // Protected by interactionLock, including every lookup and mutation.
+    nonisolated(unsafe) private static var blockedReads: [String: OSStatus] = [:]
+
+    static func recordAccessResult(_ status: OSStatus, account: String) {
+        interactionLock.lock()
+        defer { interactionLock.unlock() }
+        if status == errSecSuccess || status == errSecItemNotFound {
+            blockedReads.removeValue(forKey: account)
+        } else {
+            blockedReads[account] = status
+        }
+        let message = blockedReads.values.first.map { KeychainError.status($0).localizedDescription }
+        DispatchQueue.main.async {
+            if accessIssue.value != message { accessIssue.send(message) }
+        }
+    }
+
+    static func retryBlockedReads() {
+        interactionLock.lock()
+        let accounts = Array(blockedReads.keys)
+        blockedReads.removeAll()
+        interactionLock.unlock()
+        for account in accounts { _ = read(account) }
+    }
 
     // LAContext covers Data Protection keychain items. Existing macOS login
     // keychain ACLs also need the legacy, process-local interaction guard.
@@ -38,6 +64,11 @@ enum BlackstockKeychain {
     }
 
     static func read(_ account: String) -> String {
+        interactionLock.lock()
+        defer { interactionLock.unlock() }
+        // A denied credential is retried only by the user's explicit retry.
+        // SwiftUI recomputation must not repeatedly query the same locked item.
+        guard blockedReads[account] == nil else { return "" }
         let query = nonInteractiveQuery([
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -49,6 +80,7 @@ enum BlackstockKeychain {
         let status = (try? withoutUserInteraction {
             SecItemCopyMatching(query as CFDictionary, &result)
         }) ?? errSecInteractionNotAllowed
+        recordAccessResult(status, account: account)
         guard status == errSecSuccess,
               let data = result as? Data,
               let value = String(data: data, encoding: .utf8) else { return "" }
@@ -67,9 +99,11 @@ enum BlackstockKeychain {
             SecItemUpdate(lookup as CFDictionary, [kSecValueData as String: data] as CFDictionary)
         }
         if updateStatus == errSecSuccess {
+            recordAccessResult(updateStatus, account: account)
             return
         }
         guard updateStatus == errSecItemNotFound else {
+            recordAccessResult(updateStatus, account: account)
             throw KeychainError.status(updateStatus)
         }
 
@@ -84,6 +118,7 @@ enum BlackstockKeychain {
         let addStatus = try withoutUserInteraction {
             SecItemAdd(insert as CFDictionary, nil)
         }
+        recordAccessResult(addStatus, account: account)
         guard addStatus == errSecSuccess else {
             throw KeychainError.status(addStatus)
         }
@@ -130,6 +165,7 @@ enum BlackstockKeychain {
         let status = try withoutUserInteraction {
             SecItemDelete(query as CFDictionary)
         }
+        recordAccessResult(status, account: account)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw KeychainError.status(status)
         }

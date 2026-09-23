@@ -782,6 +782,13 @@ final class BlackstockSession: ObservableObject {
             )
     }
 
+    func retryKeychainAccess() async {
+        BlackstockKeychain.retryBlockedReads()
+        importedOAuthClientID = BlackstockKeychain.read("google.oauth.importedClientID")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        await refreshWorkspaceChannelIdentity()
+    }
+
     func connectGoogle() async {
         errorMessage = nil
         guard !effectiveClientID.isEmpty else {

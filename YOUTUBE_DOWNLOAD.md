@@ -58,3 +58,7 @@ nach jedem Zugriff wiederhergestellt; Keychain-Berechtigungen bleiben bestehen.
 Gesperrte oder nicht freigegebene Einträge liefern einen Fehler statt einer
 Kette von Passwortfenstern. Ein gesperrter Schlüsselbund muss in macOS entsperrt
 werden; das Programm kann fehlende Zugriffsrechte nicht selbst erteilen.
+
+Verweigerte Lesezugriffe werden pro Eintrag bis zur ausdrücklichen erneuten
+Prüfung angehalten. Ein einzelner Hinweis in der App ersetzt wiederholte
+Zugriffsversuche; der Schalter lädt anschließend auch die Kanalidentität neu.

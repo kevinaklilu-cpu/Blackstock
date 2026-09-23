@@ -21,6 +21,15 @@ import Security
         var restored: DarwinBoolean = false
         precondition(SecKeychainGetUserInteractionAllowed(&restored) == errSecSuccess && restored.boolValue == original.boolValue)
         print("KEYCHAIN_NO_UI_RESTORE_PASS")
+        let fixtureAccount = "test-blocked-" + UUID().uuidString
+        BlackstockKeychain.recordAccessResult(errSecInteractionNotAllowed, account: fixtureAccount)
+        for _ in 0..<100 { precondition(BlackstockKeychain.read(fixtureAccount).isEmpty) }
+        try await Task.sleep(nanoseconds: 20_000_000)
+        precondition(BlackstockKeychain.accessIssue.value != nil)
+        BlackstockKeychain.recordAccessResult(errSecSuccess, account: fixtureAccount)
+        try await Task.sleep(nanoseconds: 20_000_000)
+        precondition(BlackstockKeychain.accessIssue.value == nil)
+        print("KEYCHAIN_BLOCKED_READ_COALESCING_PASS")
 
         let root = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

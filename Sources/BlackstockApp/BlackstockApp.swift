@@ -8,6 +8,8 @@ import BlackstockCore
 struct BlackstockApp: App {
     @StateObject private var session = BlackstockSession()
     @State private var commandPaletteRequest = 0
+    @State private var keychainMessage: String?
+    @State private var retryingKeychain = false
 
     var body: some Scene {
         WindowGroup {
@@ -21,6 +23,26 @@ struct BlackstockApp: App {
                     FirstRunView(session: session)
                 }
             }
+            .safeAreaInset(edge: .top) {
+                if let keychainMessage {
+                    HStack {
+                        Label(keychainMessage, systemImage: "lock.trianglebadge.exclamationmark")
+                            .font(.callout)
+                        Spacer()
+                        Button("Zugriff erneut prüfen") {
+                            retryingKeychain = true
+                            Task {
+                                await session.retryKeychainAccess()
+                                retryingKeychain = false
+                            }
+                        }
+                        .disabled(retryingKeychain)
+                    }
+                    .padding()
+                    .background(.regularMaterial)
+                }
+            }
+            .onReceive(BlackstockKeychain.accessIssue) { keychainMessage = $0 }
             .frame(minWidth: 1180, minHeight: 760)
             .tint(BlackstockDesign.accent)
             .background(BlackstockDesign.canvas)
