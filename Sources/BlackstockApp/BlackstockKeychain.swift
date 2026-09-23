@@ -5,6 +5,22 @@ import Security
 
 enum BlackstockKeychain {
     private static let service = "de.blackstock.app"
+    private static let interactionLock = NSRecursiveLock()
+
+    // LAContext covers Data Protection keychain items. Existing macOS login
+    // keychain ACLs also need the legacy, process-local interaction guard.
+    // This changes no keychain permissions or persisted security settings.
+    static func withoutUserInteraction<T>(_ operation: () throws -> T) throws -> T {
+        interactionLock.lock()
+        defer { interactionLock.unlock() }
+        var previous: DarwinBoolean = false
+        let readStatus = SecKeychainGetUserInteractionAllowed(&previous)
+        guard readStatus == errSecSuccess else { throw KeychainError.status(readStatus) }
+        let disableStatus = SecKeychainSetUserInteractionAllowed(false)
+        guard disableStatus == errSecSuccess else { throw KeychainError.status(disableStatus) }
+        defer { SecKeychainSetUserInteractionAllowed(previous.boolValue) }
+        return try operation()
+    }
 
     private static func nonInteractiveContext() -> LAContext {
         let context = LAContext()
@@ -30,7 +46,10 @@ enum BlackstockKeychain {
             kSecMatchLimit as String: kSecMatchLimitOne
         ])
         var result: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+        let status = (try? withoutUserInteraction {
+            SecItemCopyMatching(query as CFDictionary, &result)
+        }) ?? errSecInteractionNotAllowed
+        guard status == errSecSuccess,
               let data = result as? Data,
               let value = String(data: data, encoding: .utf8) else { return "" }
         return value
@@ -44,12 +63,9 @@ enum BlackstockKeychain {
             kSecAttrAccount as String: account
         ])
 
-        let updateStatus = SecItemUpdate(
-            lookup as CFDictionary,
-            [
-                kSecValueData as String: data
-            ] as CFDictionary
-        )
+        let updateStatus = try withoutUserInteraction {
+            SecItemUpdate(lookup as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+        }
         if updateStatus == errSecSuccess {
             return
         }
@@ -57,18 +73,17 @@ enum BlackstockKeychain {
             throw KeychainError.status(updateStatus)
         }
 
-        var insert: [String: Any] = [
+        let insert = nonInteractiveQuery([
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
             kSecValueData as String: data,
             kSecAttrAccessible as String:
                 kSecAttrAccessibleWhenUnlockedThisDeviceOnly
-        ]
-        let addStatus = SecItemAdd(
-            insert as CFDictionary,
-            nil
-        )
+        ])
+        let addStatus = try withoutUserInteraction {
+            SecItemAdd(insert as CFDictionary, nil)
+        }
         guard addStatus == errSecSuccess else {
             throw KeychainError.status(addStatus)
         }
@@ -84,10 +99,9 @@ enum BlackstockKeychain {
             kSecMatchLimit as String: kSecMatchLimitAll
         ])
         var result: CFTypeRef?
-        let status = SecItemCopyMatching(
-            query as CFDictionary,
-            &result
-        )
+        let status = try withoutUserInteraction {
+            SecItemCopyMatching(query as CFDictionary, &result)
+        }
         if status == errSecItemNotFound {
             return 0
         }
@@ -113,12 +127,25 @@ enum BlackstockKeychain {
             kSecAttrService as String: service,
             kSecAttrAccount as String: account
         ])
-        let status = SecItemDelete(query as CFDictionary)
+        let status = try withoutUserInteraction {
+            SecItemDelete(query as CFDictionary)
+        }
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw KeychainError.status(status)
         }
     }
 
-    enum KeychainError: Error { case status(OSStatus) }
+    enum KeychainError: LocalizedError {
+        case status(OSStatus)
+
+        var errorDescription: String? {
+            switch self {
+            case .status(let code) where code == errSecInteractionNotAllowed || code == errSecAuthFailed:
+                return "Der Schlüsselbund ist gesperrt oder der Zugriff für diese Blackstock-Version fehlt. Entsperre ihn einmal in macOS und verbinde Google bei Bedarf erneut. Blackstock fordert dein Mac-Passwort nicht wiederholt an."
+            case .status(let code):
+                return "Schlüsselbund-Zugriff fehlgeschlagen (\(code))."
+            }
+        }
+    }
 }
 #endif

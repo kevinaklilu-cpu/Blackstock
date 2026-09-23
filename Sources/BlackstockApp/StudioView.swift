@@ -20,6 +20,7 @@ struct StudioView: View {
     @State private var pendingURL: URL?
     @State private var showOptionalCapture = false
     @State private var isResolvingAutomaticSource = false
+    @State private var isImportingMedia = false
     @State private var isAcquiringApprovedSource = false
     @State private var showSourceDownloader = false
     @State private var sourceDownloadURLText = ""
@@ -92,7 +93,7 @@ struct StudioView: View {
 
             startIngestWatcher()
             await attemptAutomaticOriginalBinding()
-            if state.asset == nil, let source = opportunitySource,
+            if state.asset == nil, !isImportingMedia, let source = opportunitySource,
                sourceDownloader.state == .idle {
                 await acquireApprovedSource(source)
             }
@@ -2998,7 +2999,10 @@ struct StudioView: View {
     }
 
     private func attemptAutomaticOriginalBinding() async {
-        guard state.asset == nil,
+        guard state.asset == nil, !isResolvingAutomaticSource, !isImportingMedia,
+              sourceDownloader.state != .downloading,
+              sourceDownloader.state != .paused,
+              sourceDownloader.state != .processing,
               session.productionIntent(
                 for: project.id
               )?.isLinkFirstClip == true,
@@ -3021,6 +3025,8 @@ struct StudioView: View {
             return
         }
 
+        guard !Task.isCancelled, session.activeProject?.id == project.id,
+              state.asset == nil, !isImportingMedia else { return }
         pendingURL = matchedURL
         pendingCaptureKind = nil
         importPendingMedia()
@@ -3073,7 +3079,7 @@ struct StudioView: View {
     }
 
     private func importPendingMedia() {
-        guard let url = pendingURL,
+        guard !isImportingMedia, let url = pendingURL,
               let attestation =
                 session.workspaceRightsAttestation,
               attestation.permitsUserDirectedProduction else {
@@ -3097,7 +3103,9 @@ struct StudioView: View {
                 "Direkt dem Blackstock-Projekt als Produktionsmedium zugeordnet."
         }
 
+        isImportingMedia = true
         Task {
+            defer { isImportingMedia = false }
             let isSupplementalCapture =
                 captureKind == .microphone
                 || captureKind == .systemAudio

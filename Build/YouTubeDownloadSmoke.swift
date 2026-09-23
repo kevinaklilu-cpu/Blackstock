@@ -10,6 +10,10 @@ import BlackstockCore
         precondition(YouTubeDownloadRequest.progress("BLACKSTOCK_PROGRESS: nan%") == nil)
         let destination = URL(fileURLWithPath: CommandLine.arguments[1])
         let manager = SourceDownloadManager()
+        let watcher = IngestDirectoryWatcher()
+        var ingestEvents = 0
+        watcher.start(directoryURL: destination.deletingLastPathComponent()) { ingestEvents += 1 }
+        defer { watcher.stop() }
         let canceledDestination = destination.deletingLastPathComponent().appendingPathComponent(UUID().uuidString + ".mp4")
         manager.start(remoteURL: URL(string: "https://www.youtube.com/watch?v=aqz-KE-bpKQ")!, destinationURL: canceledDestination)
         manager.cancel()
@@ -53,6 +57,8 @@ import BlackstockCore
                     reader.cancelReading()
                     print("DECODE_PASS", second)
                 }
+                precondition(ingestEvents > 0)
+                print("INGEST_WATCHER_PASS", ingestEvents)
                 print("DOWNLOAD_MUX_PASS", duration, destination.path, "pause tested:", paused)
                 return
             }

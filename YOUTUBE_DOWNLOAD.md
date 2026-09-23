@@ -35,3 +35,19 @@ aus und benötigt eine Xcode-Installation mit XCTest.
 Das lokal gebaute Paket ist ein Entwicklungsbuild. Ein veröffentlichbarer
 Release benötigt weiterhin die vorhandene Developer-ID-/Notarisierungspipeline.
 Ein echter Kanal-Upload wird durch den Download-Test nicht ausgeführt.
+
+## Regressionen aus dem lokalen Nutzungstest
+
+Der Ingest-Wächter liefert Ereignisse und Abbruch-Rückrufe auf dem MainActor.
+Ein Generationstoken verwirft alte Ereignisse nach einem Neustart des Wächters.
+Damit kann das Anlegen des Download-Arbeitsordners keinen Actor-Absturz auslösen.
+`Build/test_local_interaction.sh` prüft Ereignisse, Abbruch und Neustart mit
+aktivierten Actor-Prüfungen. Der Live-Downloadtest verwendet ebenfalls den Wächter.
+
+Schlüsselbundzugriffe unterdrücken optionale Authentifizierungsdialoge sowohl
+für Data-Protection- als auch für ältere Login-Keychain-Einträge. Das gilt für
+Lesen, Aktualisieren, Anlegen und Löschen. Die prozesslokale Einstellung wird
+nach jedem Zugriff wiederhergestellt; Keychain-Berechtigungen bleiben bestehen.
+Gesperrte oder nicht freigegebene Einträge liefern einen Fehler statt einer
+Kette von Passwortfenstern. Ein gesperrter Schlüsselbund muss in macOS entsperrt
+werden; das Programm kann fehlende Zugriffsrechte nicht selbst erteilen.
