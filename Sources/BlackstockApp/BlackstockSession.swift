@@ -77,6 +77,8 @@ final class BlackstockSession: ObservableObject {
     @Published var opportunities: [YouTubeOpportunityCandidate] = []
     @Published var isWorking = false
     @Published var errorMessage: String?
+    @Published var showGoogleConnection = false
+    @Published var connectionStatusMessage: String?
     @Published private(set) var onboardingComplete: Bool
     @Published private(set) var activeProject: BlackstockProject?
     @Published private(set) var activeOpportunitySource: MediaSourceReference?
@@ -97,6 +99,7 @@ final class BlackstockSession: ObservableObject {
     @Published private(set) var workspaceRightsResponsibilityAccepted: Bool
     @Published private(set) var originalMediaLibraryPath: String
 
+    private var googleConnectionServer: LoopbackOAuthServer?
     private var tokenSet: GoogleOAuthTokenSet?
     private var tokenExpiresAt: Date?
     private var cachedPublishingJournal: ExternalActionJournal?
@@ -530,6 +533,10 @@ final class BlackstockSession: ObservableObject {
             let data = try Data(contentsOf: url, options: .mappedIfSafe)
             let config = try OAuthClientConfiguration
                 .parseGoogleDesktopJSON(data)
+            if BlackstockKeychain.hasBlockedReads {
+                BlackstockKeychain.startFreshCredentialStore()
+                clearOAuthRuntimeAuthorizationState(clearChannelSelection: true)
+            }
             let previousClientID = effectiveClientID
             let nextClientID =
                 OAuthClientConfiguration.preferredClientID(
@@ -783,14 +790,66 @@ final class BlackstockSession: ObservableObject {
     }
 
     func retryKeychainAccess() async {
+        connectionStatusMessage = "Gespeicherte Anmeldung wird geprüft …"
+        showGoogleConnection = true
         BlackstockKeychain.retryBlockedReads()
         importedOAuthClientID = BlackstockKeychain.read("google.oauth.importedClientID")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        if BlackstockKeychain.hasBlockedReads {
+            connectionStatusMessage = "macOS lehnt die gespeicherte Anmeldung weiterhin ab. Melde dich erneut mit Google an."
+            return
+        }
+        guard workspaceChannelID != nil else {
+            connectionStatusMessage = "Melde dich mit Google an und wähle anschließend deinen YouTube-Kanal."
+            return
+        }
+        errorMessage = nil
         await refreshWorkspaceChannelIdentity()
+        connectionStatusMessage = errorMessage ?? "Die gespeicherte Kanalverbindung ist wieder verfügbar."
+    }
+
+    func useConnectedChannel(_ id: String) async {
+        await chooseChannel(id)
+        guard errorMessage == nil, selectedChannelID == id else { return }
+        if onboardingComplete {
+            if activeProject?.targetChannelID != id {
+                activeProject = nil
+                activeOpportunitySource = nil
+                UserDefaults.standard.removeObject(forKey: "blackstock.activeProject")
+                UserDefaults.standard.removeObject(forKey: "blackstock.activeOpportunitySource")
+            }
+            UserDefaults.standard.set(id, forKey: "blackstock.workspace.channelID")
+            opportunities = []
+            latestChannelAnalytics = nil
+        }
+        connectionStatusMessage = "Verbunden mit " + (selectedChannel?.title ?? "YouTube")
+        showGoogleConnection = false
+    }
+
+    func cancelGoogleConnection() {
+        googleConnectionServer?.cancel()
     }
 
     func connectGoogle() async {
+        guard !isWorking else { return }
         errorMessage = nil
+        connectionStatusMessage = nil
+        if BlackstockKeychain.hasBlockedReads {
+            let clientID = effectiveClientID
+            let secret = effectiveClientSecret
+            BlackstockKeychain.startFreshCredentialStore()
+            clearOAuthRuntimeAuthorizationState(clearChannelSelection: true)
+            do {
+                if !clientID.isEmpty {
+                    try BlackstockKeychain.write(clientID, account: "google.oauth.importedClientID")
+                    importedOAuthClientID = clientID
+                }
+                if let secret { try BlackstockKeychain.write(secret, account: "google.oauth.importedClientSecret") }
+            } catch {
+                errorMessage = "Neue Anmeldung konnte nicht vorbereitet werden: " + describe(error)
+                return
+            }
+        }
         guard !effectiveClientID.isEmpty else {
             errorMessage = "Keine Google-OAuth-Konfiguration verfügbar. Verwende die integrierte Blackstock-Konfiguration oder importiere eine Desktop-OAuth-JSON."
             return
@@ -798,9 +857,16 @@ final class BlackstockSession: ObservableObject {
 
         isWorking = true
         defer { isWorking = false }
+        channels = []
+        selectedChannelID = nil
 
         do {
             let server = try LoopbackOAuthServer()
+            googleConnectionServer = server
+            defer {
+                server.cancel()
+                googleConnectionServer = nil
+            }
             let redirectURI = try await server.start()
             let pkce = try PKCEPair.generate()
             let state = try PKCEPair.generate().verifier
@@ -818,7 +884,9 @@ final class BlackstockSession: ObservableObject {
                 return
             }
 
+            connectionStatusMessage = "Schließe die Anmeldung im Google-Fenster ab."
             let callbackURL = try await server.waitForCallback()
+            connectionStatusMessage = "Deine YouTube-Kanäle werden geladen …"
             guard let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false) else {
                 throw GoogleOAuthError.invalidAuthorizationResponse
             }
@@ -853,6 +921,7 @@ final class BlackstockSession: ObservableObject {
             )
             channels = identities
             selectedChannelID = nil
+            connectionStatusMessage = "Wähle jetzt deinen YouTube-Kanal."
             step = .channel
         } catch {
             errorMessage = "Google-Verbindung fehlgeschlagen: \(describe(error))"

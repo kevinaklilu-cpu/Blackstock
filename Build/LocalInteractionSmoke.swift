@@ -30,6 +30,18 @@ import Security
         try await Task.sleep(nanoseconds: 20_000_000)
         precondition(BlackstockKeychain.accessIssue.value == nil)
         print("KEYCHAIN_BLOCKED_READ_COALESCING_PASS")
+        let oldGeneration = UserDefaults.standard.string(forKey: "blackstock.keychain.generation")
+        defer {
+            if let oldGeneration { UserDefaults.standard.set(oldGeneration, forKey: "blackstock.keychain.generation") }
+            else { UserDefaults.standard.removeObject(forKey: "blackstock.keychain.generation") }
+        }
+        let oldAccount = BlackstockKeychain.storageAccount("test.account")
+        BlackstockKeychain.startFreshCredentialStore()
+        let newAccount = BlackstockKeychain.storageAccount("test.account")
+        precondition(oldAccount != newAccount)
+        precondition(newAccount == BlackstockKeychain.storageAccount("test.account"))
+        precondition(newAccount != BlackstockKeychain.storageAccount("other.account"))
+        print("FRESH_LOGIN_CREDENTIAL_ISOLATION_PASS")
 
         let root = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

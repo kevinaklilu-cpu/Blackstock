@@ -28,7 +28,9 @@ struct BlackstockApp: App {
                     HStack {
                         Label(keychainMessage, systemImage: "lock.trianglebadge.exclamationmark")
                             .font(.callout)
+                            .fixedSize(horizontal: false, vertical: true)
                         Spacer()
+                        Button("Neu anmelden") { session.showGoogleConnection = true }
                         Button("Zugriff erneut prüfen") {
                             retryingKeychain = true
                             Task {
@@ -40,9 +42,23 @@ struct BlackstockApp: App {
                     }
                     .padding()
                     .background(.regularMaterial)
+                } else if session.onboardingComplete && session.workspaceChannel == nil {
+                    HStack {
+                        Text("Verbinde Google und wähle deinen YouTube-Kanal.")
+                        Spacer()
+                        Button("Mit Google / YouTube anmelden") {
+                            session.showGoogleConnection = true
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                    .padding()
+                    .background(.regularMaterial)
                 }
             }
             .onReceive(BlackstockKeychain.accessIssue) { keychainMessage = $0 }
+            .sheet(isPresented: $session.showGoogleConnection) {
+                GoogleAccountConnectionView(session: session)
+            }
             .frame(minWidth: 1180, minHeight: 760)
             .tint(BlackstockDesign.accent)
             .background(BlackstockDesign.canvas)
@@ -1467,6 +1483,18 @@ private struct SettingsView: View {
 
             GroupBox("Google / YouTube") {
                 VStack(alignment: .leading, spacing: 10) {
+                    Button("Mit Google / YouTube anmelden") {
+                        session.connectionStatusMessage = nil
+                        session.errorMessage = nil
+                        session.showGoogleConnection = true
+                    }
+                    .buttonStyle(.borderedProminent)
+                    if let channel = session.workspaceChannel {
+                        Text("Verbunden mit " + channel.title)
+                    }
+                    Text("Wähle deinen Kanal nach der Google-Anmeldung. Ein Kanal ist nicht vorgegeben.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    DisclosureGroup("Erweiterte App-Einstellungen") {
                     Text(session.oauthConfigurationSource)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -1502,6 +1530,8 @@ private struct SettingsView: View {
                         Text(oauthConfigurationStatusMessage)
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                    }
+
                     }
 
                     Divider()

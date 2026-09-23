@@ -62,3 +62,18 @@ werden; das Programm kann fehlende Zugriffsrechte nicht selbst erteilen.
 Verweigerte Lesezugriffe werden pro Eintrag bis zur ausdrücklichen erneuten
 Prüfung angehalten. Ein einzelner Hinweis in der App ersetzt wiederholte
 Zugriffsversuche; der Schalter lädt anschließend auch die Kanalidentität neu.
+
+## Google-Anmeldung und Kanalwahl
+
+In Einstellungen und Ersteinrichtung führt „Mit Google / YouTube anmelden“
+zur Google-Kontoauswahl. Anschließend werden ausschließlich die tatsächlich
+autorisierten YouTube-Kanäle zur Auswahl angeboten; kein Kanalname ist im Code
+festgelegt. Die OAuth-App-Konfiguration ist vom Zielkanal getrennt. Erweiterte
+Konfigurationsoptionen sind eingeklappt.
+
+„Zugriff erneut prüfen“ öffnet nun einen Verbindungsdialog mit Ergebnis oder
+konkretem Fehler. Bei blockierten alten Schlüsselbundeinträgen erhält eine
+bewusste Neuanmeldung einen neuen Speichernamensraum; sie liest keine gesperrten
+alten Tokens und verändert deren Freigaben nicht. Alle neuen Zugangsdaten
+bleiben im macOS-Schlüsselbund. Vollständige lokale Datenlöschung berücksichtigt
+auch die alten Namensräume. Der Google-Dialog kann abgebrochen werden.

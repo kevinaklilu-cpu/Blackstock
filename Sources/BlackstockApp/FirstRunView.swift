@@ -125,7 +125,7 @@ struct FirstRunView: View {
                 HStack {
                     if session.isWorking { ProgressView().controlSize(.small) }
                     Image(systemName: "link")
-                    Text(session.isWorking ? "Google wird verbunden …" : "Google verbinden")
+                    Text(session.isWorking ? "Google wird verbunden …" : "Mit Google / YouTube anmelden")
                     Spacer()
                     Image(systemName: "arrow.right")
                 }
@@ -135,6 +135,7 @@ struct FirstRunView: View {
             .controlSize(.large)
             .disabled(session.isWorking)
 
+            DisclosureGroup("Erweiterte App-Einstellungen") {
             Menu {
                 Button("Eigene Desktop-OAuth-JSON auswählen …") {
                     showOAuthImporter = true
@@ -153,6 +154,7 @@ struct FirstRunView: View {
             Text("Die OAuth-Datei bleibt lokal. Zugangsdaten werden im macOS-Keychain gespeichert.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -688,7 +690,7 @@ struct FirstRunView: View {
 
     private var stepTitle: String {
         switch session.step {
-        case .welcome: "Google verbinden"
+        case .welcome: "Mit Google / YouTube anmelden"
         case .channel: "YouTube-Kanal auswählen"
         case .topic: "Kanal einrichten"
         case .language: "Sprache und Rechte"

@@ -11,6 +11,27 @@ enum BlackstockKeychain {
     // Protected by interactionLock, including every lookup and mutation.
     nonisolated(unsafe) private static var blockedReads: [String: OSStatus] = [:]
 
+    private static let generationKey = "blackstock.keychain.generation"
+
+    static var hasBlockedReads: Bool {
+        interactionLock.lock()
+        defer { interactionLock.unlock() }
+        return !blockedReads.isEmpty
+    }
+
+    static func startFreshCredentialStore() {
+        interactionLock.lock()
+        defer { interactionLock.unlock() }
+        UserDefaults.standard.set(UUID().uuidString, forKey: generationKey)
+        blockedReads.removeAll()
+        DispatchQueue.main.async { accessIssue.send(nil) }
+    }
+
+    static func storageAccount(_ account: String) -> String {
+        guard let generation = UserDefaults.standard.string(forKey: generationKey) else { return account }
+        return "session." + generation + "." + account
+    }
+
     static func recordAccessResult(_ status: OSStatus, account: String) {
         interactionLock.lock()
         defer { interactionLock.unlock() }
@@ -72,7 +93,7 @@ enum BlackstockKeychain {
         let query = nonInteractiveQuery([
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
+            kSecAttrAccount as String: storageAccount(account),
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
         ])
@@ -92,7 +113,7 @@ enum BlackstockKeychain {
         let lookup = nonInteractiveQuery([
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: account
+            kSecAttrAccount as String: storageAccount(account)
         ])
 
         let updateStatus = try withoutUserInteraction {
@@ -110,7 +131,7 @@ enum BlackstockKeychain {
         let insert = nonInteractiveQuery([
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
+            kSecAttrAccount as String: storageAccount(account),
             kSecValueData as String: data,
             kSecAttrAccessible as String:
                 kSecAttrAccessibleWhenUnlockedThisDeviceOnly
@@ -148,15 +169,20 @@ enum BlackstockKeychain {
         let accounts = items.compactMap {
             $0[kSecAttrAccount as String] as? String
         }
-        .filter { $0.hasPrefix(prefix) }
+        .filter { prefix.isEmpty || $0.hasPrefix(storageAccount(prefix)) }
 
         for account in accounts {
-            try delete(account)
+            try deleteStoredAccount(account)
         }
         return accounts.count
     }
 
     static func delete(_ account: String) throws {
+        try deleteStoredAccount(storageAccount(account))
+        recordAccessResult(errSecSuccess, account: account)
+    }
+
+    private static func deleteStoredAccount(_ account: String) throws {
         let query = nonInteractiveQuery([
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
