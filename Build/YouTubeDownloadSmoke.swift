@@ -40,6 +40,19 @@ import BlackstockCore
                 let videoRange = try await video[0].load(.timeRange)
                 let audioRange = try await audio[0].load(.timeRange)
                 precondition(abs(videoRange.duration.seconds - audioRange.duration.seconds) < 1)
+                let generator = AVAssetImageGenerator(asset: asset)
+                for second in [30.0, 300.0, 600.0] {
+                    let frame = try await generator.image(at: CMTime(seconds: second, preferredTimescale: 600))
+                    precondition(frame.image.width > 0)
+                    let reader = try AVAssetReader(asset: asset)
+                    let output = AVAssetReaderTrackOutput(track: audio[0], outputSettings: [AVFormatIDKey: kAudioFormatLinearPCM])
+                    reader.add(output)
+                    reader.timeRange = CMTimeRange(start: CMTime(seconds: second, preferredTimescale: 600), duration: CMTime(seconds: 1, preferredTimescale: 600))
+                    precondition(reader.startReading())
+                    precondition(output.copyNextSampleBuffer() != nil)
+                    reader.cancelReading()
+                    print("DECODE_PASS", second)
+                }
                 print("DOWNLOAD_MUX_PASS", duration, destination.path, "pause tested:", paused)
                 return
             }
