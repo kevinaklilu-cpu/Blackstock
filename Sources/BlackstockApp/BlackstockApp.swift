@@ -59,7 +59,7 @@ struct BlackstockApp: App {
             .sheet(isPresented: $session.showGoogleConnection) {
                 GoogleAccountConnectionView(session: session)
             }
-            .frame(minWidth: 1180, minHeight: 760)
+            .frame(minWidth: 1000, minHeight: 620)
             .tint(BlackstockDesign.accent)
             .background(BlackstockDesign.canvas)
         }

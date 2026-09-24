@@ -17,7 +17,7 @@ struct OpportunityWorkspaceView: View {
         VStack(alignment: .leading, spacing: 16) {
             header
 
-            HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(.secondary)
@@ -34,6 +34,7 @@ struct OpportunityWorkspaceView: View {
                     Task { await loadOpportunities() }
                 }
 
+                HStack(spacing: 10) {
                 Picker(
                     "Format",
                     selection: $session.opportunityContentFilter
@@ -87,15 +88,9 @@ struct OpportunityWorkspaceView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(BlackstockDesign.accent)
-                .disabled(
-                    session.isLoadingOpportunities
-                    || (
-                        query.trimmingCharacters(
-                            in: .whitespacesAndNewlines
-                        ).isEmpty
-                        && session.channelCategoryID.isEmpty
-                    )
-                )
+                .disabled(session.isLoadingOpportunities)
+            }
+
             }
 
             HStack(spacing: 10) {
@@ -103,6 +98,7 @@ struct OpportunityWorkspaceView: View {
                     "Kategorie",
                     selection: $session.channelCategoryID
                 ) {
+                    Text("Alle Kategorien").tag("")
                     ForEach(
                         session.youtubeVideoCategories
                             .filter(\.assignable)
@@ -295,7 +291,7 @@ struct OpportunityWorkspaceView: View {
                 }
                 .padding(.vertical, 2)
             }
-            .frame(minWidth: 390, idealWidth: 430)
+            .frame(minWidth: 280, idealWidth: 320)
 
             ScrollView {
                 if let selectedOpportunity {
@@ -307,7 +303,7 @@ struct OpportunityWorkspaceView: View {
                         .frame(maxWidth: .infinity, minHeight: 280)
                 }
             }
-            .frame(minWidth: 560)
+            .frame(minWidth: 360)
         }
     }
 

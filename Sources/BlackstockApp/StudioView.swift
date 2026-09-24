@@ -808,7 +808,7 @@ struct StudioView: View {
                         captionPreviewOverlay
                     }
                 }
-                .frame(minWidth: 680, minHeight: 390)
+                .frame(minWidth: 400, minHeight: 240)
                 .background(BlackstockDesign.mediaSurface)
                 .clipShape(
                     RoundedRectangle(
@@ -888,11 +888,11 @@ struct StudioView: View {
                 }
             }
             .padding(18)
-            .frame(minWidth: 760)
+            .frame(minWidth: 440)
             .background(BlackstockDesign.canvas)
 
             inspector(asset)
-                .frame(minWidth: 320, idealWidth: 350, maxWidth: 400)
+                .frame(minWidth: 280, idealWidth: 300, maxWidth: 380)
                 .background(BlackstockDesign.raisedSurface)
         }
     }
@@ -2679,6 +2679,7 @@ struct StudioView: View {
             return "Schritt 3 · Highlights werden gesucht und Schnitte vorbereitet."
         }
         if isImportingMedia || state.isLoading { return "Schritt 2 · Video wird in dein Projekt geladen." }
+        if state.renderArtifact != nil { return "Schritt 4 abgeschlossen · Video fertig. Weiter zum Veröffentlichen, um Titel, Thumbnail und Upload zu prüfen." }
         switch sourceDownloader.state {
         case .downloading: return "Schritt 1 · " + sourceDownloader.transferDescription
         case .processing: return "Schritt 2 · Bild und Ton werden zusammengefügt."
