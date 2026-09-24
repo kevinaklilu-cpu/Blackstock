@@ -2638,14 +2638,18 @@ final class BlackstockSession: ObservableObject {
         let key = [resolvedQuery, order.rawValue, window.rawValue, filter.rawValue,
                    category, region, language, workspaceChannelID ?? ""]
         let token: String?
+        let existingOpportunities: [YouTubeOpportunityCandidate]
         if loadMore {
             guard !isLoadingOpportunities, key == opportunityRequestKey,
                   let next = opportunityNextPageToken else { return }
             token = next
+            existingOpportunities = opportunities
         } else {
             token = nil
             opportunitySearchDate = Date()
-            opportunities = []
+            // Keep the previous result visible while YouTube answers. Replacing
+            // it up front makes a slow or failed search look like a dead UI.
+            existingOpportunities = []
             opportunityNextPageToken = nil
         }
         let requestID = UUID()
@@ -2659,7 +2663,7 @@ final class BlackstockSession: ObservableObject {
         defaults.set(region, forKey: "blackstock.workspace.regionCode")
         defaults.set(language, forKey: "blackstock.workspace.contentLanguage")
         defaults.set(primaryTopic, forKey: "blackstock.workspace.primaryTopic")
-        guard let channelID = workspaceChannelID else {
+        guard let channelID = selectedChannelID ?? workspaceChannelID else {
             errorMessage = "Kein YouTube-Kanal ist verbunden."
             return
         }
@@ -2674,17 +2678,25 @@ final class BlackstockSession: ObservableObject {
             let client = YouTubeAuthorizedClient(accessToken: accessToken)
             let page = try await client.opportunityPage(
                 query: resolvedQuery,
-                categoryID: category.isEmpty ? nil : category,
+                // A typed query expresses the user's intent and must not be
+                // silently restricted to the saved channel category.
+                categoryID: resolvedQuery.isEmpty
+                    ? (category.isEmpty ? nil : category)
+                    : nil,
                 regionCode: region.isEmpty ? nil : region,
                 relevanceLanguage: language.isEmpty ? nil : language,
                 publishedAfter: window.publishedAfter(now: opportunitySearchDate),
                 maxResults: 50, order: order, contentFilter: filter, pageToken: token)
             guard opportunityRequestID == requestID,
                   channelCategoryID == category, channelRegionCode == region,
-                  contentLanguage == language, workspaceChannelID == channelID else { return }
-            var seen = Set(opportunities.map(\.videoID))
+                  contentLanguage == language,
+                  (selectedChannelID ?? workspaceChannelID) == channelID else { return }
+            var seen = Set(existingOpportunities.map(\.videoID))
             let added = page.candidates.filter { seen.insert($0.videoID).inserted }
-            opportunities = YouTubeAuthorizedClient.sortedOpportunities(opportunities + added, order: order)
+            opportunities = YouTubeAuthorizedClient.sortedOpportunities(
+                existingOpportunities + added,
+                order: order
+            )
             opportunityNextPageToken = page.nextPageToken == token ? nil : page.nextPageToken
             if opportunities.isEmpty {
                 errorMessage = opportunityNextPageToken == nil
