@@ -256,7 +256,7 @@ public final class LocalOnDeviceTranscriber {
                     if let error {
                         state.fail(
                             LocalTranscriptionError.recognitionFailed(
-                                error.localizedDescription
+                                Self.recognitionFailureMessage(error)
                             )
                         )
                     } else if let result, result.isFinal {
@@ -281,6 +281,21 @@ public final class LocalOnDeviceTranscriber {
         case .authorized: return .authorized
         @unknown default: return .restricted
         }
+    }
+
+    static func recognitionFailureMessage(_ error: Error) -> String {
+        let original = error.localizedDescription
+        let normalized = original.lowercased()
+        if normalized.contains("siri")
+            && normalized.contains("dictation")
+            && normalized.contains("disabled") {
+            return "Die lokale Spracherkennung ist in macOS deaktiviert. Aktiviere unter Systemeinstellungen → Tastatur die Diktierfunktion und versuche es danach erneut."
+        }
+        if normalized.contains("not authorized")
+            || normalized.contains("permission") {
+            return "Blackstock besitzt keine Freigabe für die Spracherkennung. Erlaube sie unter Systemeinstellungen → Datenschutz & Sicherheit → Spracherkennung."
+        }
+        return original
     }
 }
 

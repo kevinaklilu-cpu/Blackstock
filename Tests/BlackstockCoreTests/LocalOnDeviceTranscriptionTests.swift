@@ -14,6 +14,23 @@ final class LocalOnDeviceTranscriptionTests: XCTestCase {
         XCTAssertEqual(status, .authorized)
     }
 
+    func testDisabledDictationErrorProvidesGermanRecoveryStep() {
+        let error = NSError(
+            domain: "Speech",
+            code: 1,
+            userInfo: [
+                NSLocalizedDescriptionKey: "Siri and Dictation are disabled"
+            ]
+        )
+
+        let message = LocalOnDeviceTranscriber
+            .recognitionFailureMessage(error)
+
+        XCTAssertTrue(message.contains("Systemeinstellungen"))
+        XCTAssertTrue(message.contains("Diktierfunktion"))
+        XCTAssertFalse(message.contains("disabled"))
+    }
+
     func testWebVTTWriterUsesTranscriptSegmentTiming() {
         let transcript = LocalTranscript(
             localeIdentifier: "de-DE",
