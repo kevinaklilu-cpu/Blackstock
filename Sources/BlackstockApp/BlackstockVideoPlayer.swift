@@ -9,6 +9,8 @@ struct BlackstockVideoPlayer: NSViewRepresentable {
 
     func makeNSView(context: Context) -> AVPlayerView {
         let view = AVPlayerView()
+        view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        view.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
         view.controlsStyle = .inline
         view.videoGravity = .resizeAspect
         view.player = player

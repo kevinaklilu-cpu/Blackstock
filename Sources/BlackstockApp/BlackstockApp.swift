@@ -13,17 +13,7 @@ struct BlackstockApp: App {
 
     var body: some Scene {
         WindowGroup {
-            Group {
-                if session.onboardingComplete {
-                    WorkspaceShell(
-                        session: session,
-                        commandPaletteRequest: commandPaletteRequest
-                    )
-                } else {
-                    FirstRunView(session: session)
-                }
-            }
-            .safeAreaInset(edge: .top) {
+            VStack(spacing: 0) {
                 if let keychainMessage {
                     HStack {
                         Label(keychainMessage, systemImage: "lock.trianglebadge.exclamationmark")
@@ -54,12 +44,22 @@ struct BlackstockApp: App {
                     .padding()
                     .background(.regularMaterial)
                 }
+            Group {
+                if session.onboardingComplete {
+                    WorkspaceShell(
+                        session: session,
+                        commandPaletteRequest: commandPaletteRequest
+                    )
+                } else {
+                    FirstRunView(session: session)
+                }
+            }
             }
             .onReceive(BlackstockKeychain.accessIssue) { keychainMessage = $0 }
             .sheet(isPresented: $session.showGoogleConnection) {
                 GoogleAccountConnectionView(session: session)
             }
-            .frame(minWidth: 1000, minHeight: 620)
+            .frame(minWidth: 1180, minHeight: 620)
             .tint(BlackstockDesign.accent)
             .background(BlackstockDesign.canvas)
         }
