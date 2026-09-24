@@ -44,7 +44,7 @@ struct StudioView: View {
             workflowProgress
             Divider()
 
-            if let opportunitySource {
+            if let opportunitySource, state.asset == nil {
                 sourceContext(opportunitySource)
                 Divider()
             }
