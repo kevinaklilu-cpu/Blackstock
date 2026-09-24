@@ -2679,7 +2679,7 @@ struct StudioView: View {
             return "Schritt 3 · Highlights werden gesucht und Schnitte vorbereitet."
         }
         if isImportingMedia || state.isLoading { return "Schritt 2 · Video wird in dein Projekt geladen." }
-        if state.renderArtifact != nil { return "Schritt 4 abgeschlossen · Video fertig. Weiter zum Veröffentlichen, um Titel, Thumbnail und Upload zu prüfen." }
+        if state.renderArtifact != nil { return "Schritt 4 abgeschlossen · Video fertig. Weiter zum Veröffentlichen, um Titel, Vorschaubild und Veröffentlichung zu prüfen." }
         switch sourceDownloader.state {
         case .downloading: return "Schritt 1 · " + sourceDownloader.transferDescription
         case .processing: return "Schritt 2 · Bild und Ton werden zusammengefügt."
