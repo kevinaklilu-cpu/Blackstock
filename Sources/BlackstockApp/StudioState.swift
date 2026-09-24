@@ -1063,6 +1063,10 @@ final class StudioState: ObservableObject {
     func generateLocalClipCandidates(
         localeIdentifier: String
     ) async {
+        guard !isGeneratingClipCandidates, !isTranscribing else {
+            clipCandidateStatusMessage = "Die Spracherkennung läuft bereits."
+            return
+        }
         guard let asset else {
             clipCandidateStatusMessage =
                 "Kein autorisiertes Produktionsmedium geladen."
@@ -1149,9 +1153,9 @@ final class StudioState: ObservableObject {
             errorMessage = nil
         } catch {
             localClipCandidates = []
-            clipCandidateStatusMessage =
-                "Lokale Clip-Analyse fehlgeschlagen: "
-                + error.localizedDescription
+            clipCandidateStatusMessage = error is CancellationError
+                ? "Verarbeitung gestoppt."
+                : "Lokale Clip-Analyse fehlgeschlagen: " + error.localizedDescription
         }
     }
 
@@ -2174,6 +2178,10 @@ final class StudioState: ObservableObject {
     func generateLocalCaptions(
         localeIdentifier: String
     ) async {
+        guard !isTranscribing, !isGeneratingClipCandidates else {
+            errorMessage = "Die Spracherkennung läuft bereits."
+            return
+        }
         guard let asset else {
             errorMessage = "Kein Produktionsmedium geladen."
             return
@@ -2270,7 +2278,9 @@ final class StudioState: ObservableObject {
             persistWorkspaceIfPossible()
             errorMessage = nil
         } catch {
-            errorMessage = "Lokale Transkription fehlgeschlagen: \(error.localizedDescription)"
+            errorMessage = error is CancellationError
+                ? "Spracherkennung wurde gestoppt."
+                : "Lokale Transkription fehlgeschlagen: \(error.localizedDescription)"
         }
     }
 

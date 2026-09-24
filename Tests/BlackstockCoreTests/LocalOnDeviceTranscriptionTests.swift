@@ -1,8 +1,19 @@
 import XCTest
+import Speech
 @testable import BlackstockCore
 
 #if os(macOS)
 final class LocalOnDeviceTranscriptionTests: XCTestCase {
+    func testAuthorizationCallbackMayArriveOnBackgroundQueue() async {
+        let status = await LocalOnDeviceTranscriber.authorizationStatus { callback in
+            DispatchQueue.global(qos: .userInitiated).async {
+                callback(.authorized)
+            }
+        }
+
+        XCTAssertEqual(status, .authorized)
+    }
+
     func testWebVTTWriterUsesTranscriptSegmentTiming() {
         let transcript = LocalTranscript(
             localeIdentifier: "de-DE",

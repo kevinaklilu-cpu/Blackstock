@@ -465,12 +465,10 @@ struct StudioView: View {
                             == .localProcessingReady,
                        currentStage == .editing {
                         Button {
-                            Task {
-                                await state
-                                    .generateLocalClipCandidates(
-                                        localeIdentifier:
-                                            speechLocaleIdentifier
-                                    )
+                            startProcessing {
+                                await state.generateLocalClipCandidates(
+                                    localeIdentifier: speechLocaleIdentifier
+                                )
                             }
                         } label: {
                             Label(
@@ -908,11 +906,14 @@ struct StudioView: View {
 
             HStack(spacing: 10) {
                 Button {
-                    startProcessing {
-                        await state.createAutomaticHighlights(
-                            localeIdentifier:
-                                speechLocaleIdentifier
-                        )
+                    if state.isCreatingAutomaticHighlights {
+                        stopProcessing()
+                    } else {
+                        startProcessing {
+                            await state.createAutomaticHighlights(
+                                localeIdentifier: speechLocaleIdentifier
+                            )
+                        }
                     }
                 } label: {
                     HStack {
@@ -922,7 +923,7 @@ struct StudioView: View {
                         }
                         Label(
                             state.isCreatingAutomaticHighlights
-                                ? "Highlights werden erstellt …"
+                                ? "Highlight-Erstellung stoppen"
                                 : "Highlights automatisch erstellen",
                             systemImage: "sparkles.rectangle.stack"
                         )
@@ -931,17 +932,19 @@ struct StudioView: View {
                 .buttonStyle(.borderedProminent)
                 .tint(BlackstockDesign.accent)
                 .disabled(
-                    state.isCreatingAutomaticHighlights
-                    || state.isGeneratingClipCandidates
-                    || !editingEnabled
+                    state.isGeneratingClipCandidates
+                    || !projectEditingEnabled
                 )
 
                 Button {
-                    startProcessing {
-                        await state.generateLocalClipCandidates(
-                            localeIdentifier:
-                                speechLocaleIdentifier
-                        )
+                    if state.isGeneratingClipCandidates {
+                        stopProcessing()
+                    } else {
+                        startProcessing {
+                            await state.generateLocalClipCandidates(
+                                localeIdentifier: speechLocaleIdentifier
+                            )
+                        }
                     }
                 } label: {
                     HStack {
@@ -951,7 +954,7 @@ struct StudioView: View {
                         }
                         Label(
                             state.isGeneratingClipCandidates
-                                ? "Clips werden gesucht …"
+                                ? "Clip-Suche stoppen"
                                 : "Clips manuell prüfen",
                             systemImage: "scissors"
                         )
@@ -960,8 +963,7 @@ struct StudioView: View {
                 .buttonStyle(.bordered)
                 .disabled(
                     state.isCreatingAutomaticHighlights
-                    || state.isGeneratingClipCandidates
-                    || !editingEnabled
+                    || !projectEditingEnabled
                 )
             }
 
@@ -1853,10 +1855,14 @@ struct StudioView: View {
                         .font(.headline)
 
                     Button {
-                        Task {
-                            await state.generateLocalCaptions(
-                                localeIdentifier: speechLocaleIdentifier
-                            )
+                        if state.isTranscribing {
+                            stopProcessing()
+                        } else {
+                            startProcessing {
+                                await state.generateLocalCaptions(
+                                    localeIdentifier: speechLocaleIdentifier
+                                )
+                            }
                         }
                     } label: {
                         HStack {
@@ -1865,14 +1871,17 @@ struct StudioView: View {
                             }
                             Label(
                                 state.isTranscribing
-                                    ? "Transkription läuft …"
+                                    ? "Spracherkennung stoppen"
                                     : "Lokale Untertitel erstellen",
                                 systemImage: "captions.bubble"
                             )
                         }
                     }
                     .buttonStyle(.bordered)
-                    .disabled(state.isTranscribing || !editingEnabled)
+                    .disabled(
+                        state.isGeneratingClipCandidates
+                        || !projectEditingEnabled
+                    )
 
                     Text("Sprache: \(speechLocaleIdentifier) · nur lokal auf dem Gerät; kein stiller Cloud-Fallback.")
                         .font(.caption)
@@ -3778,9 +3787,18 @@ struct StudioView: View {
         session.activeProject?.stage ?? project.stage
     }
 
-    private var editingEnabled: Bool {
+    private var projectEditingEnabled: Bool {
         currentStage == .editing
             && session.activeProject?.isPaused != true
+    }
+
+    private var editingEnabled: Bool {
+        projectEditingEnabled
+            && !state.isTranscribing
+            && !state.isGeneratingClipCandidates
+            && !state.isCreatingAutomaticHighlights
+            && !state.isRendering
+            && !state.isRenderingSavedClipBatch
     }
 
     private func startProcessing(
@@ -3792,6 +3810,12 @@ struct StudioView: View {
             await operation()
             activeProcessingTask = nil
         }
+    }
+
+    private func stopProcessing() {
+        activeProcessingTask?.cancel()
+        activeProcessingTask = nil
+        state.requestStopProcessing()
     }
 
     private func stageTitle(_ stage: BlackstockStage) -> String {

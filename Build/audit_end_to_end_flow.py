@@ -134,9 +134,13 @@ checks = {
         "remoteCommitted",
     ],
     "Sources/BlackstockCore/LocalVideoRenderer.swift": [
+        "AsyncAVAssetExporter.export(",
+        "Task.checkCancellation()",
+    ],
+    "Sources/BlackstockCore/AsyncAVAssetExporter.swift": [
         "withTaskCancellationHandler",
         "cancelExport()",
-        "Task.checkCancellation()",
+        "export(to: outputURL, as: fileType)",
     ],
     "Sources/BlackstockCore/YouTubeAnalyticsClient.swift": [
         "averageViewDuration",
