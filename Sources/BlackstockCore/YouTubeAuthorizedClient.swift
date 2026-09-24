@@ -257,6 +257,19 @@ public struct YouTubeAuthorizedClient: Sendable {
         }
     }
 
+    public static func sortedOpportunities(_ candidates: [YouTubeOpportunityCandidate], order: OpportunitySortMode) -> [YouTubeOpportunityCandidate] {
+        guard order != .relevance else { return candidates }
+        return candidates.enumerated().sorted { lhs, rhs in
+            if order == .views {
+                let a = lhs.element.metrics.viewCount ?? -1
+                let b = rhs.element.metrics.viewCount ?? -1
+                return a == b ? lhs.offset < rhs.offset : a > b
+            }
+            return lhs.element.publishedAt == rhs.element.publishedAt
+                ? lhs.offset < rhs.offset : (lhs.element.publishedAt ?? .distantPast) > (rhs.element.publishedAt ?? .distantPast)
+        }.map(\.element)
+    }
+
     public func firstOpportunityCandidates(
         query: String,
         categoryID: String? = nil,
@@ -269,6 +282,25 @@ public struct YouTubeAuthorizedClient: Sendable {
         session: URLSession = .shared,
         now: Date = Date()
     ) async throws -> [YouTubeOpportunityCandidate] {
+        try await opportunityPage(query: query, categoryID: categoryID,
+            regionCode: regionCode, relevanceLanguage: relevanceLanguage,
+            publishedAfter: publishedAfter, maxResults: maxResults, order: order,
+            contentFilter: contentFilter, session: session, now: now).candidates
+    }
+
+    public func opportunityPage(
+        query: String,
+        categoryID: String? = nil,
+        regionCode: String? = nil,
+        relevanceLanguage: String? = nil,
+        publishedAfter: Date? = nil,
+        maxResults: Int = 12,
+        order: OpportunitySortMode = .relevance,
+        contentFilter: OpportunityContentFilter = .all,
+        pageToken: String? = nil,
+        session: URLSession = .shared,
+        now: Date = Date()
+    ) async throws -> YouTubeOpportunityPage {
         var search = URLComponents(
             string: "https://www.googleapis.com/youtube/v3/search"
         )!
@@ -277,7 +309,7 @@ public struct YouTubeAuthorizedClient: Sendable {
             .init(name: "type", value: "video"),
             .init(
                 name: "maxResults",
-                value: String(min(max(maxResults, 1), 25))
+                value: String(min(max(maxResults, 1), 50))
             ),
             .init(
                 name: "order",
@@ -342,6 +374,7 @@ public struct YouTubeAuthorizedClient: Sendable {
                 )
             )
         }
+        if let pageToken { queryItems.append(.init(name: "pageToken", value: pageToken)) }
         search.queryItems = queryItems
 
         let searchData = try await perform(
@@ -363,7 +396,7 @@ public struct YouTubeAuthorizedClient: Sendable {
             session: session
         )
 
-        return searchItems.compactMap { item in
+        let candidates: [YouTubeOpportunityCandidate] = searchItems.compactMap { item in
             guard let videoID = item.id.videoId else {
                 return nil
             }
@@ -423,6 +456,8 @@ public struct YouTubeAuthorizedClient: Sendable {
                 metrics: metrics
             )
         }
+        return YouTubeOpportunityPage(candidates: Self.sortedOpportunities(candidates, order: order),
+            nextPageToken: searchResponse.nextPageToken)
     }
 
     public func categoryOpportunityCandidates(
@@ -455,7 +490,7 @@ public struct YouTubeAuthorizedClient: Sendable {
         if timeWindow == .allTime,
            contentFilter != .live,
            contentFilter != .shorts,
-           (order == .relevance || order == .views) {
+           order == .relevance {
             let popular = try await mostPopularOpportunityCandidates(
                 categoryID: trimmedCategoryID,
                 regionCode: trimmedRegion,
@@ -480,10 +515,7 @@ public struct YouTubeAuthorizedClient: Sendable {
             }
         }
 
-        let boundedOrder: OpportunitySortMode =
-            timeWindow == .allTime ? order : (
-                order == .relevance ? .views : order
-            )
+        let boundedOrder = order
         let publishedAfter =
             timeWindow.publishedAfter(now: now)
 
@@ -541,7 +573,7 @@ public struct YouTubeAuthorizedClient: Sendable {
             .init(name: "videoCategoryId", value: categoryID),
             .init(
                 name: "maxResults",
-                value: String(min(max(maxResults, 1), 25))
+                value: String(min(max(maxResults, 1), 50))
             )
         ]
 
@@ -736,7 +768,7 @@ private struct ThumbnailSet: Decodable {
 }
 private struct Thumbnail: Decodable { let url: URL }
 
-private struct SearchListResponse: Decodable { let items: [SearchItem] }
+private struct SearchListResponse: Decodable { let items: [SearchItem]; let nextPageToken: String? }
 private struct SearchItem: Decodable {
     let id: SearchID
     let snippet: SearchSnippet
@@ -756,4 +788,9 @@ private extension JSONDecoder {
         d.dateDecodingStrategy = .iso8601
         return d
     }
+}
+
+public struct YouTubeOpportunityPage: Sendable {
+    public let candidates: [YouTubeOpportunityCandidate]
+    public let nextPageToken: String?
 }

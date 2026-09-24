@@ -31,6 +31,7 @@ final class SourceDownloadManager:
     @Published private(set) var state:
         SourceDownloadState = .idle
     @Published private(set) var progress: Double = 0
+    @Published private(set) var transferDescription = "Video herunterladen"
     @Published private(set) var bytesReceived: Int64 = 0
     @Published private(set) var bytesExpected: Int64 = 0
     @Published private(set) var destinationURL: URL?
@@ -235,6 +236,11 @@ final class SourceDownloadManager:
                 while let range = self.youtubeBuffer.range(of: "\n") {
                     let line = String(self.youtubeBuffer[..<range.lowerBound])
                     self.youtubeBuffer.removeSubrange(...range.lowerBound)
+                    if line.contains("[download] Destination:") {
+                        self.transferDescription = line.hasSuffix(".m4a")
+                            ? "Tonspur herunterladen" : "Bildspur herunterladen"
+                        self.progress = 0
+                    }
                     if let value = YouTubeDownloadRequest.progress(line) {
                         self.progress = value
                     } else if !line.isEmpty {

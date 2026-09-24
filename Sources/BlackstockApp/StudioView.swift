@@ -41,6 +41,7 @@ struct StudioView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            workflowProgress
             Divider()
 
             if let opportunitySource {
@@ -795,7 +796,7 @@ struct StudioView: View {
         HSplitView {
             VStack(spacing: 14) {
                 ZStack(alignment: .bottom) {
-                    VideoPlayer(player: state.player)
+                    BlackstockVideoPlayer(player: state.player)
                         .accessibilityLabel("Video-Vorschau des aktuellen Schnitts")
 
                     if state.previewedLocalClipCandidateID == nil {
@@ -2649,11 +2650,49 @@ struct StudioView: View {
         return text.isEmpty ? nil : text
     }
 
+    private var workflowProgress: some View {
+        HStack(spacing: 12) {
+            if isImportingMedia || state.isLoading || state.isTranscribing
+                || state.isGeneratingClipCandidates || state.isCreatingAutomaticHighlights
+                || state.isRendering || state.isRenderingSavedClipBatch {
+                ProgressView().controlSize(.small)
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(workflowStatus).font(.callout.weight(.semibold))
+                Text("1. Download  →  2. Video vorbereiten  →  3. Schneiden & Untertitel  →  4. Rendern  →  5. Hochladen")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            if sourceDownloader.state == .downloading || sourceDownloader.state == .processing
+                || sourceDownloader.state == .paused {
+                Button("Download anzeigen") { showSourceDownloader = true }
+            }
+        }
+        .padding(.horizontal, 20).padding(.vertical, 10)
+        .background(BlackstockDesign.mediaSurface)
+    }
+
+    private var workflowStatus: String {
+        if state.isRendering || state.isRenderingSavedClipBatch { return "Schritt 4 · Clip wird gerendert. Bitte warte auf die fertige Datei." }
+        if state.isTranscribing { return "Schritt 3 · Sprache wird erkannt und Untertitel werden erstellt." }
+        if state.isCreatingAutomaticHighlights || state.isGeneratingClipCandidates {
+            return "Schritt 3 · Highlights werden gesucht und Schnitte vorbereitet."
+        }
+        if isImportingMedia || state.isLoading { return "Schritt 2 · Video wird in dein Projekt geladen." }
+        switch sourceDownloader.state {
+        case .downloading: return "Schritt 1 · " + sourceDownloader.transferDescription
+        case .processing: return "Schritt 2 · Bild und Ton werden zusammengefügt."
+        case .paused: return "Download pausiert · Über ‚Download anzeigen‘ fortsetzen."
+        case .failed: return "Download unterbrochen · Öffne den Download und versuche es erneut."
+        default: return state.asset == nil ? "Schritt 1 · Video auswählen oder herunterladen." : "Schritt 3 · Video bereit: Vorschau abspielen, Schnitt prüfen und anschließend rendern."
+        }
+    }
+
     private var sourceDownloaderSheet: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Videoquelle beziehen")
+                    Text("Video herunterladen")
                         .font(.title2.bold())
                     Text(
                         "Lade das ausgewählte Video auf deinen Mac. Nach dem Download wird die Datei automatisch an den Schnitt übergeben."
@@ -2705,28 +2744,28 @@ struct StudioView: View {
                     )
                     .font(.callout.weight(.semibold))
                     Spacer()
-                    Text(
-                        String(
-                            format: "%.0f%%",
-                            sourceDownloader.progress * 100
-                        )
-                    )
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                    if sourceDownloader.state == .downloading || sourceDownloader.state == .paused {
+                        Text(String(format: "%.0f%% der aktuellen Datei", sourceDownloader.progress * 100))
+                            .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                    }
                 }
 
-                ProgressView(
-                    value: sourceDownloader.progress
-                )
+                if sourceDownloader.state == .processing {
+                    ProgressView("Bild und Ton werden zusammengefügt …")
+                } else {
+                    ProgressView(value: sourceDownloader.progress)
+                    Text(sourceDownloader.transferDescription)
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Text("Bild und Ton werden getrennt geladen. Danach öffnet sich der Schnitt automatisch. Du kannst dieses Fenster währenddessen schließen.")
+                    .font(.caption).foregroundStyle(.secondary)
 
                 if let destination =
                         sourceDownloader.destinationURL {
-                    Text(
-                        "Ziel: " + destination.path
-                    )
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
+                    DisclosureGroup("Speicherort") {
+                        Text(destination.path).font(.caption2.monospaced())
+                            .foregroundStyle(.secondary).textSelection(.enabled)
+                    }
                 }
             }
 

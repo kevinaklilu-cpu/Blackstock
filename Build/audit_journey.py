@@ -28,7 +28,7 @@ checks = {
         "ProjectLibraryView(",
     ],
     "Sources/BlackstockApp/BlackstockBrandMark.swift": [
-        'Image(systemName: "play.fill")',
+        'Text("B")',
         "BlackstockDesign.accent",
         ".accessibilityHidden(true)",
     ],

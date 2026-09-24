@@ -74,11 +74,11 @@ struct OpportunityWorkspaceView: View {
                     Task { await loadOpportunities() }
                 } label: {
                     HStack {
-                        if session.isWorking {
+                        if session.isLoadingOpportunities {
                             ProgressView().controlSize(.small)
                         }
                         Label(
-                            session.isWorking
+                            session.isLoadingOpportunities
                                 ? "Lädt …"
                                 : "Suchen",
                             systemImage: "magnifyingglass"
@@ -88,7 +88,7 @@ struct OpportunityWorkspaceView: View {
                 .buttonStyle(.borderedProminent)
                 .tint(BlackstockDesign.accent)
                 .disabled(
-                    session.isWorking
+                    session.isLoadingOpportunities
                     || (
                         query.trimmingCharacters(
                             in: .whitespacesAndNewlines
@@ -155,6 +155,26 @@ struct OpportunityWorkspaceView: View {
                     .foregroundStyle(.secondary)
                 }
             }
+
+            HStack {
+                Text("\(session.opportunities.count) Videos · \(sortMode.germanTitle)")
+                    .font(.callout.weight(.semibold))
+                Spacer()
+                if session.isLoadingOpportunities {
+                    ProgressView().controlSize(.small)
+                    Text("Videos und Aufrufzahlen werden geladen …").font(.caption)
+                } else if session.opportunityNextPageToken != nil {
+                    Button("Mehr laden") {
+                        Task {
+                            await session.loadWorkspaceOpportunities(query: query, order: sortMode,
+                                timeWindow: session.opportunityTimeWindow,
+                                contentFilter: session.opportunityContentFilter, loadMore: true)
+                        }
+                    }
+                }
+            }
+            Text("Region: dort verfügbare Videos. Sprache: bevorzugte Treffer. Aufrufe und Datum sortieren die geladenen Videos; ‚Mehr laden‘ erweitert die Auswahl.")
+                .font(.caption).foregroundStyle(.secondary)
 
             if let error = session.errorMessage {
                 Label(

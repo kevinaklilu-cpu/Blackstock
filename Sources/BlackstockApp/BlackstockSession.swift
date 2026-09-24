@@ -2614,115 +2614,86 @@ final class BlackstockSession: ObservableObject {
         )
     }
 
+    @Published var isLoadingOpportunities = false
+    @Published var opportunityNextPageToken: String?
+    private var opportunityRequestID = UUID()
+    private var opportunityRequestKey: [String] = []
+    private var opportunitySearchDate = Date()
+
     func loadWorkspaceOpportunities(
         query: String,
         order: OpportunitySortMode,
         timeWindow: OpportunityTimeWindow? = nil,
-        contentFilter: OpportunityContentFilter? = nil
+        contentFilter: OpportunityContentFilter? = nil,
+        loadMore: Bool = false
     ) async {
-        let resolvedQuery = query.trimmingCharacters(
-            in: .whitespacesAndNewlines
-        )
-        let resolvedTimeWindow =
-            timeWindow ?? opportunityTimeWindow
-        let resolvedContentFilter =
-            contentFilter ?? opportunityContentFilter
-        opportunityContentFilter = resolvedContentFilter
+        let resolvedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let window = timeWindow ?? opportunityTimeWindow
+        let filter = contentFilter ?? opportunityContentFilter
+        // Capture every input before the first suspension. Earlier requests must
+        // never overwrite a more recently selected country, query, or sort.
+        let category = channelCategoryID
+        let region = channelRegionCode
+        let language = contentLanguage
+        let key = [resolvedQuery, order.rawValue, window.rawValue, filter.rawValue,
+                   category, region, language, workspaceChannelID ?? ""]
+        let token: String?
+        if loadMore {
+            guard !isLoadingOpportunities, key == opportunityRequestKey,
+                  let next = opportunityNextPageToken else { return }
+            token = next
+        } else {
+            token = nil
+            opportunitySearchDate = Date()
+            opportunities = []
+            opportunityNextPageToken = nil
+        }
+        let requestID = UUID()
+        opportunityRequestID = requestID
+        opportunityRequestKey = key
+        opportunityContentFilter = filter
         let defaults = UserDefaults.standard
-        defaults.set(
-            resolvedContentFilter.rawValue,
-            forKey: "blackstock.workspace.opportunityContentFilter"
-        )
-        defaults.set(
-            resolvedTimeWindow.rawValue,
-            forKey: "blackstock.workspace.opportunityTimeWindow"
-        )
-        defaults.set(
-            channelCategoryID,
-            forKey: "blackstock.workspace.channelCategoryID"
-        )
-        defaults.set(
-            channelRegionCode,
-            forKey: "blackstock.workspace.regionCode"
-        )
-        defaults.set(
-            contentLanguage,
-            forKey: "blackstock.workspace.contentLanguage"
-        )
-        defaults.set(
-            primaryTopic,
-            forKey: "blackstock.workspace.primaryTopic"
-        )
-
+        defaults.set(filter.rawValue, forKey: "blackstock.workspace.opportunityContentFilter")
+        defaults.set(window.rawValue, forKey: "blackstock.workspace.opportunityTimeWindow")
+        defaults.set(category, forKey: "blackstock.workspace.channelCategoryID")
+        defaults.set(region, forKey: "blackstock.workspace.regionCode")
+        defaults.set(language, forKey: "blackstock.workspace.contentLanguage")
+        defaults.set(primaryTopic, forKey: "blackstock.workspace.primaryTopic")
         guard let channelID = workspaceChannelID else {
             errorMessage = "Kein YouTube-Kanal ist verbunden."
             return
         }
-
-        isWorking = true
+        isLoadingOpportunities = true
         errorMessage = nil
-        defer { isWorking = false }
-
+        defer {
+            if opportunityRequestID == requestID { isLoadingOpportunities = false }
+        }
         do {
-            let accessToken =
-                try await validatedReadOnlyAccessToken(
-                    targetChannelID: channelID
-                )
-            let client = YouTubeAuthorizedClient(
-                accessToken: accessToken
-            )
-            let candidates: [YouTubeOpportunityCandidate]
-
-            if resolvedQuery.isEmpty,
-               !channelCategoryID.isEmpty,
-               !channelRegionCode.isEmpty {
-                candidates = try await client
-                    .categoryOpportunityCandidates(
-                        categoryID: channelCategoryID,
-                        categoryTitle: primaryTopic,
-                        regionCode: channelRegionCode,
-                        relevanceLanguage: contentLanguage,
-                        timeWindow: resolvedTimeWindow,
-                        maxResults: 20,
-                        order: order,
-                        contentFilter: resolvedContentFilter
-                    )
-            } else {
-                guard !resolvedQuery.isEmpty else {
-                    errorMessage =
-                        "Wähle eine Kanal-Kategorie oder gib einen Suchbegriff ein."
-                    return
-                }
-                candidates = try await client
-                    .firstOpportunityCandidates(
-                        query: resolvedQuery,
-                        categoryID: channelCategoryID.isEmpty
-                            ? nil
-                            : channelCategoryID,
-                        regionCode: channelRegionCode.isEmpty
-                            ? nil
-                            : channelRegionCode,
-                        relevanceLanguage:
-                            contentLanguage.isEmpty
-                            ? nil
-                            : contentLanguage,
-                        publishedAfter:
-                            resolvedTimeWindow
-                                .publishedAfter(now: Date()),
-                        maxResults: 20,
-                        order: order,
-                        contentFilter: resolvedContentFilter
-                    )
-            }
-
-            opportunities = candidates
-            if candidates.isEmpty {
-                errorMessage =
-                    "YouTube hat für diese Kategorie, Region und diesen Zeitraum aktuell keine passenden Videos geliefert."
+            let accessToken = try await validatedReadOnlyAccessToken(targetChannelID: channelID)
+            guard opportunityRequestID == requestID else { return }
+            let client = YouTubeAuthorizedClient(accessToken: accessToken)
+            let page = try await client.opportunityPage(
+                query: resolvedQuery,
+                categoryID: category.isEmpty ? nil : category,
+                regionCode: region.isEmpty ? nil : region,
+                relevanceLanguage: language.isEmpty ? nil : language,
+                publishedAfter: window.publishedAfter(now: opportunitySearchDate),
+                maxResults: 50, order: order, contentFilter: filter, pageToken: token)
+            guard opportunityRequestID == requestID,
+                  channelCategoryID == category, channelRegionCode == region,
+                  contentLanguage == language, workspaceChannelID == channelID else { return }
+            var seen = Set(opportunities.map(\.videoID))
+            let added = page.candidates.filter { seen.insert($0.videoID).inserted }
+            opportunities = YouTubeAuthorizedClient.sortedOpportunities(opportunities + added, order: order)
+            opportunityNextPageToken = page.nextPageToken == token ? nil : page.nextPageToken
+            if opportunities.isEmpty {
+                errorMessage = opportunityNextPageToken == nil
+                    ? "Keine passenden Videos gefunden. Erweitere Zeitraum oder Format oder ändere den Suchbegriff."
+                    : "Auf dieser Ergebnisseite passt noch kein Video zum Format. Mit ‚Mehr laden‘ weitere Treffer prüfen."
             }
         } catch {
-            errorMessage =
-                "Videos konnten nicht geladen werden: \(describe(error))"
+            guard opportunityRequestID == requestID else { return }
+            errorMessage = "Videos konnten nicht geladen werden: \(describe(error))"
         }
     }
 

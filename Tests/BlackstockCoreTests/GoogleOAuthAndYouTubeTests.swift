@@ -3,6 +3,50 @@ import Foundation
 @testable import BlackstockCore
 
 final class GoogleOAuthAndYouTubeTests: XCTestCase {
+    func testDiscoveryPaginationPreservesFiltersAndSortsNumericViews() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [OAuthURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { OAuthURLProtocol.handler = nil; session.invalidateAndCancel() }
+        OAuthURLProtocol.handler = { request in
+            let url = try XCTUnwrap(request.url)
+            let values = Dictionary(uniqueKeysWithValues: URLComponents(url: url, resolvingAgainstBaseURL: false)!.queryItems!.map { ($0.name, $0.value ?? "") })
+            let json: String
+            if url.path.hasSuffix("/search") {
+                XCTAssertEqual(values["maxResults"], "50")
+                XCTAssertEqual(values["pageToken"], "page-two")
+                XCTAssertEqual(values["order"], "viewCount")
+                XCTAssertEqual(values["regionCode"], "DE")
+                XCTAssertEqual(values["relevanceLanguage"], "de")
+                json = #"{"nextPageToken":"page-three","items":[{"id":{"videoId":"low"},"snippet":{"title":"Low","channelId":"c","channelTitle":"Channel"}},{"id":{"videoId":"high"},"snippet":{"title":"High","channelId":"c","channelTitle":"Channel"}}]}"#
+            } else {
+                json = #"{"items":[{"id":"low","statistics":{"viewCount":"9"},"contentDetails":{"duration":"PT5M"}},{"id":"high","statistics":{"viewCount":"100"},"contentDetails":{"duration":"PT5M"}}]}"#
+            }
+            return (HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data(json.utf8))
+        }
+        let page = try await YouTubeAuthorizedClient(accessToken: "test").opportunityPage(
+            query: "football", regionCode: "DE", relevanceLanguage: "de",
+            maxResults: 100, order: .views, pageToken: "page-two", session: session)
+        XCTAssertEqual(page.candidates.map(\.videoID), ["high", "low"])
+        XCTAssertEqual(page.nextPageToken, "page-three")
+    }
+
+    func testFilteredEmptyDiscoveryPageRetainsNextPage() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [OAuthURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { OAuthURLProtocol.handler = nil; session.invalidateAndCancel() }
+        OAuthURLProtocol.handler = { request in
+            let url = try XCTUnwrap(request.url)
+            return (HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data(#"{"items":[],"nextPageToken":"more"}"#.utf8))
+        }
+        let page = try await YouTubeAuthorizedClient(accessToken: "test").opportunityPage(
+            query: "football", contentFilter: .shorts, session: session)
+        XCTAssertTrue(page.candidates.isEmpty)
+        XCTAssertEqual(page.nextPageToken, "more")
+    }
+
     func testPKCEUsesS256AndURLSafeValues() throws {
         let pair = try PKCEPair.generate()
         XCTAssertGreaterThanOrEqual(pair.verifier.count, 43)
@@ -752,7 +796,7 @@ final class GoogleOAuthAndYouTubeTests: XCTestCase {
             relevanceLanguage: "de",
             timeWindow: .allTime,
             maxResults: 12,
-            order: .views,
+            order: .relevance,
             session: session
         )
 
