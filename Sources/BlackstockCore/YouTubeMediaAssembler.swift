@@ -56,14 +56,12 @@ public enum YouTubeMediaAssembler {
         guard let exporter = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetPassthrough) else {
             throw CocoaError(.fileWriteUnknown)
         }
-        exporter.outputURL = output
-        exporter.outputFileType = .mp4
         exporter.shouldOptimizeForNetworkUse = true
-        await exporter.export()
-        try Task.checkCancellation()
-        guard exporter.status == .completed else {
-            throw exporter.error ?? CocoaError(.fileWriteUnknown)
-        }
+        try await AsyncAVAssetExporter.export(
+            exporter,
+            to: output,
+            as: .mp4
+        )
         let result = AVURLAsset(url: output)
         guard let resultVideo = try await result.loadTracks(withMediaType: .video).first,
               let resultAudio = try await result.loadTracks(withMediaType: .audio).first else {
