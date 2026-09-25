@@ -8,12 +8,20 @@ public enum YouTubeMediaAssembler {
         let files = try FileManager.default.contentsOfDirectory(
             at: directory, includingPropertiesForKeys: nil
         )
-        guard let video = files.first(where: { $0.pathExtension == "mp4" }),
-              let audio = files.first(where: { $0.pathExtension == "m4a" }) else {
+        guard let video = files.first(where: { $0.pathExtension == "mp4" }) else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        let videoAsset = AVURLAsset(url: video)
+        let embeddedAudio = try await videoAsset.loadTracks(withMediaType: .audio)
+        if !embeddedAudio.isEmpty {
+            try? FileManager.default.removeItem(at: output)
+            try FileManager.default.copyItem(at: video, to: output)
+            return
+        }
+        guard let audio = files.first(where: { $0.pathExtension == "m4a" }) else {
             throw CocoaError(.fileReadCorruptFile)
         }
         let composition = AVMutableComposition()
-        let videoAsset = AVURLAsset(url: video)
         let audioAsset = AVURLAsset(url: audio)
         guard let videoTrack = try await videoAsset.loadTracks(withMediaType: .video).first,
               let audioTrack = try await audioAsset.loadTracks(withMediaType: .audio).first,
@@ -21,11 +29,14 @@ public enum YouTubeMediaAssembler {
               let destinationAudio = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else {
             throw CocoaError(.fileReadCorruptFile)
         }
-        let videoDuration = try await videoTrack.load(.timeRange).duration
-        let audioDuration = try await audioTrack.load(.timeRange).duration
-        // Some YouTube 60-fps DASH MP4 headers are interpreted by AVFoundation
-        // at half frame rate. Use the extractor's source duration to normalize
-        // timestamps, rather than stretching the audio to an incorrect movie header.
+        let videoTimeRange = try await videoTrack.load(.timeRange)
+        let audioTimeRange = try await audioTrack.load(.timeRange)
+        let videoDuration = videoTimeRange.duration
+        let audioDuration = audioTimeRange.duration
+        // Never repair a malformed DASH header by stretching either track. That
+        // changes playback speed and causes visible lip sync errors. A combined
+        // A/V MP4 is preferred; this fallback accepts separate tracks only when
+        // both source timelines already agree with the extractor metadata.
         guard let metadataURL = files.first(where: { $0.lastPathComponent.hasSuffix(".info.json") }),
               let metadata = try JSONSerialization.jsonObject(with: Data(contentsOf: metadataURL)) as? [String: Any],
               let seconds = metadata["duration"] as? Double,
@@ -34,23 +45,13 @@ public enum YouTubeMediaAssembler {
               audioDuration.seconds.isFinite, audioDuration.seconds > 0 else {
             throw CocoaError(.fileReadCorruptFile)
         }
-        func normalizedDuration(_ duration: CMTime) throws -> CMTime {
-            if abs(duration.seconds - seconds) <= 1 { return duration }
-            for multiplier in [0.5, 2.0] {
-                let corrected = CMTimeMultiplyByFloat64(duration, multiplier: multiplier)
-                if abs(corrected.seconds - seconds) <= 1 { return corrected }
-            }
-            // Do not silently stretch unrelated or truncated tracks.
+        guard abs(videoDuration.seconds - seconds) <= 1,
+              abs(audioDuration.seconds - seconds) <= 1,
+              abs(videoDuration.seconds - audioDuration.seconds) <= 1 else {
             throw CocoaError(.fileReadCorruptFile)
         }
-        let normalizedVideoDuration = try normalizedDuration(videoDuration)
-        try destinationVideo.insertTimeRange(CMTimeRange(start: .zero, duration: videoDuration), of: videoTrack, at: .zero)
-        try destinationAudio.insertTimeRange(CMTimeRange(start: .zero, duration: audioDuration), of: audioTrack, at: .zero)
-        if abs(videoDuration.seconds - seconds) > 1 {
-            destinationVideo.scaleTimeRange(CMTimeRange(start: .zero, duration: videoDuration), toDuration: normalizedVideoDuration)
-        }
-        // Keep AAC timestamps intact: AVFoundation resolves its fragmented
-        // edit lists on export; applying the video-rate correction doubles speed.
+        try destinationVideo.insertTimeRange(videoTimeRange, of: videoTrack, at: .zero)
+        try destinationAudio.insertTimeRange(audioTimeRange, of: audioTrack, at: .zero)
         destinationVideo.preferredTransform = try await videoTrack.load(.preferredTransform)
         try Task.checkCancellation()
         guard let exporter = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetPassthrough) else {

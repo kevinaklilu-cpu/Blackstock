@@ -6,6 +6,7 @@ import BlackstockCore
 struct FirstRunView: View {
     @ObservedObject var session: BlackstockSession
     @State private var showOAuthImporter = false
+    @State private var showAdvancedAppSettings = false
     @State private var selectedOpportunityID: String?
     @State private var opportunitySortMode: OpportunitySortMode = .views
 
@@ -119,6 +120,22 @@ struct FirstRunView: View {
 
     private var welcome: some View {
         VStack(alignment: .leading, spacing: 16) {
+            if !session.hasImportedOAuthConfiguration {
+                VStack(alignment: .leading, spacing: 10) {
+                    Label("Zuerst Google-OAuth-JSON hinzufügen", systemImage: "1.circle.fill")
+                        .font(.headline)
+                    Text("Blackstock benötigt deine Desktop-OAuth-Datei, bevor die Google-Anmeldung geöffnet werden kann.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button("Desktop-OAuth-JSON auswählen …") {
+                        showOAuthImporter = true
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+                .padding(14)
+                .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+            }
+
             Button {
                 Task { await session.connectGoogle() }
             } label: {
@@ -133,9 +150,22 @@ struct FirstRunView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
-            .disabled(session.isWorking)
+            .disabled(session.isWorking || !session.hasImportedOAuthConfiguration)
 
-            DisclosureGroup("Erweiterte App-Einstellungen") {
+            Button {
+                withAnimation { showAdvancedAppSettings.toggle() }
+            } label: {
+                HStack {
+                    Text("Erweiterte App-Einstellungen")
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .rotationEffect(.degrees(showAdvancedAppSettings ? 90 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if showAdvancedAppSettings {
             Menu {
                 Button("Eigene Desktop-OAuth-JSON auswählen …") {
                     showOAuthImporter = true

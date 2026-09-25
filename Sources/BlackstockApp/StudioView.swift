@@ -953,12 +953,19 @@ struct StudioView: View {
 
     private var localClipCandidatesSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Clip-Vorschläge")
+            Text("Automatischer Schnitt")
                 .font(.headline)
 
             Text("Blackstock findet die stärksten Ausschnitte, bereitet Hochkantformat und Untertitel vor und rendert daraus fertige Clips. Du kannst jeden Schritt anschließend ändern.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+            HStack(spacing: 8) {
+                workflowStep("1", "Analysieren")
+                workflowStep("2", "Schneiden")
+                workflowStep("3", "Untertitel")
+                workflowStep("4", "Rendern")
+            }
 
             HStack(spacing: 10) {
                 Button {
@@ -980,7 +987,7 @@ struct StudioView: View {
                         Label(
                             state.isCreatingAutomaticHighlights
                                 ? "Highlight-Erstellung stoppen"
-                                : "Highlights automatisch erstellen",
+                                : "Automatik starten",
                             systemImage: "sparkles.rectangle.stack"
                         )
                     }
@@ -1498,6 +1505,19 @@ struct StudioView: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private func workflowStep(_ number: String, _ title: String) -> some View {
+        HStack(spacing: 5) {
+            Text(number)
+                .font(.caption2.bold())
+                .frame(width: 19, height: 19)
+                .background(BlackstockDesign.accent.opacity(0.14), in: Circle())
+            Text(title).font(.caption2.weight(.medium))
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(Color.primary.opacity(0.04), in: Capsule())
     }
 
     private func timeline(_ asset: ProductionMediaAsset) -> some View {

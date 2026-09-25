@@ -2722,30 +2722,21 @@ final class BlackstockSession: ObservableObject {
             // An empty search field means automatic recommendations. Narrow
             // time/category combinations can legitimately return no search
             // rows, so fall back to YouTube's regional popularity chart.
-            if !loadMore, resolvedQuery.isEmpty, page.candidates.isEmpty {
-                let popular = try await client.mostPopularOpportunityCandidates(
-                    categoryID: category,
-                    regionCode: region.isEmpty ? "US" : region,
-                    maxResults: 50
+            if !loadMore, resolvedQuery.isEmpty, page.candidates.isEmpty,
+               !category.isEmpty {
+                page = try await client.opportunityPage(
+                    query: "",
+                    categoryID: nil,
+                    regionCode: region.isEmpty ? nil : region,
+                    relevanceLanguage: language.isEmpty ? nil : language,
+                    publishedAfter: window.publishedAfter(now: opportunitySearchDate),
+                    maxResults: 50,
+                    order: order,
+                    contentFilter: filter
                 )
-                let filteredPopular = popular.filter { candidate in
-                    switch filter {
-                    case .all: return true
-                    case .shorts: return candidate.contentKind == .short
-                    case .videos: return candidate.contentKind == .video
-                    case .live: return candidate.contentKind == .live
-                    }
-                }
-                if !filteredPopular.isEmpty {
-                    page = YouTubeOpportunityPage(
-                        candidates: YouTubeAuthorizedClient.sortedOpportunities(
-                            filteredPopular,
-                            order: order
-                        ),
-                        nextPageToken: nil
-                    )
+                if !page.candidates.isEmpty {
                     recommendationNote =
-                        "Automatische Empfehlungen: aktuell beliebte Videos in deiner Region."
+                        "Im gewählten Zeitraum gab es in der Kategorie zu wenige Treffer. Die Kategorie wurde erweitert; Zeitraum, Region und Format bleiben strikt aktiv."
                 }
             }
             guard opportunityRequestID == requestID,

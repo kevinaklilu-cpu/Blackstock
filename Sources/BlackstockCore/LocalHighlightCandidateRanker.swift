@@ -45,10 +45,29 @@ public struct LocalHighlightCandidateRanker: Sendable {
             0,
             1 - candidate.sourceRange.startSeconds / 600
         )
+        let hookStrength = transcriptHookStrength(
+            candidate.transcriptPreview
+        )
 
-        return confidence * 0.35
-            + speechDensity * 0.30
-            + durationFit * 0.25
+        return confidence * 0.25
+            + speechDensity * 0.25
+            + durationFit * 0.20
+            + hookStrength * 0.20
             + openingBias * 0.10
+    }
+
+    private func transcriptHookStrength(_ text: String) -> Double {
+        let normalized = text.lowercased()
+        guard !normalized.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return 0
+        }
+        let hookTerms = [
+            "warum", "wie ", "so ", "fehler", "geheim", "überrasch", "niemals",
+            "what", "why", "how ", "mistake", "secret", "surpris", "never"
+        ]
+        let termHits = hookTerms.filter { normalized.contains($0) }.count
+        let punctuation = normalized.contains("?") || normalized.contains("!") ? 0.25 : 0
+        let digit = normalized.rangeOfCharacter(from: .decimalDigits) != nil ? 0.15 : 0
+        return min(Double(termHits) * 0.22 + punctuation + digit, 1)
     }
 }

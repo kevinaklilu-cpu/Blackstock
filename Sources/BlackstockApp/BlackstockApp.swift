@@ -1540,11 +1540,7 @@ private struct SettingsView: View {
     @State private var privacyExportStatusMessage: String?
     @State private var showLocalDataRemovalConfirmation = false
     @State private var localDataStatusMessage: String?
-    @State private var isCheckingForUpdates = false
-    @State private var isDownloadingUpdatePackage = false
-    @State private var availableUpdateManifest: BlackstockUpdateManifest?
-    @State private var verifiedUpdatePackageURL: URL?
-    @State private var updateStatusMessage: String?
+    @State private var showAdvancedGoogleSettings = false
 
     var body: some View {
         ScrollView {
@@ -1552,7 +1548,7 @@ private struct SettingsView: View {
             Text("Einstellungen")
                 .font(.largeTitle.bold())
 
-            Text("Konto, Medien, Updates und Datenschutz an einem Ort.")
+            Text("Konto, Medien und Datenschutz an einem Ort.")
                 .font(.title3)
                 .foregroundStyle(.secondary)
 
@@ -1569,7 +1565,20 @@ private struct SettingsView: View {
                     }
                     Text("Wähle deinen Kanal nach der Google-Anmeldung. Ein Kanal ist nicht vorgegeben.")
                         .font(.caption).foregroundStyle(.secondary)
-                    DisclosureGroup("Erweiterte App-Einstellungen") {
+                    Button {
+                        withAnimation { showAdvancedGoogleSettings.toggle() }
+                    } label: {
+                        HStack {
+                            Text("Erweiterte App-Einstellungen")
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .rotationEffect(.degrees(showAdvancedGoogleSettings ? 90 : 0))
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+
+                    if showAdvancedGoogleSettings {
                     Text(session.oauthConfigurationSource)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -1731,153 +1740,6 @@ private struct SettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical, 6)
             }
-            GroupBox("Updates") {
-                VStack(alignment: .leading, spacing: 10) {
-                    Button {
-                        Task {
-                            isCheckingForUpdates = true
-                            defer { isCheckingForUpdates = false }
-
-                            do {
-                                switch try await BlackstockUpdateChecker().check() {
-                                case .notConfigured:
-                                    availableUpdateManifest = nil
-                                    verifiedUpdatePackageURL = nil
-                                    updateStatusMessage = "Update-Prüfung ist in diesem Build noch nicht konfiguriert."
-                                case .upToDate:
-                                    availableUpdateManifest = nil
-                                    verifiedUpdatePackageURL = nil
-                                    updateStatusMessage = "Blackstock ist auf dem aktuellen Stand."
-                                case .updateAvailable(let manifest):
-                                    availableUpdateManifest = manifest
-                                    verifiedUpdatePackageURL = nil
-                                    updateStatusMessage = "Update verfügbar: Version \(manifest.version), Build \(manifest.build). Das Paket wird erst nach ausdrücklicher Aktion geladen und gegen den signierten SHA-256 geprüft."
-                                }
-                            } catch {
-                                if let localized = error as? LocalizedError,
-                                   let description = localized.errorDescription {
-                                    updateStatusMessage = "Update-Prüfung fehlgeschlagen: \(description)"
-                                } else {
-                                    updateStatusMessage = "Update-Prüfung fehlgeschlagen: \(error.localizedDescription)"
-                                }
-                            }
-                        }
-                    } label: {
-                        HStack {
-                            if isCheckingForUpdates {
-                                ProgressView().controlSize(.small)
-                            }
-                            Label(
-                                isCheckingForUpdates
-                                    ? "Updates werden geprüft …"
-                                    : "Nach Updates suchen",
-                                systemImage: "arrow.triangle.2.circlepath"
-                            )
-                        }
-                    }
-                    .disabled(isCheckingForUpdates || isDownloadingUpdatePackage)
-
-                    if let manifest = availableUpdateManifest {
-                        Button {
-                            Task {
-                                isDownloadingUpdatePackage = true
-                                defer { isDownloadingUpdatePackage = false }
-
-                                do {
-                                    let url = try await BlackstockUpdatePackageDownloader()
-                                        .downloadAndVerify(manifest: manifest)
-                                    verifiedUpdatePackageURL = url
-                                    updateStatusMessage = "Update-Paket wurde geladen und per SHA-256 verifiziert. Es wird nicht automatisch installiert."
-                                } catch {
-                                    verifiedUpdatePackageURL = nil
-                                    if let localized = error as? LocalizedError,
-                                       let description = localized.errorDescription {
-                                        updateStatusMessage = "Update-Paket wurde verworfen: \(description)"
-                                    } else {
-                                        updateStatusMessage = "Update-Paket wurde verworfen: \(error.localizedDescription)"
-                                    }
-                                }
-                            }
-                        } label: {
-                            HStack {
-                                if isDownloadingUpdatePackage {
-                                    ProgressView().controlSize(.small)
-                                }
-                                Label(
-                                    isDownloadingUpdatePackage
-                                        ? "Update-Paket wird geprüft …"
-                                        : "Update-Paket laden und prüfen",
-                                    systemImage: "checkmark.shield"
-                                )
-                            }
-                        }
-                        .disabled(isCheckingForUpdates || isDownloadingUpdatePackage)
-                    }
-
-                    Text("Updates werden vor der Installation geprüft.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    if let updateStatusMessage {
-                        Text(updateStatusMessage)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    if let verifiedUpdatePackageURL {
-                        Text("Verifiziertes Paket: \(verifiedUpdatePackageURL.path)")
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
-
-                        if let manifest = availableUpdateManifest {
-                            Button {
-                                do {
-                                    try BlackstockUpdateInstallationPreflight()
-                                        .verify(
-                                            fileURL:
-                                                verifiedUpdatePackageURL,
-                                            manifest: manifest
-                                        )
-                                    BlackstockUpdateAudit
-                                        .recordVerifiedPackage(
-                                            manifest: manifest
-                                        )
-                                    guard NSWorkspace.shared.open(
-                                        verifiedUpdatePackageURL
-                                    ) else {
-                                        updateStatusMessage = "Das erneut verifizierte Paket konnte nicht im macOS-Installer geöffnet werden."
-                                        return
-                                    }
-                                    BlackstockUpdateAudit.recordInstallerOpened(
-                                        manifest: manifest
-                                    )
-                                    updateStatusMessage = "Das Update wurde erneut verifiziert und an den macOS-Installer übergeben. Blackstock wird jetzt beendet, damit die neue Version sauber installiert werden kann."
-                                    DispatchQueue.main.asyncAfter(
-                                        deadline: .now() + 0.4
-                                    ) {
-                                        NSApp.terminate(nil)
-                                    }
-                                } catch {
-                                    try? FileManager.default.removeItem(
-                                        at: verifiedUpdatePackageURL
-                                    )
-                                    self.verifiedUpdatePackageURL = nil
-                                    updateStatusMessage = "Das Paket hat den erneuten Installations-Preflight für SHA-256 und Developer-ID-Installer-Team nicht bestanden, wurde gelöscht und nicht geöffnet."
-                                }
-                            } label: {
-                                Label(
-                                    "Update installieren und Blackstock schließen",
-                                    systemImage: "shippingbox"
-                                )
-                            }
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, 6)
-            }
-
             DisclosureGroup("Diagnose") {
                 VStack(alignment: .leading, spacing: 10) {
                     if let evidence =

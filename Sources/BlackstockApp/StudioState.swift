@@ -1167,13 +1167,25 @@ final class StudioState: ObservableObject {
 
         isCreatingAutomaticHighlights = true
         defer { isCreatingAutomaticHighlights = false }
+        errorMessage = nil
+        clipCandidateStatusMessage =
+            "Schritt 1 von 4: Sprache, Pausen und Clip-Bereiche werden lokal analysiert …"
 
         await generateLocalClipCandidates(
             localeIdentifier: localeIdentifier
         )
-        guard !shouldStopProcessing,
-              errorMessage == nil,
-              !localClipCandidates.isEmpty else {
+        guard !shouldStopProcessing else {
+            return
+        }
+        if localClipCandidates.isEmpty, let asset {
+            localClipCandidates = automaticTimelineCandidates(
+                duration: asset.durationSeconds
+            )
+            clipCandidateStatusMessage =
+                "Keine verlässlichen Sprachblöcke erkannt. Blackstock verwendet gleichmäßig verteilte, zeitbasierte Vorschläge und kennzeichnet sie zur Prüfung."
+        }
+        guard !localClipCandidates.isEmpty else {
+            errorMessage = "Das Video ist zu kurz, um automatisch einen Clip zu erstellen."
             return
         }
 
@@ -1218,6 +1230,8 @@ final class StudioState: ObservableObject {
             }
         }
         captionVisualStyle = .strong
+        clipCandidateStatusMessage =
+            "Schritt 2 von 4: Die stärksten Bereiche werden geschnitten und für 9:16 vorbereitet …"
 
         guard !shouldStopProcessing else {
             clipCandidateStatusMessage = "Verarbeitung gestoppt."
@@ -1234,6 +1248,12 @@ final class StudioState: ObservableObject {
             transcriptStructure = TranscriptStructureAnalyzer()
                 .analyze(transcript: transcript)
             burnInCaptionsEnabled = true
+            clipCandidateStatusMessage =
+                "Schritt 3 von 4: Lesbare Untertitel werden aus der erkannten Sprache erzeugt …"
+        } else {
+            burnInCaptionsEnabled = false
+            clipCandidateStatusMessage =
+                "Schritt 3 von 4: Keine verlässliche Sprache erkannt; der Clip wird ohne erfundene Untertitel gerendert …"
         }
 
         let before = graph.headID
@@ -1288,12 +1308,38 @@ final class StudioState: ObservableObject {
 
         if let first = savedClipSelections.first,
            first.renderArtifact != nil {
+            clipCandidateStatusMessage =
+                "Schritt 4 von 4: Der fertige Clip wird geöffnet und für Titel, Thumbnail und Upload vorbereitet …"
             await useSavedClipForPackaging(first)
         }
 
         clipCandidateStatusMessage =
             "\(selected.count) Highlights sind geschnitten, als Hochkant-Clips vorbereitet und lokal validiert gerendert."
         errorMessage = nil
+    }
+
+    private func automaticTimelineCandidates(
+        duration: Double
+    ) -> [LocalClipCandidate] {
+        guard duration >= 8 else { return [] }
+        let clipDuration = min(max(duration * 0.12, 20), 45, duration)
+        let centers = duration > clipDuration * 2 ? [0.2, 0.5, 0.8] : [0.5]
+        return centers.enumerated().map { index, fraction in
+            let start = min(
+                max(duration * fraction - clipDuration / 2, 0),
+                max(duration - clipDuration, 0)
+            )
+            return LocalClipCandidate(
+                sourceRange: EditTimeRange(
+                    startSeconds: start,
+                    durationSeconds: clipDuration
+                ),
+                transcriptPreview: "Zeitbasierter Vorschlag \(index + 1)",
+                wordCount: 0,
+                averageConfidence: nil,
+                segmentIDs: []
+            )
+        }
     }
 
     private func automaticHighlightTitle(
@@ -2058,13 +2104,12 @@ final class StudioState: ObservableObject {
             )
 
             player.pause()
-            player.replaceCurrentItem(
-                with: AVPlayerItem(
-                    asset: composition
-                )
-            )
+            player.defaultRate = 1
+            let previewItem = AVPlayerItem(asset: composition)
+            previewItem.audioTimePitchAlgorithm = .spectral
+            player.replaceCurrentItem(with: previewItem)
             await player.seek(to: .zero)
-            player.play()
+            player.playImmediately(atRate: 1)
             previewedLocalClipCandidateID =
                 candidate.id
             clipCandidateStatusMessage =
@@ -2901,6 +2946,10 @@ final class StudioState: ObservableObject {
             }
         }
 
+        player.pause()
+        player.defaultRate = 1
+        player.automaticallyWaitsToMinimizeStalling = true
+        item.audioTimePitchAlgorithm = .spectral
         player.replaceCurrentItem(with: item)
         player.volume = Float(appliedMasterVolume)
         await player.seek(to: .zero)

@@ -103,8 +103,8 @@ checks = {
         "burnInCaptions: burnInCaptionsEnabled",
     ],
     "Sources/BlackstockApp/StudioView.swift": [
-        "Clip-Vorschläge",
-        "Highlights automatisch erstellen",
+        "Automatischer Schnitt",
+        "Automatik starten",
         "Diesen Ausschnitt übernehmen",
         "Exportieren …",
         "Zum Veröffentlichen verwenden",

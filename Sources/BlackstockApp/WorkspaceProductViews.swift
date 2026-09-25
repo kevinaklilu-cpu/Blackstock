@@ -462,7 +462,18 @@ struct OpportunityWorkspaceView: View {
         _ item: YouTubeOpportunityCandidate
     ) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            discoveryPreview(item)
+            ZStack {
+                discoveryPreview(item)
+                if item.embeddable != false {
+                    YouTubeEmbeddedPlayer(videoID: item.videoID)
+                        .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: BlackstockDesign.cornerRadius))
+            .overlay(
+                RoundedRectangle(cornerRadius: BlackstockDesign.cornerRadius)
+                    .strokeBorder(BlackstockDesign.subtleBorder)
+            )
 
             HStack {
                 Spacer()
@@ -1050,6 +1061,7 @@ struct ChannelAnalyticsWorkspaceView: View {
                 channelIdentityCard
 
                 if analyticsConnected {
+                    monetizationCard
                     periodMetrics
                     performanceDetails
                 } else {
@@ -1214,6 +1226,55 @@ struct ChannelAnalyticsWorkspaceView: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
             }
+        }
+        .padding(20)
+        .blackstockSurface(raised: true)
+    }
+
+    private var monetizationCard: some View {
+        let subscribers = max(
+            session.workspaceChannel?.subscriberCount ?? 0,
+            0
+        )
+        let subscriberTarget = 1_000
+        let missingSubscribers = max(subscriberTarget - subscribers, 0)
+
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Label("Monetarisierung", systemImage: "eurosign.circle.fill")
+                    .font(.title2.bold())
+                Spacer()
+                Text(missingSubscribers == 0 ? "Abo-Ziel erreicht" : "Noch \(missingSubscribers) Abonnenten")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+
+            ProgressView(
+                value: Double(min(subscribers, subscriberTarget)),
+                total: Double(subscriberTarget)
+            )
+            Text("\(subscribers.formatted()) von \(subscriberTarget.formatted()) Abonnenten")
+                .font(.caption.monospacedDigit())
+
+            Text("Für Werbeeinnahmen prüft YouTube zusätzlich qualifizierte öffentliche Wiedergabestunden der letzten 12 Monate oder qualifizierte Shorts-Aufrufe der letzten 90 Tage. Diese beiden YPP-Zähler und der aktive Anmeldestatus werden von der verwendeten API nicht vollständig bereitgestellt.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if let minutes = session.latestChannelAnalytics?.estimatedMinutesWatched {
+                Label(
+                    "Gemessene Wiedergabezeit im gewählten Zeitraum: \(watchHours(minutes)) · kein offizieller YPP-Zähler",
+                    systemImage: "info.circle"
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
+            Button("Vollständigen Status in YouTube Studio öffnen") {
+                guard let channelID = session.workspaceChannelID,
+                      let url = URL(string: "https://studio.youtube.com/channel/\(channelID)/monetization") else { return }
+                NSWorkspace.shared.open(url)
+            }
+            .buttonStyle(.borderedProminent)
         }
         .padding(20)
         .blackstockSurface(raised: true)

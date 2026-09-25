@@ -38,7 +38,7 @@ REQUIRED = {
         "AsyncImage(url: selected.thumbnailURL)",
     ],
     "Sources/BlackstockApp/YouTubeEmbeddedPlayer.swift": [
-        "https://www.youtube.com/embed/",
+        "https://www.youtube-nocookie.com/embed/",
         'forHTTPHeaderField: "Referer"',
         "https://blackstock.app/",
         ".allowsContentJavaScript = true",

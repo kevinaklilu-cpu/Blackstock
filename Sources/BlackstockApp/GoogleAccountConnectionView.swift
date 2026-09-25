@@ -6,12 +6,24 @@ struct GoogleAccountConnectionView: View {
     @ObservedObject var session: BlackstockSession
     @Environment(\.dismiss) private var dismiss
     @State private var showConfigurationImporter = false
+    @State private var showAdvanced = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             Text("Google und YouTube verbinden").font(.title2.bold())
             Text("Melde dich bei Google an. Danach wählst du den YouTube-Kanal, mit dem du in Blackstock arbeiten möchtest.")
                 .foregroundStyle(.secondary)
+            if !session.hasImportedOAuthConfiguration {
+                Label(
+                    "Füge zuerst deine Google Desktop-OAuth-JSON hinzu. Danach wird die Anmeldung freigeschaltet.",
+                    systemImage: "1.circle.fill"
+                )
+                .font(.callout.weight(.semibold))
+                Button("Desktop-OAuth-JSON auswählen …") {
+                    showConfigurationImporter = true
+                }
+                .buttonStyle(.borderedProminent)
+            }
             Button {
                 Task { await session.connectGoogle() }
             } label: {
@@ -21,7 +33,7 @@ struct GoogleAccountConnectionView: View {
                 }
             }
             .buttonStyle(.borderedProminent)
-            .disabled(session.isWorking)
+            .disabled(session.isWorking || !session.hasImportedOAuthConfiguration)
 
             if !session.channels.isEmpty {
                 Text("Deinen Kanal auswählen").font(.headline)
@@ -58,7 +70,18 @@ struct GoogleAccountConnectionView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
             }
-            DisclosureGroup("Erweiterte App-Einstellungen") {
+            Button {
+                withAnimation { showAdvanced.toggle() }
+            } label: {
+                HStack {
+                    Text("Erweiterte App-Einstellungen")
+                    Spacer()
+                    Image(systemName: showAdvanced ? "chevron.down" : "chevron.right")
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if showAdvanced {
                 Button("Eigene Desktop-OAuth-JSON auswählen …") { showConfigurationImporter = true }
                     .disabled(session.isWorking)
                 Text("Die App-Konfiguration legt keinen Kanal fest. Den Kanal wählst du erst nach der Google-Anmeldung.")
