@@ -19,6 +19,9 @@ struct StudioView: View {
     @StateObject private var ingestWatcher =
         IngestDirectoryWatcher()
     @State private var pendingURL: URL?
+    @State private var pendingSourceReference: MediaSourceReference?
+    @State private var pendingStorySource: YouTubeOpportunityCandidate?
+    @State private var queuedStorySources: [YouTubeOpportunityCandidate] = []
     @State private var showOptionalCapture = false
     @State private var isResolvingAutomaticSource = false
     @State private var isImportingMedia = false
@@ -84,6 +87,10 @@ struct StudioView: View {
             await state.loadWorkspace(
                 projectID: project.id
             )
+            if state.asset != nil,
+               session.activeStorySources.count > 1 {
+                beginStorySourceDownloadsIfNeeded()
+            }
             if session.activeProject?.isPaused == true {
                 state.requestStopProcessing()
                 return
@@ -129,7 +136,13 @@ struct StudioView: View {
                 return
             }
             pendingURL = completedURL
-            pendingCaptureKind = nil
+            if let storySource = pendingStorySource {
+                pendingCaptureKind = .screen
+                pendingSourceReference = storySourceReference(storySource)
+            } else {
+                pendingCaptureKind = nil
+                pendingSourceReference = nil
+            }
             showSourceDownloader = false
             if session.workspaceRightsAttestation?.permitsUserDirectedProduction == true {
                 importPendingMedia()
@@ -137,6 +150,12 @@ struct StudioView: View {
                 rightsConfirmed = false
                 showRightsSheet = true
             }
+        }
+        .onChange(of: sourceDownloader.state) { downloadState in
+            guard pendingStorySource != nil,
+                  case .failed(let message) = downloadState else { return }
+            sourceDownloadMessage =
+                "Ergänzung konnte nicht geladen werden: " + message
         }
         .sheet(isPresented: $showPackagingReview) {
             if let asset = state.asset,
@@ -263,17 +282,65 @@ struct StudioView: View {
                         Text(source.channelTitle)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
+                        if index > 0 {
+                            storySourceStatus(source)
+                        }
                     }
                 }
                 Text("Die Auswahlreihenfolge bestimmt die Story-Rollen. Geladene Ergänzungen lassen sich im Schnitt zeitlich platzieren und einzeln deaktivieren.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    if pendingStorySource != nil {
+                        ProgressView(value: sourceDownloader.progress)
+                            .frame(maxWidth: 180)
+                        Text(sourceDownloader.state.germanTitle)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Button("Download anzeigen") {
+                            showSourceDownloader = true
+                        }
+                        .buttonStyle(.link)
+                    }
+                    Spacer()
+                    Button("Ergänzungen laden") {
+                        beginStorySourceDownloadsIfNeeded()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(
+                        state.asset == nil
+                        || pendingStorySource != nil
+                        || sourceDownloader.state == .downloading
+                        || sourceDownloader.state == .processing
+                        || sourceDownloader.state == .paused
+                    )
+                }
             }
             .padding(.top, 6)
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 10)
         .background(Color.primary.opacity(0.018))
+    }
+
+    @ViewBuilder
+    private func storySourceStatus(
+        _ source: YouTubeOpportunityCandidate
+    ) -> some View {
+        if pendingStorySource?.videoID == source.videoID {
+            Label("Wird geladen", systemImage: "arrow.down.circle.fill")
+                .font(.caption2)
+                .foregroundStyle(BlackstockDesign.accent)
+        } else if isStorySourceLoaded(source.videoID) {
+            Label("Im Schnitt", systemImage: "checkmark.circle.fill")
+                .font(.caption2)
+                .foregroundStyle(.green)
+        } else {
+            Text("Bereit")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
     }
 
     private func sourceContext(_ source: MediaSourceReference) -> some View {
@@ -2928,10 +2995,14 @@ struct StudioView: View {
                 Spacer()
             }
 
-            if let source = opportunitySource {
-                GroupBox("Ausgewähltes Video") {
+            if let source = pendingSourceReference ?? opportunitySource {
+                GroupBox(
+                    pendingStorySource == nil
+                        ? "Ausgewähltes Video"
+                        : "Ausgewählte Ergänzung"
+                ) {
                     VStack(alignment: .leading, spacing: 5) {
-                        Text(project.title)
+                        Text(pendingStorySource?.title ?? project.title)
                             .font(.headline)
                         Text(source.pageURL.absoluteString)
                             .font(.caption2.monospaced())
@@ -3160,7 +3231,9 @@ struct StudioView: View {
     }
 
     private func startSourceDownload(
-        remoteURL: URL
+        remoteURL: URL,
+        sourceIDOverride: String? = nil,
+        showProgressSheet: Bool = true
     ) {
         guard let ingestDirectory =
                 session.automaticIngestDirectoryURL else {
@@ -3188,7 +3261,9 @@ struct StudioView: View {
         }
 
         if YouTubeDownloadRequest.accepts(remoteURL) {
-            let sourceID = (opportunitySource?.externalID ?? "youtube")
+            let sourceID = (sourceIDOverride
+                ?? opportunitySource?.externalID
+                ?? "youtube")
                 .filter { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") }
             let sourceKey = SHA256.hash(data: Data(remoteURL.absoluteString.utf8))
                 .prefix(8).map { String(format: "%02x", $0) }.joined()
@@ -3201,10 +3276,57 @@ struct StudioView: View {
             .appendingPathComponent(fileName)
 
         downloadProjectID = project.id
-        showSourceDownloader = true
+        showSourceDownloader = showProgressSheet
         sourceDownloader.start(
             remoteURL: remoteURL,
             destinationURL: destination
+        )
+    }
+
+    private func storySourceReference(
+        _ source: YouTubeOpportunityCandidate
+    ) -> MediaSourceReference {
+        MediaSourceReference(
+            provider: .youtube,
+            pageURL: URL(
+                string: "https://www.youtube.com/watch?v=\(source.videoID)"
+            )!,
+            externalID: source.videoID,
+            discoveredAt: source.retrievedAt
+        )
+    }
+
+    private func isStorySourceLoaded(_ videoID: String) -> Bool {
+        state.supplementalCaptures.contains {
+            $0.rightsEvidence.contains("YouTube-Ergänzung:\(videoID)")
+        }
+    }
+
+    private func beginStorySourceDownloadsIfNeeded() {
+        guard state.asset != nil,
+              pendingStorySource == nil,
+              sourceDownloader.state != .downloading,
+              sourceDownloader.state != .processing,
+              sourceDownloader.state != .paused else { return }
+
+        queuedStorySources = Array(session.activeStorySources.dropFirst())
+            .filter { !isStorySourceLoaded($0.videoID) }
+        startNextStorySourceDownload()
+    }
+
+    private func startNextStorySourceDownload() {
+        guard pendingStorySource == nil,
+              !queuedStorySources.isEmpty else { return }
+        let source = queuedStorySources.removeFirst()
+        let reference = storySourceReference(source)
+        pendingStorySource = source
+        pendingSourceReference = reference
+        sourceDownloadURLText = reference.pageURL.absoluteString
+        sourceDownloadMessage = nil
+        startSourceDownload(
+            remoteURL: reference.pageURL,
+            sourceIDOverride: source.videoID,
+            showProgressSheet: false
         )
     }
 
@@ -3360,9 +3482,16 @@ struct StudioView: View {
         }
 
         let captureKind = pendingCaptureKind
-        let sourceReference = opportunitySource
+        let sourceReference = pendingSourceReference ?? opportunitySource
+        let storySource = pendingStorySource
         let sourceEvidence: String
-        if let sourceReference {
+        if let storySource {
+            sourceEvidence =
+                "YouTube-Ergänzung:"
+                + storySource.videoID
+                + " · "
+                + storySource.title
+        } else if let sourceReference {
             let providerReference =
                 sourceReference.externalID
                 ?? sourceReference.pageURL.absoluteString
@@ -3392,6 +3521,9 @@ struct StudioView: View {
 
             if isSupplementalCapture,
                let captureKind {
+                let existingCaptureIDs = Set(
+                    state.supplementalCaptures.map(\.id)
+                )
                 let saved = await state.importSupplementalCapture(
                     url: url,
                     kind: captureKind,
@@ -3404,8 +3536,44 @@ struct StudioView: View {
                 )
                 if saved,
                    let persisted = state.supplementalCaptures.last(
-                    where: { $0.kind == captureKind }
+                    where: {
+                        $0.kind == captureKind
+                        && !existingCaptureIDs.contains($0.id)
+                    }
                    ) {
+                    if let storySource,
+                       let storyIndex = session.activeStorySources.firstIndex(
+                            where: { $0.videoID == storySource.videoID }
+                       ) {
+                        let duration = min(
+                            max(persisted.durationSeconds ?? 5, 1),
+                            5
+                        )
+                        let outputDuration = max(
+                            state.currentOutputDurationSeconds,
+                            duration
+                        )
+                        let timelineStart = min(
+                            Double(max(storyIndex - 1, 0)) * 5,
+                            max(outputDuration - duration, 0)
+                        )
+                        state.setSupplementalVideoEnabled(
+                            captureID: persisted.id,
+                            enabled: true
+                        )
+                        state.setSupplementalVideoTimelineStart(
+                            captureID: persisted.id,
+                            seconds: timelineStart
+                        )
+                        state.setSupplementalVideoSourceStart(
+                            captureID: persisted.id,
+                            seconds: 0
+                        )
+                        state.setSupplementalVideoDuration(
+                            captureID: persisted.id,
+                            seconds: duration
+                        )
+                    }
                     await BlackstockCaptureHardwareAudit
                         .recordPersistedCapture(
                             kind: captureKind,
@@ -3472,6 +3640,7 @@ struct StudioView: View {
                                 localeIdentifier:
                                     speechLocaleIdentifier
                             )
+                            beginStorySourceDownloadsIfNeeded()
                         } else {
                             _ = session.advanceActiveProject(
                                 to: .preview
@@ -3483,6 +3652,11 @@ struct StudioView: View {
 
             pendingURL = nil
             pendingCaptureKind = nil
+            pendingSourceReference = nil
+            if storySource != nil {
+                pendingStorySource = nil
+                startNextStorySourceDownload()
+            }
         }
     }
 

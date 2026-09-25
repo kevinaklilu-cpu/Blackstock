@@ -17,8 +17,6 @@ requirements = {
         "session.setWorkspaceRightsResponsibilityAccepted(",
         "session.prepareChannelAndLoadOpportunities(",
         "session.useOpportunityAsClip(",
-        "session.useMultiSourceStory(",
-        "Mehrquellen-Story",
     ],
     "Sources/BlackstockApp/WorkspaceProductViews.swift": [
         "session.loadWorkspaceOpportunities(",
@@ -29,6 +27,8 @@ requirements = {
         "session.youtubeLanguages",
         "session.useOpportunity(",
         "session.useOpportunityAsClip(",
+        "session.useMultiSourceStory(",
+        "Mehrquellen-Story",
         "session.setWorkspaceRightsResponsibilityAccepted(",
         "session.setProjectPaused(",
         "session.deleteProject(",
