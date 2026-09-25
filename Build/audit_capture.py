@@ -302,6 +302,7 @@ else:
 
 adhoc_contract = "\n".join([
     "  codesign --force --options runtime \\",
+    '    --requirements "$ROOT/Build/Blackstock.requirements" \\',
     '    --entitlements "$ROOT/Build/Blackstock.entitlements" \\',
     '    --sign - "$APP"',
 ])
