@@ -76,14 +76,14 @@ trap 'rm -rf "$WORK"' EXIT
 ARM64_BUILD="$WORK/build-arm64"
 X86_64_BUILD="$WORK/build-x86_64"
 
-swift build -c release --arch arm64 --scratch-path "$ARM64_BUILD"
-swift build -c release --arch x86_64 --scratch-path "$X86_64_BUILD"
+swift build --disable-sandbox -c release --arch arm64 --scratch-path "$ARM64_BUILD"
+swift build --disable-sandbox -c release --arch x86_64 --scratch-path "$X86_64_BUILD"
 
 ARM64_BIN_DIR="$(
-  swift build -c release --arch arm64     --scratch-path "$ARM64_BUILD"     --show-bin-path
+  swift build --disable-sandbox -c release --arch arm64     --scratch-path "$ARM64_BUILD"     --show-bin-path
 )"
 X86_64_BIN_DIR="$(
-  swift build -c release --arch x86_64     --scratch-path "$X86_64_BUILD"     --show-bin-path
+  swift build --disable-sandbox -c release --arch x86_64     --scratch-path "$X86_64_BUILD"     --show-bin-path
 )"
 
 require_universal_binary() {
