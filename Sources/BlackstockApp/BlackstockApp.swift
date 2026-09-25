@@ -15,12 +15,23 @@ struct BlackstockApp: App {
         WindowGroup {
             VStack(spacing: 0) {
                 if let keychainMessage {
-                    HStack {
-                        Label(keychainMessage, systemImage: "lock.trianglebadge.exclamationmark")
-                            .font(.callout)
-                            .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 12) {
+                        Image(systemName: "lock.trianglebadge.exclamationmark")
+                            .font(.title3)
+                            .foregroundStyle(.orange)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Google-Verbindung erneuern")
+                                .font(.callout.weight(.semibold))
+                            Text(keychainMessage)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                         Spacer()
-                        Button("Neu anmelden") { session.showGoogleConnection = true }
+                        Button("Mit Google anmelden") {
+                            session.showGoogleConnection = true
+                        }
+                        .buttonStyle(.borderedProminent)
                         Button("Zugriff erneut prüfen") {
                             retryingKeychain = true
                             Task {
@@ -30,8 +41,9 @@ struct BlackstockApp: App {
                         }
                         .disabled(retryingKeychain)
                     }
-                    .padding()
-                    .background(.regularMaterial)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 10)
+                    .background(Color.orange.opacity(0.09))
                 } else if session.onboardingComplete && session.workspaceChannel == nil {
                     HStack {
                         Text("Verbinde Google und wähle deinen YouTube-Kanal.")
@@ -103,24 +115,82 @@ private struct WorkspaceShell: View {
                 Divider()
 
                 List(selection: $selection) {
-                    Label("Start", systemImage: "house")
-                        .tag("Übersicht")
-                    Label("Entdecken", systemImage: "play.rectangle.fill")
-                        .tag("Chancen")
-                    Label("Projekte", systemImage: "folder.fill")
-                        .tag("Projekte")
-                    Label("Analyse", systemImage: "chart.line.uptrend.xyaxis")
-                        .tag("Analyse")
-                    if session.activeProject?.stage.journeyGuidance
-                        .recommendedSurface == .studio {
-                        Label("Editor", systemImage: "scissors")
-                            .tag("Studio")
+                    Section("Arbeitsbereich") {
+                        Label("Start", systemImage: "house")
+                            .tag("Übersicht")
+                        Label("Entdecken", systemImage: "play.rectangle.fill")
+                            .tag("Chancen")
+                        Label("Projekte", systemImage: "folder.fill")
+                            .tag("Projekte")
+                        Label("Analyse", systemImage: "chart.line.uptrend.xyaxis")
+                            .tag("Analyse")
                     }
-                    Label("Einstellungen", systemImage: "gearshape")
-                        .tag("Einstellungen")
+
+                    if session.activeProject?.stage.journeyGuidance
+                        .recommendedSurface == .studio,
+                       let project = session.activeProject {
+                        Section("Aktives Projekt") {
+                            Label {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Editor")
+                                    Text(project.title)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                            } icon: {
+                                Image(systemName: "scissors")
+                            }
+                            .tag("Studio")
+                        }
+                    } else if let project = session.activeProject {
+                        Section("Aktives Projekt") {
+                            Label {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Projektstatus")
+                                    Text(project.title)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                            } icon: {
+                                Image(systemName: "checkmark.circle")
+                            }
+                            .tag("Übersicht")
+                        }
+                    }
+
+                    Section {
+                        Label("Einstellungen", systemImage: "gearshape")
+                            .tag("Einstellungen")
+                    }
                 }
                 .listStyle(.sidebar)
                 .scrollContentBackground(.hidden)
+                .background(BlackstockDesign.sidebar)
+
+                Divider()
+
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(
+                            session.workspaceChannelID == nil
+                                ? Color.orange
+                                : Color.green
+                        )
+                        .frame(width: 7, height: 7)
+                    Text(
+                        session.workspaceChannel?.title
+                            ?? (session.workspaceChannelID == nil
+                                ? "YouTube nicht verbunden"
+                                : "YouTube verbunden")
+                    )
+                    .font(.caption)
+                    .lineLimit(1)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 11)
                 .background(BlackstockDesign.sidebar)
             }
             .background(BlackstockDesign.sidebar)
@@ -1477,9 +1547,14 @@ private struct SettingsView: View {
     @State private var updateStatusMessage: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
             Text("Einstellungen")
                 .font(.largeTitle.bold())
+
+            Text("Konto, Medien, Updates und Datenschutz an einem Ort.")
+                .font(.title3)
+                .foregroundStyle(.secondary)
 
             GroupBox("Google / YouTube") {
                 VStack(alignment: .leading, spacing: 10) {
@@ -2031,8 +2106,12 @@ private struct SettingsView: View {
             }
 
             Spacer()
+            }
+            .frame(maxWidth: 980, alignment: .leading)
+            .padding(28)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .padding(28)
+        .background(BlackstockDesign.canvas)
         .fileImporter(
             isPresented: $showOAuthImporter,
             allowedContentTypes: [.json],
