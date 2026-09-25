@@ -8,16 +8,23 @@ public enum YouTubeMediaAssembler {
         let files = try FileManager.default.contentsOfDirectory(
             at: directory, includingPropertiesForKeys: nil
         )
-        guard let video = files.first(where: { $0.pathExtension == "mp4" }) else {
+        let videos = files.filter { $0.pathExtension.lowercased() == "mp4" }
+        guard !videos.isEmpty else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        for video in videos {
+            let candidate = AVURLAsset(url: video)
+            if !(try await candidate.loadTracks(withMediaType: .audio)).isEmpty,
+               !(try await candidate.loadTracks(withMediaType: .video)).isEmpty {
+                try? FileManager.default.removeItem(at: output)
+                try FileManager.default.copyItem(at: video, to: output)
+                return
+            }
+        }
+        guard let video = videos.first else {
             throw CocoaError(.fileReadCorruptFile)
         }
         let videoAsset = AVURLAsset(url: video)
-        let embeddedAudio = try await videoAsset.loadTracks(withMediaType: .audio)
-        if !embeddedAudio.isEmpty {
-            try? FileManager.default.removeItem(at: output)
-            try FileManager.default.copyItem(at: video, to: output)
-            return
-        }
         guard let audio = files.first(where: { $0.pathExtension == "m4a" }) else {
             throw CocoaError(.fileReadCorruptFile)
         }
@@ -33,10 +40,11 @@ public enum YouTubeMediaAssembler {
         let audioTimeRange = try await audioTrack.load(.timeRange)
         let videoDuration = videoTimeRange.duration
         let audioDuration = audioTimeRange.duration
-        // Never repair a malformed DASH header by stretching either track. That
-        // changes playback speed and causes visible lip sync errors. A combined
-        // A/V MP4 is preferred; this fallback accepts separate tracks only when
-        // both source timelines already agree with the extractor metadata.
+        // Some fragmented YouTube DASH files expose both audio and video at the
+        // same incorrect multiple of their real duration. AVFoundation resolves
+        // the AAC edit list during export, while the video media timeline keeps
+        // the expanded duration. Verify a shared, known factor before applying
+        // the video-only correction used below.
         guard let metadataURL = files.first(where: { $0.lastPathComponent.hasSuffix(".info.json") }),
               let metadata = try JSONSerialization.jsonObject(with: Data(contentsOf: metadataURL)) as? [String: Any],
               let seconds = metadata["duration"] as? Double,
@@ -45,16 +53,42 @@ public enum YouTubeMediaAssembler {
               audioDuration.seconds.isFinite, audioDuration.seconds > 0 else {
             throw CocoaError(.fileReadCorruptFile)
         }
-        guard abs(videoDuration.seconds - seconds) <= 1,
-              abs(audioDuration.seconds - seconds) <= 1,
-              abs(videoDuration.seconds - audioDuration.seconds) <= 1 else {
+        guard abs(videoDuration.seconds - audioDuration.seconds) <= 1 else {
             throw CocoaError(.fileReadCorruptFile)
         }
         try destinationVideo.insertTimeRange(videoTimeRange, of: videoTrack, at: .zero)
         try destinationAudio.insertTimeRange(audioTimeRange, of: audioTrack, at: .zero)
+        let needsTimelineNormalization =
+            abs(videoDuration.seconds - seconds) > 1
+            || abs(audioDuration.seconds - seconds) > 1
+        if needsTimelineNormalization {
+            let videoFactor = videoDuration.seconds / seconds
+            let audioFactor = audioDuration.seconds / seconds
+            let recognizedFactor = [0.5, 2.0].contains {
+                abs(videoFactor - $0) <= 0.05
+                    && abs(audioFactor - $0) <= 0.05
+            }
+            guard recognizedFactor,
+                  abs(videoFactor - audioFactor) <= 0.02 else {
+                throw CocoaError(.fileReadCorruptFile)
+            }
+            // The fragmented video track keeps the doubled media timeline after
+            // export, while AAC resolves its edit list automatically. Correct
+            // the video timeline only; scaling AAC would shorten it twice.
+            destinationVideo.scaleTimeRange(
+                CMTimeRange(start: .zero, duration: videoDuration),
+                toDuration: CMTime(
+                    seconds: seconds,
+                    preferredTimescale: 600
+                )
+            )
+        }
         destinationVideo.preferredTransform = try await videoTrack.load(.preferredTransform)
         try Task.checkCancellation()
-        guard let exporter = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetPassthrough) else {
+        let preset = needsTimelineNormalization
+            ? AVAssetExportPresetHighestQuality
+            : AVAssetExportPresetPassthrough
+        guard let exporter = AVAssetExportSession(asset: composition, presetName: preset) else {
             throw CocoaError(.fileWriteUnknown)
         }
         exporter.shouldOptimizeForNetworkUse = true

@@ -180,7 +180,8 @@ final class SourceDownloadManager:
         let pipe = Pipe()
         process.executableURL = executable
         // Download outside the watched ingest folder until the file is complete.
-        let identity = destination.standardizedFileURL.path + "\n" + remoteURL.absoluteString
+        let identity = YouTubeDownloadRequest.recoveryIdentityVersion + "\n"
+            + destination.standardizedFileURL.path + "\n" + remoteURL.absoluteString
         let key = SHA256.hash(data: Data(identity.utf8)).map { String(format: "%02x", $0) }.joined()
         let recoveryRoot = destination.deletingLastPathComponent()
             .appendingPathComponent(".downloads", isDirectory: true)

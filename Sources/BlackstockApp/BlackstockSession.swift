@@ -82,6 +82,7 @@ final class BlackstockSession: ObservableObject {
     @Published var errorMessage: String?
     @Published var showGoogleConnection = false
     @Published var connectionStatusMessage: String?
+    @Published private(set) var activeStorySources: [YouTubeOpportunityCandidate] = []
     @Published private(set) var onboardingComplete: Bool
     @Published private(set) var activeProject: BlackstockProject?
     @Published private(set) var activeOpportunitySource: MediaSourceReference?
@@ -206,6 +207,16 @@ final class BlackstockSession: ObservableObject {
         workspaceRightsResponsibilityAccepted = false
         activeProject = Self.loadStoredProject()
         activeOpportunitySource = Self.loadStoredSource()
+        if let projectID = activeProject?.id,
+           let data = UserDefaults.standard.data(
+                forKey: "blackstock.storySources.\(projectID.uuidString)"
+           ),
+           let sources = try? JSONDecoder().decode(
+                [YouTubeOpportunityCandidate].self,
+                from: data
+           ) {
+            activeStorySources = sources
+        }
         if let activeProject {
             try? Self.upsertStoredProject(activeProject)
             if let activeOpportunitySource {
@@ -2746,6 +2757,40 @@ final class BlackstockSession: ObservableObject {
                         "Im gewählten Zeitraum gab es in der Kategorie zu wenige Treffer. Die Kategorie wurde erweitert; Zeitraum, Region und Format bleiben strikt aktiv."
                 }
             }
+            if !loadMore, resolvedQuery.isEmpty, page.candidates.isEmpty,
+               !language.isEmpty {
+                page = try await client.opportunityPage(
+                    query: "",
+                    categoryID: nil,
+                    regionCode: region.isEmpty ? nil : region,
+                    relevanceLanguage: nil,
+                    publishedAfter: window.publishedAfter(now: opportunitySearchDate),
+                    maxResults: 50,
+                    order: order,
+                    contentFilter: filter
+                )
+                if !page.candidates.isEmpty {
+                    recommendationNote =
+                        "Für Sprache und Kategorie gab es zu wenige Treffer. Sprache und Kategorie wurden erweitert; Zeitraum, Region und Format bleiben strikt aktiv."
+                }
+            }
+            if !loadMore, resolvedQuery.isEmpty, page.candidates.isEmpty,
+               !region.isEmpty {
+                page = try await client.opportunityPage(
+                    query: "",
+                    categoryID: nil,
+                    regionCode: nil,
+                    relevanceLanguage: nil,
+                    publishedAfter: window.publishedAfter(now: opportunitySearchDate),
+                    maxResults: 50,
+                    order: order,
+                    contentFilter: filter
+                )
+                if !page.candidates.isEmpty {
+                    recommendationNote =
+                        "Für die enge Auswahl gab es zu wenige Treffer. Kategorie, Sprache und Region wurden erweitert; Zeitraum und Format bleiben strikt aktiv."
+                }
+            }
             guard opportunityRequestID == requestID,
                   channelCategoryID == category, channelRegionCode == region,
                   contentLanguage == language,
@@ -2790,6 +2835,32 @@ final class BlackstockSession: ObservableObject {
             opportunity,
             productionIntentKind: .clipFromOpportunity
         )
+    }
+
+    func useMultiSourceStory(
+        _ sources: [YouTubeOpportunityCandidate]
+    ) {
+        let unique = sources.reduce(into: [YouTubeOpportunityCandidate]()) {
+            result, source in
+            if !result.contains(where: { $0.videoID == source.videoID }) {
+                result.append(source)
+            }
+        }
+        guard unique.count >= 2 else {
+            errorMessage = "Wähle mindestens zwei Videos für eine Mehrquellen-Story aus."
+            return
+        }
+        let selected = Array(unique.prefix(5))
+        useOpportunity(selected[0], productionIntentKind: .clipFromOpportunity)
+        guard let projectID = activeProject?.id else { return }
+        activeStorySources = selected
+        if let data = try? JSONEncoder().encode(selected) {
+            UserDefaults.standard.set(
+                data,
+                forKey: "blackstock.storySources.\(projectID.uuidString)"
+            )
+        }
+        errorMessage = nil
     }
 
     func productionIntent(
@@ -2872,6 +2943,7 @@ final class BlackstockSession: ObservableObject {
             }
             activeProject = seed.project
             activeOpportunitySource = seed.source
+            activeStorySources = []
             lastPublishingResult = nil
             latestGrowthLearning = nil
             latestCommentPage = nil

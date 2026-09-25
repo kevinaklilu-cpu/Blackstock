@@ -17,6 +17,8 @@ requirements = {
         "session.setWorkspaceRightsResponsibilityAccepted(",
         "session.prepareChannelAndLoadOpportunities(",
         "session.useOpportunityAsClip(",
+        "session.useMultiSourceStory(",
+        "Mehrquellen-Story",
     ],
     "Sources/BlackstockApp/WorkspaceProductViews.swift": [
         "session.loadWorkspaceOpportunities(",
@@ -103,6 +105,7 @@ requirements = {
         "attemptAutomaticOriginalBinding()",
         "session.resolveOriginalMedia(",
         "SourceDownloadManager()",
+        "session.activeStorySources",
         "IngestDirectoryWatcher()",
         "startIngestWatcher()",
         "acquireApprovedSource(",

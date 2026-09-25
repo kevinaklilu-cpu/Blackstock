@@ -1,6 +1,8 @@
 import Foundation
 
 public enum YouTubeDownloadRequest {
+    public static let recoveryIdentityVersion = "av-sync-v2"
+
     public static func accepts(_ url: URL) -> Bool {
         guard ["https", "http"].contains(url.scheme?.lowercased() ?? ""),
               let host = url.host?.lowercased() else { return false }
@@ -10,7 +12,7 @@ public enum YouTubeDownloadRequest {
     public static func arguments(url: URL, output: URL) -> [String] {
         ["--ignore-config", "--no-playlist", "--break-match-filters", "!is_live", "--no-overwrites", "--newline",
          "--no-colors", "--write-info-json", "--no-simulate", "--progress", "--socket-timeout", "30",
-         "--retries", "3", "--format", "best[ext=mp4][vcodec^=avc1][acodec!=none][height<=1080]/(bestvideo[ext=mp4][vcodec^=avc1][height<=1080],bestaudio[ext=m4a])",
+         "--retries", "5", "--fragment-retries", "5", "--format", "best[ext=mp4][vcodec^=avc1][acodec!=none][height<=1080][fps<=30]/(bestvideo[ext=mp4][vcodec^=avc1][height<=1080][fps<=30],bestaudio[ext=m4a])",
          "--progress-template", "download:BLACKSTOCK_PROGRESS:%(progress._percent_str)s",
          "--output", output.path, "--", url.absoluteString]
     }

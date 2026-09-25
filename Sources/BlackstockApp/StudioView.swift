@@ -49,6 +49,11 @@ struct StudioView: View {
                 Divider()
             }
 
+            if session.activeStorySources.count > 1 {
+                storySourcesOverview
+                Divider()
+            }
+
             if let asset = state.asset {
                 editor(asset)
             } else {
@@ -235,6 +240,40 @@ struct StudioView: View {
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
         .background(BlackstockDesign.raisedSurface)
+    }
+
+    private var storySourcesOverview: some View {
+        DisclosureGroup(
+            "Mehrquellen-Story · \(session.activeStorySources.count) Videos"
+        ) {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(
+                    Array(session.activeStorySources.enumerated()),
+                    id: \.element.videoID
+                ) { index, source in
+                    HStack(spacing: 10) {
+                        Text(index == 0 ? "Leitvideo" : "Ergänzung \(index)")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 82, alignment: .leading)
+                        Text(source.title)
+                            .font(.caption)
+                            .lineLimit(1)
+                        Spacer()
+                        Text(source.channelTitle)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Text("Die Auswahlreihenfolge bestimmt die Story-Rollen. Geladene Ergänzungen lassen sich im Schnitt zeitlich platzieren und einzeln deaktivieren.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.top, 6)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 10)
+        .background(Color.primary.opacity(0.018))
     }
 
     private func sourceContext(_ source: MediaSourceReference) -> some View {
