@@ -8,7 +8,8 @@ struct OpportunityWorkspaceView: View {
     @ObservedObject var session: BlackstockSession
     let onProjectCreated: () -> Void
 
-    @State private var query = ""
+    @AppStorage("blackstock.discovery.query")
+    private var query = ""
     @State private var sortMode: OpportunitySortMode = .views
     @State private var selectedOpportunityID: String?
     @State private var hasLoadedInitially = false
@@ -26,6 +27,17 @@ struct OpportunityWorkspaceView: View {
                         text: $query
                     )
                     .textFieldStyle(.plain)
+                    .accessibilityLabel("YouTube-Suchbegriff")
+                    if !query.isEmpty {
+                        Button {
+                            query = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("Suchbegriff löschen")
+                    }
                 }
                 .padding(.horizontal, 12)
                 .frame(height: 38)
@@ -173,12 +185,35 @@ struct OpportunityWorkspaceView: View {
                 .font(.caption).foregroundStyle(.secondary)
 
             if let error = session.errorMessage {
-                Label(
-                    error,
-                    systemImage: "exclamationmark.triangle.fill"
+                HStack(spacing: 12) {
+                    Label(
+                        error,
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    Spacer()
+                    if error.localizedCaseInsensitiveContains("Google")
+                        || error.localizedCaseInsensitiveContains("Berechtigung")
+                        || error.localizedCaseInsensitiveContains("Kanal") {
+                        Button("Google verbinden") {
+                            session.showGoogleConnection = true
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                    } else {
+                        Button("Erneut versuchen") {
+                            Task { await loadOpportunities() }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                }
+                .padding(12)
+                .background(
+                    Color.red.opacity(0.08),
+                    in: RoundedRectangle(cornerRadius: 12)
                 )
-                .font(.caption)
-                .foregroundStyle(.red)
             }
 
             if session.opportunities.isEmpty {
@@ -196,12 +231,7 @@ struct OpportunityWorkspaceView: View {
             hasLoadedInitially = true
             await session.ensureYouTubeDiscoveryOptionsLoaded()
             if session.opportunities.isEmpty,
-               (
-                    !session.channelCategoryID.isEmpty
-                    || !query.trimmingCharacters(
-                        in: .whitespacesAndNewlines
-                    ).isEmpty
-               ) {
+               session.workspaceChannelID != nil {
                 await loadOpportunities()
             } else {
                 selectedOpportunityID =
@@ -269,12 +299,42 @@ struct OpportunityWorkspaceView: View {
                 Image(systemName: "sparkle.magnifyingglass")
                     .font(.largeTitle)
                     .foregroundStyle(.secondary)
-                Text("Noch keine Videos")
+                Text(
+                    session.workspaceChannelID == nil
+                        ? "YouTube verbinden"
+                        : "Noch keine passenden Videos"
+                )
                     .font(.headline)
-                Text("Lade die Videos deiner Kanal-Kategorie oder suche zusätzlich nach einem Begriff.")
+                Text(
+                    session.workspaceChannelID == nil
+                        ? "Verbinde dein Google-Konto und wähle anschließend den YouTube-Kanal, für den du recherchieren möchtest."
+                        : "Suche nach einem Thema oder erweitere Zeitraum und Format. Blackstock zeigt echte YouTube-Treffer mit Aufrufen und Veröffentlichungsdatum."
+                )
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: 560)
+
+                HStack(spacing: 10) {
+                    if session.workspaceChannelID == nil {
+                        Button("Google / YouTube verbinden") {
+                            session.showGoogleConnection = true
+                        }
+                        .buttonStyle(.borderedProminent)
+                    } else {
+                        Button("Erneut suchen") {
+                            Task { await loadOpportunities() }
+                        }
+                        .buttonStyle(.borderedProminent)
+
+                        Button("Filter zurücksetzen") {
+                            query = ""
+                            session.opportunityContentFilter = .all
+                            session.opportunityTimeWindow = .allTime
+                            Task { await loadOpportunities() }
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 36)
@@ -877,6 +937,17 @@ struct ProjectLibraryView: View {
                 )
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
+
+                ProgressView(
+                    value: Double(
+                        project.stage.canonicalProgressPosition
+                    ),
+                    total: Double(
+                        BlackstockStage.canonicalProgressCount
+                    )
+                )
+                .frame(width: 150)
+                .tint(BlackstockDesign.accent)
 
                 HStack(spacing: 8) {
                     if session.activeProject?.id == project.id {
