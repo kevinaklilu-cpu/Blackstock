@@ -41,6 +41,8 @@ struct LocalPrivacyDeletionSummary {
 
 @MainActor
 final class BlackstockSession: ObservableObject {
+    private static let importedOAuthClientIDDefaultsKey =
+        "blackstock.google.oauth.importedClientID"
     enum FirstRunStep: Int, CaseIterable {
         case welcome
         case channel
@@ -181,8 +183,21 @@ final class BlackstockSession: ObservableObject {
         _ = try? PrivacyRetentionEnforcer().purgeExpiredUpdatePackages(
             in: FileManager.default.temporaryDirectory
         )
-        importedOAuthClientID = BlackstockKeychain.read("google.oauth.importedClientID")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let defaultsClientID = UserDefaults.standard.string(
+            forKey: Self.importedOAuthClientIDDefaultsKey
+        )?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let keychainClientID = BlackstockKeychain.read(
+            "google.oauth.importedClientID"
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        importedOAuthClientID = keychainClientID.isEmpty
+            ? defaultsClientID
+            : keychainClientID
+        if !keychainClientID.isEmpty {
+            UserDefaults.standard.set(
+                keychainClientID,
+                forKey: Self.importedOAuthClientIDDefaultsKey
+            )
+        }
         originalMediaLibraryPath = UserDefaults.standard.string(
             forKey: "blackstock.originalMediaLibraryPath"
         ) ?? ""
@@ -559,6 +574,10 @@ final class BlackstockSession: ObservableObject {
                 config.clientID,
                 account: "google.oauth.importedClientID"
             )
+            UserDefaults.standard.set(
+                config.clientID,
+                forKey: Self.importedOAuthClientIDDefaultsKey
+            )
             if let clientSecret = config.clientSecret,
                !clientSecret.isEmpty {
                 try BlackstockKeychain.write(
@@ -757,6 +776,9 @@ final class BlackstockSession: ObservableObject {
                 "google.oauth.importedClientSecret"
             )
             importedOAuthClientID = ""
+            UserDefaults.standard.removeObject(
+                forKey: Self.importedOAuthClientIDDefaultsKey
+            )
             clearOAuthRuntimeAuthorizationState(
                 clearChannelSelection: clientChanged
             )
@@ -793,8 +815,16 @@ final class BlackstockSession: ObservableObject {
         connectionStatusMessage = "Gespeicherte Anmeldung wird geprüft …"
         showGoogleConnection = true
         BlackstockKeychain.retryBlockedReads()
-        importedOAuthClientID = BlackstockKeychain.read("google.oauth.importedClientID")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let storedClientID = BlackstockKeychain.read(
+            "google.oauth.importedClientID"
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        if !storedClientID.isEmpty {
+            importedOAuthClientID = storedClientID
+            UserDefaults.standard.set(
+                storedClientID,
+                forKey: Self.importedOAuthClientIDDefaultsKey
+            )
+        }
         if BlackstockKeychain.hasBlockedReads {
             connectionStatusMessage = "macOS lehnt die gespeicherte Anmeldung weiterhin ab. Melde dich erneut mit Google an."
             return
