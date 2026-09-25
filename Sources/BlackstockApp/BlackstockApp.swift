@@ -44,7 +44,7 @@ struct BlackstockApp: App {
                     .padding(.horizontal, 18)
                     .padding(.vertical, 10)
                     .background(Color.orange.opacity(0.09))
-                } else if session.onboardingComplete && session.workspaceChannel == nil {
+                } else if session.onboardingComplete && session.workspaceChannelID == nil {
                     HStack {
                         Text("Verbinde Google und wähle deinen YouTube-Kanal.")
                         Spacer()

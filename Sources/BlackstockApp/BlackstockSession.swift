@@ -1418,7 +1418,14 @@ final class BlackstockSession: ObservableObject {
             if selectedChannelID == nil {
                 selectedChannelID = channelID
             }
+            if analyticsScopePlan()?.state == .alreadyAuthorized {
+                analyticsAuthorizedChannelID = channelID
+            }
         } catch {
+            if let urlError = error as? URLError,
+               urlError.code == .cancelled {
+                return
+            }
             errorMessage =
                 "Kanaldaten konnten nicht aktualisiert werden: "
                 + describe(error)
