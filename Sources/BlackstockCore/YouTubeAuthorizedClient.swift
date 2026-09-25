@@ -439,9 +439,9 @@ public struct YouTubeAuthorizedClient: Sendable {
 
             return YouTubeOpportunityCandidate(
                 videoID: videoID,
-                title: item.snippet.title,
+                title: Self.decodedYouTubeText(item.snippet.title),
                 channelID: item.snippet.channelId,
-                channelTitle: item.snippet.channelTitle,
+                channelTitle: Self.decodedYouTubeText(item.snippet.channelTitle),
                 publishedAt: item.snippet.publishedAt,
                 thumbnailURL:
                     item.snippet.thumbnails?.medium?.url
@@ -563,19 +563,22 @@ public struct YouTubeAuthorizedClient: Sendable {
         var components = URLComponents(
             string: "https://www.googleapis.com/youtube/v3/videos"
         )!
-        components.queryItems = [
+        var queryItems: [URLQueryItem] = [
             .init(
                 name: "part",
                 value: "snippet,statistics,status,contentDetails,liveStreamingDetails"
             ),
             .init(name: "chart", value: "mostPopular"),
             .init(name: "regionCode", value: regionCode),
-            .init(name: "videoCategoryId", value: categoryID),
             .init(
                 name: "maxResults",
                 value: String(min(max(maxResults, 1), 50))
             )
         ]
+        if !categoryID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            queryItems.append(.init(name: "videoCategoryId", value: categoryID))
+        }
+        components.queryItems = queryItems
 
         let data = try await perform(
             components.url!,
@@ -593,9 +596,9 @@ public struct YouTubeAuthorizedClient: Sendable {
             }
             return YouTubeOpportunityCandidate(
                 videoID: video.id,
-                title: snippet.title,
+                title: Self.decodedYouTubeText(snippet.title),
                 channelID: snippet.channelId,
-                channelTitle: snippet.channelTitle,
+                channelTitle: Self.decodedYouTubeText(snippet.channelTitle),
                 publishedAt: snippet.publishedAt,
                 thumbnailURL:
                     snippet.thumbnails?.medium?.url
@@ -646,6 +649,17 @@ public struct YouTubeAuthorizedClient: Sendable {
         let data = try await perform(c.url!, session: session)
         let response = try JSONDecoder.youtube.decode(VideoListResponse.self, from: data)
         return Dictionary(uniqueKeysWithValues: response.items.map { ($0.id, $0) })
+    }
+
+    private static func decodedYouTubeText(_ text: String) -> String {
+        text
+            .replacingOccurrences(of: "&amp;", with: "&")
+            .replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&#39;", with: "'")
+            .replacingOccurrences(of: "&apos;", with: "'")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "&nbsp;", with: " ")
     }
 
     private static func contentKind(
@@ -793,4 +807,12 @@ private extension JSONDecoder {
 public struct YouTubeOpportunityPage: Sendable {
     public let candidates: [YouTubeOpportunityCandidate]
     public let nextPageToken: String?
+
+    public init(
+        candidates: [YouTubeOpportunityCandidate],
+        nextPageToken: String?
+    ) {
+        self.candidates = candidates
+        self.nextPageToken = nextPageToken
+    }
 }

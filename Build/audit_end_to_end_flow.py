@@ -11,7 +11,7 @@ checks = {
         "session.chooseChannel(",
         "session.refreshYouTubeVideoCategories(",
         "session.continueFromTopic(",
-        "YouTubeEmbeddedPlayer(videoID:",
+        "AsyncImage(url: selected.thumbnailURL)",
         "OpportunityTimeWindow.allCases",
         "session.useOpportunityAsClip(",
     ],
@@ -44,7 +44,7 @@ checks = {
         "originalMediaLibraryPath",
     ],
     "Sources/BlackstockApp/WorkspaceProductViews.swift": [
-        "YouTubeEmbeddedPlayer(videoID:",
+        "discoveryPreview(item)",
         "session.useOpportunityAsClip(",
         "Video schneiden",
         "Projekt pausieren",

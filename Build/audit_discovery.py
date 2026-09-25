@@ -35,7 +35,7 @@ REQUIRED = {
         "Video-Zeitraum",
         "Die Angaben stammen direkt von YouTube.",
         "Datenabruf:",
-        "YouTubeEmbeddedPlayer(videoID:",
+        "AsyncImage(url: selected.thumbnailURL)",
     ],
     "Sources/BlackstockApp/YouTubeEmbeddedPlayer.swift": [
         "https://www.youtube.com/embed/",
@@ -75,4 +75,4 @@ if errors:
         print(f"- {error}", file=sys.stderr)
     sys.exit(1)
 
-print("Discovery audit passed: channel-category discovery uses YouTube parameters, content-format filtering, identified embedded playback, provider ordering and missing-data honesty.")
+print("Discovery audit passed: automatic channel recommendations use YouTube parameters, content-format filtering, resilient thumbnail previews, provider ordering and missing-data honesty.")

@@ -77,6 +77,7 @@ final class BlackstockSession: ObservableObject {
     @Published private(set) var officialChannelSettingsVerified = false
     @Published private(set) var channelAudienceAppliedToYouTube: Bool?
     @Published var opportunities: [YouTubeOpportunityCandidate] = []
+    @Published var opportunityRecommendationNote = ""
     @Published var isWorking = false
     @Published var errorMessage: String?
     @Published var showGoogleConnection = false
@@ -2706,7 +2707,7 @@ final class BlackstockSession: ObservableObject {
             let accessToken = try await validatedReadOnlyAccessToken(targetChannelID: channelID)
             guard opportunityRequestID == requestID else { return }
             let client = YouTubeAuthorizedClient(accessToken: accessToken)
-            let page = try await client.opportunityPage(
+            var page = try await client.opportunityPage(
                 query: resolvedQuery,
                 // A typed query expresses the user's intent and must not be
                 // silently restricted to the saved channel category.
@@ -2717,10 +2718,41 @@ final class BlackstockSession: ObservableObject {
                 relevanceLanguage: language.isEmpty ? nil : language,
                 publishedAfter: window.publishedAfter(now: opportunitySearchDate),
                 maxResults: 50, order: order, contentFilter: filter, pageToken: token)
+            var recommendationNote = ""
+            // An empty search field means automatic recommendations. Narrow
+            // time/category combinations can legitimately return no search
+            // rows, so fall back to YouTube's regional popularity chart.
+            if !loadMore, resolvedQuery.isEmpty, page.candidates.isEmpty {
+                let popular = try await client.mostPopularOpportunityCandidates(
+                    categoryID: category,
+                    regionCode: region.isEmpty ? "US" : region,
+                    maxResults: 50
+                )
+                let filteredPopular = popular.filter { candidate in
+                    switch filter {
+                    case .all: return true
+                    case .shorts: return candidate.contentKind == .short
+                    case .videos: return candidate.contentKind == .video
+                    case .live: return candidate.contentKind == .live
+                    }
+                }
+                if !filteredPopular.isEmpty {
+                    page = YouTubeOpportunityPage(
+                        candidates: YouTubeAuthorizedClient.sortedOpportunities(
+                            filteredPopular,
+                            order: order
+                        ),
+                        nextPageToken: nil
+                    )
+                    recommendationNote =
+                        "Automatische Empfehlungen: aktuell beliebte Videos in deiner Region."
+                }
+            }
             guard opportunityRequestID == requestID,
                   channelCategoryID == category, channelRegionCode == region,
                   contentLanguage == language,
                   (selectedChannelID ?? workspaceChannelID) == channelID else { return }
+            opportunityRecommendationNote = recommendationNote
             var seen = Set(existingOpportunities.map(\.videoID))
             let added = page.candidates.filter { seen.insert($0.videoID).inserted }
             opportunities = YouTubeAuthorizedClient.sortedOpportunities(
@@ -2735,6 +2767,7 @@ final class BlackstockSession: ObservableObject {
             }
         } catch {
             guard opportunityRequestID == requestID else { return }
+            opportunityRecommendationNote = ""
             errorMessage = "Videos konnten nicht geladen werden: \(describe(error))"
         }
     }

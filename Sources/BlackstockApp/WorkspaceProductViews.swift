@@ -8,8 +8,7 @@ struct OpportunityWorkspaceView: View {
     @ObservedObject var session: BlackstockSession
     let onProjectCreated: () -> Void
 
-    @AppStorage("blackstock.discovery.query")
-    private var query = ""
+    @State private var query = ""
     @State private var sortMode: OpportunitySortMode = .views
     @State private var selectedOpportunityID: String?
     @State private var hasLoadedInitially = false
@@ -23,7 +22,7 @@ struct OpportunityWorkspaceView: View {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(.secondary)
                     TextField(
-                        "YouTube durchsuchen",
+                        "Optional: Thema, Kanal oder Stichwort",
                         text: $query
                     )
                     .textFieldStyle(.plain)
@@ -31,6 +30,7 @@ struct OpportunityWorkspaceView: View {
                     if !query.isEmpty {
                         Button {
                             query = ""
+                            Task { await loadOpportunities() }
                         } label: {
                             Image(systemName: "xmark.circle.fill")
                         }
@@ -93,8 +93,12 @@ struct OpportunityWorkspaceView: View {
                         Label(
                             session.isLoadingOpportunities
                                 ? "Lädt …"
-                                : "Suchen",
-                            systemImage: "magnifyingglass"
+                                : (query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                    ? "Aktualisieren"
+                                    : "Suchen"),
+                            systemImage: query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                ? "sparkles"
+                                : "magnifyingglass"
                         )
                     }
                 }
@@ -181,8 +185,15 @@ struct OpportunityWorkspaceView: View {
                     }
                 }
             }
-            Text("Region: dort verfügbare Videos. Sprache: bevorzugte Treffer. Aufrufe und Datum sortieren die geladenen Videos; ‚Mehr laden‘ erweitert die Auswahl.")
-                .font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 6) {
+                Image(systemName: query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                      ? "wand.and.stars" : "line.3.horizontal.decrease.circle")
+                Text(session.opportunityRecommendationNote.isEmpty
+                     ? "Ohne Suchbegriff empfiehlt Blackstock automatisch passende Videos. Region, Sprache, Format und Zeitraum verfeinern die Auswahl."
+                     : session.opportunityRecommendationNote)
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
 
             if let error = session.errorMessage {
                 HStack(spacing: 12) {
@@ -279,12 +290,10 @@ struct OpportunityWorkspaceView: View {
     private var header: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Entdecken")
+                Text("Videos entdecken")
                     .font(.largeTitle.bold())
                 Text(
-                    session.primaryTopic.isEmpty
-                        ? "Finde ein Video und erstelle daraus einen Clip."
-                        : "Kanal-Kategorie: \(session.primaryTopic) · Zeitraum: \(session.opportunityTimeWindow.germanTitle)"
+                    "Automatische Empfehlungen für deinen Kanal – die Suche ist optional."
                 )
                     .font(.title3)
                     .foregroundStyle(.secondary)
@@ -308,7 +317,7 @@ struct OpportunityWorkspaceView: View {
                 Text(
                     session.workspaceChannelID == nil
                         ? "Verbinde dein Google-Konto und wähle anschließend den YouTube-Kanal, für den du recherchieren möchtest."
-                        : "Suche nach einem Thema oder erweitere Zeitraum und Format. Blackstock zeigt echte YouTube-Treffer mit Aufrufen und Veröffentlichungsdatum."
+                        : "Blackstock lädt Empfehlungen automatisch. Passe bei Bedarf Kategorie, Region, Zeitraum oder Format an."
                 )
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
@@ -453,39 +462,7 @@ struct OpportunityWorkspaceView: View {
         _ item: YouTubeOpportunityCandidate
     ) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            if item.embeddable != false {
-                YouTubeEmbeddedPlayer(videoID: item.videoID)
-                    .accessibilityLabel(
-                        "YouTube-Vorschau: \(item.title)"
-                    )
-                    .aspectRatio(16.0 / 9.0, contentMode: .fit)
-                    .background(BlackstockDesign.mediaSurface)
-                    .clipShape(
-                        RoundedRectangle(
-                            cornerRadius: BlackstockDesign.cornerRadius,
-                            style: .continuous
-                        )
-                    )
-                    .overlay(
-                        RoundedRectangle(
-                            cornerRadius: BlackstockDesign.cornerRadius,
-                            style: .continuous
-                        )
-                        .strokeBorder(BlackstockDesign.subtleBorder)
-                    )
-            } else {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 14)
-                        .fill(Color.primary.opacity(0.04))
-                    VStack(spacing: 8) {
-                        Image(systemName: "play.slash")
-                            .font(.title)
-                        Text("YouTube-Vorschau hier nicht verfügbar.")
-                            .font(.headline)
-                    }
-                }
-                .frame(minHeight: 260)
-            }
+            discoveryPreview(item)
 
             HStack {
                 Spacer()
@@ -726,6 +703,45 @@ struct OpportunityWorkspaceView: View {
             format: "%d:%02d",
             minutes,
             remainder
+        )
+    }
+
+    private func discoveryPreview(
+        _ item: YouTubeOpportunityCandidate
+    ) -> some View {
+        ZStack {
+            AsyncImage(url: item.thumbnailURL) { image in
+                image.resizable().scaledToFill()
+            } placeholder: {
+                Rectangle().fill(BlackstockDesign.mediaSurface)
+            }
+            .aspectRatio(16.0 / 9.0, contentMode: .fit)
+
+            LinearGradient(
+                colors: [.clear, .black.opacity(0.62)],
+                startPoint: .center,
+                endPoint: .bottom
+            )
+
+            VStack {
+                Spacer()
+                HStack {
+                    Label("Vorschau", systemImage: "play.fill")
+                        .font(.callout.bold())
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(.black.opacity(0.66), in: Capsule())
+                    Spacer()
+                }
+                .padding(14)
+            }
+        }
+        .accessibilityLabel("YouTube-Vorschau: \(item.title)")
+        .clipShape(RoundedRectangle(cornerRadius: BlackstockDesign.cornerRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: BlackstockDesign.cornerRadius)
+                .strokeBorder(BlackstockDesign.subtleBorder)
         )
     }
 

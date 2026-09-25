@@ -455,28 +455,36 @@ struct FirstRunView: View {
 
             if let selected = selectedOpportunity {
                 VStack(alignment: .leading, spacing: 12) {
-                    if selected.embeddable != false {
-                        YouTubeEmbeddedPlayer(videoID: selected.videoID)
-                            .accessibilityLabel("YouTube-Vorschau: \(selected.title)")
-                            .aspectRatio(16.0 / 9.0, contentMode: .fit)
-                            .background(BlackstockDesign.mediaSurface)
-                            .clipShape(RoundedRectangle(cornerRadius: 14))
-                    } else {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 14)
-                                .fill(Color.primary.opacity(0.04))
-                            VStack(spacing: 8) {
-                                Image(systemName: "play.slash")
-                                    .font(.title)
-                                Text("YouTube-Vorschau hier nicht verfügbar.")
-                                    .font(.callout.weight(.semibold))
-                                Text("Dieses Video kann hier nicht eingebettet abgespielt werden.")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
+                    ZStack {
+                        AsyncImage(url: selected.thumbnailURL) { image in
+                            image.resizable().scaledToFill()
+                        } placeholder: {
+                            Rectangle().fill(BlackstockDesign.mediaSurface)
                         }
-                        .frame(minHeight: 260)
+                        .aspectRatio(16.0 / 9.0, contentMode: .fit)
+
+                        LinearGradient(
+                            colors: [.clear, .black.opacity(0.62)],
+                            startPoint: .center,
+                            endPoint: .bottom
+                        )
+
+                        VStack {
+                            Spacer()
+                            HStack {
+                                Label("Video auswählen", systemImage: "play.fill")
+                                    .font(.callout.bold())
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(.black.opacity(0.66), in: Capsule())
+                                Spacer()
+                            }
+                            .padding(14)
+                        }
                     }
+                    .accessibilityLabel("YouTube-Vorschau: \(selected.title)")
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
 
                     VStack(alignment: .leading, spacing: 5) {
                         Text(selected.title)
