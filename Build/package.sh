@@ -205,6 +205,7 @@ else
     codesign --force --sign - "$APP/Contents/Helpers/BlackstockE2ESmoke"
   fi
   codesign --force --options runtime \
+    --requirements "$ROOT/Build/Blackstock.requirements" \
     --entitlements "$ROOT/Build/Blackstock.entitlements" \
     --sign - "$APP"
 fi
