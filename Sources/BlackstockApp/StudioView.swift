@@ -826,6 +826,35 @@ struct StudioView: View {
                     .frame(height: 112)
 
                 HStack(spacing: 8) {
+                    editorMetric(
+                        title: "Quelle",
+                        value: timeLabel(asset.durationSeconds),
+                        icon: "film"
+                    )
+                    editorMetric(
+                        title: "Ausgabe",
+                        value: timeLabel(
+                            state.currentOutputDurationSeconds
+                        ),
+                        icon: "scissors"
+                    )
+                    editorMetric(
+                        title: "Änderungen",
+                        value: String(
+                            state.graph.currentOperations.count
+                        ),
+                        icon: "slider.horizontal.3"
+                    )
+                    editorMetric(
+                        title: "Untertitel",
+                        value: state.transcript == nil
+                            ? "Offen"
+                            : "Bereit",
+                        icon: "captions.bubble"
+                    )
+                }
+
+                HStack(spacing: 8) {
                     Button {
                         Task { await state.undo() }
                     } label: {
@@ -893,6 +922,33 @@ struct StudioView: View {
                 .frame(minWidth: 280, idealWidth: 300, maxWidth: 380)
                 .background(BlackstockDesign.raisedSurface)
         }
+    }
+
+    private func editorMetric(
+        title: String,
+        value: String,
+        icon: String
+    ) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(value)
+                    .font(.caption.weight(.semibold))
+                    .monospacedDigit()
+                Text(title)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity)
+        .background(
+            Color.primary.opacity(0.035),
+            in: RoundedRectangle(cornerRadius: 10)
+        )
     }
 
     private var localClipCandidatesSection: some View {
@@ -2660,25 +2716,125 @@ struct StudioView: View {
     }
 
     private var workflowProgress: some View {
-        HStack(spacing: 12) {
-            if isImportingMedia || state.isLoading || state.isTranscribing
-                || state.isGeneratingClipCandidates || state.isCreatingAutomaticHighlights
-                || state.isRendering || state.isRenderingSavedClipBatch {
-                ProgressView().controlSize(.small)
+        let steps: [(title: String, icon: String)] = [
+            ("Quelle", "arrow.down.circle"),
+            ("Schnitt", "scissors"),
+            ("Untertitel", "captions.bubble"),
+            ("Render", "film.stack"),
+            ("Veröffentlichen", "arrow.up.circle")
+        ]
+
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                if isProcessingNow {
+                    ProgressView().controlSize(.small)
+                }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(workflowStatus)
+                        .font(.callout.weight(.semibold))
+                    Text(workflowNextAction)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if sourceDownloader.state == .downloading
+                    || sourceDownloader.state == .processing
+                    || sourceDownloader.state == .paused {
+                    Button("Download anzeigen") {
+                        showSourceDownloader = true
+                    }
+                }
             }
-            VStack(alignment: .leading, spacing: 3) {
-                Text(workflowStatus).font(.callout.weight(.semibold))
-                Text("1. Download  →  2. Video vorbereiten  →  3. Schneiden & Untertitel  →  4. Rendern  →  5. Hochladen")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Spacer()
-            if sourceDownloader.state == .downloading || sourceDownloader.state == .processing
-                || sourceDownloader.state == .paused {
-                Button("Download anzeigen") { showSourceDownloader = true }
+
+            HStack(spacing: 8) {
+                ForEach(Array(steps.enumerated()), id: \.offset) {
+                    index, step in
+                    HStack(spacing: 7) {
+                        ZStack {
+                            Circle()
+                                .fill(
+                                    index < workflowStepIndex
+                                        ? Color.green.opacity(0.18)
+                                        : index == workflowStepIndex
+                                            ? BlackstockDesign.accent.opacity(0.16)
+                                            : Color.primary.opacity(0.055)
+                                )
+                            Image(
+                                systemName:
+                                    index < workflowStepIndex
+                                    ? "checkmark"
+                                    : step.icon
+                            )
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(
+                                index < workflowStepIndex
+                                    ? Color.green
+                                    : index == workflowStepIndex
+                                        ? BlackstockDesign.accent
+                                        : Color.secondary
+                            )
+                        }
+                        .frame(width: 28, height: 28)
+
+                        Text(step.title)
+                            .font(.caption.weight(
+                                index == workflowStepIndex
+                                    ? .semibold
+                                    : .regular
+                            ))
+                            .foregroundStyle(
+                                index <= workflowStepIndex
+                                    ? Color.primary
+                                    : Color.secondary
+                            )
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
         }
-        .padding(.horizontal, 20).padding(.vertical, 10)
-        .background(BlackstockDesign.mediaSurface)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(BlackstockDesign.raisedSurface)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(BlackstockDesign.subtleBorder)
+                .frame(height: 1)
+        }
+    }
+
+    private var isProcessingNow: Bool {
+        isImportingMedia || state.isLoading || state.isTranscribing
+            || state.isGeneratingClipCandidates
+            || state.isCreatingAutomaticHighlights
+            || state.isRendering || state.isRenderingSavedClipBatch
+            || sourceDownloader.state == .downloading
+            || sourceDownloader.state == .processing
+    }
+
+    private var workflowStepIndex: Int {
+        if state.renderArtifact != nil { return 4 }
+        if state.isRendering || state.isRenderingSavedClipBatch { return 3 }
+        if state.isTranscribing || state.transcript != nil
+            || state.isGeneratingClipCandidates
+            || state.isCreatingAutomaticHighlights
+            || !state.localClipCandidates.isEmpty { return 2 }
+        if state.asset != nil { return 1 }
+        return 0
+    }
+
+    private var workflowNextAction: String {
+        switch workflowStepIndex {
+        case 0:
+            return "Als Nächstes: Video laden oder eine lokale Datei auswählen."
+        case 1:
+            return "Als Nächstes: Abspielbereich festlegen und Schnitt anwenden."
+        case 2:
+            return "Als Nächstes: Clips und Untertitel prüfen, dann das Video erstellen."
+        case 3:
+            return "Blackstock erstellt gerade die veröffentlichungsfertige Datei."
+        default:
+            return "Als Nächstes: Titel, Vorschaubild und Veröffentlichung in der Freigabe prüfen."
+        }
     }
 
     private var workflowStatus: String {
