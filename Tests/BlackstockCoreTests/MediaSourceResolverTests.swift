@@ -2,6 +2,15 @@ import XCTest
 @testable import BlackstockCore
 
 final class MediaSourceResolverTests: XCTestCase {
+    func testLocalDownloaderResolvesWithoutProviderConfiguration() {
+        let source = MediaSourceReference(provider: .youtube,
+            pageURL: URL(string: "https://youtu.be/abc")!, externalID: "abc", discoveredAt: Date())
+        let result = MediaSourceResolver().resolve(source, approvedProvider: nil,
+            localYouTubeDownloaderAvailable: true)
+        XCTAssertEqual(result.status, .ingestReady)
+        XCTAssertEqual(result.ingestProviderID, "local-youtube-download")
+    }
+
     func testYouTubeLinkIsPlaybackOnlyUntilApprovedIngestProviderExists() {
         let source = MediaSourceReference(
             provider: .youtube,

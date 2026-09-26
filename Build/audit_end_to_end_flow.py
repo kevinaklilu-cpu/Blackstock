@@ -11,7 +11,7 @@ checks = {
         "session.chooseChannel(",
         "session.refreshYouTubeVideoCategories(",
         "session.continueFromTopic(",
-        "YouTubeEmbeddedPlayer(videoID:",
+        "AsyncImage(url: selected.thumbnailURL)",
         "OpportunityTimeWindow.allCases",
         "session.useOpportunityAsClip(",
     ],
@@ -44,9 +44,9 @@ checks = {
         "originalMediaLibraryPath",
     ],
     "Sources/BlackstockApp/WorkspaceProductViews.swift": [
-        "YouTubeEmbeddedPlayer(videoID:",
+        "discoveryPreview(item)",
         "session.useOpportunityAsClip(",
-        "Clip erstellen",
+        "Video schneiden",
         "Projekt pausieren",
         "Projekt löschen",
         "Auf YouTube ansehen",
@@ -134,9 +134,13 @@ checks = {
         "remoteCommitted",
     ],
     "Sources/BlackstockCore/LocalVideoRenderer.swift": [
+        "AsyncAVAssetExporter.export(",
+        "Task.checkCancellation()",
+    ],
+    "Sources/BlackstockCore/AsyncAVAssetExporter.swift": [
         "withTaskCancellationHandler",
         "cancelExport()",
-        "Task.checkCancellation()",
+        "export(to: outputURL, as: fileType)",
     ],
     "Sources/BlackstockCore/YouTubeAnalyticsClient.swift": [
         "averageViewDuration",

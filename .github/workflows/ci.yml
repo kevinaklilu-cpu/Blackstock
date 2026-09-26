@@ -33,7 +33,10 @@ jobs:
         run: |
           set -euo pipefail
           grep -q '23c51e7d90ca653c92b04b19a7b65615fdf420f581caa16024725c4935bde827' docs/CANONICAL_SOURCE.md
-          grep -q 'NOCH NICHT MARKTREIF' README.md
+          grep -q 'LOKALES 1.0.0-PAKET VALIDIERT' README.md
+          grep -q 'ÖFFENTLICHE MACOS-FREIGABE AUSSTEHEND' README.md
+      - name: Blackstock 1.0 product audit
+        run: python3 Build/audit_v1_product.py
       - name: Accessibility semantic audit
         run: python3 Build/audit_accessibility.py
       - name: GitHub Actions supply-chain audit
@@ -64,6 +67,10 @@ jobs:
         run: python3 Build/audit_end_to_end_flow.py
       - name: Capture foundation audit
         run: python3 Build/audit_capture.py
+      - name: Keychain and ingest interaction regression
+        run: bash Build/test_local_interaction.sh
+      - name: Download recovery regression
+        run: bash Build/test_download_recovery.sh
       - name: Capture hardware evidence validator audit
         run: |
           set -euo pipefail
@@ -1375,5 +1382,4 @@ jobs:
             ${{ runner.temp }}/blackstock-intel-clean-machine-e2e.log
           retention-days: 7
           if-no-files-found: error
-
 

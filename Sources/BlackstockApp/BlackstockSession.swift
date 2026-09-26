@@ -41,6 +41,8 @@ struct LocalPrivacyDeletionSummary {
 
 @MainActor
 final class BlackstockSession: ObservableObject {
+    private static let importedOAuthClientIDDefaultsKey =
+        "blackstock.google.oauth.importedClientID"
     enum FirstRunStep: Int, CaseIterable {
         case welcome
         case channel
@@ -67,7 +69,7 @@ final class BlackstockSession: ObservableObject {
     @Published var channelRegionCode = ""
     @Published var channelCategoryID = ""
     @Published var opportunityTimeWindow:
-        OpportunityTimeWindow = .allTime
+        OpportunityTimeWindow = .last7Days
     @Published var opportunityContentFilter: OpportunityContentFilter = .all
     @Published var channelAudienceSetting:
         YouTubeChannelAudienceSetting = .perVideo
@@ -75,8 +77,12 @@ final class BlackstockSession: ObservableObject {
     @Published private(set) var officialChannelSettingsVerified = false
     @Published private(set) var channelAudienceAppliedToYouTube: Bool?
     @Published var opportunities: [YouTubeOpportunityCandidate] = []
+    @Published var opportunityRecommendationNote = ""
     @Published var isWorking = false
     @Published var errorMessage: String?
+    @Published var showGoogleConnection = false
+    @Published var connectionStatusMessage: String?
+    @Published private(set) var activeStorySources: [YouTubeOpportunityCandidate] = []
     @Published private(set) var onboardingComplete: Bool
     @Published private(set) var activeProject: BlackstockProject?
     @Published private(set) var activeOpportunitySource: MediaSourceReference?
@@ -97,6 +103,7 @@ final class BlackstockSession: ObservableObject {
     @Published private(set) var workspaceRightsResponsibilityAccepted: Bool
     @Published private(set) var originalMediaLibraryPath: String
 
+    private var googleConnectionServer: LoopbackOAuthServer?
     private var tokenSet: GoogleOAuthTokenSet?
     private var tokenExpiresAt: Date?
     private var cachedPublishingJournal: ExternalActionJournal?
@@ -178,8 +185,21 @@ final class BlackstockSession: ObservableObject {
         _ = try? PrivacyRetentionEnforcer().purgeExpiredUpdatePackages(
             in: FileManager.default.temporaryDirectory
         )
-        importedOAuthClientID = BlackstockKeychain.read("google.oauth.importedClientID")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let defaultsClientID = UserDefaults.standard.string(
+            forKey: Self.importedOAuthClientIDDefaultsKey
+        )?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let keychainClientID = BlackstockKeychain.read(
+            "google.oauth.importedClientID"
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        importedOAuthClientID = keychainClientID.isEmpty
+            ? defaultsClientID
+            : keychainClientID
+        if !keychainClientID.isEmpty {
+            UserDefaults.standard.set(
+                keychainClientID,
+                forKey: Self.importedOAuthClientIDDefaultsKey
+            )
+        }
         originalMediaLibraryPath = UserDefaults.standard.string(
             forKey: "blackstock.originalMediaLibraryPath"
         ) ?? ""
@@ -187,6 +207,16 @@ final class BlackstockSession: ObservableObject {
         workspaceRightsResponsibilityAccepted = false
         activeProject = Self.loadStoredProject()
         activeOpportunitySource = Self.loadStoredSource()
+        if let projectID = activeProject?.id,
+           let data = UserDefaults.standard.data(
+                forKey: "blackstock.storySources.\(projectID.uuidString)"
+           ),
+           let sources = try? JSONDecoder().decode(
+                [YouTubeOpportunityCandidate].self,
+                from: data
+           ) {
+            activeStorySources = sources
+        }
         if let activeProject {
             try? Self.upsertStoredProject(activeProject)
             if let activeOpportunitySource {
@@ -336,9 +366,10 @@ final class BlackstockSession: ObservableObject {
     }
 
     var canAutomaticallyAcquireYouTubeSource: Bool {
-        approvedSourceProviderAuthorization?
-            .mayIngestYouTubeLinks == true
-        && approvedSourceProviderEndpointURL != nil
+        SourceDownloadManager.youtubeExecutable != nil || (
+            approvedSourceProviderAuthorization?.mayIngestYouTubeLinks == true
+            && approvedSourceProviderEndpointURL != nil
+        )
     }
 
     func resolveApprovedSourceMediaURL(
@@ -529,6 +560,10 @@ final class BlackstockSession: ObservableObject {
             let data = try Data(contentsOf: url, options: .mappedIfSafe)
             let config = try OAuthClientConfiguration
                 .parseGoogleDesktopJSON(data)
+            if BlackstockKeychain.hasBlockedReads {
+                BlackstockKeychain.startFreshCredentialStore()
+                clearOAuthRuntimeAuthorizationState(clearChannelSelection: true)
+            }
             let previousClientID = effectiveClientID
             let nextClientID =
                 OAuthClientConfiguration.preferredClientID(
@@ -550,6 +585,10 @@ final class BlackstockSession: ObservableObject {
             try BlackstockKeychain.write(
                 config.clientID,
                 account: "google.oauth.importedClientID"
+            )
+            UserDefaults.standard.set(
+                config.clientID,
+                forKey: Self.importedOAuthClientIDDefaultsKey
             )
             if let clientSecret = config.clientSecret,
                !clientSecret.isEmpty {
@@ -749,6 +788,9 @@ final class BlackstockSession: ObservableObject {
                 "google.oauth.importedClientSecret"
             )
             importedOAuthClientID = ""
+            UserDefaults.standard.removeObject(
+                forKey: Self.importedOAuthClientIDDefaultsKey
+            )
             clearOAuthRuntimeAuthorizationState(
                 clearChannelSelection: clientChanged
             )
@@ -781,8 +823,75 @@ final class BlackstockSession: ObservableObject {
             )
     }
 
-    func connectGoogle() async {
+    func retryKeychainAccess() async {
+        connectionStatusMessage = "Gespeicherte Anmeldung wird geprüft …"
+        showGoogleConnection = true
+        BlackstockKeychain.retryBlockedReads()
+        let storedClientID = BlackstockKeychain.read(
+            "google.oauth.importedClientID"
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        if !storedClientID.isEmpty {
+            importedOAuthClientID = storedClientID
+            UserDefaults.standard.set(
+                storedClientID,
+                forKey: Self.importedOAuthClientIDDefaultsKey
+            )
+        }
+        if BlackstockKeychain.hasBlockedReads {
+            connectionStatusMessage = "macOS lehnt die gespeicherte Anmeldung weiterhin ab. Melde dich erneut mit Google an."
+            return
+        }
+        guard workspaceChannelID != nil else {
+            connectionStatusMessage = "Melde dich mit Google an und wähle anschließend deinen YouTube-Kanal."
+            return
+        }
         errorMessage = nil
+        await refreshWorkspaceChannelIdentity()
+        connectionStatusMessage = errorMessage ?? "Die gespeicherte Kanalverbindung ist wieder verfügbar."
+    }
+
+    func useConnectedChannel(_ id: String) async {
+        await chooseChannel(id)
+        guard errorMessage == nil, selectedChannelID == id else { return }
+        if onboardingComplete {
+            if activeProject?.targetChannelID != id {
+                activeProject = nil
+                activeOpportunitySource = nil
+                UserDefaults.standard.removeObject(forKey: "blackstock.activeProject")
+                UserDefaults.standard.removeObject(forKey: "blackstock.activeOpportunitySource")
+            }
+            UserDefaults.standard.set(id, forKey: "blackstock.workspace.channelID")
+            opportunities = []
+            latestChannelAnalytics = nil
+        }
+        connectionStatusMessage = "Verbunden mit " + (selectedChannel?.title ?? "YouTube")
+        showGoogleConnection = false
+    }
+
+    func cancelGoogleConnection() {
+        googleConnectionServer?.cancel()
+    }
+
+    func connectGoogle() async {
+        guard !isWorking else { return }
+        errorMessage = nil
+        connectionStatusMessage = nil
+        if BlackstockKeychain.hasBlockedReads {
+            let clientID = effectiveClientID
+            let secret = effectiveClientSecret
+            BlackstockKeychain.startFreshCredentialStore()
+            clearOAuthRuntimeAuthorizationState(clearChannelSelection: true)
+            do {
+                if !clientID.isEmpty {
+                    try BlackstockKeychain.write(clientID, account: "google.oauth.importedClientID")
+                    importedOAuthClientID = clientID
+                }
+                if let secret { try BlackstockKeychain.write(secret, account: "google.oauth.importedClientSecret") }
+            } catch {
+                errorMessage = "Neue Anmeldung konnte nicht vorbereitet werden: " + describe(error)
+                return
+            }
+        }
         guard !effectiveClientID.isEmpty else {
             errorMessage = "Keine Google-OAuth-Konfiguration verfügbar. Verwende die integrierte Blackstock-Konfiguration oder importiere eine Desktop-OAuth-JSON."
             return
@@ -790,9 +899,16 @@ final class BlackstockSession: ObservableObject {
 
         isWorking = true
         defer { isWorking = false }
+        channels = []
+        selectedChannelID = nil
 
         do {
             let server = try LoopbackOAuthServer()
+            googleConnectionServer = server
+            defer {
+                server.cancel()
+                googleConnectionServer = nil
+            }
             let redirectURI = try await server.start()
             let pkce = try PKCEPair.generate()
             let state = try PKCEPair.generate().verifier
@@ -810,7 +926,9 @@ final class BlackstockSession: ObservableObject {
                 return
             }
 
+            connectionStatusMessage = "Schließe die Anmeldung im Google-Fenster ab."
             let callbackURL = try await server.waitForCallback()
+            connectionStatusMessage = "Deine YouTube-Kanäle werden geladen …"
             guard let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false) else {
                 throw GoogleOAuthError.invalidAuthorizationResponse
             }
@@ -845,6 +963,7 @@ final class BlackstockSession: ObservableObject {
             )
             channels = identities
             selectedChannelID = nil
+            connectionStatusMessage = "Wähle jetzt deinen YouTube-Kanal."
             step = .channel
         } catch {
             errorMessage = "Google-Verbindung fehlgeschlagen: \(describe(error))"
@@ -1310,7 +1429,14 @@ final class BlackstockSession: ObservableObject {
             if selectedChannelID == nil {
                 selectedChannelID = channelID
             }
+            if analyticsScopePlan()?.state == .alreadyAuthorized {
+                analyticsAuthorizedChannelID = channelID
+            }
         } catch {
+            if let urlError = error as? URLError,
+               urlError.code == .cancelled {
+                return
+            }
             errorMessage =
                 "Kanaldaten konnten nicht aktualisiert werden: "
                 + describe(error)
@@ -2537,115 +2663,281 @@ final class BlackstockSession: ObservableObject {
         )
     }
 
+    @Published var isLoadingOpportunities = false
+    @Published var opportunityNextPageToken: String?
+    private var opportunityRequestID = UUID()
+    private var opportunityRequestKey: [String] = []
+    private var opportunitySearchDate = Date()
+
     func loadWorkspaceOpportunities(
         query: String,
         order: OpportunitySortMode,
         timeWindow: OpportunityTimeWindow? = nil,
-        contentFilter: OpportunityContentFilter? = nil
+        contentFilter: OpportunityContentFilter? = nil,
+        loadMore: Bool = false
     ) async {
-        let resolvedQuery = query.trimmingCharacters(
-            in: .whitespacesAndNewlines
-        )
-        let resolvedTimeWindow =
-            timeWindow ?? opportunityTimeWindow
-        let resolvedContentFilter =
-            contentFilter ?? opportunityContentFilter
-        opportunityContentFilter = resolvedContentFilter
+        let resolvedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let window = timeWindow ?? opportunityTimeWindow
+        let filter = contentFilter ?? opportunityContentFilter
+        // Capture every input before the first suspension. Earlier requests must
+        // never overwrite a more recently selected country, query, or sort.
+        let category = channelCategoryID
+        let region = channelRegionCode
+        let language = contentLanguage
+        let key = [resolvedQuery, order.rawValue, window.rawValue, filter.rawValue,
+                   category, region, language, workspaceChannelID ?? ""]
+        let token: String?
+        let existingOpportunities: [YouTubeOpportunityCandidate]
+        if loadMore {
+            guard !isLoadingOpportunities, key == opportunityRequestKey,
+                  let next = opportunityNextPageToken else { return }
+            token = next
+            existingOpportunities = opportunities
+        } else {
+            token = nil
+            opportunitySearchDate = Date()
+            // Keep the previous result visible while YouTube answers. Replacing
+            // it up front makes a slow or failed search look like a dead UI.
+            existingOpportunities = []
+            opportunityNextPageToken = nil
+        }
+        let requestID = UUID()
+        opportunityRequestID = requestID
+        opportunityRequestKey = key
+        opportunityContentFilter = filter
         let defaults = UserDefaults.standard
-        defaults.set(
-            resolvedContentFilter.rawValue,
-            forKey: "blackstock.workspace.opportunityContentFilter"
-        )
-        defaults.set(
-            resolvedTimeWindow.rawValue,
-            forKey: "blackstock.workspace.opportunityTimeWindow"
-        )
-        defaults.set(
-            channelCategoryID,
-            forKey: "blackstock.workspace.channelCategoryID"
-        )
-        defaults.set(
-            channelRegionCode,
-            forKey: "blackstock.workspace.regionCode"
-        )
-        defaults.set(
-            contentLanguage,
-            forKey: "blackstock.workspace.contentLanguage"
-        )
-        defaults.set(
-            primaryTopic,
-            forKey: "blackstock.workspace.primaryTopic"
-        )
-
-        guard let channelID = workspaceChannelID else {
+        defaults.set(filter.rawValue, forKey: "blackstock.workspace.opportunityContentFilter")
+        defaults.set(window.rawValue, forKey: "blackstock.workspace.opportunityTimeWindow")
+        defaults.set(category, forKey: "blackstock.workspace.channelCategoryID")
+        defaults.set(region, forKey: "blackstock.workspace.regionCode")
+        defaults.set(language, forKey: "blackstock.workspace.contentLanguage")
+        defaults.set(primaryTopic, forKey: "blackstock.workspace.primaryTopic")
+        guard let channelID = selectedChannelID ?? workspaceChannelID else {
             errorMessage = "Kein YouTube-Kanal ist verbunden."
             return
         }
-
-        isWorking = true
+        isLoadingOpportunities = true
         errorMessage = nil
-        defer { isWorking = false }
-
+        defer {
+            if opportunityRequestID == requestID { isLoadingOpportunities = false }
+        }
         do {
-            let accessToken =
-                try await validatedReadOnlyAccessToken(
-                    targetChannelID: channelID
-                )
-            let client = YouTubeAuthorizedClient(
-                accessToken: accessToken
-            )
-            let candidates: [YouTubeOpportunityCandidate]
-
-            if resolvedQuery.isEmpty,
-               !channelCategoryID.isEmpty,
-               !channelRegionCode.isEmpty {
-                candidates = try await client
-                    .categoryOpportunityCandidates(
-                        categoryID: channelCategoryID,
-                        categoryTitle: primaryTopic,
-                        regionCode: channelRegionCode,
-                        relevanceLanguage: contentLanguage,
-                        timeWindow: resolvedTimeWindow,
-                        maxResults: 20,
+            let accessToken = try await validatedReadOnlyAccessToken(targetChannelID: channelID)
+            guard opportunityRequestID == requestID else { return }
+            let client = YouTubeAuthorizedClient(accessToken: accessToken)
+            // Shorts/video classification needs video details. A search page
+            // can therefore become empty only after enrichment although a
+            // following page contains valid matches. Scan ahead before
+            // declaring a valid time/filter combination empty.
+            func matchingPage(
+                searchQuery: String = resolvedQuery,
+                categoryID: String?,
+                regionCode: String?,
+                relevanceLanguage: String?,
+                initialToken: String? = nil
+            ) async throws -> YouTubeOpportunityPage {
+                var candidates: [YouTubeOpportunityCandidate] = []
+                var nextToken = initialToken
+                var returnedNextToken: String?
+                // YouTube search requests are quota-heavy. Automatic feeds
+                // use the inexpensive popularity chart first; a typed/topic
+                // query may scan one additional page only when necessary.
+                let pageLimit = loadMore || searchQuery.isEmpty ? 1 : 2
+                for _ in 0..<pageLimit {
+                    let part = try await client.opportunityPage(
+                        query: searchQuery,
+                        categoryID: categoryID,
+                        regionCode: regionCode,
+                        relevanceLanguage: relevanceLanguage,
+                        publishedAfter: window.publishedAfter(
+                            now: opportunitySearchDate
+                        ),
+                        maxResults: 50,
                         order: order,
-                        contentFilter: resolvedContentFilter
+                        contentFilter: filter,
+                        pageToken: nextToken
                     )
-            } else {
-                guard !resolvedQuery.isEmpty else {
-                    errorMessage =
-                        "Wähle eine Kanal-Kategorie oder gib einen Suchbegriff ein."
-                    return
+                    candidates.append(contentsOf: part.candidates)
+                    returnedNextToken = part.nextPageToken
+                    guard candidates.isEmpty,
+                          let following = part.nextPageToken,
+                          following != nextToken else { break }
+                    nextToken = following
                 }
-                candidates = try await client
-                    .firstOpportunityCandidates(
-                        query: resolvedQuery,
-                        categoryID: channelCategoryID.isEmpty
-                            ? nil
-                            : channelCategoryID,
-                        regionCode: channelRegionCode.isEmpty
-                            ? nil
-                            : channelRegionCode,
-                        relevanceLanguage:
-                            contentLanguage.isEmpty
-                            ? nil
-                            : contentLanguage,
-                        publishedAfter:
-                            resolvedTimeWindow
-                                .publishedAfter(now: Date()),
-                        maxResults: 20,
-                        order: order,
-                        contentFilter: resolvedContentFilter
-                    )
+                return YouTubeOpportunityPage(
+                    candidates: candidates,
+                    nextPageToken: returnedNextToken
+                )
             }
 
-            opportunities = candidates
-            if candidates.isEmpty {
-                errorMessage =
-                    "YouTube hat für diese Kategorie, Region und diesen Zeitraum aktuell keine passenden Videos geliefert."
+            func filteredPopularChart(
+                categoryID: String
+            ) async throws -> [YouTubeOpportunityCandidate] {
+                guard !region.isEmpty else { return [] }
+                let cutoff = window.publishedAfter(
+                    now: opportunitySearchDate
+                )
+                return try await client
+                    .mostPopularOpportunityCandidates(
+                        categoryID: categoryID,
+                        regionCode: region,
+                        maxResults: 50,
+                        now: opportunitySearchDate
+                    )
+                    .filter { candidate in
+                        let insideWindow = cutoff.map {
+                            (candidate.publishedAt ?? .distantPast) >= $0
+                        } ?? true
+                        let matchesFormat: Bool
+                        switch filter {
+                        case .all:
+                            matchesFormat = true
+                        case .shorts:
+                            matchesFormat = candidate.contentKind == .short
+                        case .videos:
+                            matchesFormat = candidate.contentKind == .video
+                        case .live:
+                            matchesFormat = candidate.contentKind == .live
+                        }
+                        return insideWindow && matchesFormat
+                    }
+            }
+
+            var recommendationNote = ""
+            var page: YouTubeOpportunityPage
+            let initialChart = !loadMore && resolvedQuery.isEmpty
+                ? try await filteredPopularChart(categoryID: category)
+                : []
+            if !initialChart.isEmpty {
+                page = YouTubeOpportunityPage(
+                    candidates: YouTubeAuthorizedClient.sortedOpportunities(
+                        initialChart,
+                        order: order
+                    ),
+                    nextPageToken: nil
+                )
+                recommendationNote = language.isEmpty
+                    ? "Aktuelle YouTube-Trends für Kategorie und Region. Zeitraum und Format wurden exakt angewendet."
+                    : "Aktuelle YouTube-Trends für Kategorie und Region. Zeitraum und Format gelten exakt; die Sprachwahl wurde für mehr passende Treffer erweitert."
+            } else {
+                page = try await matchingPage(
+                    // A typed query expresses the user's intent and must not
+                    // be restricted to the saved channel category.
+                    categoryID: resolvedQuery.isEmpty
+                        ? (category.isEmpty ? nil : category)
+                        : nil,
+                    regionCode: region.isEmpty ? nil : region,
+                    relevanceLanguage: language.isEmpty ? nil : language,
+                    initialToken: token
+                )
+            }
+            // An empty search field means automatic recommendations. Narrow
+            // time/category combinations can legitimately return no search
+            // rows, so fall back to YouTube's regional popularity chart.
+            if !loadMore, resolvedQuery.isEmpty, page.candidates.isEmpty,
+               !category.isEmpty {
+                page = try await matchingPage(
+                    categoryID: nil,
+                    regionCode: region.isEmpty ? nil : region,
+                    relevanceLanguage: language.isEmpty ? nil : language
+                )
+                if !page.candidates.isEmpty {
+                    recommendationNote =
+                        "Im gewählten Zeitraum gab es in der Kategorie zu wenige Treffer. Die Kategorie wurde erweitert; Zeitraum, Region und Format bleiben strikt aktiv."
+                }
+            }
+            if !loadMore, resolvedQuery.isEmpty, page.candidates.isEmpty,
+               !language.isEmpty {
+                page = try await matchingPage(
+                    categoryID: nil,
+                    regionCode: region.isEmpty ? nil : region,
+                    relevanceLanguage: nil
+                )
+                if !page.candidates.isEmpty {
+                    recommendationNote =
+                        "Für Sprache und Kategorie gab es zu wenige Treffer. Sprache und Kategorie wurden erweitert; Zeitraum, Region und Format bleiben strikt aktiv."
+                }
+            }
+            if !loadMore, resolvedQuery.isEmpty, page.candidates.isEmpty,
+               !region.isEmpty {
+                page = try await matchingPage(
+                    categoryID: nil,
+                    regionCode: nil,
+                    relevanceLanguage: nil
+                )
+                if !page.candidates.isEmpty {
+                    recommendationNote =
+                        "Für die enge Auswahl gab es zu wenige Treffer. Kategorie, Sprache und Region wurden erweitert; Zeitraum und Format bleiben strikt aktiv."
+                }
+            }
+            // Some YouTube accounts/regions return an empty category-only
+            // search even though normal keyword search has current results.
+            // Use the official category title as an automatic query while
+            // keeping the chosen time window and format strict.
+            if !loadMore, resolvedQuery.isEmpty, page.candidates.isEmpty {
+                let categoryTitle = youtubeVideoCategories.first(
+                    where: { $0.id == category }
+                )?.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                let automaticTopic = (categoryTitle?.isEmpty == false
+                    ? categoryTitle
+                    : primaryTopic.trimmingCharacters(
+                        in: .whitespacesAndNewlines
+                    )) ?? ""
+                if !automaticTopic.isEmpty {
+                    page = try await matchingPage(
+                        searchQuery: automaticTopic,
+                        categoryID: nil,
+                        regionCode: region.isEmpty ? nil : region,
+                        relevanceLanguage: language.isEmpty ? nil : language
+                    )
+                    if !page.candidates.isEmpty {
+                        recommendationNote =
+                            "Blackstock nutzt die gewählte Kategorie als automatisches Thema. Zeitraum, Region und Format bleiben aktiv."
+                    }
+                }
+            }
+            // The videos.list popularity chart is more dependable than an
+            // empty search feed and still comes from YouTube. Filter its rows
+            // locally so the selected time window and format remain true.
+            if !loadMore, resolvedQuery.isEmpty, page.candidates.isEmpty,
+               !region.isEmpty {
+                var chart = try await filteredPopularChart(
+                    categoryID: category
+                )
+                if chart.isEmpty, !category.isEmpty {
+                    chart = try await filteredPopularChart(categoryID: "")
+                }
+                if !chart.isEmpty {
+                    page = YouTubeOpportunityPage(
+                        candidates: YouTubeAuthorizedClient
+                            .sortedOpportunities(chart, order: order),
+                        nextPageToken: nil
+                    )
+                    recommendationNote =
+                        "Aktuelle YouTube-Trends für die gewählte Region. Zeitraum und Format wurden exakt angewendet."
+                }
+            }
+            guard opportunityRequestID == requestID,
+                  channelCategoryID == category, channelRegionCode == region,
+                  contentLanguage == language,
+                  (selectedChannelID ?? workspaceChannelID) == channelID else { return }
+            opportunityRecommendationNote = recommendationNote
+            var seen = Set(existingOpportunities.map(\.videoID))
+            let added = page.candidates.filter { seen.insert($0.videoID).inserted }
+            opportunities = YouTubeAuthorizedClient.sortedOpportunities(
+                existingOpportunities + added,
+                order: order
+            )
+            opportunityNextPageToken = page.nextPageToken == token ? nil : page.nextPageToken
+            if opportunities.isEmpty {
+                errorMessage = opportunityNextPageToken == nil
+                    ? "Keine passenden Videos gefunden. Erweitere Zeitraum oder Format oder ändere den Suchbegriff."
+                    : "Auf dieser Ergebnisseite passt noch kein Video zum Format. Mit ‚Mehr laden‘ weitere Treffer prüfen."
             }
         } catch {
-            errorMessage =
-                "Videos konnten nicht geladen werden: \(describe(error))"
+            guard opportunityRequestID == requestID else { return }
+            opportunityRecommendationNote = ""
+            errorMessage = "Videos konnten nicht geladen werden: \(describe(error))"
         }
     }
 
@@ -2669,6 +2961,44 @@ final class BlackstockSession: ObservableObject {
             opportunity,
             productionIntentKind: .clipFromOpportunity
         )
+    }
+
+    @discardableResult
+    func useMultiSourceStory(
+        _ sources: [YouTubeOpportunityCandidate]
+    ) -> Bool {
+        let unique = sources.reduce(into: [YouTubeOpportunityCandidate]()) {
+            result, source in
+            if !result.contains(where: { $0.videoID == source.videoID }) {
+                result.append(source)
+            }
+        }
+        guard unique.count >= 2 else {
+            errorMessage = "Wähle mindestens zwei Videos für eine Mehrquellen-Story aus."
+            return false
+        }
+        guard workspaceRightsResponsibilityAccepted else {
+            errorMessage =
+                "Bestätige die Nutzungsrechte, bevor du eine Mehrquellen-Story erstellst."
+            return false
+        }
+        let selected = Array(unique.prefix(5))
+        useOpportunity(selected[0], productionIntentKind: .clipFromOpportunity)
+        guard let projectID = activeProject?.id else {
+            if errorMessage == nil {
+                errorMessage = "Die Mehrquellen-Story konnte nicht angelegt werden."
+            }
+            return false
+        }
+        activeStorySources = selected
+        if let data = try? JSONEncoder().encode(selected) {
+            UserDefaults.standard.set(
+                data,
+                forKey: "blackstock.storySources.\(projectID.uuidString)"
+            )
+        }
+        errorMessage = nil
+        return true
     }
 
     func productionIntent(
@@ -2751,6 +3081,7 @@ final class BlackstockSession: ObservableObject {
             }
             activeProject = seed.project
             activeOpportunitySource = seed.source
+            activeStorySources = []
             lastPublishingResult = nil
             latestGrowthLearning = nil
             latestCommentPage = nil
@@ -2787,7 +3118,14 @@ final class BlackstockSession: ObservableObject {
     }
 
     func finishFirstRun() {
-        guard selectedChannel != nil, !opportunities.isEmpty else { return }
+        guard selectedChannel != nil else {
+            errorMessage = "Wähle zuerst deinen YouTube-Kanal."
+            return
+        }
+        guard workspaceRightsResponsibilityAccepted else {
+            errorMessage = "Bestätige zuerst die Nutzungsrechte für deinen Arbeitsbereich."
+            return
+        }
         UserDefaults.standard.set(selectedChannelID, forKey: "blackstock.workspace.channelID")
         UserDefaults.standard.set(primaryTopic, forKey: "blackstock.workspace.primaryTopic")
         UserDefaults.standard.set(contentLanguage, forKey: "blackstock.workspace.contentLanguage")
@@ -3102,7 +3440,7 @@ final class BlackstockSession: ObservableObject {
         contentLanguage = "de"
         channelRegionCode = ""
         channelCategoryID = ""
-        opportunityTimeWindow = .allTime
+        opportunityTimeWindow = .last7Days
         channelAudienceSetting = .perVideo
         channelAudienceAppliedToYouTube = nil
         youtubeLanguages = []

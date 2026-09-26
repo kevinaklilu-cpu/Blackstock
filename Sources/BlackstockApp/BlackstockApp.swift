@@ -8,20 +8,71 @@ import BlackstockCore
 struct BlackstockApp: App {
     @StateObject private var session = BlackstockSession()
     @State private var commandPaletteRequest = 0
+    @State private var keychainMessage: String?
+    @State private var retryingKeychain = false
 
     var body: some Scene {
         WindowGroup {
+            VStack(spacing: 0) {
+                if let keychainMessage {
+                    HStack(spacing: 12) {
+                        Image(systemName: "lock.trianglebadge.exclamationmark")
+                            .font(.title3)
+                            .foregroundStyle(.orange)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Google-Verbindung erneuern")
+                                .font(.callout.weight(.semibold))
+                            Text(keychainMessage)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer()
+                        Button("Mit Google anmelden") {
+                            session.showGoogleConnection = true
+                        }
+                        .buttonStyle(.borderedProminent)
+                        Button("Zugriff erneut prüfen") {
+                            retryingKeychain = true
+                            Task {
+                                await session.retryKeychainAccess()
+                                retryingKeychain = false
+                            }
+                        }
+                        .disabled(retryingKeychain)
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 10)
+                    .background(Color.orange.opacity(0.09))
+                } else if session.onboardingComplete && session.workspaceChannelID == nil {
+                    HStack {
+                        Text("Verbinde Google und wähle deinen YouTube-Kanal.")
+                        Spacer()
+                        Button("Mit Google / YouTube anmelden") {
+                            session.showGoogleConnection = true
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                    .padding()
+                    .background(.regularMaterial)
+                }
             Group {
                 if session.onboardingComplete {
                     WorkspaceShell(
                         session: session,
-                        commandPaletteRequest: commandPaletteRequest
+                        commandPaletteRequest: commandPaletteRequest,
+                        hasCredentialIssue: keychainMessage != nil
                     )
                 } else {
                     FirstRunView(session: session)
                 }
             }
-            .frame(minWidth: 1180, minHeight: 760)
+            }
+            .onReceive(BlackstockKeychain.accessIssue) { keychainMessage = $0 }
+            .sheet(isPresented: $session.showGoogleConnection) {
+                GoogleAccountConnectionView(session: session)
+            }
+            .frame(minWidth: 1180, minHeight: 620)
             .tint(BlackstockDesign.accent)
             .background(BlackstockDesign.canvas)
         }
@@ -41,6 +92,7 @@ struct BlackstockApp: App {
 private struct WorkspaceShell: View {
     @ObservedObject var session: BlackstockSession
     let commandPaletteRequest: Int
+    let hasCredentialIssue: Bool
 
     @State private var selection = "Übersicht"
     @State private var showCommandPalette = false
@@ -49,40 +101,108 @@ private struct WorkspaceShell: View {
         NavigationSplitView {
             VStack(spacing: 0) {
                 HStack(alignment: .center, spacing: 10) {
-                    BlackstockBrandMark(width: 34)
+                    BlackstockBrandMark(width: 38)
 
-                    Text("Blackstock")
-                        .font(.headline.weight(.bold))
-                        .lineLimit(1)
-                        .fixedSize(horizontal: true, vertical: false)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("BLACKSTOCK")
+                            .font(.headline.weight(.black))
+                            .tracking(0.5)
+                        Text("CREATOR STUDIO")
+                            .font(.caption2.weight(.bold))
+                            .tracking(1.2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
 
                     Spacer(minLength: 0)
                 }
-                .frame(maxWidth: .infinity, minHeight: 54)
+                .frame(maxWidth: .infinity, minHeight: 64)
                 .padding(.horizontal, 14)
                 .background(BlackstockDesign.sidebar)
 
                 Divider()
 
                 List(selection: $selection) {
-                    Label("Start", systemImage: "house")
-                        .tag("Übersicht")
-                    Label("Entdecken", systemImage: "play.rectangle.fill")
-                        .tag("Chancen")
-                    Label("Projekte", systemImage: "folder.fill")
-                        .tag("Projekte")
-                    Label("Analyse", systemImage: "chart.line.uptrend.xyaxis")
-                        .tag("Analyse")
-                    if session.activeProject?.stage.journeyGuidance
-                        .recommendedSurface == .studio {
-                        Label("Editor", systemImage: "scissors")
-                            .tag("Studio")
+                    Section("Arbeitsbereich") {
+                        Label("Start", systemImage: "house")
+                            .tag("Übersicht")
+                        Label("Entdecken", systemImage: "play.rectangle.fill")
+                            .tag("Chancen")
+                        Label("Projekte", systemImage: "folder.fill")
+                            .tag("Projekte")
+                        Label("Analyse", systemImage: "chart.line.uptrend.xyaxis")
+                            .tag("Analyse")
                     }
-                    Label("Einstellungen", systemImage: "gearshape")
-                        .tag("Einstellungen")
+
+                    if session.activeProject?.stage.journeyGuidance
+                        .recommendedSurface == .studio,
+                       let project = session.activeProject {
+                        Section("Aktives Projekt") {
+                            Label {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Editor")
+                                    Text(project.title)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                            } icon: {
+                                Image(systemName: "scissors")
+                            }
+                            .tag("Studio")
+                        }
+                    } else if let project = session.activeProject {
+                        Section("Aktives Projekt") {
+                            Label {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Projektstatus")
+                                    Text(project.title)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                            } icon: {
+                                Image(systemName: "checkmark.circle")
+                            }
+                            .tag("Übersicht")
+                        }
+                    }
+
+                    Section {
+                        Label("Einstellungen", systemImage: "gearshape")
+                            .tag("Einstellungen")
+                    }
                 }
                 .listStyle(.sidebar)
                 .scrollContentBackground(.hidden)
+                .background(BlackstockDesign.sidebar)
+
+                Divider()
+
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(
+                            session.workspaceChannelID == nil
+                                || hasCredentialIssue
+                                ? Color.orange
+                                : Color.green
+                        )
+                        .frame(width: 7, height: 7)
+                    Text(
+                        hasCredentialIssue
+                            ? "Google-Verbindung prüfen"
+                            : session.workspaceChannel?.title
+                            ?? (session.workspaceChannelID == nil
+                                ? "YouTube nicht verbunden"
+                                : "YouTube verbunden")
+                    )
+                    .font(.caption)
+                    .lineLimit(1)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 11)
                 .background(BlackstockDesign.sidebar)
             }
             .background(BlackstockDesign.sidebar)
@@ -1432,19 +1552,45 @@ private struct SettingsView: View {
     @State private var privacyExportStatusMessage: String?
     @State private var showLocalDataRemovalConfirmation = false
     @State private var localDataStatusMessage: String?
-    @State private var isCheckingForUpdates = false
-    @State private var isDownloadingUpdatePackage = false
-    @State private var availableUpdateManifest: BlackstockUpdateManifest?
-    @State private var verifiedUpdatePackageURL: URL?
-    @State private var updateStatusMessage: String?
+    @State private var showAdvancedGoogleSettings = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
             Text("Einstellungen")
                 .font(.largeTitle.bold())
 
+            Text("Konto, Medien und Datenschutz an einem Ort.")
+                .font(.title3)
+                .foregroundStyle(.secondary)
+
             GroupBox("Google / YouTube") {
                 VStack(alignment: .leading, spacing: 10) {
+                    Button("Mit Google / YouTube anmelden") {
+                        session.connectionStatusMessage = nil
+                        session.errorMessage = nil
+                        session.showGoogleConnection = true
+                    }
+                    .buttonStyle(.borderedProminent)
+                    if let channel = session.workspaceChannel {
+                        Text("Verbunden mit " + channel.title)
+                    }
+                    Text("Wähle deinen Kanal nach der Google-Anmeldung. Ein Kanal ist nicht vorgegeben.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Button {
+                        withAnimation { showAdvancedGoogleSettings.toggle() }
+                    } label: {
+                        HStack {
+                            Text("Erweiterte App-Einstellungen")
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .rotationEffect(.degrees(showAdvancedGoogleSettings ? 90 : 0))
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+
+                    if showAdvancedGoogleSettings {
                     Text(session.oauthConfigurationSource)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -1480,6 +1626,8 @@ private struct SettingsView: View {
                         Text(oauthConfigurationStatusMessage)
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                    }
+
                     }
 
                     Divider()
@@ -1604,153 +1752,6 @@ private struct SettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical, 6)
             }
-            GroupBox("Updates") {
-                VStack(alignment: .leading, spacing: 10) {
-                    Button {
-                        Task {
-                            isCheckingForUpdates = true
-                            defer { isCheckingForUpdates = false }
-
-                            do {
-                                switch try await BlackstockUpdateChecker().check() {
-                                case .notConfigured:
-                                    availableUpdateManifest = nil
-                                    verifiedUpdatePackageURL = nil
-                                    updateStatusMessage = "Update-Prüfung ist in diesem Build noch nicht konfiguriert."
-                                case .upToDate:
-                                    availableUpdateManifest = nil
-                                    verifiedUpdatePackageURL = nil
-                                    updateStatusMessage = "Blackstock ist auf dem aktuellen Stand."
-                                case .updateAvailable(let manifest):
-                                    availableUpdateManifest = manifest
-                                    verifiedUpdatePackageURL = nil
-                                    updateStatusMessage = "Update verfügbar: Version \(manifest.version), Build \(manifest.build). Das Paket wird erst nach ausdrücklicher Aktion geladen und gegen den signierten SHA-256 geprüft."
-                                }
-                            } catch {
-                                if let localized = error as? LocalizedError,
-                                   let description = localized.errorDescription {
-                                    updateStatusMessage = "Update-Prüfung fehlgeschlagen: \(description)"
-                                } else {
-                                    updateStatusMessage = "Update-Prüfung fehlgeschlagen: \(error.localizedDescription)"
-                                }
-                            }
-                        }
-                    } label: {
-                        HStack {
-                            if isCheckingForUpdates {
-                                ProgressView().controlSize(.small)
-                            }
-                            Label(
-                                isCheckingForUpdates
-                                    ? "Updates werden geprüft …"
-                                    : "Nach Updates suchen",
-                                systemImage: "arrow.triangle.2.circlepath"
-                            )
-                        }
-                    }
-                    .disabled(isCheckingForUpdates || isDownloadingUpdatePackage)
-
-                    if let manifest = availableUpdateManifest {
-                        Button {
-                            Task {
-                                isDownloadingUpdatePackage = true
-                                defer { isDownloadingUpdatePackage = false }
-
-                                do {
-                                    let url = try await BlackstockUpdatePackageDownloader()
-                                        .downloadAndVerify(manifest: manifest)
-                                    verifiedUpdatePackageURL = url
-                                    updateStatusMessage = "Update-Paket wurde geladen und per SHA-256 verifiziert. Es wird nicht automatisch installiert."
-                                } catch {
-                                    verifiedUpdatePackageURL = nil
-                                    if let localized = error as? LocalizedError,
-                                       let description = localized.errorDescription {
-                                        updateStatusMessage = "Update-Paket wurde verworfen: \(description)"
-                                    } else {
-                                        updateStatusMessage = "Update-Paket wurde verworfen: \(error.localizedDescription)"
-                                    }
-                                }
-                            }
-                        } label: {
-                            HStack {
-                                if isDownloadingUpdatePackage {
-                                    ProgressView().controlSize(.small)
-                                }
-                                Label(
-                                    isDownloadingUpdatePackage
-                                        ? "Update-Paket wird geprüft …"
-                                        : "Update-Paket laden und prüfen",
-                                    systemImage: "checkmark.shield"
-                                )
-                            }
-                        }
-                        .disabled(isCheckingForUpdates || isDownloadingUpdatePackage)
-                    }
-
-                    Text("Updates werden vor der Installation geprüft.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    if let updateStatusMessage {
-                        Text(updateStatusMessage)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    if let verifiedUpdatePackageURL {
-                        Text("Verifiziertes Paket: \(verifiedUpdatePackageURL.path)")
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
-
-                        if let manifest = availableUpdateManifest {
-                            Button {
-                                do {
-                                    try BlackstockUpdateInstallationPreflight()
-                                        .verify(
-                                            fileURL:
-                                                verifiedUpdatePackageURL,
-                                            manifest: manifest
-                                        )
-                                    BlackstockUpdateAudit
-                                        .recordVerifiedPackage(
-                                            manifest: manifest
-                                        )
-                                    guard NSWorkspace.shared.open(
-                                        verifiedUpdatePackageURL
-                                    ) else {
-                                        updateStatusMessage = "Das erneut verifizierte Paket konnte nicht im macOS-Installer geöffnet werden."
-                                        return
-                                    }
-                                    BlackstockUpdateAudit.recordInstallerOpened(
-                                        manifest: manifest
-                                    )
-                                    updateStatusMessage = "Das Update wurde erneut verifiziert und an den macOS-Installer übergeben. Blackstock wird jetzt beendet, damit die neue Version sauber installiert werden kann."
-                                    DispatchQueue.main.asyncAfter(
-                                        deadline: .now() + 0.4
-                                    ) {
-                                        NSApp.terminate(nil)
-                                    }
-                                } catch {
-                                    try? FileManager.default.removeItem(
-                                        at: verifiedUpdatePackageURL
-                                    )
-                                    self.verifiedUpdatePackageURL = nil
-                                    updateStatusMessage = "Das Paket hat den erneuten Installations-Preflight für SHA-256 und Developer-ID-Installer-Team nicht bestanden, wurde gelöscht und nicht geöffnet."
-                                }
-                            } label: {
-                                Label(
-                                    "Update installieren und Blackstock schließen",
-                                    systemImage: "shippingbox"
-                                )
-                            }
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, 6)
-            }
-
             DisclosureGroup("Diagnose") {
                 VStack(alignment: .leading, spacing: 10) {
                     if let evidence =
@@ -1979,8 +1980,12 @@ private struct SettingsView: View {
             }
 
             Spacer()
+            }
+            .frame(maxWidth: 980, alignment: .leading)
+            .padding(28)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .padding(28)
+        .background(BlackstockDesign.canvas)
         .fileImporter(
             isPresented: $showOAuthImporter,
             allowedContentTypes: [.json],

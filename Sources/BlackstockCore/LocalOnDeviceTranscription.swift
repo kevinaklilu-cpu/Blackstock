@@ -75,6 +75,27 @@ public enum LocalTranscriptionError: Error, Sendable, Equatable {
     case emptyTranscript
 }
 
+extension LocalTranscriptionError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .authorizationDenied:
+            return "Die Spracherkennung wurde nicht erlaubt."
+        case .authorizationRestricted:
+            return "Die Spracherkennung ist auf diesem Mac eingeschränkt."
+        case .recognizerUnavailable:
+            return "Die lokale Spracherkennung ist momentan nicht verfügbar."
+        case .onDeviceRecognitionUnsupported:
+            return "Für diese Sprache ist keine lokale Spracherkennung verfügbar."
+        case .audioExtractionUnavailable:
+            return "Die Tonspur konnte nicht für die Spracherkennung vorbereitet werden."
+        case .audioExtractionFailed(let message), .recognitionFailed(let message):
+            return message
+        case .emptyTranscript:
+            return "In diesem Ausschnitt wurde keine Sprache erkannt."
+        }
+    }
+}
+
 private final class SpeechExportSessionBox: @unchecked Sendable {
     let session: AVAssetExportSession
     init(_ session: AVAssetExportSession) {
@@ -82,7 +103,10 @@ private final class SpeechExportSessionBox: @unchecked Sendable {
     }
 }
 
-@MainActor
+private struct SpeechRecognitionResultBox: @unchecked Sendable {
+    let value: SFSpeechRecognitionResult
+}
+
 public final class LocalOnDeviceTranscriber {
     public init() {}
 
@@ -102,9 +126,20 @@ public final class LocalOnDeviceTranscriber {
     }
 
     public func requestAuthorization() async -> LocalSpeechAuthorizationState {
+        let status = await Self.authorizationStatus { callback in
+            SFSpeechRecognizer.requestAuthorization(callback)
+        }
+        return Self.map(status)
+    }
+
+    static func authorizationStatus(
+        using request: @escaping (
+            @escaping @Sendable (SFSpeechRecognizerAuthorizationStatus) -> Void
+        ) -> Void
+    ) async -> SFSpeechRecognizerAuthorizationStatus {
         await withCheckedContinuation { continuation in
-            SFSpeechRecognizer.requestAuthorization { status in
-                continuation.resume(returning: Self.map(status))
+            request { status in
+                continuation.resume(returning: status)
             }
         }
     }
@@ -153,10 +188,7 @@ public final class LocalOnDeviceTranscriber {
             request.addsPunctuation = true
         }
 
-        let result = try await recognize(
-            recognizer: recognizer,
-            request: request
-        )
+        let result = try await recognize(recognizer: recognizer, request: request)
         let transcription = result.bestTranscription
         let text = transcription.formattedString
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -195,31 +227,18 @@ public final class LocalOnDeviceTranscriber {
             .appendingPathComponent("blackstock-speech-\(UUID().uuidString)")
             .appendingPathExtension("m4a")
 
-        exporter.outputURL = destination
-        exporter.outputFileType = .m4a
-
-        let box = SpeechExportSessionBox(exporter)
-        try await withCheckedThrowingContinuation { continuation in
-            box.session.exportAsynchronously {
-                let session = box.session
-                switch session.status {
-                case .completed:
-                    continuation.resume()
-                case .failed, .cancelled:
-                    continuation.resume(
-                        throwing: LocalTranscriptionError.audioExtractionFailed(
-                            session.error?.localizedDescription
-                            ?? "Audio-Extraktion fehlgeschlagen."
-                        )
-                    )
-                default:
-                    continuation.resume(
-                        throwing: LocalTranscriptionError.audioExtractionFailed(
-                            "Audio-Extraktion endete im Zustand \(session.status.rawValue)."
-                        )
-                    )
-                }
-            }
+        do {
+            try await AsyncAVAssetExporter.export(
+                exporter,
+                to: destination,
+                as: .m4a
+            )
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw LocalTranscriptionError.audioExtractionFailed(
+                error.localizedDescription
+            )
         }
 
         return destination
@@ -229,30 +248,27 @@ public final class LocalOnDeviceTranscriber {
         recognizer: SFSpeechRecognizer,
         request: SFSpeechURLRecognitionRequest
     ) async throws -> SFSpeechRecognitionResult {
-        try await withCheckedThrowingContinuation { continuation in
-            var completed = false
-            var task: SFSpeechRecognitionTask?
-            task = recognizer.recognitionTask(with: request) { result, error in
-                guard !completed else { return }
-
-                if let error {
-                    completed = true
-                    task?.cancel()
-                    continuation.resume(
-                        throwing: LocalTranscriptionError.recognitionFailed(
-                            error.localizedDescription
+        let state = SpeechRecognitionState()
+        let box: SpeechRecognitionResultBox = try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                state.install(continuation)
+                let task = recognizer.recognitionTask(with: request) { result, error in
+                    if let error {
+                        state.fail(
+                            LocalTranscriptionError.recognitionFailed(
+                                Self.recognitionFailureMessage(error)
+                            )
                         )
-                    )
-                    return
+                    } else if let result, result.isFinal {
+                        state.succeed(result)
+                    }
                 }
-
-                if let result, result.isFinal {
-                    completed = true
-                    task?.finish()
-                    continuation.resume(returning: result)
-                }
+                state.install(task)
             }
+        } onCancel: {
+            state.cancel()
         }
+        return box.value
     }
 
     private static func map(
@@ -265,6 +281,80 @@ public final class LocalOnDeviceTranscriber {
         case .authorized: return .authorized
         @unknown default: return .restricted
         }
+    }
+
+    static func recognitionFailureMessage(_ error: Error) -> String {
+        let original = error.localizedDescription
+        let normalized = original.lowercased()
+        if normalized.contains("siri")
+            && normalized.contains("dictation")
+            && normalized.contains("disabled") {
+            return "Die lokale Spracherkennung ist in macOS deaktiviert. Aktiviere unter Systemeinstellungen → Tastatur die Diktierfunktion und versuche es danach erneut."
+        }
+        if normalized.contains("not authorized")
+            || normalized.contains("permission") {
+            return "Blackstock besitzt keine Freigabe für die Spracherkennung. Erlaube sie unter Systemeinstellungen → Datenschutz & Sicherheit → Spracherkennung."
+        }
+        return original
+    }
+}
+
+private final class SpeechRecognitionState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<SpeechRecognitionResultBox, Error>?
+    private var task: SFSpeechRecognitionTask?
+    private var completion: Result<SpeechRecognitionResultBox, Error>?
+    private var finished = false
+
+    func install(_ continuation: CheckedContinuation<SpeechRecognitionResultBox, Error>) {
+        lock.lock()
+        if let completion {
+            lock.unlock()
+            continuation.resume(with: completion)
+            return
+        }
+        self.continuation = continuation
+        lock.unlock()
+    }
+
+    func install(_ task: SFSpeechRecognitionTask) {
+        lock.lock()
+        self.task = task
+        let shouldCancel = finished
+        lock.unlock()
+        if shouldCancel { task.cancel() }
+    }
+
+    func succeed(_ result: SFSpeechRecognitionResult) {
+        finish(.success(SpeechRecognitionResultBox(value: result)), cancelTask: false)
+    }
+
+    func fail(_ error: Error) {
+        finish(.failure(error), cancelTask: true)
+    }
+
+    func cancel() {
+        finish(.failure(CancellationError()), cancelTask: true)
+    }
+
+    private func finish(
+        _ result: Result<SpeechRecognitionResultBox, Error>,
+        cancelTask: Bool
+    ) {
+        lock.lock()
+        guard !finished else {
+            lock.unlock()
+            return
+        }
+        finished = true
+        completion = result
+        let continuation = self.continuation
+        self.continuation = nil
+        let task = self.task
+        lock.unlock()
+
+        if cancelTask { task?.cancel() } else { task?.finish() }
+        continuation?.resume(with: result)
     }
 }
 

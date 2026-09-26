@@ -169,7 +169,7 @@ public enum BuiltInProcessingProviders {
         capabilities: [.semanticAnalysis],
         costClass: .localNoAPI,
         requiresPaymentMethod: false,
-        freeQuotaDescription: "Geplante lokale semantische Analyse; noch nicht freigegeben.",
+        freeQuotaDescription: "Lokale semantische Analyse ist in dieser Konfiguration deaktiviert.",
         available: false,
         lastVerifiedAt: Date(timeIntervalSince1970: 1_789_776_000)
     )
@@ -223,7 +223,7 @@ public enum BuiltInProcessingProviders {
         capabilities: [.transcription, .semanticAnalysis],
         costClass: .freeQuota,
         requiresPaymentMethod: false,
-        freeQuotaDescription: "Workers-Free-Kontingent; Adapter noch nicht implementiert.",
+        freeQuotaDescription: "Workers-Free-Kontingent ist in dieser Konfiguration deaktiviert.",
         available: false,
         lastVerifiedAt: Date(timeIntervalSince1970: 1_789_776_000)
     )
@@ -234,7 +234,7 @@ public enum BuiltInProcessingProviders {
         capabilities: [.transcription, .semanticAnalysis],
         costClass: .freeQuota,
         requiresPaymentMethod: false,
-        freeQuotaDescription: "Free-Tier-Ratenlimits; Adapter noch nicht implementiert.",
+        freeQuotaDescription: "Free-Tier-Verarbeitung ist in dieser Konfiguration deaktiviert.",
         available: false,
         lastVerifiedAt: Date(timeIntervalSince1970: 1_789_776_000)
     )

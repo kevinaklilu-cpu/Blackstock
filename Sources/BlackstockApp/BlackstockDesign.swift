@@ -3,7 +3,8 @@ import SwiftUI
 import AppKit
 
 enum BlackstockDesign {
-    static let accent = Color(red: 1.0, green: 0.0, blue: 0.0)
+    static let accent = Color(red: 0.94, green: 0.10, blue: 0.17)
+    static let accentGlow = Color(red: 1.0, green: 0.30, blue: 0.20)
     static let canvas = Color(nsColor: .windowBackgroundColor)
     static let sidebar = Color(nsColor: .underPageBackgroundColor)
     static let surface = Color(nsColor: .controlBackgroundColor)
@@ -35,6 +36,11 @@ private struct BlackstockSurfaceModifier: ViewModifier {
                     style: .continuous
                 )
                 .strokeBorder(BlackstockDesign.subtleBorder)
+            )
+            .shadow(
+                color: raised ? Color.black.opacity(0.10) : .clear,
+                radius: raised ? 14 : 0,
+                y: raised ? 5 : 0
             )
     }
 }

@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import CryptoKit
 import SwiftUI
 import AVFoundation
 import AVKit
@@ -18,11 +19,16 @@ struct StudioView: View {
     @StateObject private var ingestWatcher =
         IngestDirectoryWatcher()
     @State private var pendingURL: URL?
+    @State private var pendingSourceReference: MediaSourceReference?
+    @State private var pendingStorySource: YouTubeOpportunityCandidate?
+    @State private var queuedStorySources: [YouTubeOpportunityCandidate] = []
     @State private var showOptionalCapture = false
     @State private var isResolvingAutomaticSource = false
+    @State private var isImportingMedia = false
     @State private var isAcquiringApprovedSource = false
     @State private var showSourceDownloader = false
     @State private var sourceDownloadURLText = ""
+    @State private var downloadProjectID: UUID?
     @State private var sourceDownloadMessage: String?
     @State private var pendingCaptureKind: CaptureKind?
     @State private var showRightsSheet = false
@@ -38,10 +44,16 @@ struct StudioView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            workflowProgress
             Divider()
 
-            if let opportunitySource {
+            if let opportunitySource, state.asset == nil {
                 sourceContext(opportunitySource)
+                Divider()
+            }
+
+            if session.activeStorySources.count > 1 {
+                storySourcesOverview
                 Divider()
             }
 
@@ -68,9 +80,17 @@ struct StudioView: View {
             rightsSheet
         }
         .task(id: project.id) {
+            if downloadProjectID != nil && downloadProjectID != project.id {
+                sourceDownloader.reset()
+                downloadProjectID = nil
+            }
             await state.loadWorkspace(
                 projectID: project.id
             )
+            if state.asset != nil,
+               session.activeStorySources.count > 1 {
+                beginStorySourceDownloadsIfNeeded()
+            }
             if session.activeProject?.isPaused == true {
                 state.requestStopProcessing()
                 return
@@ -87,6 +107,10 @@ struct StudioView: View {
 
             startIngestWatcher()
             await attemptAutomaticOriginalBinding()
+            if state.asset == nil, !isImportingMedia, let source = opportunitySource,
+               sourceDownloader.state == .idle {
+                await acquireApprovedSource(source)
+            }
         }
         .onDisappear {
             activeProcessingTask?.cancel()
@@ -108,13 +132,30 @@ struct StudioView: View {
         .onChange(
             of: sourceDownloader.lastCompletedURL
         ) { completedURL in
-            guard let completedURL else {
+            guard let completedURL, downloadProjectID == project.id else {
                 return
             }
             pendingURL = completedURL
-            pendingCaptureKind = nil
-            importPendingMedia()
+            if let storySource = pendingStorySource {
+                pendingCaptureKind = .screen
+                pendingSourceReference = storySourceReference(storySource)
+            } else {
+                pendingCaptureKind = nil
+                pendingSourceReference = nil
+            }
             showSourceDownloader = false
+            if session.workspaceRightsAttestation?.permitsUserDirectedProduction == true {
+                importPendingMedia()
+            } else {
+                rightsConfirmed = false
+                showRightsSheet = true
+            }
+        }
+        .onChange(of: sourceDownloader.state) { downloadState in
+            guard pendingStorySource != nil,
+                  case .failed(let message) = downloadState else { return }
+            sourceDownloadMessage =
+                "Ergänzung konnte nicht geladen werden: " + message
         }
         .sheet(isPresented: $showPackagingReview) {
             if let asset = state.asset,
@@ -220,10 +261,117 @@ struct StudioView: View {
         .background(BlackstockDesign.raisedSurface)
     }
 
+    private var storySourcesOverview: some View {
+        DisclosureGroup(
+            "Mehrquellen-Story · \(session.activeStorySources.count) Videos"
+        ) {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(
+                    Array(session.activeStorySources.enumerated()),
+                    id: \.element.videoID
+                ) { index, source in
+                    HStack(spacing: 10) {
+                        Text(index == 0 ? "Leitvideo" : "Ergänzung \(index)")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 82, alignment: .leading)
+                        Text(source.title)
+                            .font(.caption)
+                            .lineLimit(1)
+                        Spacer()
+                        Text(source.channelTitle)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        if index > 0 {
+                            storySourceStatus(source)
+                        }
+                    }
+                }
+                Text("Die Auswahlreihenfolge bestimmt die Story-Rollen. Geladene Ergänzungen lassen sich im Schnitt zeitlich platzieren und einzeln deaktivieren.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    if pendingStorySource != nil {
+                        ProgressView(value: sourceDownloader.progress)
+                            .frame(maxWidth: 180)
+                        Text(sourceDownloader.state.germanTitle)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Button("Download anzeigen") {
+                            showSourceDownloader = true
+                        }
+                        .buttonStyle(.link)
+                    }
+                    Spacer()
+                    Button("Ergänzungen laden") {
+                        beginStorySourceDownloadsIfNeeded()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(
+                        state.asset == nil
+                        || pendingStorySource != nil
+                        || sourceDownloader.state == .downloading
+                        || sourceDownloader.state == .processing
+                        || sourceDownloader.state == .paused
+                    )
+                    Button("Automatisch anordnen") {
+                        state.autoArrangeSupplementalVideos(
+                            captureIDs: loadedStoryVideoCaptures.map(\.id)
+                        )
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(
+                        !editingEnabled
+                        || loadedStoryVideoCaptures.isEmpty
+                    )
+                    .help(
+                        "Verteilt alle geladenen Ergänzungen ohne Überlappung über das Video."
+                    )
+                }
+            }
+            .padding(.top, 6)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 10)
+        .background(Color.primary.opacity(0.018))
+    }
+
+    private var loadedStoryVideoCaptures: [SupplementalCaptureAsset] {
+        session.activeStorySources.dropFirst().compactMap { source in
+            state.supplementalCaptures.first { capture in
+                capture.rightsEvidence.contains(
+                    "YouTube-Ergänzung:\(source.videoID)"
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func storySourceStatus(
+        _ source: YouTubeOpportunityCandidate
+    ) -> some View {
+        if pendingStorySource?.videoID == source.videoID {
+            Label("Wird geladen", systemImage: "arrow.down.circle.fill")
+                .font(.caption2)
+                .foregroundStyle(BlackstockDesign.accent)
+        } else if isStorySourceLoaded(source.videoID) {
+            Label("Im Schnitt", systemImage: "checkmark.circle.fill")
+                .font(.caption2)
+                .foregroundStyle(.green)
+        } else {
+            Text("Bereit")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
     private func sourceContext(_ source: MediaSourceReference) -> some View {
         let resolution = MediaSourceResolver().resolve(
             source,
-            approvedProvider: nil
+            approvedProvider: session.approvedSourceProviderAuthorization,
+            localYouTubeDownloaderAvailable: SourceDownloadManager.youtubeExecutable != nil
         )
         let isLinkFirstClip =
             session.productionIntent(for: project.id)?.isLinkFirstClip == true
@@ -391,12 +539,13 @@ struct StudioView: View {
                                 .controlSize(.small)
                                 .disabled(
                                     isAcquiringApprovedSource
-                                    || sourceDownloader.state
-                                        == .downloading
+                                    || sourceDownloader.state == .downloading
+                                    || sourceDownloader.state == .paused
+                                    || sourceDownloader.state == .processing
                                 )
                             } else {
                                 Button {
-                                    sourceDownloadURLText = ""
+                                    sourceDownloadURLText = opportunitySource?.pageURL.absoluteString ?? ""
                                     sourceDownloadMessage = nil
                                     showSourceDownloader = true
                                 } label: {
@@ -446,12 +595,10 @@ struct StudioView: View {
                             == .localProcessingReady,
                        currentStage == .editing {
                         Button {
-                            Task {
-                                await state
-                                    .generateLocalClipCandidates(
-                                        localeIdentifier:
-                                            speechLocaleIdentifier
-                                    )
+                            startProcessing {
+                                await state.generateLocalClipCandidates(
+                                    localeIdentifier: speechLocaleIdentifier
+                                )
                             }
                         } label: {
                             Label(
@@ -558,13 +705,13 @@ struct StudioView: View {
 
                 Text(
                     isAcquiringApprovedSource
-                        ? "Blackstock bezieht die freigegebene Videoquelle und übergibt sie anschließend automatisch an den Schnitt."
+                        ? "Blackstock lädt die Videoquelle herunter und übergibt sie anschließend automatisch an den Schnitt."
                         : (
                             isResolvingAutomaticSource
                             ? "Blackstock prüft gerade bereits verfügbare Quellen für dieses Video."
                             : (
                                 session.canAutomaticallyAcquireYouTubeSource
-                                ? "Das Video ist ausgewählt. Blackstock kann die freigegebene Quelle automatisch beziehen und danach direkt mit Analyse und Schnitt fortfahren."
+                                ? "Das Video wird auf deinen Mac geladen und anschließend im Schnitt-Player geöffnet."
                                 : "Das Video ist ausgewählt. Blackstock prüft lokale und autorisierte Quellen automatisch; Ingest-Ordner, Mediathek oder direkte Medienquelle bleiben als Fallback verfügbar."
                             )
                         )
@@ -623,12 +770,13 @@ struct StudioView: View {
                         .buttonStyle(.borderedProminent)
                         .disabled(
                             isAcquiringApprovedSource
-                            || sourceDownloader.state
-                                == .downloading
+                            || sourceDownloader.state == .downloading
+                            || sourceDownloader.state == .paused
+                            || sourceDownloader.state == .processing
                         )
                     } else {
                         Button {
-                            sourceDownloadURLText = ""
+                            sourceDownloadURLText = opportunitySource?.pageURL.absoluteString ?? ""
                             sourceDownloadMessage = nil
                             showSourceDownloader = true
                         } label: {
@@ -658,7 +806,7 @@ struct StudioView: View {
 
                     Menu {
                         Button {
-                            sourceDownloadURLText = ""
+                            sourceDownloadURLText = opportunitySource?.pageURL.absoluteString ?? ""
                             sourceDownloadMessage = nil
                             showSourceDownloader = true
                         } label: {
@@ -776,7 +924,7 @@ struct StudioView: View {
         HSplitView {
             VStack(spacing: 14) {
                 ZStack(alignment: .bottom) {
-                    VideoPlayer(player: state.player)
+                    BlackstockVideoPlayer(player: state.player)
                         .accessibilityLabel("Video-Vorschau des aktuellen Schnitts")
 
                     if state.previewedLocalClipCandidateID == nil {
@@ -788,7 +936,7 @@ struct StudioView: View {
                         captionPreviewOverlay
                     }
                 }
-                .frame(minWidth: 680, minHeight: 390)
+                .frame(minWidth: 400, minHeight: 240)
                 .background(BlackstockDesign.mediaSurface)
                 .clipShape(
                     RoundedRectangle(
@@ -806,6 +954,35 @@ struct StudioView: View {
 
                 timeline(asset)
                     .frame(height: 112)
+
+                HStack(spacing: 8) {
+                    editorMetric(
+                        title: "Quelle",
+                        value: timeLabel(asset.durationSeconds),
+                        icon: "film"
+                    )
+                    editorMetric(
+                        title: "Ausgabe",
+                        value: timeLabel(
+                            state.currentOutputDurationSeconds
+                        ),
+                        icon: "scissors"
+                    )
+                    editorMetric(
+                        title: "Änderungen",
+                        value: String(
+                            state.graph.currentOperations.count
+                        ),
+                        icon: "slider.horizontal.3"
+                    )
+                    editorMetric(
+                        title: "Untertitel",
+                        value: state.transcript == nil
+                            ? "Offen"
+                            : "Bereit",
+                        icon: "captions.bubble"
+                    )
+                }
 
                 HStack(spacing: 8) {
                     Button {
@@ -868,31 +1045,76 @@ struct StudioView: View {
                 }
             }
             .padding(18)
-            .frame(minWidth: 760)
+            .frame(minWidth: 440)
             .background(BlackstockDesign.canvas)
 
             inspector(asset)
-                .frame(minWidth: 320, idealWidth: 350, maxWidth: 400)
+                .frame(minWidth: 280, idealWidth: 300, maxWidth: 380)
                 .background(BlackstockDesign.raisedSurface)
         }
     }
 
+    private func editorMetric(
+        title: String,
+        value: String,
+        icon: String
+    ) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(value)
+                    .font(.caption.weight(.semibold))
+                    .monospacedDigit()
+                Text(title)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity)
+        .background(
+            Color.primary.opacity(0.035),
+            in: RoundedRectangle(cornerRadius: 10)
+        )
+    }
+
     private var localClipCandidatesSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Clip-Vorschläge")
+            Text("Automatischer Schnitt")
                 .font(.headline)
 
-            Text("Blackstock findet die stärksten Ausschnitte, bereitet Hochkantformat und Untertitel vor und rendert daraus fertige Clips. Du kannst jeden Schritt anschließend ändern.")
+            Text("Blackstock findet die stärksten Ausschnitte, setzt auf Wunsch gezielte Fokus-Zooms, bereitet Hochkantformat und Untertitel vor und rendert daraus fertige Clips. Du kannst jeden Schritt anschließend ändern.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
+            Toggle(
+                "Visuelle Dynamik: dezente Fokus-Zooms",
+                isOn: $state.automaticVisualDynamicsEnabled
+            )
+            .toggleStyle(.switch)
+            .font(.caption.weight(.medium))
+            .disabled(state.isCreatingAutomaticHighlights)
+
+            HStack(spacing: 8) {
+                workflowStep("1", "Analysieren")
+                workflowStep("2", "Schneiden")
+                workflowStep("3", "Untertitel")
+                workflowStep("4", "Rendern")
+            }
+
             HStack(spacing: 10) {
                 Button {
-                    startProcessing {
-                        await state.createAutomaticHighlights(
-                            localeIdentifier:
-                                speechLocaleIdentifier
-                        )
+                    if state.isCreatingAutomaticHighlights {
+                        stopProcessing()
+                    } else {
+                        startProcessing {
+                            await state.createAutomaticHighlights(
+                                localeIdentifier: speechLocaleIdentifier
+                            )
+                        }
                     }
                 } label: {
                     HStack {
@@ -902,8 +1124,8 @@ struct StudioView: View {
                         }
                         Label(
                             state.isCreatingAutomaticHighlights
-                                ? "Highlights werden erstellt …"
-                                : "Highlights automatisch erstellen",
+                                ? "Highlight-Erstellung stoppen"
+                                : "Automatik starten",
                             systemImage: "sparkles.rectangle.stack"
                         )
                     }
@@ -911,17 +1133,19 @@ struct StudioView: View {
                 .buttonStyle(.borderedProminent)
                 .tint(BlackstockDesign.accent)
                 .disabled(
-                    state.isCreatingAutomaticHighlights
-                    || state.isGeneratingClipCandidates
-                    || !editingEnabled
+                    state.isGeneratingClipCandidates
+                    || !projectEditingEnabled
                 )
 
                 Button {
-                    startProcessing {
-                        await state.generateLocalClipCandidates(
-                            localeIdentifier:
-                                speechLocaleIdentifier
-                        )
+                    if state.isGeneratingClipCandidates {
+                        stopProcessing()
+                    } else {
+                        startProcessing {
+                            await state.generateLocalClipCandidates(
+                                localeIdentifier: speechLocaleIdentifier
+                            )
+                        }
                     }
                 } label: {
                     HStack {
@@ -931,7 +1155,7 @@ struct StudioView: View {
                         }
                         Label(
                             state.isGeneratingClipCandidates
-                                ? "Clips werden gesucht …"
+                                ? "Clip-Suche stoppen"
                                 : "Clips manuell prüfen",
                             systemImage: "scissors"
                         )
@@ -940,8 +1164,7 @@ struct StudioView: View {
                 .buttonStyle(.bordered)
                 .disabled(
                     state.isCreatingAutomaticHighlights
-                    || state.isGeneratingClipCandidates
-                    || !editingEnabled
+                    || !projectEditingEnabled
                 )
             }
 
@@ -1422,6 +1645,19 @@ struct StudioView: View {
         }
     }
 
+    private func workflowStep(_ number: String, _ title: String) -> some View {
+        HStack(spacing: 5) {
+            Text(number)
+                .font(.caption2.bold())
+                .frame(width: 19, height: 19)
+                .background(BlackstockDesign.accent.opacity(0.14), in: Circle())
+            Text(title).font(.caption2.weight(.medium))
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(Color.primary.opacity(0.04), in: Capsule())
+    }
+
     private func timeline(_ asset: ProductionMediaAsset) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -1833,10 +2069,14 @@ struct StudioView: View {
                         .font(.headline)
 
                     Button {
-                        Task {
-                            await state.generateLocalCaptions(
-                                localeIdentifier: speechLocaleIdentifier
-                            )
+                        if state.isTranscribing {
+                            stopProcessing()
+                        } else {
+                            startProcessing {
+                                await state.generateLocalCaptions(
+                                    localeIdentifier: speechLocaleIdentifier
+                                )
+                            }
                         }
                     } label: {
                         HStack {
@@ -1845,20 +2085,107 @@ struct StudioView: View {
                             }
                             Label(
                                 state.isTranscribing
-                                    ? "Transkription läuft …"
+                                    ? "Spracherkennung stoppen"
                                     : "Lokale Untertitel erstellen",
                                 systemImage: "captions.bubble"
                             )
                         }
                     }
                     .buttonStyle(.bordered)
-                    .disabled(state.isTranscribing || !editingEnabled)
+                    .disabled(
+                        state.isGeneratingClipCandidates
+                        || !projectEditingEnabled
+                    )
 
                     Text("Sprache: \(speechLocaleIdentifier) · nur lokal auf dem Gerät; kein stiller Cloud-Fallback.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
                     if let transcript = state.transcript {
+                        GroupBox {
+                            VStack(alignment: .leading, spacing: 10) {
+                                HStack(alignment: .firstTextBaseline) {
+                                    Label(
+                                        "Sprachschnitt",
+                                        systemImage: "waveform.badge.minus"
+                                    )
+                                    .font(.caption.weight(.semibold))
+                                    Spacer()
+                                    Text(
+                                        "\(state.speechCleanupPlan.suggestions.count) Vorschläge"
+                                    )
+                                    .font(.caption2.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                                }
+
+                                Text(
+                                    state.speechCleanupPlan.suggestions.isEmpty
+                                    ? "Keine sicheren Füllwörter oder langen Pausen erkannt. Der Inhalt bleibt unverändert."
+                                    : "Blackstock hat lokale, prüfbare Schnitte gefunden. Bild und Ton werden immer gemeinsam gekürzt."
+                                )
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+
+                                if !state.speechCleanupPlan.suggestions.isEmpty {
+                                    HStack {
+                                        Label(
+                                            "ca. \(timeLabel(state.speechCleanupPlan.savedSeconds)) kürzer",
+                                            systemImage: "timer"
+                                        )
+                                        .font(.caption.weight(.medium))
+                                        Spacer()
+                                        Button("Vorschläge anwenden") {
+                                            Task {
+                                                await state.applySpeechCleanup()
+                                            }
+                                        }
+                                        .buttonStyle(.borderedProminent)
+                                        .disabled(!editingEnabled)
+                                        .accessibilityHint(
+                                            "Wendet die angezeigten Schnitte gemeinsam auf Bild und Ton an."
+                                        )
+                                    }
+
+                                    DisclosureGroup("Schnitte prüfen") {
+                                        VStack(alignment: .leading, spacing: 7) {
+                                            ForEach(
+                                                Array(state.speechCleanupPlan.suggestions.prefix(12))
+                                            ) { suggestion in
+                                                HStack {
+                                                    Text(suggestion.reason.germanTitle)
+                                                        .font(.caption.weight(.semibold))
+                                                    Text(suggestion.evidence)
+                                                        .font(.caption)
+                                                        .lineLimit(1)
+                                                    Spacer()
+                                                    Text(
+                                                        "\(timeLabel(suggestion.outputRange.startSeconds))–\(timeLabel(suggestion.outputRange.endSeconds))"
+                                                    )
+                                                    .font(.caption2.monospacedDigit())
+                                                    .foregroundStyle(.secondary)
+                                                }
+                                            }
+                                            if state.speechCleanupPlan.suggestions.count > 12 {
+                                                Text(
+                                                    "+ \(state.speechCleanupPlan.suggestions.count - 12) weitere Schnitte"
+                                                )
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
+                                            }
+                                        }
+                                        .padding(.top, 6)
+                                    }
+                                    .font(.caption.weight(.semibold))
+
+                                    Text(
+                                        "Nach dem Schnitt erstellt Blackstock Untertitel neu. Jeder Schnitt bleibt im Verlauf einzeln rückgängig machbar."
+                                    )
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+
                         Toggle(
                             isOn: Binding(
                                 get: {
@@ -2630,14 +2957,217 @@ struct StudioView: View {
         return text.isEmpty ? nil : text
     }
 
+    private var workflowProgress: some View {
+        let steps: [(title: String, icon: String)] = [
+            ("Quelle", "arrow.down.circle"),
+            ("Schnitt", "scissors"),
+            ("Untertitel", "captions.bubble"),
+            ("Render", "film.stack"),
+            ("Veröffentlichen", "arrow.up.circle")
+        ]
+
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                if isProcessingNow {
+                    ProgressView().controlSize(.small)
+                }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(workflowStatus)
+                        .font(.callout.weight(.semibold))
+                    Text(workflowNextAction)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if sourceDownloader.state == .downloading
+                    || sourceDownloader.state == .processing
+                    || sourceDownloader.state == .paused {
+                    Button("Download anzeigen") {
+                        showSourceDownloader = true
+                    }
+                }
+            }
+
+            if isProcessingNow {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text(processingProgressLabel)
+                            .font(.caption.weight(.semibold))
+                        Spacer()
+                        if let progress = processingProgressValue {
+                        Text("\(Int((progress * 100).rounded())) %")
+                            .font(.caption.monospacedDigit().weight(.semibold))
+                            .foregroundStyle(BlackstockDesign.accent)
+                        }
+                    }
+                    if let progress = processingProgressValue {
+                        ProgressView(value: progress)
+                        .tint(BlackstockDesign.accent)
+                    } else {
+                        ProgressView().controlSize(.small)
+                    }
+                    if let detail = state.clipCandidateStatusMessage,
+                       !detail.isEmpty {
+                        Text(detail)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(10)
+                .background(
+                    BlackstockDesign.accent.opacity(0.06),
+                    in: RoundedRectangle(cornerRadius: 10)
+                )
+            }
+
+            HStack(spacing: 8) {
+                ForEach(Array(steps.enumerated()), id: \.offset) {
+                    index, step in
+                    HStack(spacing: 7) {
+                        ZStack {
+                            Circle()
+                                .fill(
+                                    index < workflowStepIndex
+                                        ? Color.green.opacity(0.18)
+                                        : index == workflowStepIndex
+                                            ? BlackstockDesign.accent.opacity(0.16)
+                                            : Color.primary.opacity(0.055)
+                                )
+                            Image(
+                                systemName:
+                                    index < workflowStepIndex
+                                    ? "checkmark"
+                                    : step.icon
+                            )
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(
+                                index < workflowStepIndex
+                                    ? Color.green
+                                    : index == workflowStepIndex
+                                        ? BlackstockDesign.accent
+                                        : Color.secondary
+                            )
+                        }
+                        .frame(width: 28, height: 28)
+
+                        Text(step.title)
+                            .font(.caption.weight(
+                                index == workflowStepIndex
+                                    ? .semibold
+                                    : .regular
+                            ))
+                            .foregroundStyle(
+                                index <= workflowStepIndex
+                                    ? Color.primary
+                                    : Color.secondary
+                            )
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(BlackstockDesign.raisedSurface)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(BlackstockDesign.subtleBorder)
+                .frame(height: 1)
+        }
+    }
+
+    private var isProcessingNow: Bool {
+        isImportingMedia || state.isLoading || state.isTranscribing
+            || state.isGeneratingClipCandidates
+            || state.isCreatingAutomaticHighlights
+            || state.isRendering || state.isRenderingSavedClipBatch
+            || sourceDownloader.state == .downloading
+            || sourceDownloader.state == .processing
+    }
+
+    private var workflowStepIndex: Int {
+        if state.renderArtifact != nil { return 4 }
+        if state.isRendering || state.isRenderingSavedClipBatch { return 3 }
+        if state.isTranscribing || state.transcript != nil
+            || state.isGeneratingClipCandidates
+            || state.isCreatingAutomaticHighlights
+            || !state.localClipCandidates.isEmpty { return 2 }
+        if state.asset != nil { return 1 }
+        return 0
+    }
+
+    private var processingProgressValue: Double? {
+        switch sourceDownloader.state {
+        case .downloading:
+            return min(max(sourceDownloader.progress, 0), 1)
+        default:
+            break
+        }
+        return nil
+    }
+
+    private var processingProgressLabel: String {
+        switch sourceDownloader.state {
+        case .downloading:
+            return "Download"
+        case .processing:
+            return "Bild und Ton synchronisieren"
+        default:
+            break
+        }
+        if isImportingMedia || state.isLoading { return "Quelle vorbereiten" }
+        if state.isTranscribing { return "Sprache erkennen" }
+        if state.isRenderingSavedClipBatch { return "Clips rendern" }
+        if state.isCreatingAutomaticHighlights {
+            return "Automatischer Schnitt · 4 Phasen"
+        }
+        if state.isGeneratingClipCandidates { return "Highlights analysieren" }
+        if state.isRenderingSavedClipBatch { return "Clips rendern" }
+        if state.isRendering { return "Video rendern" }
+        return "Verarbeitung"
+    }
+
+    private var workflowNextAction: String {
+        switch workflowStepIndex {
+        case 0:
+            return "Als Nächstes: Video laden oder eine lokale Datei auswählen."
+        case 1:
+            return "Als Nächstes: Abspielbereich festlegen und Schnitt anwenden."
+        case 2:
+            return "Als Nächstes: Clips und Untertitel prüfen, dann das Video erstellen."
+        case 3:
+            return "Blackstock erstellt gerade die veröffentlichungsfertige Datei."
+        default:
+            return "Als Nächstes: Titel, Vorschaubild und Veröffentlichung in der Freigabe prüfen."
+        }
+    }
+
+    private var workflowStatus: String {
+        if state.isRendering || state.isRenderingSavedClipBatch { return "Schritt 4 · Clip wird gerendert. Bitte warte auf die fertige Datei." }
+        if state.isTranscribing { return "Schritt 3 · Sprache wird erkannt und Untertitel werden erstellt." }
+        if state.isCreatingAutomaticHighlights || state.isGeneratingClipCandidates {
+            return "Schritt 3 · Highlights werden gesucht und Schnitte vorbereitet."
+        }
+        if isImportingMedia || state.isLoading { return "Schritt 2 · Video wird in dein Projekt geladen." }
+        if state.renderArtifact != nil { return "Schritt 4 abgeschlossen · Video fertig. Weiter zum Veröffentlichen, um Titel, Vorschaubild und Veröffentlichung zu prüfen." }
+        switch sourceDownloader.state {
+        case .downloading: return "Schritt 1 · " + sourceDownloader.transferDescription
+        case .processing: return "Schritt 2 · Bild und Ton werden zusammengefügt."
+        case .paused: return "Download pausiert · Über ‚Download anzeigen‘ fortsetzen."
+        case .failed: return "Download unterbrochen · Öffne den Download und versuche es erneut."
+        default: return state.asset == nil ? "Schritt 1 · Video auswählen oder herunterladen." : "Schritt 3 · Video bereit: Vorschau abspielen, Schnitt prüfen und anschließend rendern."
+        }
+    }
+
     private var sourceDownloaderSheet: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Videoquelle beziehen")
+                    Text("Video herunterladen")
                         .font(.title2.bold())
                     Text(
-                        "Blackstock versucht zuerst, die passende Quelle automatisch zu finden. Falls nötig, kannst du hier eine direkte oder autorisierte Medienquelle laden."
+                        "Lade das ausgewählte Video auf deinen Mac. Nach dem Download wird die Datei automatisch an den Schnitt übergeben."
                     )
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -2645,10 +3175,14 @@ struct StudioView: View {
                 Spacer()
             }
 
-            if let source = opportunitySource {
-                GroupBox("Ausgewähltes Video") {
+            if let source = pendingSourceReference ?? opportunitySource {
+                GroupBox(
+                    pendingStorySource == nil
+                        ? "Ausgewähltes Video"
+                        : "Ausgewählte Ergänzung"
+                ) {
                     VStack(alignment: .leading, spacing: 5) {
-                        Text(project.title)
+                        Text(pendingStorySource?.title ?? project.title)
                             .font(.headline)
                         Text(source.pageURL.absoluteString)
                             .font(.caption2.monospaced())
@@ -2663,16 +3197,16 @@ struct StudioView: View {
             }
 
             VStack(alignment: .leading, spacing: 7) {
-                Text("Direkte Medienquelle")
+                Text("YouTube-Link oder direkte Medienquelle")
                     .font(.caption.weight(.semibold))
                 TextField(
-                    "https://…/video.mp4",
+                    "https://www.youtube.com/watch?v=…",
                     text: $sourceDownloadURLText
                 )
                 .textFieldStyle(.roundedBorder)
 
                 Text(
-                    "Nur nötig, wenn die Quelle nicht automatisch gefunden wurde. Verwende eine direkte oder von einem verbundenen Anbieter freigegebene Medien-URL."
+                    "Füge einen YouTube-Link oder einen direkten Videolink ein. Lade nur Inhalte, die du verwenden darfst."
                 )
                 .font(.caption2)
                 .foregroundStyle(.secondary)
@@ -2686,29 +3220,39 @@ struct StudioView: View {
                     )
                     .font(.callout.weight(.semibold))
                     Spacer()
-                    Text(
-                        String(
-                            format: "%.0f%%",
-                            sourceDownloader.progress * 100
-                        )
-                    )
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                    if sourceDownloader.state == .downloading || sourceDownloader.state == .paused {
+                        Text(String(format: "%.0f%% der aktuellen Datei", sourceDownloader.progress * 100))
+                            .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                    }
                 }
 
-                ProgressView(
-                    value: sourceDownloader.progress
-                )
+                if sourceDownloader.state == .processing {
+                    ProgressView("Bild und Ton werden zusammengefügt …")
+                } else {
+                    ProgressView(value: sourceDownloader.progress)
+                    Text(sourceDownloader.transferDescription)
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Text("Bild und Ton werden getrennt geladen. Danach öffnet sich der Schnitt automatisch. Du kannst dieses Fenster währenddessen schließen.")
+                    .font(.caption).foregroundStyle(.secondary)
 
                 if let destination =
                         sourceDownloader.destinationURL {
-                    Text(
-                        "Ziel: " + destination.path
-                    )
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
+                    DisclosureGroup("Speicherort") {
+                        Text(destination.path).font(.caption2.monospaced())
+                            .foregroundStyle(.secondary).textSelection(.enabled)
+                    }
                 }
+            }
+
+            if sourceDownloader.recoveredDownload {
+                Text("Gespeicherte Download-Dateien werden weiterverwendet. Bereits geladene Abschnitte müssen nicht erneut geladen werden.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if case .failed(let message) = sourceDownloader.state {
+                Text(message).font(.caption).foregroundStyle(.red).textSelection(.enabled)
             }
 
             if let sourceDownloadMessage {
@@ -2745,6 +3289,8 @@ struct StudioView: View {
                     }
                     .buttonStyle(.bordered)
 
+                case .processing:
+                    Button("Abbrechen", role: .destructive) { sourceDownloader.cancel() }
                 case .paused:
                     Button("Fortsetzen") {
                         sourceDownloader.resume()
@@ -2790,6 +3336,8 @@ struct StudioView: View {
             return "arrow.down.circle"
         case .downloading:
             return "arrow.down.circle.fill"
+        case .processing:
+            return "film.stack"
         case .paused:
             return "pause.circle.fill"
         case .completed:
@@ -2810,6 +3358,13 @@ struct StudioView: View {
         sourceDownloadMessage = nil
         defer {
             isAcquiringApprovedSource = false
+        }
+
+        if source.provider == .youtube, SourceDownloadManager.youtubeExecutable != nil {
+            sourceDownloadURLText = source.pageURL.absoluteString
+            showSourceDownloader = true
+            startSourceDownload(remoteURL: source.pageURL)
+            return
         }
 
         do {
@@ -2850,24 +3405,15 @@ struct StudioView: View {
             return
         }
 
-        let host = remoteURL.host?
-            .lowercased() ?? ""
-        if host == "youtube.com"
-            || host.hasSuffix(".youtube.com")
-            || host == "youtu.be"
-            || host.hasSuffix(".youtu.be") {
-            sourceDownloadMessage =
-                "Ein normaler YouTube-Watch-Link ist keine direkte Medien-Downloadquelle. Verwende eine direkte oder autorisierte Medien-URL."
-            return
-        }
-
         startSourceDownload(
             remoteURL: remoteURL
         )
     }
 
     private func startSourceDownload(
-        remoteURL: URL
+        remoteURL: URL,
+        sourceIDOverride: String? = nil,
+        showProgressSheet: Bool = true
     ) {
         guard let ingestDirectory =
                 session.automaticIngestDirectoryURL else {
@@ -2894,12 +3440,73 @@ struct StudioView: View {
             fileName += ".mp4"
         }
 
+        if YouTubeDownloadRequest.accepts(remoteURL) {
+            let sourceID = (sourceIDOverride
+                ?? opportunitySource?.externalID
+                ?? "youtube")
+                .filter { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") }
+            let sourceKey = SHA256.hash(data: Data(remoteURL.absoluteString.utf8))
+                .prefix(8).map { String(format: "%02x", $0) }.joined()
+            fileName = sourceID + "-" + project.id.uuidString + "-" + sourceKey + ".mp4"
+        }
+        if !YouTubeDownloadRequest.accepts(remoteURL) {
+            fileName = UUID().uuidString + "-" + fileName
+        }
         let destination = ingestDirectory
             .appendingPathComponent(fileName)
 
+        downloadProjectID = project.id
+        showSourceDownloader = showProgressSheet
         sourceDownloader.start(
             remoteURL: remoteURL,
             destinationURL: destination
+        )
+    }
+
+    private func storySourceReference(
+        _ source: YouTubeOpportunityCandidate
+    ) -> MediaSourceReference {
+        MediaSourceReference(
+            provider: .youtube,
+            pageURL: URL(
+                string: "https://www.youtube.com/watch?v=\(source.videoID)"
+            )!,
+            externalID: source.videoID,
+            discoveredAt: source.retrievedAt
+        )
+    }
+
+    private func isStorySourceLoaded(_ videoID: String) -> Bool {
+        state.supplementalCaptures.contains {
+            $0.rightsEvidence.contains("YouTube-Ergänzung:\(videoID)")
+        }
+    }
+
+    private func beginStorySourceDownloadsIfNeeded() {
+        guard state.asset != nil,
+              pendingStorySource == nil,
+              sourceDownloader.state != .downloading,
+              sourceDownloader.state != .processing,
+              sourceDownloader.state != .paused else { return }
+
+        queuedStorySources = Array(session.activeStorySources.dropFirst())
+            .filter { !isStorySourceLoaded($0.videoID) }
+        startNextStorySourceDownload()
+    }
+
+    private func startNextStorySourceDownload() {
+        guard pendingStorySource == nil,
+              !queuedStorySources.isEmpty else { return }
+        let source = queuedStorySources.removeFirst()
+        let reference = storySourceReference(source)
+        pendingStorySource = source
+        pendingSourceReference = reference
+        sourceDownloadURLText = reference.pageURL.absoluteString
+        sourceDownloadMessage = nil
+        startSourceDownload(
+            remoteURL: reference.pageURL,
+            sourceIDOverride: source.videoID,
+            showProgressSheet: false
         )
     }
 
@@ -2967,7 +3574,10 @@ struct StudioView: View {
     }
 
     private func attemptAutomaticOriginalBinding() async {
-        guard state.asset == nil,
+        guard state.asset == nil, !isResolvingAutomaticSource, !isImportingMedia,
+              sourceDownloader.state != .downloading,
+              sourceDownloader.state != .paused,
+              sourceDownloader.state != .processing,
               session.productionIntent(
                 for: project.id
               )?.isLinkFirstClip == true,
@@ -2990,6 +3600,8 @@ struct StudioView: View {
             return
         }
 
+        guard !Task.isCancelled, session.activeProject?.id == project.id,
+              state.asset == nil, !isImportingMedia else { return }
         pendingURL = matchedURL
         pendingCaptureKind = nil
         importPendingMedia()
@@ -3042,7 +3654,7 @@ struct StudioView: View {
     }
 
     private func importPendingMedia() {
-        guard let url = pendingURL,
+        guard !isImportingMedia, let url = pendingURL,
               let attestation =
                 session.workspaceRightsAttestation,
               attestation.permitsUserDirectedProduction else {
@@ -3050,9 +3662,16 @@ struct StudioView: View {
         }
 
         let captureKind = pendingCaptureKind
-        let sourceReference = opportunitySource
+        let sourceReference = pendingSourceReference ?? opportunitySource
+        let storySource = pendingStorySource
         let sourceEvidence: String
-        if let sourceReference {
+        if let storySource {
+            sourceEvidence =
+                "YouTube-Ergänzung:"
+                + storySource.videoID
+                + " · "
+                + storySource.title
+        } else if let sourceReference {
             let providerReference =
                 sourceReference.externalID
                 ?? sourceReference.pageURL.absoluteString
@@ -3066,7 +3685,9 @@ struct StudioView: View {
                 "Direkt dem Blackstock-Projekt als Produktionsmedium zugeordnet."
         }
 
+        isImportingMedia = true
         Task {
+            defer { isImportingMedia = false }
             let isSupplementalCapture =
                 captureKind == .microphone
                 || captureKind == .systemAudio
@@ -3080,6 +3701,9 @@ struct StudioView: View {
 
             if isSupplementalCapture,
                let captureKind {
+                let existingCaptureIDs = Set(
+                    state.supplementalCaptures.map(\.id)
+                )
                 let saved = await state.importSupplementalCapture(
                     url: url,
                     kind: captureKind,
@@ -3092,8 +3716,44 @@ struct StudioView: View {
                 )
                 if saved,
                    let persisted = state.supplementalCaptures.last(
-                    where: { $0.kind == captureKind }
+                    where: {
+                        $0.kind == captureKind
+                        && !existingCaptureIDs.contains($0.id)
+                    }
                    ) {
+                    if let storySource,
+                       let storyIndex = session.activeStorySources.firstIndex(
+                            where: { $0.videoID == storySource.videoID }
+                       ) {
+                        let duration = min(
+                            max(persisted.durationSeconds ?? 5, 1),
+                            5
+                        )
+                        let outputDuration = max(
+                            state.currentOutputDurationSeconds,
+                            duration
+                        )
+                        let timelineStart = min(
+                            Double(max(storyIndex - 1, 0)) * 5,
+                            max(outputDuration - duration, 0)
+                        )
+                        state.setSupplementalVideoEnabled(
+                            captureID: persisted.id,
+                            enabled: true
+                        )
+                        state.setSupplementalVideoTimelineStart(
+                            captureID: persisted.id,
+                            seconds: timelineStart
+                        )
+                        state.setSupplementalVideoSourceStart(
+                            captureID: persisted.id,
+                            seconds: 0
+                        )
+                        state.setSupplementalVideoDuration(
+                            captureID: persisted.id,
+                            seconds: duration
+                        )
+                    }
                     await BlackstockCaptureHardwareAudit
                         .recordPersistedCapture(
                             kind: captureKind,
@@ -3160,6 +3820,7 @@ struct StudioView: View {
                                 localeIdentifier:
                                     speechLocaleIdentifier
                             )
+                            beginStorySourceDownloadsIfNeeded()
                         } else {
                             _ = session.advanceActiveProject(
                                 to: .preview
@@ -3171,6 +3832,30 @@ struct StudioView: View {
 
             pendingURL = nil
             pendingCaptureKind = nil
+            pendingSourceReference = nil
+            if storySource != nil {
+                pendingStorySource = nil
+                if let storySource, !isStorySourceLoaded(storySource.videoID) {
+                    queuedStorySources = []
+                    state.clipCandidateStatusMessage = "Die Ergänzung konnte nicht importiert werden. Über „Ergänzungen laden“ erneut versuchen."
+                    return
+                }
+                if queuedStorySources.isEmpty,
+                   session.activeStorySources.count > 1,
+                   session.activeStorySources.dropFirst().allSatisfy({ isStorySourceLoaded($0.videoID) }) {
+                    state.autoArrangeSupplementalVideos(
+                        captureIDs: loadedStoryVideoCaptures.map(\.id)
+                    )
+                    guard state.errorMessage == nil else { return }
+                    state.clipCandidateStatusMessage = "Alle Quellen geladen · gemeinsame Story wird gerendert …"
+                    await state.render(projectID: project.id)
+                    if state.errorMessage == nil {
+                        state.clipCandidateStatusMessage = "Gemeinsame Story aus \(session.activeStorySources.count) Quellen fertig. Die Vorschau zeigt die Exportdatei."
+                    }
+                } else {
+                    startNextStorySourceDownload()
+                }
+            }
         }
     }
 
@@ -3690,9 +4375,18 @@ struct StudioView: View {
         session.activeProject?.stage ?? project.stage
     }
 
-    private var editingEnabled: Bool {
+    private var projectEditingEnabled: Bool {
         currentStage == .editing
             && session.activeProject?.isPaused != true
+    }
+
+    private var editingEnabled: Bool {
+        projectEditingEnabled
+            && !state.isTranscribing
+            && !state.isGeneratingClipCandidates
+            && !state.isCreatingAutomaticHighlights
+            && !state.isRendering
+            && !state.isRenderingSavedClipBatch
     }
 
     private func startProcessing(
@@ -3704,6 +4398,12 @@ struct StudioView: View {
             await operation()
             activeProcessingTask = nil
         }
+    }
+
+    private func stopProcessing() {
+        activeProcessingTask?.cancel()
+        activeProcessingTask = nil
+        state.requestStopProcessing()
     }
 
     private func stageTitle(_ stage: BlackstockStage) -> String {
