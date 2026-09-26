@@ -195,6 +195,8 @@ struct OpportunityWorkspaceView: View {
             }
             if !storySelectionIDs.isEmpty {
                 storySelectionBar
+            } else {
+                storySelectionHint
             }
             HStack(spacing: 6) {
                 Image(systemName: query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -390,10 +392,11 @@ struct OpportunityWorkspaceView: View {
     private func opportunityRow(
         _ item: YouTubeOpportunityCandidate
     ) -> some View {
-        Button {
-            selectedOpportunityID = item.id
-        } label: {
-            HStack(alignment: .top, spacing: 12) {
+        ZStack(alignment: .bottomTrailing) {
+            Button {
+                selectedOpportunityID = item.id
+            } label: {
+                HStack(alignment: .top, spacing: 12) {
                 AsyncImage(url: item.thumbnailURL) { image in
                     image.resizable().scaledToFill()
                 } placeholder: {
@@ -469,9 +472,36 @@ struct OpportunityWorkspaceView: View {
                         : BlackstockDesign.subtleBorder
                 )
             )
-            .contentShape(Rectangle())
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                toggleStorySelection(item)
+            } label: {
+                Image(
+                    systemName: storySelectionIDs.contains(item.videoID)
+                        ? "checkmark.circle.fill"
+                        : "rectangle.stack.badge.plus"
+                )
+                .font(.title3)
+                .padding(9)
+                .background(.ultraThinMaterial, in: Circle())
+            }
+            .buttonStyle(.plain)
+            .padding(8)
+            .accessibilityLabel(
+                storySelectionIDs.contains(item.videoID)
+                    ? "Aus Mehrquellen-Story entfernen"
+                    : (storySelectionIDs.isEmpty
+                        ? "Als Leitvideo wählen"
+                        : "Als passendes Ergänzungsvideo wählen")
+            )
+            .disabled(
+                !storySelectionIDs.contains(item.videoID)
+                && storySelectionIDs.count >= 5
+            )
         }
-        .buttonStyle(.plain)
     }
 
     private func opportunityDetail(
@@ -723,37 +753,75 @@ struct OpportunityWorkspaceView: View {
     }
 
     private var storySelectionBar: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "rectangle.stack.fill")
-                .foregroundStyle(BlackstockDesign.accent)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Mehrquellen-Story · \(storySelectionIDs.count) von 5")
-                    .font(.callout.weight(.semibold))
-                Text(storySelectionIDs.count < 2
-                     ? "Wähle mindestens ein passendes Ergänzungsvideo."
-                     : "Leitvideo und Ergänzungen sind gewählt. Reihenfolge: Auswahlreihenfolge.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Button("Leeren") {
-                storySelectionIDs = []
-            }
-            .buttonStyle(.bordered)
-            Button("Story erstellen") {
-                let selected = storySelectionIDs.compactMap { id in
-                    session.opportunities.first(where: { $0.videoID == id })
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                Image(systemName: "rectangle.stack.fill")
+                    .foregroundStyle(BlackstockDesign.accent)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Mehrquellen-Story · \(storySelectionIDs.count) von 5")
+                        .font(.callout.weight(.semibold))
+                    Text(storySelectionIDs.count < 2
+                         ? "Blackstock schlägt passende Ergänzungen aus den aktuellen Treffern vor."
+                         : "Leitvideo und Ergänzungen sind gewählt. Reihenfolge: Auswahlreihenfolge.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-                session.useMultiSourceStory(selected)
-                if session.activeStorySources.count >= 2 {
-                    onProjectCreated()
+                Spacer()
+                Button("Leeren") {
+                    storySelectionIDs = []
+                }
+                .buttonStyle(.bordered)
+                Button("Story erstellen") {
+                    let selected = storySelectionIDs.compactMap { id in
+                        session.opportunities.first(where: { $0.videoID == id })
+                    }
+                    session.useMultiSourceStory(selected)
+                    if session.activeStorySources.count >= 2 {
+                        onProjectCreated()
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(storySelectionIDs.count < 2)
+            }
+
+            if storySelectionIDs.count < 5,
+               !suggestedStorySources.isEmpty {
+                HStack(spacing: 8) {
+                    Text("Vorschläge")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    ForEach(suggestedStorySources) { item in
+                        Button {
+                            toggleStorySelection(item)
+                        } label: {
+                            Label(item.title, systemImage: "plus.circle.fill")
+                                .lineLimit(1)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .help(item.title)
+                    }
                 }
             }
-            .buttonStyle(.borderedProminent)
-            .disabled(storySelectionIDs.count < 2)
         }
         .padding(12)
         .blackstockSurface(raised: true)
+    }
+
+    private var storySelectionHint: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "rectangle.stack.badge.plus")
+                .foregroundStyle(BlackstockDesign.accent)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Mehrere Videos zu einer Story verbinden")
+                    .font(.callout.weight(.semibold))
+                Text("Wähle über das Stapel-Symbol ein Leitvideo. Danach markiert Blackstock die übrigen Treffer als mögliche Ergänzungen.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(12)
+        .blackstockSurface(raised: false)
     }
 
     private func toggleStorySelection(_ item: YouTubeOpportunityCandidate) {
@@ -762,6 +830,14 @@ struct OpportunityWorkspaceView: View {
         } else if storySelectionIDs.count < 5 {
             storySelectionIDs.append(item.videoID)
         }
+    }
+
+    private var suggestedStorySources: [YouTubeOpportunityCandidate] {
+        Array(
+            session.opportunities
+                .filter { !storySelectionIDs.contains($0.videoID) }
+                .prefix(min(3, 5 - storySelectionIDs.count))
+        )
     }
 
     private func loadOpportunities() async {

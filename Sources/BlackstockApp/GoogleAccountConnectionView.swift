@@ -16,11 +16,11 @@ struct GoogleAccountConnectionView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Label(
                     session.hasImportedOAuthConfiguration
-                        ? "1. OAuth-JSON geprüft"
-                        : "1. Zuerst OAuth-JSON hinzufügen",
+                        ? "OAuth-Konfiguration bereit"
+                        : "Desktop-OAuth-Datei hinzufügen",
                     systemImage: session.hasImportedOAuthConfiguration
                         ? "checkmark.circle.fill"
-                        : "1.circle.fill"
+                        : "doc.badge.gearshape"
                 )
                 .font(.callout.weight(.semibold))
                 .foregroundStyle(
@@ -45,8 +45,6 @@ struct GoogleAccountConnectionView: View {
             .padding(12)
             .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
 
-            Label("2. Google-Konto verbinden", systemImage: "2.circle.fill")
-                .font(.callout.weight(.semibold))
             Button {
                 Task { await session.connectGoogle() }
             } label: {

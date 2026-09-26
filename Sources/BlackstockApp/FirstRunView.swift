@@ -7,6 +7,8 @@ struct FirstRunView: View {
     @ObservedObject var session: BlackstockSession
     @State private var showOAuthImporter = false
     @State private var showAdvancedAppSettings = false
+    // Legacy recovery states can still render the former discovery pane, but
+    // new onboarding never routes through video selection.
     @State private var selectedOpportunityID: String?
     @State private var opportunitySortMode: OpportunitySortMode = .views
 
@@ -19,9 +21,17 @@ struct FirstRunView: View {
                     Text("Blackstock")
                         .font(.title2.bold())
                     Spacer()
-                    Text("\(session.step.rawValue + 1) / 6")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
+                    VStack(alignment: .trailing, spacing: 5) {
+                        Text("Einrichtung")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        ProgressView(
+                            value: onboardingProgress,
+                            total: 4
+                        )
+                        .frame(width: 120)
+                        .accessibilityLabel("Fortschritt der Einrichtung")
+                    }
                 }
                 .padding(.horizontal, 32)
                 .padding(.vertical, 22)
@@ -53,9 +63,9 @@ struct FirstRunView: View {
 
             Spacer()
 
-            Text("YouTube-Clips erstellen.")
+            Text("Dein YouTube-Workflow beginnt hier.")
                 .font(.largeTitle.bold())
-            Text("Kanal verbinden, Video auswählen, schneiden und veröffentlichen.")
+            Text("Kanal sicher verbinden und Blackstock auf deine Inhalte abstimmen.")
                 .font(.title3)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -84,10 +94,8 @@ struct FirstRunView: View {
                 topic
             case .language:
                 language
-            case .preparing:
-                preparing
-            case .opportunities:
-                opportunities
+            case .preparing, .opportunities:
+                language
             }
 
             if let error = session.errorMessage {
@@ -123,11 +131,11 @@ struct FirstRunView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Label(
                     session.hasImportedOAuthConfiguration
-                        ? "1. OAuth-JSON geprüft"
-                        : "1. Zuerst OAuth-JSON hinzufügen",
+                        ? "OAuth-Konfiguration bereit"
+                        : "Desktop-OAuth-Datei hinzufügen",
                     systemImage: session.hasImportedOAuthConfiguration
                         ? "checkmark.circle.fill"
-                        : "1.circle.fill"
+                        : "doc.badge.gearshape"
                 )
                 .font(.headline)
                 .foregroundStyle(
@@ -151,9 +159,6 @@ struct FirstRunView: View {
             }
             .padding(14)
             .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
-
-            Label("2. Mit Google anmelden", systemImage: "2.circle.fill")
-                .font(.headline)
 
             Button {
                 Task { await session.connectGoogle() }
@@ -429,11 +434,8 @@ struct FirstRunView: View {
 
             HStack {
                 Spacer()
-                Button("Videos laden") {
-                    Task {
-                        await session
-                            .prepareChannelAndLoadOpportunities()
-                    }
+                Button("Blackstock öffnen") {
+                    session.finishFirstRun()
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(
@@ -734,14 +736,21 @@ struct FirstRunView: View {
     }
 
 
+    private var onboardingProgress: Double {
+        switch session.step {
+        case .welcome: 1
+        case .channel: 2
+        case .topic: 3
+        case .language, .preparing, .opportunities: 4
+        }
+    }
+
     private var stepEyebrow: String {
         switch session.step {
-        case .welcome: "1 · Google"
-        case .channel: "2 · YouTube-Kanal"
-        case .topic: "3 · Kanal"
-        case .language: "4 · Rechte"
-        case .preparing: "5 · Vorbereitung"
-        case .opportunities: "6 · Video"
+        case .welcome: "Sicher verbinden"
+        case .channel: "Dein Arbeitsbereich"
+        case .topic: "Kanalprofil"
+        case .language, .preparing, .opportunities: "Bereit zum Start"
         }
     }
 
@@ -751,8 +760,7 @@ struct FirstRunView: View {
         case .channel: "YouTube-Kanal auswählen"
         case .topic: "Kanal einrichten"
         case .language: "Sprache und Rechte"
-        case .preparing: "Kanal vorbereiten"
-        case .opportunities: "Video auswählen"
+        case .preparing, .opportunities: "Blackstock ist bereit"
         }
     }
 
@@ -762,8 +770,7 @@ struct FirstRunView: View {
         case .channel: "Wähle den Kanal, mit dem du arbeiten willst."
         case .topic: "Wähle Region, Sprache, Kanal-Kategorie und Zielgruppe."
         case .language: "Bestätige die Nutzungsrechte für deinen Arbeitsbereich."
-        case .preparing: "Blackstock lädt die benötigten Kanaldaten."
-        case .opportunities: "Wähle ein Video für dein erstes Clip-Projekt."
+        case .preparing, .opportunities: "Videos und Mehrquellen-Stories erstellst du anschließend in Entdecken."
         }
     }
 }

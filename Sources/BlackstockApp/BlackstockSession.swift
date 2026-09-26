@@ -2725,8 +2725,48 @@ final class BlackstockSession: ObservableObject {
             let accessToken = try await validatedReadOnlyAccessToken(targetChannelID: channelID)
             guard opportunityRequestID == requestID else { return }
             let client = YouTubeAuthorizedClient(accessToken: accessToken)
-            var page = try await client.opportunityPage(
-                query: resolvedQuery,
+            // Shorts/video classification needs video details. A search page
+            // can therefore become empty only after enrichment although a
+            // following page contains valid matches. Scan ahead before
+            // declaring a valid time/filter combination empty.
+            func matchingPage(
+                categoryID: String?,
+                regionCode: String?,
+                relevanceLanguage: String?,
+                initialToken: String? = nil
+            ) async throws -> YouTubeOpportunityPage {
+                var candidates: [YouTubeOpportunityCandidate] = []
+                var nextToken = initialToken
+                var returnedNextToken: String?
+                let pageLimit = loadMore ? 1 : 3
+                for _ in 0..<pageLimit {
+                    let part = try await client.opportunityPage(
+                        query: resolvedQuery,
+                        categoryID: categoryID,
+                        regionCode: regionCode,
+                        relevanceLanguage: relevanceLanguage,
+                        publishedAfter: window.publishedAfter(
+                            now: opportunitySearchDate
+                        ),
+                        maxResults: 50,
+                        order: order,
+                        contentFilter: filter,
+                        pageToken: nextToken
+                    )
+                    candidates.append(contentsOf: part.candidates)
+                    returnedNextToken = part.nextPageToken
+                    guard candidates.isEmpty,
+                          let following = part.nextPageToken,
+                          following != nextToken else { break }
+                    nextToken = following
+                }
+                return YouTubeOpportunityPage(
+                    candidates: candidates,
+                    nextPageToken: returnedNextToken
+                )
+            }
+
+            var page = try await matchingPage(
                 // A typed query expresses the user's intent and must not be
                 // silently restricted to the saved channel category.
                 categoryID: resolvedQuery.isEmpty
@@ -2734,23 +2774,18 @@ final class BlackstockSession: ObservableObject {
                     : nil,
                 regionCode: region.isEmpty ? nil : region,
                 relevanceLanguage: language.isEmpty ? nil : language,
-                publishedAfter: window.publishedAfter(now: opportunitySearchDate),
-                maxResults: 50, order: order, contentFilter: filter, pageToken: token)
+                initialToken: token
+            )
             var recommendationNote = ""
             // An empty search field means automatic recommendations. Narrow
             // time/category combinations can legitimately return no search
             // rows, so fall back to YouTube's regional popularity chart.
             if !loadMore, resolvedQuery.isEmpty, page.candidates.isEmpty,
                !category.isEmpty {
-                page = try await client.opportunityPage(
-                    query: "",
+                page = try await matchingPage(
                     categoryID: nil,
                     regionCode: region.isEmpty ? nil : region,
-                    relevanceLanguage: language.isEmpty ? nil : language,
-                    publishedAfter: window.publishedAfter(now: opportunitySearchDate),
-                    maxResults: 50,
-                    order: order,
-                    contentFilter: filter
+                    relevanceLanguage: language.isEmpty ? nil : language
                 )
                 if !page.candidates.isEmpty {
                     recommendationNote =
@@ -2759,15 +2794,10 @@ final class BlackstockSession: ObservableObject {
             }
             if !loadMore, resolvedQuery.isEmpty, page.candidates.isEmpty,
                !language.isEmpty {
-                page = try await client.opportunityPage(
-                    query: "",
+                page = try await matchingPage(
                     categoryID: nil,
                     regionCode: region.isEmpty ? nil : region,
-                    relevanceLanguage: nil,
-                    publishedAfter: window.publishedAfter(now: opportunitySearchDate),
-                    maxResults: 50,
-                    order: order,
-                    contentFilter: filter
+                    relevanceLanguage: nil
                 )
                 if !page.candidates.isEmpty {
                     recommendationNote =
@@ -2776,15 +2806,10 @@ final class BlackstockSession: ObservableObject {
             }
             if !loadMore, resolvedQuery.isEmpty, page.candidates.isEmpty,
                !region.isEmpty {
-                page = try await client.opportunityPage(
-                    query: "",
+                page = try await matchingPage(
                     categoryID: nil,
                     regionCode: nil,
-                    relevanceLanguage: nil,
-                    publishedAfter: window.publishedAfter(now: opportunitySearchDate),
-                    maxResults: 50,
-                    order: order,
-                    contentFilter: filter
+                    relevanceLanguage: nil
                 )
                 if !page.candidates.isEmpty {
                     recommendationNote =
@@ -2980,7 +3005,14 @@ final class BlackstockSession: ObservableObject {
     }
 
     func finishFirstRun() {
-        guard selectedChannel != nil, !opportunities.isEmpty else { return }
+        guard selectedChannel != nil else {
+            errorMessage = "Wähle zuerst deinen YouTube-Kanal."
+            return
+        }
+        guard workspaceRightsResponsibilityAccepted else {
+            errorMessage = "Bestätige zuerst die Nutzungsrechte für deinen Arbeitsbereich."
+            return
+        }
         UserDefaults.standard.set(selectedChannelID, forKey: "blackstock.workspace.channelID")
         UserDefaults.standard.set(primaryTopic, forKey: "blackstock.workspace.primaryTopic")
         UserDefaults.standard.set(contentLanguage, forKey: "blackstock.workspace.contentLanguage")

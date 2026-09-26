@@ -35,8 +35,9 @@ require("Sources/BlackstockApp/StudioView.swift", [
     "Bild und Ton werden immer gemeinsam gekürzt",
 ])
 require("Sources/BlackstockApp/FirstRunView.swift", [
-    "Zuerst OAuth-JSON hinzufügen",
-    "Mit Google anmelden",
+    "Desktop-OAuth-Datei hinzufügen",
+    "Blackstock öffnen",
+    "Videos und Mehrquellen-Stories erstellst du anschließend in Entdecken.",
 ])
 require("Sources/BlackstockApp/BlackstockApp.swift", [
     "YouTubeEmbeddedPlayer",
@@ -50,6 +51,8 @@ require("Sources/BlackstockApp/WorkspaceProductViews.swift", [
     "session.opportunityTimeWindow = .last7Days",
     'Picker(\n                    "Land"',
     "session.opportunityContentFilter.germanTitle",
+    '"Mehrere Videos zu einer Story verbinden"',
+    '"Als passendes Ergänzungsvideo wählen"',
 ])
 require("Sources/BlackstockApp/BlackstockSession.swift", [
     "OpportunityTimeWindow = .last7Days",

@@ -28,14 +28,13 @@ REQUIRED = {
         "YouTubeOpportunityContentKind",
         "OpportunityTimeWindow",
     ],
-    "Sources/BlackstockApp/FirstRunView.swift": [
-        'Text("Videos")',
-        "YouTube-Ergebnisse für deinen Kanal",
-        "Trend-Zeitraum",
-        "Video-Zeitraum",
+    "Sources/BlackstockApp/WorkspaceProductViews.swift": [
+        'Text("Videos entdecken")',
+        "Automatische Empfehlungen für deinen Kanal",
+        'Picker(\n                    "Zeitraum"',
         "Die Angaben stammen direkt von YouTube.",
-        "Datenabruf:",
-        "AsyncImage(url: selected.thumbnailURL)",
+        '"Mehrere Videos zu einer Story verbinden"',
+        "YouTubeEmbeddedPlayer(videoID: item.videoID)",
     ],
     "Sources/BlackstockApp/YouTubeEmbeddedPlayer.swift": [
         "https://www.youtube-nocookie.com/embed/",
