@@ -120,21 +120,40 @@ struct FirstRunView: View {
 
     private var welcome: some View {
         VStack(alignment: .leading, spacing: 16) {
-            if !session.hasImportedOAuthConfiguration {
-                VStack(alignment: .leading, spacing: 10) {
-                    Label("Zuerst Google-OAuth-JSON hinzufügen", systemImage: "1.circle.fill")
-                        .font(.headline)
-                    Text("Blackstock benötigt deine Desktop-OAuth-Datei, bevor die Google-Anmeldung geöffnet werden kann.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Button("Desktop-OAuth-JSON auswählen …") {
-                        showOAuthImporter = true
-                    }
-                    .buttonStyle(.borderedProminent)
+            VStack(alignment: .leading, spacing: 10) {
+                Label(
+                    session.hasImportedOAuthConfiguration
+                        ? "1. OAuth-JSON geprüft"
+                        : "1. Zuerst OAuth-JSON hinzufügen",
+                    systemImage: session.hasImportedOAuthConfiguration
+                        ? "checkmark.circle.fill"
+                        : "1.circle.fill"
+                )
+                .font(.headline)
+                .foregroundStyle(
+                    session.hasImportedOAuthConfiguration ? .green : .primary
+                )
+                Text(
+                    session.hasImportedOAuthConfiguration
+                        ? "Die Desktop-OAuth-Datei ist gültig. Die Google-Anmeldung ist jetzt freigeschaltet."
+                        : "Blackstock öffnet die Google-Anmeldung erst, nachdem eine gültige Desktop-OAuth-Datei geprüft wurde."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                Button(
+                    session.hasImportedOAuthConfiguration
+                        ? "OAuth-JSON ersetzen …"
+                        : "Desktop-OAuth-JSON auswählen …"
+                ) {
+                    showOAuthImporter = true
                 }
-                .padding(14)
-                .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+                .buttonStyle(.borderedProminent)
             }
+            .padding(14)
+            .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+
+            Label("2. Mit Google anmelden", systemImage: "2.circle.fill")
+                .font(.headline)
 
             Button {
                 Task { await session.connectGoogle() }

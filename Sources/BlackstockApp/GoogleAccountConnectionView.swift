@@ -13,17 +13,40 @@ struct GoogleAccountConnectionView: View {
             Text("Google und YouTube verbinden").font(.title2.bold())
             Text("Melde dich bei Google an. Danach wählst du den YouTube-Kanal, mit dem du in Blackstock arbeiten möchtest.")
                 .foregroundStyle(.secondary)
-            if !session.hasImportedOAuthConfiguration {
+            VStack(alignment: .leading, spacing: 10) {
                 Label(
-                    "Füge zuerst deine Google Desktop-OAuth-JSON hinzu. Danach wird die Anmeldung freigeschaltet.",
-                    systemImage: "1.circle.fill"
+                    session.hasImportedOAuthConfiguration
+                        ? "1. OAuth-JSON geprüft"
+                        : "1. Zuerst OAuth-JSON hinzufügen",
+                    systemImage: session.hasImportedOAuthConfiguration
+                        ? "checkmark.circle.fill"
+                        : "1.circle.fill"
                 )
                 .font(.callout.weight(.semibold))
-                Button("Desktop-OAuth-JSON auswählen …") {
+                .foregroundStyle(
+                    session.hasImportedOAuthConfiguration ? .green : .primary
+                )
+                Text(
+                    session.hasImportedOAuthConfiguration
+                        ? "Die Datei ist gültig. Du kannst dich jetzt bei Google anmelden."
+                        : "Die Google-Anmeldung bleibt gesperrt, bis eine gültige Desktop-OAuth-Datei geprüft wurde."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                Button(
+                    session.hasImportedOAuthConfiguration
+                        ? "OAuth-JSON ersetzen …"
+                        : "Desktop-OAuth-JSON auswählen …"
+                ) {
                     showConfigurationImporter = true
                 }
                 .buttonStyle(.borderedProminent)
             }
+            .padding(12)
+            .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+
+            Label("2. Google-Konto verbinden", systemImage: "2.circle.fill")
+                .font(.callout.weight(.semibold))
             Button {
                 Task { await session.connectGoogle() }
             } label: {
