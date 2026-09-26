@@ -12,6 +12,7 @@ struct OpportunityWorkspaceView: View {
     @State private var sortMode: OpportunitySortMode = .views
     @State private var selectedOpportunityID: String?
     @State private var storySelectionIDs: [String] = []
+    @State private var storyCreationFeedback: String?
     @State private var hasLoadedInitially = false
 
     var body: some View {
@@ -19,6 +20,15 @@ struct OpportunityWorkspaceView: View {
             header
 
             VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Label("Recherche einstellen", systemImage: "slider.horizontal.3")
+                        .font(.headline)
+                    Spacer()
+                    Text("Suche leer lassen für automatische Trends")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(.secondary)
@@ -108,8 +118,6 @@ struct OpportunityWorkspaceView: View {
                 .disabled(session.isLoadingOpportunities)
             }
 
-            }
-
             HStack(spacing: 10) {
                 Picker(
                     "Kategorie",
@@ -168,6 +176,10 @@ struct OpportunityWorkspaceView: View {
                     .foregroundStyle(.secondary)
                 }
             }
+            .padding(.top, 2)
+            }
+            .padding(14)
+            .blackstockSurface(raised: true)
 
             HStack {
                 Text(
@@ -301,18 +313,47 @@ struct OpportunityWorkspaceView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Videos entdecken")
+        HStack(alignment: .center, spacing: 16) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                BlackstockDesign.accent,
+                                BlackstockDesign.accent.opacity(0.62)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                Image(systemName: "sparkles.tv.fill")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(.white)
+            }
+            .frame(width: 54, height: 54)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Entdecken")
                     .font(.largeTitle.bold())
-                Text(
-                    "Automatische Empfehlungen für deinen Kanal."
-                )
+                Text("Trends finden, Quellen kombinieren, Story starten")
                     .font(.title3)
                     .foregroundStyle(.secondary)
             }
+
             Spacer()
+
+            Label(
+                session.workspaceChannel?.title ?? "YouTube",
+                systemImage: "checkmark.seal.fill"
+            )
+            .font(.callout.weight(.semibold))
+            .foregroundStyle(.green)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color.green.opacity(0.09), in: Capsule())
         }
+        .padding(16)
+        .blackstockSurface(raised: true)
     }
 
     private var emptyState: some View {
@@ -407,6 +448,16 @@ struct OpportunityWorkspaceView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 9))
 
                 VStack(alignment: .leading, spacing: 5) {
+                    if storySelectionIDs.first == item.videoID {
+                        Text("LEITVIDEO")
+                            .font(.caption2.weight(.black))
+                            .foregroundStyle(BlackstockDesign.accent)
+                    } else if !storySelectionIDs.isEmpty,
+                              !storySelectionIDs.contains(item.videoID) {
+                        Text("ERGÄNZUNGSVORSCHLAG")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.secondary)
+                    }
                     Text(item.title)
                         .font(.headline)
                         .lineLimit(2)
@@ -775,31 +826,65 @@ struct OpportunityWorkspaceView: View {
                     let selected = storySelectionIDs.compactMap { id in
                         session.opportunities.first(where: { $0.videoID == id })
                     }
-                    session.useMultiSourceStory(selected)
-                    if session.activeStorySources.count >= 2 {
+                    if session.useMultiSourceStory(selected) {
+                        storyCreationFeedback = "Story erstellt · Editor wird geöffnet"
                         onProjectCreated()
+                    } else {
+                        storyCreationFeedback = session.errorMessage
                     }
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(storySelectionIDs.count < 2)
             }
 
+            if let storyCreationFeedback {
+                Label(storyCreationFeedback, systemImage: "info.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             if storySelectionIDs.count < 5,
                !suggestedStorySources.isEmpty {
-                HStack(spacing: 8) {
-                    Text("Vorschläge")
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("Empfohlene Ergänzungen")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
-                    ForEach(suggestedStorySources) { item in
-                        Button {
-                            toggleStorySelection(item)
-                        } label: {
-                            Label(item.title, systemImage: "plus.circle.fill")
-                                .lineLimit(1)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            ForEach(suggestedStorySources) { item in
+                                Button {
+                                    toggleStorySelection(item)
+                                } label: {
+                                    HStack(spacing: 8) {
+                                        AsyncImage(url: item.thumbnailURL) { image in
+                                            image.resizable().scaledToFill()
+                                        } placeholder: {
+                                            Rectangle().fill(BlackstockDesign.mediaSurface)
+                                        }
+                                        .frame(width: 68, height: 38)
+                                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(item.title)
+                                                .font(.caption.weight(.semibold))
+                                                .lineLimit(1)
+                                            Text("Zur Story hinzufügen")
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        Image(systemName: "plus.circle.fill")
+                                            .foregroundStyle(BlackstockDesign.accent)
+                                    }
+                                    .frame(width: 260, alignment: .leading)
+                                    .padding(7)
+                                    .background(
+                                        BlackstockDesign.mutedFill,
+                                        in: RoundedRectangle(cornerRadius: 10)
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                                .help(item.title)
+                            }
                         }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .help(item.title)
                     }
                 }
             }
@@ -833,11 +918,42 @@ struct OpportunityWorkspaceView: View {
     }
 
     private var suggestedStorySources: [YouTubeOpportunityCandidate] {
-        Array(
-            session.opportunities
-                .filter { !storySelectionIDs.contains($0.videoID) }
-                .prefix(min(3, 5 - storySelectionIDs.count))
-        )
+        let lead = storySelectionIDs.first.flatMap { leadID in
+            session.opportunities.first { $0.videoID == leadID }
+        }
+        let candidates = session.opportunities
+            .enumerated()
+            .filter { !storySelectionIDs.contains($0.element.videoID) }
+            .sorted { lhs, rhs in
+                let lhsScore = storySuggestionScore(
+                    lhs.element,
+                    lead: lead,
+                    originalIndex: lhs.offset
+                )
+                let rhsScore = storySuggestionScore(
+                    rhs.element,
+                    lead: lead,
+                    originalIndex: rhs.offset
+                )
+                return lhsScore > rhsScore
+            }
+            .map(\.element)
+        return Array(candidates.prefix(min(5, 5 - storySelectionIDs.count)))
+    }
+
+    private func storySuggestionScore(
+        _ candidate: YouTubeOpportunityCandidate,
+        lead: YouTubeOpportunityCandidate?,
+        originalIndex: Int
+    ) -> Int {
+        guard let lead else { return -originalIndex }
+        var score = -originalIndex
+        if candidate.contentKind == lead.contentKind { score += 20 }
+        if candidate.channelID != lead.channelID { score += 8 }
+        if let views = candidate.metrics.viewCount {
+            score += min(12, Int(log10(Double(max(views, 1)))))
+        }
+        return score
     }
 
     private func loadOpportunities() async {

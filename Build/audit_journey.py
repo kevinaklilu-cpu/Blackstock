@@ -22,7 +22,7 @@ checks = {
         'Label("Projekte", systemImage: "folder.fill")',
         'Label("Analyse", systemImage: "chart.line.uptrend.xyaxis")',
         "ChannelAnalyticsWorkspaceView(",
-        "BlackstockBrandMark(width: 34)",
+        "BlackstockBrandMark(width: 38)",
         ".navigationSplitViewColumnWidth(",
         "OpportunityWorkspaceView(",
         "ProjectLibraryView(",

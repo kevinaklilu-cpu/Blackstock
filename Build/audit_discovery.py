@@ -29,8 +29,8 @@ REQUIRED = {
         "OpportunityTimeWindow",
     ],
     "Sources/BlackstockApp/WorkspaceProductViews.swift": [
-        'Text("Videos entdecken")',
-        "Automatische Empfehlungen für deinen Kanal",
+        'Text("Entdecken")',
+        "Trends finden, Quellen kombinieren, Story starten",
         'Picker(\n                    "Zeitraum"',
         "Die Angaben stammen direkt von YouTube.",
         '"Mehrere Videos zu einer Story verbinden"',

@@ -60,7 +60,8 @@ struct BlackstockApp: App {
                 if session.onboardingComplete {
                     WorkspaceShell(
                         session: session,
-                        commandPaletteRequest: commandPaletteRequest
+                        commandPaletteRequest: commandPaletteRequest,
+                        hasCredentialIssue: keychainMessage != nil
                     )
                 } else {
                     FirstRunView(session: session)
@@ -91,6 +92,7 @@ struct BlackstockApp: App {
 private struct WorkspaceShell: View {
     @ObservedObject var session: BlackstockSession
     let commandPaletteRequest: Int
+    let hasCredentialIssue: Bool
 
     @State private var selection = "Übersicht"
     @State private var showCommandPalette = false
@@ -99,16 +101,23 @@ private struct WorkspaceShell: View {
         NavigationSplitView {
             VStack(spacing: 0) {
                 HStack(alignment: .center, spacing: 10) {
-                    BlackstockBrandMark(width: 34)
+                    BlackstockBrandMark(width: 38)
 
-                    Text("Blackstock")
-                        .font(.headline.weight(.bold))
-                        .lineLimit(1)
-                        .fixedSize(horizontal: true, vertical: false)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("BLACKSTOCK")
+                            .font(.headline.weight(.black))
+                            .tracking(0.5)
+                        Text("CREATOR STUDIO")
+                            .font(.caption2.weight(.bold))
+                            .tracking(1.2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
 
                     Spacer(minLength: 0)
                 }
-                .frame(maxWidth: .infinity, minHeight: 54)
+                .frame(maxWidth: .infinity, minHeight: 64)
                 .padding(.horizontal, 14)
                 .background(BlackstockDesign.sidebar)
 
@@ -175,12 +184,15 @@ private struct WorkspaceShell: View {
                     Circle()
                         .fill(
                             session.workspaceChannelID == nil
+                                || hasCredentialIssue
                                 ? Color.orange
                                 : Color.green
                         )
                         .frame(width: 7, height: 7)
                     Text(
-                        session.workspaceChannel?.title
+                        hasCredentialIssue
+                            ? "Google-Verbindung prüfen"
+                            : session.workspaceChannel?.title
                             ?? (session.workspaceChannelID == nil
                                 ? "YouTube nicht verbunden"
                                 : "YouTube verbunden")

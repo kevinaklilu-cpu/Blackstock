@@ -2730,6 +2730,7 @@ final class BlackstockSession: ObservableObject {
             // following page contains valid matches. Scan ahead before
             // declaring a valid time/filter combination empty.
             func matchingPage(
+                searchQuery: String = resolvedQuery,
                 categoryID: String?,
                 regionCode: String?,
                 relevanceLanguage: String?,
@@ -2738,10 +2739,13 @@ final class BlackstockSession: ObservableObject {
                 var candidates: [YouTubeOpportunityCandidate] = []
                 var nextToken = initialToken
                 var returnedNextToken: String?
-                let pageLimit = loadMore ? 1 : 3
+                // YouTube search requests are quota-heavy. Automatic feeds
+                // use the inexpensive popularity chart first; a typed/topic
+                // query may scan one additional page only when necessary.
+                let pageLimit = loadMore || searchQuery.isEmpty ? 1 : 2
                 for _ in 0..<pageLimit {
                     let part = try await client.opportunityPage(
-                        query: resolvedQuery,
+                        query: searchQuery,
                         categoryID: categoryID,
                         regionCode: regionCode,
                         relevanceLanguage: relevanceLanguage,
@@ -2766,17 +2770,67 @@ final class BlackstockSession: ObservableObject {
                 )
             }
 
-            var page = try await matchingPage(
-                // A typed query expresses the user's intent and must not be
-                // silently restricted to the saved channel category.
-                categoryID: resolvedQuery.isEmpty
-                    ? (category.isEmpty ? nil : category)
-                    : nil,
-                regionCode: region.isEmpty ? nil : region,
-                relevanceLanguage: language.isEmpty ? nil : language,
-                initialToken: token
-            )
+            func filteredPopularChart(
+                categoryID: String
+            ) async throws -> [YouTubeOpportunityCandidate] {
+                guard !region.isEmpty else { return [] }
+                let cutoff = window.publishedAfter(
+                    now: opportunitySearchDate
+                )
+                return try await client
+                    .mostPopularOpportunityCandidates(
+                        categoryID: categoryID,
+                        regionCode: region,
+                        maxResults: 50,
+                        now: opportunitySearchDate
+                    )
+                    .filter { candidate in
+                        let insideWindow = cutoff.map {
+                            (candidate.publishedAt ?? .distantPast) >= $0
+                        } ?? true
+                        let matchesFormat: Bool
+                        switch filter {
+                        case .all:
+                            matchesFormat = true
+                        case .shorts:
+                            matchesFormat = candidate.contentKind == .short
+                        case .videos:
+                            matchesFormat = candidate.contentKind == .video
+                        case .live:
+                            matchesFormat = candidate.contentKind == .live
+                        }
+                        return insideWindow && matchesFormat
+                    }
+            }
+
             var recommendationNote = ""
+            var page: YouTubeOpportunityPage
+            let initialChart = !loadMore && resolvedQuery.isEmpty
+                ? try await filteredPopularChart(categoryID: category)
+                : []
+            if !initialChart.isEmpty {
+                page = YouTubeOpportunityPage(
+                    candidates: YouTubeAuthorizedClient.sortedOpportunities(
+                        initialChart,
+                        order: order
+                    ),
+                    nextPageToken: nil
+                )
+                recommendationNote = language.isEmpty
+                    ? "Aktuelle YouTube-Trends für Kategorie und Region. Zeitraum und Format wurden exakt angewendet."
+                    : "Aktuelle YouTube-Trends für Kategorie und Region. Zeitraum und Format gelten exakt; die Sprachwahl wurde für mehr passende Treffer erweitert."
+            } else {
+                page = try await matchingPage(
+                    // A typed query expresses the user's intent and must not
+                    // be restricted to the saved channel category.
+                    categoryID: resolvedQuery.isEmpty
+                        ? (category.isEmpty ? nil : category)
+                        : nil,
+                    regionCode: region.isEmpty ? nil : region,
+                    relevanceLanguage: language.isEmpty ? nil : language,
+                    initialToken: token
+                )
+            }
             // An empty search field means automatic recommendations. Narrow
             // time/category combinations can legitimately return no search
             // rows, so fall back to YouTube's regional popularity chart.
@@ -2814,6 +2868,53 @@ final class BlackstockSession: ObservableObject {
                 if !page.candidates.isEmpty {
                     recommendationNote =
                         "Für die enge Auswahl gab es zu wenige Treffer. Kategorie, Sprache und Region wurden erweitert; Zeitraum und Format bleiben strikt aktiv."
+                }
+            }
+            // Some YouTube accounts/regions return an empty category-only
+            // search even though normal keyword search has current results.
+            // Use the official category title as an automatic query while
+            // keeping the chosen time window and format strict.
+            if !loadMore, resolvedQuery.isEmpty, page.candidates.isEmpty {
+                let categoryTitle = youtubeVideoCategories.first(
+                    where: { $0.id == category }
+                )?.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                let automaticTopic = (categoryTitle?.isEmpty == false
+                    ? categoryTitle
+                    : primaryTopic.trimmingCharacters(
+                        in: .whitespacesAndNewlines
+                    )) ?? ""
+                if !automaticTopic.isEmpty {
+                    page = try await matchingPage(
+                        searchQuery: automaticTopic,
+                        categoryID: nil,
+                        regionCode: region.isEmpty ? nil : region,
+                        relevanceLanguage: language.isEmpty ? nil : language
+                    )
+                    if !page.candidates.isEmpty {
+                        recommendationNote =
+                            "Blackstock nutzt die gewählte Kategorie als automatisches Thema. Zeitraum, Region und Format bleiben aktiv."
+                    }
+                }
+            }
+            // The videos.list popularity chart is more dependable than an
+            // empty search feed and still comes from YouTube. Filter its rows
+            // locally so the selected time window and format remain true.
+            if !loadMore, resolvedQuery.isEmpty, page.candidates.isEmpty,
+               !region.isEmpty {
+                var chart = try await filteredPopularChart(
+                    categoryID: category
+                )
+                if chart.isEmpty, !category.isEmpty {
+                    chart = try await filteredPopularChart(categoryID: "")
+                }
+                if !chart.isEmpty {
+                    page = YouTubeOpportunityPage(
+                        candidates: YouTubeAuthorizedClient
+                            .sortedOpportunities(chart, order: order),
+                        nextPageToken: nil
+                    )
+                    recommendationNote =
+                        "Aktuelle YouTube-Trends für die gewählte Region. Zeitraum und Format wurden exakt angewendet."
                 }
             }
             guard opportunityRequestID == requestID,
@@ -2862,9 +2963,10 @@ final class BlackstockSession: ObservableObject {
         )
     }
 
+    @discardableResult
     func useMultiSourceStory(
         _ sources: [YouTubeOpportunityCandidate]
-    ) {
+    ) -> Bool {
         let unique = sources.reduce(into: [YouTubeOpportunityCandidate]()) {
             result, source in
             if !result.contains(where: { $0.videoID == source.videoID }) {
@@ -2873,11 +2975,21 @@ final class BlackstockSession: ObservableObject {
         }
         guard unique.count >= 2 else {
             errorMessage = "Wähle mindestens zwei Videos für eine Mehrquellen-Story aus."
-            return
+            return false
+        }
+        guard workspaceRightsResponsibilityAccepted else {
+            errorMessage =
+                "Bestätige die Nutzungsrechte, bevor du eine Mehrquellen-Story erstellst."
+            return false
         }
         let selected = Array(unique.prefix(5))
         useOpportunity(selected[0], productionIntentKind: .clipFromOpportunity)
-        guard let projectID = activeProject?.id else { return }
+        guard let projectID = activeProject?.id else {
+            if errorMessage == nil {
+                errorMessage = "Die Mehrquellen-Story konnte nicht angelegt werden."
+            }
+            return false
+        }
         activeStorySources = selected
         if let data = try? JSONEncoder().encode(selected) {
             UserDefaults.standard.set(
@@ -2886,6 +2998,7 @@ final class BlackstockSession: ObservableObject {
             )
         }
         errorMessage = nil
+        return true
     }
 
     func productionIntent(
