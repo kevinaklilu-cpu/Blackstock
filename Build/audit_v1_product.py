@@ -42,6 +42,20 @@ require("Sources/BlackstockApp/BlackstockApp.swift", [
     "YouTubeEmbeddedPlayer",
     'title: "Entdecken"',
 ])
+require("Sources/BlackstockApp/WorkspaceProductViews.swift", [
+    '"Thema, Kanal oder Stichwort"',
+    "await session.ensureYouTubeDiscoveryOptionsLoaded()",
+    "await loadOpportunities()",
+    "YouTubeEmbeddedPlayer(videoID: item.videoID)",
+    "session.opportunityTimeWindow = .last7Days",
+    'Picker(\n                    "Land"',
+    "session.opportunityContentFilter.germanTitle",
+])
+require("Sources/BlackstockApp/BlackstockSession.swift", [
+    "OpportunityTimeWindow = .last7Days",
+    "publishedAfter: window.publishedAfter",
+    "Kategorie, Sprache und Region wurden erweitert; Zeitraum und Format bleiben strikt aktiv.",
+])
 require("Sources/BlackstockApp/StudioView.swift", [
     "activeStorySources",
     "beginStorySourceDownloadsIfNeeded",

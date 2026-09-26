@@ -69,7 +69,7 @@ final class BlackstockSession: ObservableObject {
     @Published var channelRegionCode = ""
     @Published var channelCategoryID = ""
     @Published var opportunityTimeWindow:
-        OpportunityTimeWindow = .allTime
+        OpportunityTimeWindow = .last7Days
     @Published var opportunityContentFilter: OpportunityContentFilter = .all
     @Published var channelAudienceSetting:
         YouTubeChannelAudienceSetting = .perVideo
@@ -3295,7 +3295,7 @@ final class BlackstockSession: ObservableObject {
         contentLanguage = "de"
         channelRegionCode = ""
         channelCategoryID = ""
-        opportunityTimeWindow = .allTime
+        opportunityTimeWindow = .last7Days
         channelAudienceSetting = .perVideo
         channelAudienceAppliedToYouTube = nil
         youtubeLanguages = []

@@ -128,7 +128,7 @@ struct OpportunityWorkspaceView: View {
                 .frame(minWidth: 190, idealWidth: 240)
 
                 Picker(
-                    "Region",
+                    "Land",
                     selection: $session.channelRegionCode
                 ) {
                     ForEach(session.youtubeRegions) { region in
@@ -170,7 +170,14 @@ struct OpportunityWorkspaceView: View {
             }
 
             HStack {
-                Text("\(session.opportunities.count) Videos · \(sortMode.germanTitle)")
+                Text(
+                    "\(session.opportunities.count) Videos · "
+                    + session.opportunityTimeWindow.germanTitle
+                    + " · "
+                    + session.opportunityContentFilter.germanTitle
+                    + " · "
+                    + sortMode.germanTitle
+                )
                     .font(.callout.weight(.semibold))
                 Spacer()
                 if session.isLoadingOpportunities {
@@ -342,7 +349,7 @@ struct OpportunityWorkspaceView: View {
                         Button("Filter zurücksetzen") {
                             query = ""
                             session.opportunityContentFilter = .all
-                            session.opportunityTimeWindow = .allTime
+                            session.opportunityTimeWindow = .last7Days
                             Task { await loadOpportunities() }
                         }
                         .buttonStyle(.bordered)
