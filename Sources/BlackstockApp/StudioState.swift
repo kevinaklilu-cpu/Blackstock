@@ -1372,21 +1372,20 @@ final class StudioState: ObservableObject {
             actor: .acceptedAIProposal
         )
         let clipDuration = primary.sourceRange.durationSeconds
-        let emphasisStarts = automaticVisualDynamicsEnabled
-            ? [0.14, 0.47, 0.76]
-                .map { clipDuration * $0 }
-                .filter { $0 + 1.25 < clipDuration }
+        let emphasisCues = automaticVisualDynamicsEnabled
+            ? VisualEmphasisComposer.automaticCues(
+                duration: clipDuration, transcript: savedClipSelections.first?.transcript)
             : []
         if automaticVisualDynamicsEnabled {
-            for (index, start) in emphasisStarts.enumerated() {
+            for cue in emphasisCues {
                 _ = graph.apply(
                     EditOperation(
                         type: .emphasis,
                         timeRange: EditTimeRange(
-                            startSeconds: start,
-                            durationSeconds: 1.25
+                            startSeconds: cue.startSeconds,
+                            durationSeconds: cue.durationSeconds
                         ),
-                        value: index == 0 ? 1.10 : 1.08,
+                        value: cue.scale,
                         createdAt: Date()
                     ),
                     actor: .acceptedAIProposal
@@ -1402,7 +1401,7 @@ final class StudioState: ObservableObject {
             stage: .editing,
             action: "automatic-highlights-prepared",
             summary:
-                "\(selected.count) Highlights wurden lokal priorisiert, als Clips gespeichert und für Hochkant-Export mit kräftigen Untertiteln sowie \(emphasisStarts.count) gezielten Punch-in-Zooms vorbereitet.",
+                "\(selected.count) Highlights vorbereitet. Der erste Clip enthält \(emphasisCues.count) Fokus-Zooms, aus Sprachpausen oder ersatzweise rhythmischen Abständen abgeleitet.",
             relatedSourceIDs: selected.map { $0.id.uuidString },
             beforeRevisionID: before,
             afterRevisionID: graph.headID,
@@ -1435,9 +1434,15 @@ final class StudioState: ObservableObject {
                 "Schritt 4 von 4: Der fertige Clip wird geöffnet und für Titel, Thumbnail und Upload vorbereitet …"
             await useSavedClipForPackaging(first)
         }
+        guard errorMessage == nil, renderArtifact != nil else {
+            if errorMessage == nil {
+                errorMessage = "Es wurde keine fertige Exportdatei erstellt. Bitte den Render-Schritt erneut starten."
+            }
+            return
+        }
 
         clipCandidateStatusMessage =
-                "\(selected.count) Highlights sind geschnitten, mit \(emphasisStarts.count) dezenten Fokus-Zooms dynamisiert, als Hochkant-Clips vorbereitet und lokal validiert gerendert."
+                "\(selected.count) Highlights sind geschnitten und lokal validiert gerendert. Fokus-Zooms werden für jeden Clip separat geplant."
         errorMessage = nil
     }
 
@@ -1880,6 +1885,7 @@ final class StudioState: ObservableObject {
                 continue
             }
 
+            clipCandidateStatusMessage = "Clip \(completed + 1) von \(ids.count): \(selection.title) wird gerendert …"
             await renderSavedClipSelection(
                 selection
             )
@@ -1948,13 +1954,20 @@ final class StudioState: ObservableObject {
                 )
             }
 
-            for emphasis in graph.currentOperations
-                .filter({ $0.type == .emphasis }) {
+            let dynamicsActive = !VisualEmphasisPlanner().cues(
+                operations: graph.currentOperations,
+                outputDurationSeconds: currentOutputDurationSeconds
+            ).isEmpty
+            let clipCues = dynamicsActive ? VisualEmphasisComposer.automaticCues(
+                duration: selection.sourceRange.durationSeconds,
+                transcript: selection.transcript
+            ) : []
+            for cue in clipCues {
                 _ = clipGraph.apply(
                     EditOperation(
                         type: .emphasis,
-                        timeRange: emphasis.timeRange,
-                        value: emphasis.value,
+                        timeRange: .init(startSeconds: cue.startSeconds, durationSeconds: cue.durationSeconds),
+                        value: cue.scale,
                         createdAt: Date()
                     ),
                     actor: .acceptedAIProposal
@@ -2080,6 +2093,12 @@ final class StudioState: ObservableObject {
         renderArtifact = artifact
         packagingSuggestedTitle =
             selection.title
+        // Review the exact exported captions, zooms and framing, rather than
+        // an independently reconstructed edit preview.
+        player.pause()
+        player.defaultRate = 1
+        player.replaceCurrentItem(with: AVPlayerItem(url: artifact.fileURL))
+        player.volume = 1
         await refreshAudioInspection(
             for: artifact.fileURL
         )
@@ -2108,6 +2127,17 @@ final class StudioState: ObservableObject {
     func previewSavedClipSelection(
         _ selection: SavedClipSelection
     ) async {
+        if let artifact = selection.renderArtifact,
+           artifact.hasCurrentTechnicalValidation,
+           FileManager.default.fileExists(atPath: artifact.fileURL.path) {
+            player.pause()
+            player.defaultRate = 1
+            player.replaceCurrentItem(with: AVPlayerItem(url: artifact.fileURL))
+            player.volume = 1
+            player.playImmediately(atRate: 1)
+            clipCandidateStatusMessage = "Fertige Exportdatei: \(selection.title)"
+            return
+        }
         let candidate = LocalClipCandidate(
             id: selection.id,
             sourceRange: selection.sourceRange,

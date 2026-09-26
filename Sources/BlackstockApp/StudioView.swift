@@ -1091,7 +1091,7 @@ struct StudioView: View {
                 .foregroundStyle(.secondary)
 
             Toggle(
-                "Visuelle Dynamik: dezente Zooms an starken Momenten",
+                "Visuelle Dynamik: dezente Fokus-Zooms",
                 isOn: $state.automaticVisualDynamicsEnabled
             )
             .toggleStyle(.switch)
@@ -2988,19 +2988,24 @@ struct StudioView: View {
                 }
             }
 
-            if isProcessingNow,
-               let progress = processingProgressValue {
+            if isProcessingNow {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Text(processingProgressLabel)
                             .font(.caption.weight(.semibold))
                         Spacer()
+                        if let progress = processingProgressValue {
                         Text("\(Int((progress * 100).rounded())) %")
                             .font(.caption.monospacedDigit().weight(.semibold))
                             .foregroundStyle(BlackstockDesign.accent)
+                        }
                     }
-                    ProgressView(value: progress)
+                    if let progress = processingProgressValue {
+                        ProgressView(value: progress)
                         .tint(BlackstockDesign.accent)
+                    } else {
+                        ProgressView().controlSize(.small)
+                    }
                     if let detail = state.clipCandidateStatusMessage,
                        !detail.isEmpty {
                         Text(detail)
@@ -3095,24 +3100,10 @@ struct StudioView: View {
     private var processingProgressValue: Double? {
         switch sourceDownloader.state {
         case .downloading:
-            return min(max(sourceDownloader.progress * 0.82, 0.02), 0.82)
-        case .processing:
-            return 0.92
+            return min(max(sourceDownloader.progress, 0), 1)
         default:
             break
         }
-        if isImportingMedia || state.isLoading { return 0.18 }
-        if state.isTranscribing { return 0.34 }
-        if state.isCreatingAutomaticHighlights {
-            let detail = state.clipCandidateStatusMessage ?? ""
-            if detail.contains("Schritt 4 von 4") { return 0.94 }
-            if detail.contains("Schritt 3 von 4") { return 0.72 }
-            if detail.contains("Schritt 2 von 4") { return 0.50 }
-            return 0.25
-        }
-        if state.isGeneratingClipCandidates { return 0.34 }
-        if state.isRenderingSavedClipBatch { return 0.82 }
-        if state.isRendering { return 0.78 }
         return nil
     }
 
@@ -3127,6 +3118,7 @@ struct StudioView: View {
         }
         if isImportingMedia || state.isLoading { return "Quelle vorbereiten" }
         if state.isTranscribing { return "Sprache erkennen" }
+        if state.isRenderingSavedClipBatch { return "Clips rendern" }
         if state.isCreatingAutomaticHighlights {
             return "Automatischer Schnitt · 4 Phasen"
         }

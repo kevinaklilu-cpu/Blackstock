@@ -455,13 +455,19 @@ public struct VisualEmphasisPlanner: Sendable {
         operations: [EditOperation],
         outputDurationSeconds: Double
     ) -> [VisualEmphasisCue] {
-        guard outputDurationSeconds > 0.6 else { return [] }
+        guard outputDurationSeconds.isFinite, outputDurationSeconds > 0.6 else { return [] }
 
         var accepted: [VisualEmphasisCue] = []
-        let candidates = operations
+        // A new framing starts a new visual treatment, including an automatic rerun.
+        let startIndex = operations.lastIndex { $0.type == .reframe }
+            .map { operations.index(after: $0) } ?? operations.startIndex
+        let candidates = operations[startIndex...]
             .filter { $0.type == .emphasis }
             .compactMap { operation -> VisualEmphasisCue? in
-                guard let range = operation.timeRange else { return nil }
+                guard let range = operation.timeRange,
+                      range.startSeconds.isFinite,
+                      range.durationSeconds.isFinite,
+                      (operation.value ?? 1.08).isFinite else { return nil }
                 let start = min(
                     max(range.startSeconds, 0),
                     outputDurationSeconds
