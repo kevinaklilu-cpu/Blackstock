@@ -53,7 +53,9 @@ import BlackstockCore
                 precondition(!video.isEmpty && !audio.isEmpty && duration > 630 && duration < 640)
                 let videoRange = try await video[0].load(.timeRange)
                 let audioRange = try await audio[0].load(.timeRange)
-                precondition(abs(videoRange.duration.seconds - audioRange.duration.seconds) < 1)
+                precondition(abs(videoRange.start.seconds) < 0.1)
+                precondition(abs(audioRange.start.seconds) < 0.1)
+                precondition(abs(videoRange.duration.seconds - audioRange.duration.seconds) < 0.75)
                 let generator = AVAssetImageGenerator(asset: asset)
                 for second in [30.0, 300.0, 600.0] {
                     let frame = try await generator.image(at: CMTime(seconds: second, preferredTimescale: 600))

@@ -45,6 +45,7 @@ final class StudioState: ObservableObject {
     @Published var savedClipSelections: [SavedClipSelection] = []
     @Published var isGeneratingClipCandidates = false
     @Published var isCreatingAutomaticHighlights = false
+    @Published var automaticVisualDynamicsEnabled = true
     @Published var clipCandidateStatusMessage: String?
     @Published var previewedLocalClipCandidateID: UUID?
     @Published var renderingSavedClipID: UUID?
@@ -1366,10 +1367,32 @@ final class StudioState: ObservableObject {
             ),
             createdAt: Date()
         )
-        let revision = graph.apply(
+        _ = graph.apply(
             reframe,
             actor: .acceptedAIProposal
         )
+        let clipDuration = primary.sourceRange.durationSeconds
+        let emphasisStarts = automaticVisualDynamicsEnabled
+            ? [0.14, 0.47, 0.76]
+                .map { clipDuration * $0 }
+                .filter { $0 + 1.25 < clipDuration }
+            : []
+        if automaticVisualDynamicsEnabled {
+            for (index, start) in emphasisStarts.enumerated() {
+                _ = graph.apply(
+                    EditOperation(
+                        type: .emphasis,
+                        timeRange: EditTimeRange(
+                            startSeconds: start,
+                            durationSeconds: 1.25
+                        ),
+                        value: index == 0 ? 1.10 : 1.08,
+                        createdAt: Date()
+                    ),
+                    actor: .acceptedAIProposal
+                )
+            }
+        }
         lastUndoneRevisionID = nil
         renderArtifact = nil
 
@@ -1379,10 +1402,10 @@ final class StudioState: ObservableObject {
             stage: .editing,
             action: "automatic-highlights-prepared",
             summary:
-                "\(selected.count) Highlights wurden lokal priorisiert, als Clips gespeichert und für Hochkant-Export mit kräftigen Untertiteln vorbereitet.",
+                "\(selected.count) Highlights wurden lokal priorisiert, als Clips gespeichert und für Hochkant-Export mit kräftigen Untertiteln sowie \(emphasisStarts.count) gezielten Punch-in-Zooms vorbereitet.",
             relatedSourceIDs: selected.map { $0.id.uuidString },
             beforeRevisionID: before,
-            afterRevisionID: revision.id,
+            afterRevisionID: graph.headID,
             reversible: true,
             correlationID: correlationID
         ))
@@ -1414,7 +1437,7 @@ final class StudioState: ObservableObject {
         }
 
         clipCandidateStatusMessage =
-            "\(selected.count) Highlights sind geschnitten, als Hochkant-Clips vorbereitet und lokal validiert gerendert."
+                "\(selected.count) Highlights sind geschnitten, mit \(emphasisStarts.count) dezenten Fokus-Zooms dynamisiert, als Hochkant-Clips vorbereitet und lokal validiert gerendert."
         errorMessage = nil
     }
 
@@ -1922,6 +1945,19 @@ final class StudioState: ObservableObject {
                         createdAt: Date()
                     ),
                     actor: .user
+                )
+            }
+
+            for emphasis in graph.currentOperations
+                .filter({ $0.type == .emphasis }) {
+                _ = clipGraph.apply(
+                    EditOperation(
+                        type: .emphasis,
+                        timeRange: emphasis.timeRange,
+                        value: emphasis.value,
+                        createdAt: Date()
+                    ),
+                    actor: .acceptedAIProposal
                 )
             }
 
@@ -3084,7 +3120,16 @@ final class StudioState: ObservableObject {
                     let layer = AVMutableVideoCompositionLayerInstruction(
                         assetTrack: compositionTrack
                     )
-                    layer.setTransform(plan.transform, at: .zero)
+                    let emphasisCues = VisualEmphasisPlanner().cues(
+                        operations: graph.currentOperations,
+                        outputDurationSeconds: timeline.outputDurationSeconds
+                    )
+                    VisualEmphasisComposer.apply(
+                        cues: emphasisCues,
+                        baseTransform: plan.transform,
+                        renderSize: renderSize,
+                        to: layer
+                    )
                     instruction.layerInstructions = [layer]
 
                     let videoComposition = AVMutableVideoComposition()

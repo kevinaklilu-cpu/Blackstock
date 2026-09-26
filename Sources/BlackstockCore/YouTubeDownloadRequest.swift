@@ -1,7 +1,9 @@
 import Foundation
 
 public enum YouTubeDownloadRequest {
-    public static let recoveryIdentityVersion = "av-sync-v2"
+    // Bump whenever the media acceptance/normalization contract changes so a
+    // previously cached file can never bypass the current A/V sync checks.
+    public static let recoveryIdentityVersion = "av-sync-v3-zero-timeline"
 
     public static func accepts(_ url: URL) -> Bool {
         guard ["https", "http"].contains(url.scheme?.lowercased() ?? ""),

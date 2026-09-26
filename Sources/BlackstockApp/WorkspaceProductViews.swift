@@ -894,19 +894,113 @@ struct OpportunityWorkspaceView: View {
     }
 
     private var storySelectionHint: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "rectangle.stack.badge.plus")
-                .foregroundStyle(BlackstockDesign.accent)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Mehrere Videos zu einer Story verbinden")
-                    .font(.callout.weight(.semibold))
-                Text("Wähle über das Stapel-Symbol ein Leitvideo. Danach markiert Blackstock die übrigen Treffer als mögliche Ergänzungen.")
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(BlackstockDesign.accent.opacity(0.12))
+                    Image(systemName: "wand.and.stars")
+                        .foregroundStyle(BlackstockDesign.accent)
+                }
+                .frame(width: 38, height: 38)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Blackstock Story-Vorschlag")
+                        .font(.headline)
+                    Text(
+                        automaticStorySources.count >= 2
+                            ? "Leitvideo und Ergänzungen sind bereits passend zu Filter, Format und Reichweitensignal zusammengestellt."
+                            : "Sobald mindestens zwei Treffer verfügbar sind, stellt Blackstock automatisch eine Story zusammen."
+                    )
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if automaticStorySources.count >= 2 {
+                    Button("Vorschlag anpassen") {
+                        storySelectionIDs = automaticStorySources.map(\.videoID)
+                    }
+                    .buttonStyle(.bordered)
+                    Button {
+                        if session.useMultiSourceStory(automaticStorySources) {
+                            storyCreationFeedback = "Story erstellt · Editor wird geöffnet"
+                            onProjectCreated()
+                        } else {
+                            storyCreationFeedback = session.errorMessage
+                        }
+                    } label: {
+                        Label("Automatisch erstellen", systemImage: "sparkles")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(BlackstockDesign.accent)
+                    .disabled(!session.workspaceRightsResponsibilityAccepted)
+                }
+            }
+
+            if !automaticStorySources.isEmpty {
+                HStack(spacing: 10) {
+                    ForEach(
+                        Array(automaticStorySources.enumerated()),
+                        id: \.element.videoID
+                    ) { index, item in
+                        HStack(spacing: 8) {
+                            ZStack(alignment: .topLeading) {
+                                AsyncImage(url: item.thumbnailURL) { image in
+                                    image.resizable().scaledToFill()
+                                } placeholder: {
+                                    Rectangle().fill(BlackstockDesign.mediaSurface)
+                                }
+                                .frame(width: 76, height: 44)
+                                .clipShape(RoundedRectangle(cornerRadius: 7))
+                                Text(index == 0 ? "LEAD" : "+\(index)")
+                                    .font(.system(size: 8, weight: .black))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 3)
+                                    .background(
+                                        index == 0
+                                            ? BlackstockDesign.accent
+                                            : Color.black.opacity(0.72),
+                                        in: Capsule()
+                                    )
+                                    .padding(4)
+                            }
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(item.title)
+                                    .font(.caption.weight(.semibold))
+                                    .lineLimit(2)
+                                Text(item.channelTitle)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
             }
         }
-        .padding(12)
-        .blackstockSurface(raised: false)
+        .padding(16)
+        .background(
+            LinearGradient(
+                colors: [
+                    BlackstockDesign.accent.opacity(0.09),
+                    BlackstockDesign.surface
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(
+                cornerRadius: BlackstockDesign.cornerRadius,
+                style: .continuous
+            )
+        )
+        .overlay(
+            RoundedRectangle(
+                cornerRadius: BlackstockDesign.cornerRadius,
+                style: .continuous
+            )
+            .strokeBorder(BlackstockDesign.accent.opacity(0.20))
+        )
     }
 
     private func toggleStorySelection(_ item: YouTubeOpportunityCandidate) {
@@ -939,6 +1033,27 @@ struct OpportunityWorkspaceView: View {
             }
             .map(\.element)
         return Array(candidates.prefix(min(5, 5 - storySelectionIDs.count)))
+    }
+
+    private var automaticStorySources: [YouTubeOpportunityCandidate] {
+        guard let lead = session.opportunities.first else { return [] }
+        let additions = session.opportunities
+            .dropFirst()
+            .enumerated()
+            .sorted {
+                storySuggestionScore(
+                    $0.element,
+                    lead: lead,
+                    originalIndex: $0.offset
+                ) > storySuggestionScore(
+                    $1.element,
+                    lead: lead,
+                    originalIndex: $1.offset
+                )
+            }
+            .prefix(2)
+            .map(\.element)
+        return [lead] + additions
     }
 
     private func storySuggestionScore(

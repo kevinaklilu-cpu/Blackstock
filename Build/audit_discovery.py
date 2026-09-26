@@ -33,7 +33,8 @@ REQUIRED = {
         "Trends finden, Quellen kombinieren, Story starten",
         'Picker(\n                    "Zeitraum"',
         "Die Angaben stammen direkt von YouTube.",
-        '"Mehrere Videos zu einer Story verbinden"',
+        '"Blackstock Story-Vorschlag"',
+        '"Automatisch erstellen"',
         "YouTubeEmbeddedPlayer(videoID: item.videoID)",
     ],
     "Sources/BlackstockApp/YouTubeEmbeddedPlayer.swift": [

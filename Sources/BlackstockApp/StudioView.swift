@@ -1086,9 +1086,17 @@ struct StudioView: View {
             Text("Automatischer Schnitt")
                 .font(.headline)
 
-            Text("Blackstock findet die stärksten Ausschnitte, bereitet Hochkantformat und Untertitel vor und rendert daraus fertige Clips. Du kannst jeden Schritt anschließend ändern.")
+            Text("Blackstock findet die stärksten Ausschnitte, setzt auf Wunsch gezielte Fokus-Zooms, bereitet Hochkantformat und Untertitel vor und rendert daraus fertige Clips. Du kannst jeden Schritt anschließend ändern.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+            Toggle(
+                "Visuelle Dynamik: dezente Zooms an starken Momenten",
+                isOn: $state.automaticVisualDynamicsEnabled
+            )
+            .toggleStyle(.switch)
+            .font(.caption.weight(.medium))
+            .disabled(state.isCreatingAutomaticHighlights)
 
             HStack(spacing: 8) {
                 workflowStep("1", "Analysieren")
@@ -2980,6 +2988,34 @@ struct StudioView: View {
                 }
             }
 
+            if isProcessingNow,
+               let progress = processingProgressValue {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text(processingProgressLabel)
+                            .font(.caption.weight(.semibold))
+                        Spacer()
+                        Text("\(Int((progress * 100).rounded())) %")
+                            .font(.caption.monospacedDigit().weight(.semibold))
+                            .foregroundStyle(BlackstockDesign.accent)
+                    }
+                    ProgressView(value: progress)
+                        .tint(BlackstockDesign.accent)
+                    if let detail = state.clipCandidateStatusMessage,
+                       !detail.isEmpty {
+                        Text(detail)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(10)
+                .background(
+                    BlackstockDesign.accent.opacity(0.06),
+                    in: RoundedRectangle(cornerRadius: 10)
+                )
+            }
+
             HStack(spacing: 8) {
                 ForEach(Array(steps.enumerated()), id: \.offset) {
                     index, step in
@@ -3054,6 +3090,50 @@ struct StudioView: View {
             || !state.localClipCandidates.isEmpty { return 2 }
         if state.asset != nil { return 1 }
         return 0
+    }
+
+    private var processingProgressValue: Double? {
+        switch sourceDownloader.state {
+        case .downloading:
+            return min(max(sourceDownloader.progress * 0.82, 0.02), 0.82)
+        case .processing:
+            return 0.92
+        default:
+            break
+        }
+        if isImportingMedia || state.isLoading { return 0.18 }
+        if state.isTranscribing { return 0.34 }
+        if state.isCreatingAutomaticHighlights {
+            let detail = state.clipCandidateStatusMessage ?? ""
+            if detail.contains("Schritt 4 von 4") { return 0.94 }
+            if detail.contains("Schritt 3 von 4") { return 0.72 }
+            if detail.contains("Schritt 2 von 4") { return 0.50 }
+            return 0.25
+        }
+        if state.isGeneratingClipCandidates { return 0.34 }
+        if state.isRenderingSavedClipBatch { return 0.82 }
+        if state.isRendering { return 0.78 }
+        return nil
+    }
+
+    private var processingProgressLabel: String {
+        switch sourceDownloader.state {
+        case .downloading:
+            return "Download"
+        case .processing:
+            return "Bild und Ton synchronisieren"
+        default:
+            break
+        }
+        if isImportingMedia || state.isLoading { return "Quelle vorbereiten" }
+        if state.isTranscribing { return "Sprache erkennen" }
+        if state.isCreatingAutomaticHighlights {
+            return "Automatischer Schnitt · 4 Phasen"
+        }
+        if state.isGeneratingClipCandidates { return "Highlights analysieren" }
+        if state.isRenderingSavedClipBatch { return "Clips rendern" }
+        if state.isRendering { return "Video rendern" }
+        return "Verarbeitung"
     }
 
     private var workflowNextAction: String {

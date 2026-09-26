@@ -59,6 +59,7 @@ public actor LocalVideoRenderer {
                 EditOperationType.removeRange,
                 EditOperationType.volume,
                 EditOperationType.reframe,
+                EditOperationType.emphasis,
                 EditOperationType.overlay
             ].contains($0.type)
         }
@@ -272,7 +273,16 @@ public actor LocalVideoRenderer {
             let layer = AVMutableVideoCompositionLayerInstruction(
                 assetTrack: compositionTrack
             )
-            layer.setTransform(plan.transform, at: .zero)
+            let emphasisCues = VisualEmphasisPlanner().cues(
+                operations: graph.currentOperations,
+                outputDurationSeconds: timeline.outputDurationSeconds
+            )
+            VisualEmphasisComposer.apply(
+                cues: emphasisCues,
+                baseTransform: plan.transform,
+                renderSize: renderSize,
+                to: layer
+            )
             instruction.layerInstructions = [layer]
 
             let videoComposition = AVMutableVideoComposition()
