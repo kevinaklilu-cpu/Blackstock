@@ -23,12 +23,15 @@ require("Sources/BlackstockCore/SpeechCleanup.swift", [
 ])
 require("Sources/BlackstockApp/StudioState.swift", [
     "func applySpeechCleanup() async",
+    "func autoArrangeSupplementalVideos(",
     "actor: .acceptedAIProposal",
     "speech-cleanup-applied",
+    "multi-source-video-auto-arranged",
 ])
 require("Sources/BlackstockApp/StudioView.swift", [
     '"Sprachschnitt"',
     '"Vorschläge anwenden"',
+    '"Automatisch anordnen"',
     "Bild und Ton werden immer gemeinsam gekürzt",
 ])
 require("Sources/BlackstockApp/FirstRunView.swift", [

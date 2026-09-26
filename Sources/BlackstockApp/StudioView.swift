@@ -315,6 +315,20 @@ struct StudioView: View {
                         || sourceDownloader.state == .processing
                         || sourceDownloader.state == .paused
                     )
+                    Button("Automatisch anordnen") {
+                        state.autoArrangeSupplementalVideos(
+                            captureIDs: loadedStoryVideoCaptures.map(\.id)
+                        )
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(
+                        !editingEnabled
+                        || loadedStoryVideoCaptures.isEmpty
+                    )
+                    .help(
+                        "Verteilt alle geladenen Ergänzungen ohne Überlappung über das Video."
+                    )
                 }
             }
             .padding(.top, 6)
@@ -322,6 +336,16 @@ struct StudioView: View {
         .padding(.horizontal, 18)
         .padding(.vertical, 10)
         .background(Color.primary.opacity(0.018))
+    }
+
+    private var loadedStoryVideoCaptures: [SupplementalCaptureAsset] {
+        session.activeStorySources.dropFirst().compactMap { source in
+            state.supplementalCaptures.first { capture in
+                capture.rightsEvidence.contains(
+                    "YouTube-Ergänzung:\(source.videoID)"
+                )
+            }
+        }
     }
 
     @ViewBuilder

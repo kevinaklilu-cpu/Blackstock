@@ -2799,6 +2799,60 @@ final class StudioState: ObservableObject {
         persistWorkspaceIfPossible()
     }
 
+    func autoArrangeSupplementalVideos(
+        captureIDs: [UUID]
+    ) {
+        let orderedCaptures = captureIDs.compactMap { id in
+            supplementalCaptures.first {
+                $0.id == id
+                    && ($0.kind == .camera || $0.kind == .screen)
+                    && $0.mayBeUsedInProduction
+            }
+        }
+        let outputDuration = currentOutputDurationSeconds
+        guard !orderedCaptures.isEmpty, outputDuration >= 0.5 else {
+            errorMessage = "Für den automatischen Mehrvideo-Schnitt fehlen geladene Ergänzungen oder eine gültige Hauptzeitleiste."
+            return
+        }
+
+        let slot = outputDuration / Double(orderedCaptures.count + 1)
+        let maximumInsertDuration = max(min(slot * 0.7, 5), 0.5)
+        for (index, capture) in orderedCaptures.enumerated() {
+            let duration = min(
+                max(capture.durationSeconds ?? maximumInsertDuration, 0.1),
+                maximumInsertDuration,
+                outputDuration
+            )
+            let center = slot * Double(index + 1)
+            let start = min(
+                max(center - duration / 2, 0),
+                max(outputDuration - duration, 0)
+            )
+            updateSupplementalVideoInsertSetting(
+                captureID: capture.id
+            ) { setting in
+                setting.enabled = true
+                setting.timelineStartSeconds = start
+                setting.sourceStartSeconds = 0
+                setting.durationSeconds = duration
+            }
+        }
+
+        invalidateSupplementalVideoRender()
+        ledger.append(.init(
+            timestamp: Date(),
+            actor: .blackstock,
+            stage: .editing,
+            action: "multi-source-video-auto-arranged",
+            summary: "Mehrvideo-Schnitt automatisch angeordnet: \(orderedCaptures.count) Ergänzungen wurden ohne Überlappung über die gemeinsame Zeitleiste verteilt; der Hauptton bleibt synchron.",
+            relatedSourceIDs: orderedCaptures.map { $0.id.uuidString },
+            reversible: false,
+            correlationID: correlationID
+        ))
+        persistWorkspaceIfPossible()
+        errorMessage = nil
+    }
+
     private func updateSupplementalVideoInsertSetting(
         captureID: UUID,
         change: (inout SupplementalVideoInsertSetting) -> Void
