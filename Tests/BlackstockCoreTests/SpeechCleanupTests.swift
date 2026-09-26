@@ -17,7 +17,7 @@ final class SpeechCleanupTests: XCTestCase {
 
         let plan = LocalSpeechCleanupPlanner().plan(
             transcript: transcript,
-            outputDurationSeconds: 4
+            outputDurationSeconds: 6
         )
 
         XCTAssertEqual(plan.suggestions.map(\.reason), [.fillerWord, .longPause])
