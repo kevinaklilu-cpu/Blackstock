@@ -3835,7 +3835,26 @@ struct StudioView: View {
             pendingSourceReference = nil
             if storySource != nil {
                 pendingStorySource = nil
-                startNextStorySourceDownload()
+                if let storySource, !isStorySourceLoaded(storySource.videoID) {
+                    queuedStorySources = []
+                    state.clipCandidateStatusMessage = "Die Ergänzung konnte nicht importiert werden. Über „Ergänzungen laden“ erneut versuchen."
+                    return
+                }
+                if queuedStorySources.isEmpty,
+                   session.activeStorySources.count > 1,
+                   session.activeStorySources.dropFirst().allSatisfy({ isStorySourceLoaded($0.videoID) }) {
+                    state.autoArrangeSupplementalVideos(
+                        captureIDs: loadedStoryVideoCaptures.map(\.id)
+                    )
+                    guard state.errorMessage == nil else { return }
+                    state.clipCandidateStatusMessage = "Alle Quellen geladen · gemeinsame Story wird gerendert …"
+                    await state.render(projectID: project.id)
+                    if state.errorMessage == nil {
+                        state.clipCandidateStatusMessage = "Gemeinsame Story aus \(session.activeStorySources.count) Quellen fertig. Die Vorschau zeigt die Exportdatei."
+                    }
+                } else {
+                    startNextStorySourceDownload()
+                }
             }
         }
     }
