@@ -20,6 +20,7 @@ final class StudioState: ObservableObject {
     @Published var renderArtifact: RenderArtifact?
     @Published var isTranscribing = false
     @Published var transcript: LocalTranscript?
+    @Published var speechCleanupPlan = SpeechCleanupPlan(suggestions: [])
     @Published var captionURL: URL?
     @Published var burnInCaptionsEnabled = false
     @Published var captionVisualStyle: CaptionVisualStyle = .clear
@@ -95,6 +96,7 @@ final class StudioState: ObservableObject {
         previewedLocalClipCandidateID = nil
         renderingSavedClipID = nil
         clipCandidateSourceTranscript = nil
+        speechCleanupPlan = SpeechCleanupPlan(suggestions: [])
         packagingSuggestedTitle = nil
         isGeneratingClipCandidates = false
         overlayText = ""
@@ -143,6 +145,7 @@ final class StudioState: ObservableObject {
                 trimStart = snapshot.trimStart
                 trimEnd = snapshot.trimEnd
                 transcript = snapshot.transcript
+                refreshSpeechCleanupPlan()
                 captionURL = snapshot.captionURL
                 burnInCaptionsEnabled =
                     snapshot.burnInCaptionsEnabled
@@ -442,6 +445,7 @@ final class StudioState: ObservableObject {
             lastUndoneRevisionID = nil
             renderArtifact = nil
             transcript = nil
+            speechCleanupPlan = SpeechCleanupPlan(suggestions: [])
             captionURL = nil
             burnInCaptionsEnabled = false
             captionVisualStyle = .clear
@@ -650,6 +654,7 @@ final class StudioState: ObservableObject {
         lastUndoneRevisionID = nil
         renderArtifact = nil
         transcript = nil
+        speechCleanupPlan = SpeechCleanupPlan(suggestions: [])
         captionURL = nil
         burnInCaptionsEnabled = false
         audioTechnicalAssessment = nil
@@ -722,6 +727,7 @@ final class StudioState: ObservableObject {
         lastUndoneRevisionID = nil
         renderArtifact = nil
         transcript = nil
+        speechCleanupPlan = SpeechCleanupPlan(suggestions: [])
         captionURL = nil
         burnInCaptionsEnabled = false
         audioTechnicalAssessment = nil
@@ -752,12 +758,105 @@ final class StudioState: ObservableObject {
         }
     }
 
+    func refreshSpeechCleanupPlan() {
+        guard let transcript else {
+            speechCleanupPlan = SpeechCleanupPlan(suggestions: [])
+            return
+        }
+        speechCleanupPlan = LocalSpeechCleanupPlanner().plan(
+            transcript: transcript,
+            outputDurationSeconds: currentOutputDurationSeconds
+        )
+    }
+
+    func applySpeechCleanup() async {
+        guard let asset, !speechCleanupPlan.suggestions.isEmpty else {
+            errorMessage = "Es wurden keine sicheren Sprachschnitt-Vorschläge gefunden."
+            return
+        }
+
+        let resolver = EditTimelineResolver()
+        let currentOperations = graph.currentOperations
+        let timeline = resolver.resolve(
+            sourceDurationSeconds: asset.durationSeconds,
+            operations: currentOperations
+        )
+        let sourceRanges = speechCleanupPlan.suggestions
+            .flatMap { timeline.sourceRanges(forOutputRange: $0.outputRange) }
+        let operations = sourceRanges.map { range in
+            EditOperation(
+                type: .removeRange,
+                timeRange: range,
+                createdAt: Date()
+            )
+        }
+        guard !operations.isEmpty else {
+            errorMessage = "Die Vorschläge liegen nicht mehr auf der aktuellen Zeitleiste. Bitte Untertitel erneut erstellen."
+            return
+        }
+
+        let nextPlan = resolver.resolve(
+            sourceDurationSeconds: asset.durationSeconds,
+            operations: currentOperations + operations
+        )
+        guard nextPlan.hasContent,
+              nextPlan.outputDurationSeconds
+                < timeline.outputDurationSeconds - 0.05 else {
+            errorMessage = "Der Sprachschnitt würde keinen sicheren Inhalt entfernen."
+            return
+        }
+
+        let before = graph.headID
+        var lastRevisionID = before
+        for operation in operations {
+            lastRevisionID = graph.apply(
+                operation,
+                actor: .acceptedAIProposal
+            ).id
+        }
+        let removedSeconds = timeline.outputDurationSeconds
+            - nextPlan.outputDurationSeconds
+        lastUndoneRevisionID = nil
+        renderArtifact = nil
+        transcript = nil
+        speechCleanupPlan = SpeechCleanupPlan(suggestions: [])
+        captionURL = nil
+        burnInCaptionsEnabled = false
+        audioTechnicalAssessment = nil
+        audioSignalAssessment = nil
+        audioLoudnessAssessment = nil
+        transcriptStructure = nil
+        retentionAdvisory = nil
+        retentionAdvisorAvailability = nil
+
+        ledger.append(.init(
+            timestamp: Date(),
+            actor: .blackstock,
+            stage: .editing,
+            action: "speech-cleanup-applied",
+            summary: "Sprachschnitt angewendet: \(operations.count) gemeinsame Bild-/Ton-Schnitte, \(format(removedSeconds)) gekürzt. Jeder Schnitt ist im Verlauf rückgängig machbar.",
+            beforeRevisionID: before,
+            afterRevisionID: lastRevisionID,
+            reversible: true,
+            correlationID: correlationID
+        ))
+
+        do {
+            try await rebuildPreview()
+            persistWorkspaceIfPossible()
+            errorMessage = nil
+        } catch {
+            errorMessage = "Sprachschnitt-Vorschau konnte nicht aktualisiert werden: \(error.localizedDescription)"
+        }
+    }
+
     func undo() async {
         let undone = graph.headID
         guard let restored = graph.undo() else { return }
         lastUndoneRevisionID = undone
         renderArtifact = nil
         transcript = nil
+        speechCleanupPlan = SpeechCleanupPlan(suggestions: [])
         captionURL = nil
         burnInCaptionsEnabled = false
         audioTechnicalAssessment = nil
@@ -790,6 +889,7 @@ final class StudioState: ObservableObject {
         lastUndoneRevisionID = nil
         renderArtifact = nil
         transcript = nil
+        speechCleanupPlan = SpeechCleanupPlan(suggestions: [])
         captionURL = nil
         burnInCaptionsEnabled = false
         audioTechnicalAssessment = nil
@@ -2181,6 +2281,7 @@ final class StudioState: ObservableObject {
         lastUndoneRevisionID = nil
         renderArtifact = nil
         transcript = nil
+        speechCleanupPlan = SpeechCleanupPlan(suggestions: [])
         captionURL = nil
         burnInCaptionsEnabled = false
         transcriptStructure = nil
@@ -2297,6 +2398,7 @@ final class StudioState: ObservableObject {
             )
 
             transcript = localTranscript
+            refreshSpeechCleanupPlan()
             captionURL = outputURL
             if burnInCaptionsEnabled {
                 renderArtifact = nil

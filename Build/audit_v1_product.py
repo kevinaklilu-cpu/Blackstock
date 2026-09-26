@@ -1,0 +1,55 @@
+#!/usr/bin/env python3
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def require(path: str, needles: list[str]) -> None:
+    text = (ROOT / path).read_text(encoding="utf-8")
+    missing = [needle for needle in needles if needle not in text]
+    if missing:
+        raise SystemExit(f"{path}: missing 1.0 contract: {missing}")
+
+
+require("README.md", [
+    "# Blackstock 1.0",
+    "LOKALES 1.0.0-PAKET VALIDIERT",
+    "ÖFFENTLICHE MACOS-FREIGABE AUSSTEHEND",
+])
+require("Sources/BlackstockCore/SpeechCleanup.swift", [
+    "LocalSpeechCleanupPlanner",
+    "sourceRanges(forOutputRange",
+    "duration * 0.3",
+])
+require("Sources/BlackstockApp/StudioState.swift", [
+    "func applySpeechCleanup() async",
+    "actor: .acceptedAIProposal",
+    "speech-cleanup-applied",
+])
+require("Sources/BlackstockApp/StudioView.swift", [
+    '"Sprachschnitt"',
+    '"Vorschläge anwenden"',
+    "Bild und Ton werden immer gemeinsam gekürzt",
+])
+require("Sources/BlackstockApp/FirstRunView.swift", [
+    "Zuerst OAuth-JSON hinzufügen",
+    "Mit Google anmelden",
+])
+require("Sources/BlackstockApp/BlackstockApp.swift", [
+    "YouTubeEmbeddedPlayer",
+    'title: "Entdecken"',
+])
+require("Sources/BlackstockApp/StudioView.swift", [
+    "activeStorySources",
+    "beginStorySourceDownloadsIfNeeded",
+])
+require("Sources/BlackstockApp/SourceDownloadManager.swift", [
+    "func pause()",
+    "func resume()",
+])
+require("docs/1.0_RELEASE_NOTES.md", [
+    "Blackstock 1.0.0",
+    "Developer-ID-Signierung",
+])
+
+print("BLACKSTOCK_V1_PRODUCT_AUDIT_PASS")

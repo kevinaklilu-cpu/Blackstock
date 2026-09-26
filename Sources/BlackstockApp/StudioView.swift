@@ -2070,6 +2070,90 @@ struct StudioView: View {
                         .foregroundStyle(.secondary)
 
                     if let transcript = state.transcript {
+                        GroupBox {
+                            VStack(alignment: .leading, spacing: 10) {
+                                HStack(alignment: .firstTextBaseline) {
+                                    Label(
+                                        "Sprachschnitt",
+                                        systemImage: "waveform.badge.minus"
+                                    )
+                                    .font(.caption.weight(.semibold))
+                                    Spacer()
+                                    Text(
+                                        "\(state.speechCleanupPlan.suggestions.count) Vorschläge"
+                                    )
+                                    .font(.caption2.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                                }
+
+                                Text(
+                                    state.speechCleanupPlan.suggestions.isEmpty
+                                    ? "Keine sicheren Füllwörter oder langen Pausen erkannt. Der Inhalt bleibt unverändert."
+                                    : "Blackstock hat lokale, prüfbare Schnitte gefunden. Bild und Ton werden immer gemeinsam gekürzt."
+                                )
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+
+                                if !state.speechCleanupPlan.suggestions.isEmpty {
+                                    HStack {
+                                        Label(
+                                            "ca. \(timeLabel(state.speechCleanupPlan.savedSeconds)) kürzer",
+                                            systemImage: "timer"
+                                        )
+                                        .font(.caption.weight(.medium))
+                                        Spacer()
+                                        Button("Vorschläge anwenden") {
+                                            Task {
+                                                await state.applySpeechCleanup()
+                                            }
+                                        }
+                                        .buttonStyle(.borderedProminent)
+                                        .disabled(!editingEnabled)
+                                        .accessibilityHint(
+                                            "Wendet die angezeigten Schnitte gemeinsam auf Bild und Ton an."
+                                        )
+                                    }
+
+                                    DisclosureGroup("Schnitte prüfen") {
+                                        VStack(alignment: .leading, spacing: 7) {
+                                            ForEach(
+                                                Array(state.speechCleanupPlan.suggestions.prefix(12))
+                                            ) { suggestion in
+                                                HStack {
+                                                    Text(suggestion.reason.germanTitle)
+                                                        .font(.caption.weight(.semibold))
+                                                    Text(suggestion.evidence)
+                                                        .font(.caption)
+                                                        .lineLimit(1)
+                                                    Spacer()
+                                                    Text(
+                                                        "\(timeLabel(suggestion.outputRange.startSeconds))–\(timeLabel(suggestion.outputRange.endSeconds))"
+                                                    )
+                                                    .font(.caption2.monospacedDigit())
+                                                    .foregroundStyle(.secondary)
+                                                }
+                                            }
+                                            if state.speechCleanupPlan.suggestions.count > 12 {
+                                                Text(
+                                                    "+ \(state.speechCleanupPlan.suggestions.count - 12) weitere Schnitte"
+                                                )
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
+                                            }
+                                        }
+                                        .padding(.top, 6)
+                                    }
+                                    .font(.caption.weight(.semibold))
+
+                                    Text(
+                                        "Nach dem Schnitt erstellt Blackstock Untertitel neu. Jeder Schnitt bleibt im Verlauf einzeln rückgängig machbar."
+                                    )
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+
                         Toggle(
                             isOn: Binding(
                                 get: {
