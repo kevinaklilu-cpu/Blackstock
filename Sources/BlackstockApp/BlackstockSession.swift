@@ -2668,6 +2668,13 @@ final class BlackstockSession: ObservableObject {
     private var opportunityRequestID = UUID()
     private var opportunityRequestKey: [String] = []
     private var opportunitySearchDate = Date()
+    private struct OpportunitySearchParameters {
+        let query: String
+        let category: String?
+        let region: String?
+        let language: String?
+    }
+    private var opportunityPageParameters: OpportunitySearchParameters?
 
     func loadWorkspaceOpportunities(
         query: String,
@@ -2696,11 +2703,18 @@ final class BlackstockSession: ObservableObject {
         } else {
             token = nil
             opportunitySearchDate = Date()
-            // Keep the previous result visible while YouTube answers. Replacing
-            // it up front makes a slow or failed search look like a dead UI.
+            // Old rows are only valid for the old filters. Keep them on a
+            // same-query refresh, never under a newly selected interval.
+            if key != opportunityRequestKey {
+                opportunities = []
+                opportunityRecommendationNote = ""
+            }
             existingOpportunities = []
             opportunityNextPageToken = nil
+            opportunityPageParameters = nil
         }
+        let searchDate = opportunitySearchDate
+        var pageParameters = opportunityPageParameters
         let requestID = UUID()
         opportunityRequestID = requestID
         opportunityRequestKey = key
@@ -2750,7 +2764,7 @@ final class BlackstockSession: ObservableObject {
                         regionCode: regionCode,
                         relevanceLanguage: relevanceLanguage,
                         publishedAfter: window.publishedAfter(
-                            now: opportunitySearchDate
+                            now: searchDate
                         ),
                         maxResults: 50,
                         order: order,
@@ -2764,6 +2778,10 @@ final class BlackstockSession: ObservableObject {
                           following != nextToken else { break }
                     nextToken = following
                 }
+                pageParameters = OpportunitySearchParameters(
+                    query: searchQuery, category: categoryID,
+                    region: regionCode, language: relevanceLanguage
+                )
                 return YouTubeOpportunityPage(
                     candidates: candidates,
                     nextPageToken: returnedNextToken
@@ -2775,14 +2793,14 @@ final class BlackstockSession: ObservableObject {
             ) async throws -> [YouTubeOpportunityCandidate] {
                 guard !region.isEmpty else { return [] }
                 let cutoff = window.publishedAfter(
-                    now: opportunitySearchDate
+                    now: searchDate
                 )
                 return try await client
                     .mostPopularOpportunityCandidates(
                         categoryID: categoryID,
                         regionCode: region,
                         maxResults: 50,
-                        now: opportunitySearchDate
+                        now: searchDate
                     )
                     .filter { candidate in
                         let insideWindow = cutoff.map {
@@ -2808,7 +2826,16 @@ final class BlackstockSession: ObservableObject {
             let initialChart = !loadMore && resolvedQuery.isEmpty
                 ? try await filteredPopularChart(categoryID: category)
                 : []
-            if !initialChart.isEmpty {
+            if loadMore, let parameters = pageParameters {
+                page = try await matchingPage(
+                    searchQuery: parameters.query,
+                    categoryID: parameters.category,
+                    regionCode: parameters.region,
+                    relevanceLanguage: parameters.language,
+                    initialToken: token
+                )
+                recommendationNote = opportunityRecommendationNote
+            } else if !initialChart.isEmpty {
                 page = YouTubeOpportunityPage(
                     candidates: YouTubeAuthorizedClient.sortedOpportunities(
                         initialChart,
@@ -2819,6 +2846,31 @@ final class BlackstockSession: ObservableObject {
                 recommendationNote = language.isEmpty
                     ? "Aktuelle YouTube-Trends für Kategorie und Region. Zeitraum und Format wurden exakt angewendet."
                     : "Aktuelle YouTube-Trends für Kategorie und Region. Zeitraum und Format gelten exakt; die Sprachwahl wurde für mehr passende Treffer erweitert."
+                // A narrow interval often leaves just one chart row. Complete
+                // this with fresh search results instead of stopping there.
+                if initialChart.count < 12 {
+                    do {
+                        let supplement = try await matchingPage(
+                            categoryID: category.isEmpty ? nil : category,
+                            regionCode: region.isEmpty ? nil : region,
+                            relevanceLanguage: language.isEmpty ? nil : language
+                        )
+                        var identifiers = Set(initialChart.map(\.videoID))
+                        let additions = supplement.candidates.filter {
+                            identifiers.insert($0.videoID).inserted
+                        }
+                        page = YouTubeOpportunityPage(
+                            candidates: YouTubeAuthorizedClient.sortedOpportunities(
+                                initialChart + additions, order: order),
+                            nextPageToken: supplement.nextPageToken
+                        )
+                        recommendationNote = "YouTube-Trends und aktuelle Suchtreffer. Zeitraum und Format bleiben aktiv."
+                    } catch {
+                        // A quota/network failure must not discard usable
+                        // chart results that already meet the selected filters.
+                        recommendationNote += " Weitere Treffer konnten nicht geladen werden: \(describe(error))"
+                    }
+                }
             } else {
                 page = try await matchingPage(
                     // A typed query expresses the user's intent and must not
@@ -2929,6 +2981,7 @@ final class BlackstockSession: ObservableObject {
                 order: order
             )
             opportunityNextPageToken = page.nextPageToken == token ? nil : page.nextPageToken
+            opportunityPageParameters = page.nextPageToken == nil ? nil : pageParameters
             if opportunities.isEmpty {
                 errorMessage = opportunityNextPageToken == nil
                     ? "Keine passenden Videos gefunden. Erweitere Zeitraum oder Format oder ändere den Suchbegriff."
@@ -2946,6 +2999,28 @@ final class BlackstockSession: ObservableObject {
             opportunity,
             productionIntentKind: .standardProject
         )
+    }
+
+    func relatedStorySources(for lead: YouTubeOpportunityCandidate) async throws -> [YouTubeOpportunityCandidate] {
+        guard let channelID = selectedChannelID ?? workspaceChannelID else { return [] }
+        let query = StoryTopicMatcher().searchQuery(for: lead.title)
+        guard !query.isEmpty else { return [] }
+        let region = channelRegionCode
+        let language = contentLanguage
+        let cutoff = opportunityTimeWindow.publishedAfter(now: Date())
+        let filter = opportunityContentFilter
+        let token = try await validatedReadOnlyAccessToken(targetChannelID: channelID)
+        try Task.checkCancellation()
+        let page = try await YouTubeAuthorizedClient(accessToken: token).opportunityPage(
+            query: query, regionCode: region.isEmpty ? nil : region,
+            relevanceLanguage: language.isEmpty ? nil : language,
+            publishedAfter: cutoff, maxResults: 25, order: .relevance,
+            contentFilter: filter
+        )
+        try Task.checkCancellation()
+        return page.candidates.filter {
+            $0.videoID != lead.videoID && StoryTopicMatcher().match($0.title, to: lead.title).isRelated
+        }
     }
 
     func useOpportunityAsClip(

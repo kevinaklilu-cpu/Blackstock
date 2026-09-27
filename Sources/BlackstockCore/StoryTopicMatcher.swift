@@ -15,6 +15,15 @@ public struct StoryTopicMatch: Sendable, Equatable {
 public struct StoryTopicMatcher: Sendable {
     public init() {}
 
+    public func searchQuery(for title: String) -> String {
+        let meaningful = terms(title)
+        var seen = Set<String>()
+        return title.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "de_DE"))
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { meaningful.contains($0) && seen.insert($0).inserted }
+            .prefix(2).joined(separator: " ")
+    }
+
     public func match(_ text: String, to reference: String) -> StoryTopicMatch {
         let source = terms(text)
         let target = terms(reference)

@@ -2,6 +2,11 @@ import XCTest
 @testable import BlackstockCore
 
 final class StoryTopicMatcherTests: XCTestCase {
+    func testRelatedSearchUsesTopicRatherThanGenericTitleWords() {
+        XCTAssertEqual(StoryTopicMatcher().searchQuery(for: "HIGHLIGHTS - England v Spain | Chaotic Clash"), "england spain")
+        XCTAssertEqual(StoryTopicMatcher().searchQuery(for: "Messi MESSI Tor 2026"), "messi tor")
+        XCTAssertEqual(StoryTopicMatcher().searchQuery(for: "Best new video 2026"), "")
+    }
     func testGenericVideoWordsDoNotMakeTopicsRelated() {
         XCTAssertFalse(StoryTopicMatcher().match("Best football highlights 2026", to: "Best cooking video 2026").isRelated)
     }

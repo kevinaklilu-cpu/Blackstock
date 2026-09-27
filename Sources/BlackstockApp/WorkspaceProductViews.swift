@@ -12,10 +12,16 @@ struct OpportunityWorkspaceView: View {
     @State private var sortMode: OpportunitySortMode = .views
     @State private var selectedOpportunityID: String?
     @State private var storySelectionIDs: [String] = []
+    @State private var storySelectionItems: [String: YouTubeOpportunityCandidate] = [:]
+    @State private var relatedStoryItems: [YouTubeOpportunityCandidate] = []
+    @State private var isLoadingRelatedStoryItems = false
+    @State private var relatedStoryError: String?
+    @State private var storyPreviewItem: YouTubeOpportunityCandidate?
     @State private var storyCreationFeedback: String?
     @State private var hasLoadedInitially = false
 
     var body: some View {
+        ScrollView {
         VStack(alignment: .leading, spacing: 16) {
             header
 
@@ -24,9 +30,6 @@ struct OpportunityWorkspaceView: View {
                     Label("Recherche einstellen", systemImage: "slider.horizontal.3")
                         .font(.headline)
                     Spacer()
-                    Text("Suche leer lassen für automatische Trends")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
 
                 HStack(spacing: 8) {
@@ -57,7 +60,7 @@ struct OpportunityWorkspaceView: View {
                     Task { await loadOpportunities() }
                 }
 
-                HStack(spacing: 10) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 250), spacing: 16)], alignment: .leading, spacing: 12) {
                 Picker(
                     "Format",
                     selection: $session.opportunityContentFilter
@@ -70,7 +73,7 @@ struct OpportunityWorkspaceView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 300)
+                .frame(maxWidth: .infinity)
 
                 Picker(
                     "Zeitraum",
@@ -84,7 +87,7 @@ struct OpportunityWorkspaceView: View {
                     }
                 }
                 .pickerStyle(.menu)
-                .frame(width: 120)
+                .frame(maxWidth: .infinity)
 
                 Picker("Sortierung", selection: $sortMode) {
                     ForEach(OpportunitySortMode.allCases, id: \.self) { mode in
@@ -92,7 +95,7 @@ struct OpportunityWorkspaceView: View {
                     }
                 }
                 .pickerStyle(.menu)
-                .frame(width: 175)
+                .frame(maxWidth: .infinity)
 
                 Button {
                     Task { await loadOpportunities() }
@@ -118,12 +121,16 @@ struct OpportunityWorkspaceView: View {
                 .disabled(session.isLoadingOpportunities)
             }
 
-            HStack(spacing: 10) {
+            DisclosureGroup("Kategorie, Land und Sprache") {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 250), spacing: 16)], alignment: .leading, spacing: 12) {
                 Picker(
                     "Kategorie",
                     selection: $session.channelCategoryID
                 ) {
                     Text("Alle Kategorien").tag("")
+                    if session.youtubeVideoCategories.isEmpty && !session.channelCategoryID.isEmpty {
+                        Text(session.primaryTopic.isEmpty ? "Gespeicherte Kategorie" : session.primaryTopic).tag(session.channelCategoryID)
+                    }
                     ForEach(
                         session.youtubeVideoCategories
                             .filter(\.assignable)
@@ -133,33 +140,37 @@ struct OpportunityWorkspaceView: View {
                     }
                 }
                 .pickerStyle(.menu)
-                .frame(minWidth: 190, idealWidth: 240)
+                .frame(maxWidth: .infinity)
 
                 Picker(
                     "Land",
                     selection: $session.channelRegionCode
                 ) {
+                    if session.youtubeRegions.isEmpty {
+                        Text(session.channelRegionCode).tag(session.channelRegionCode)
+                    }
                     ForEach(session.youtubeRegions) { region in
                         Text(region.name)
                             .tag(region.code)
                     }
                 }
                 .pickerStyle(.menu)
-                .frame(width: 170)
+                .frame(maxWidth: .infinity)
 
                 Picker(
                     "Sprache",
                     selection: $session.contentLanguage
                 ) {
+                    if session.youtubeLanguages.isEmpty {
+                        Text(session.contentLanguage).tag(session.contentLanguage)
+                    }
                     ForEach(session.youtubeLanguages) { language in
                         Text(language.name)
                             .tag(language.code)
                     }
                 }
                 .pickerStyle(.menu)
-                .frame(width: 190)
-
-                Spacer()
+                .frame(maxWidth: .infinity)
 
                 if session.isLoadingYouTubeSetupOptions {
                     ProgressView()
@@ -177,6 +188,7 @@ struct OpportunityWorkspaceView: View {
                 }
             }
             .padding(.top, 2)
+            }
             }
             .padding(14)
             .blackstockSurface(raised: true)
@@ -207,7 +219,7 @@ struct OpportunityWorkspaceView: View {
             }
             if !storySelectionIDs.isEmpty {
                 storySelectionBar
-            } else {
+            } else if !session.opportunities.isEmpty {
                 storySelectionHint
             }
             HStack(spacing: 6) {
@@ -261,7 +273,53 @@ struct OpportunityWorkspaceView: View {
             Spacer(minLength: 0)
         }
         .padding(24)
+        }
         .background(BlackstockDesign.canvas)
+        .sheet(item: $storyPreviewItem) { item in
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    Text("Quellenvorschau").font(.title2.bold())
+                    Spacer()
+                    Button("Schließen") { storyPreviewItem = nil }
+                }
+                YouTubeEmbeddedPlayer(videoID: item.videoID)
+                    .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                Text(item.title).font(.headline)
+                Text(item.channelTitle).foregroundStyle(.secondary)
+                HStack {
+                    Button(storySelectionIDs.contains(item.videoID) ? "Aus Story entfernen" : "Zur Story hinzufügen") {
+                        toggleStorySelection(item)
+                    }
+                    .disabled(!storySelectionIDs.contains(item.videoID) && storySelectionIDs.count >= 5)
+                    .buttonStyle(.borderedProminent)
+                    Link("Auf YouTube ansehen", destination: URL(string: "https://www.youtube.com/watch?v=\(item.videoID)")!)
+                }
+            }
+            .padding(24)
+            .frame(width: 700)
+        }
+        .task(id: relatedStoryRequestKey) {
+            relatedStoryItems = []
+            relatedStoryError = nil
+            guard let id = storySelectionIDs.first, let lead = storySelectionItems[id] else {
+                isLoadingRelatedStoryItems = false
+                return
+            }
+            isLoadingRelatedStoryItems = true
+            do {
+                try await Task.sleep(for: .milliseconds(350))
+                let items = try await session.relatedStorySources(for: lead)
+                try Task.checkCancellation()
+                relatedStoryItems = items
+                isLoadingRelatedStoryItems = false
+            } catch is CancellationError {
+                // The replacement task owns the new selection's loading state.
+            } catch {
+                guard !Task.isCancelled else { return }
+                relatedStoryError = error.localizedDescription
+                isLoadingRelatedStoryItems = false
+            }
+        }
         .task {
             guard !hasLoadedInitially else { return }
             hasLoadedInitially = true
@@ -277,6 +335,13 @@ struct OpportunityWorkspaceView: View {
         .onChange(of: sortMode) { _ in
             guard hasLoadedInitially else { return }
             Task { await loadOpportunities() }
+        }
+        .onChange(of: session.workspaceChannel?.id) { channelID in
+            guard hasLoadedInitially, channelID != nil else { return }
+            Task {
+                await session.ensureYouTubeDiscoveryOptionsLoaded()
+                await loadOpportunities()
+            }
         }
         .onChange(of: session.opportunityTimeWindow) { _ in
             guard hasLoadedInitially else { return }
@@ -330,24 +395,24 @@ struct OpportunityWorkspaceView: View {
                     .font(.title2.weight(.semibold))
                     .foregroundStyle(.white)
             }
-            .frame(width: 54, height: 54)
+            .frame(width: 40, height: 40)
 
             VStack(alignment: .leading, spacing: 5) {
                 Text("Entdecken")
-                    .font(.largeTitle.bold())
+                    .font(.title2.bold())
                 Text("Trends finden, Quellen kombinieren, Story starten")
-                    .font(.title3)
+                    .font(.callout)
                     .foregroundStyle(.secondary)
             }
 
             Spacer()
 
             Label(
-                session.workspaceChannel?.title ?? "YouTube",
-                systemImage: "checkmark.seal.fill"
+                session.workspaceChannel?.title ?? "Verbindung prüfen",
+                systemImage: session.workspaceChannel == nil ? "exclamationmark.circle" : "checkmark.seal.fill"
             )
             .font(.callout.weight(.semibold))
-            .foregroundStyle(.green)
+            .foregroundStyle(session.workspaceChannel == nil ? Color.secondary : Color.green)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(Color.green.opacity(0.09), in: Capsule())
@@ -420,6 +485,7 @@ struct OpportunityWorkspaceView: View {
                 if let selectedOpportunity {
                     opportunityDetail(selectedOpportunity)
                         .padding(.leading, 18)
+                        .id(selectedOpportunity.id)
                 } else {
                     Text("Wähle links ein Video aus.")
                         .foregroundStyle(.secondary)
@@ -428,6 +494,9 @@ struct OpportunityWorkspaceView: View {
             }
             .frame(minWidth: 360)
         }
+        // Give both independent panes real space. The surrounding page scrolls
+        // on short windows instead of compressing the player below the filters.
+        .frame(height: 620)
     }
 
     private func opportunityRow(
@@ -662,7 +731,7 @@ struct OpportunityWorkspaceView: View {
                 .foregroundStyle(.secondary)
             }
 
-            HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 10) {
                 Button {
                     toggleStorySelection(item)
                 } label: {
@@ -721,7 +790,7 @@ struct OpportunityWorkspaceView: View {
     private func videoFacts(
         _ item: YouTubeOpportunityCandidate
     ) -> some View {
-        HStack(spacing: 8) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 105))], alignment: .leading, spacing: 8) {
             metricChip(
                 "Format",
                 item.contentKind.germanTitle,
@@ -797,7 +866,8 @@ struct OpportunityWorkspaceView: View {
         if let selectedOpportunityID,
            let selected = session.opportunities.first(
                 where: { $0.id == selectedOpportunityID }
-           ) {
+           ) ?? storySelectionItems.values.first(where: { $0.id == selectedOpportunityID })
+             ?? relatedStoryItems.first(where: { $0.id == selectedOpportunityID }) {
             return selected
         }
         return session.opportunities.first
@@ -820,11 +890,12 @@ struct OpportunityWorkspaceView: View {
                 Spacer()
                 Button("Leeren") {
                     storySelectionIDs = []
+                    storySelectionItems = [:]
                 }
                 .buttonStyle(.bordered)
                 Button("Story erstellen") {
                     let selected = storySelectionIDs.compactMap { id in
-                        session.opportunities.first(where: { $0.videoID == id })
+                        storySelectionItems[id]
                     }
                     if session.useMultiSourceStory(selected) {
                         storyCreationFeedback = "Story erstellt · Editor wird geöffnet"
@@ -843,6 +914,41 @@ struct OpportunityWorkspaceView: View {
                     .foregroundStyle(.secondary)
             }
 
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(Array(storySelectionIDs.enumerated()), id: \.element) { index, id in
+                        if let item = storySelectionItems[id] {
+                            HStack(spacing: 6) {
+                                Button {
+                                    storyPreviewItem = item
+                                } label: {
+                                    Label("\(index == 0 ? "Erzählung" : "Bildquelle \(index)"): \(item.title)", systemImage: "play.circle")
+                                        .lineLimit(1)
+                                        .frame(maxWidth: 230)
+                                }
+                                .buttonStyle(.bordered)
+                                Button { toggleStorySelection(item) } label: {
+                                    Image(systemName: "xmark.circle")
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("\(item.title) aus Story entfernen")
+                            }
+                        }
+                    }
+                }
+            }
+
+            if isLoadingRelatedStoryItems {
+                HStack { ProgressView().controlSize(.small); Text("Passende Ergänzungen werden auf YouTube gesucht …") }
+                    .font(.caption)
+            } else if let relatedStoryError {
+                Text("Ergänzungen konnten nicht geladen werden: \(relatedStoryError)")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else if suggestedStorySources.isEmpty && storySelectionIDs.count < 5 {
+                Text("Keine weiteren thematisch passenden Videos in diesem Zeitraum gefunden. Erweitere den Zeitraum oder füge selbst eine Quelle hinzu.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
             if storySelectionIDs.count < 5,
                !suggestedStorySources.isEmpty {
                 VStack(alignment: .leading, spacing: 7) {
@@ -852,9 +958,8 @@ struct OpportunityWorkspaceView: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 10) {
                             ForEach(suggestedStorySources) { item in
-                                Button {
-                                    toggleStorySelection(item)
-                                } label: {
+                                VStack(alignment: .leading, spacing: 8) {
+                                Button { storyPreviewItem = item } label: {
                                     HStack(spacing: 8) {
                                         AsyncImage(url: item.thumbnailURL) { image in
                                             image.resizable().scaledToFill()
@@ -869,13 +974,13 @@ struct OpportunityWorkspaceView: View {
                                                 .lineLimit(1)
                                             Text(StoryTopicMatcher().match(
                                                 item.title,
-                                                to: session.opportunities.first(where: { $0.videoID == storySelectionIDs.first })?.title ?? ""
+                                                to: storySelectionIDs.first.flatMap { storySelectionItems[$0]?.title } ?? ""
                                             ).explanation)
                                                 .font(.caption2)
                                                 .foregroundStyle(.secondary)
                                                 .lineLimit(2)
                                         }
-                                        Image(systemName: "plus.circle.fill")
+                                        Image(systemName: "play.circle.fill")
                                             .foregroundStyle(BlackstockDesign.accent)
                                     }
                                     .frame(width: 260, alignment: .leading)
@@ -886,7 +991,14 @@ struct OpportunityWorkspaceView: View {
                                     )
                                 }
                                 .buttonStyle(.plain)
-                                .help(item.title)
+                                .help("Vorschau: \(item.title)")
+                                Button {
+                                    toggleStorySelection(item)
+                                } label: {
+                                    Label("Zur Story hinzufügen", systemImage: "plus.circle")
+                                }
+                                .buttonStyle(.bordered)
+                                }
                             }
                         }
                     }
@@ -922,6 +1034,8 @@ struct OpportunityWorkspaceView: View {
                 if automaticStorySources.count >= 2 {
                     Button("Vorschlag anpassen") {
                         storySelectionIDs = automaticStorySources.map(\.videoID)
+                        storySelectionItems = Dictionary(uniqueKeysWithValues:
+                            automaticStorySources.map { ($0.videoID, $0) })
                     }
                     .buttonStyle(.bordered)
                     Button {
@@ -1010,16 +1124,21 @@ struct OpportunityWorkspaceView: View {
     private func toggleStorySelection(_ item: YouTubeOpportunityCandidate) {
         if let index = storySelectionIDs.firstIndex(of: item.videoID) {
             storySelectionIDs.remove(at: index)
+            storySelectionItems.removeValue(forKey: item.videoID)
         } else if storySelectionIDs.count < 5 {
             storySelectionIDs.append(item.videoID)
+            storySelectionItems[item.videoID] = item
         }
+        storyCreationFeedback = nil
     }
 
     private var suggestedStorySources: [YouTubeOpportunityCandidate] {
         let lead = storySelectionIDs.first.flatMap { leadID in
-            session.opportunities.first { $0.videoID == leadID }
+            storySelectionItems[leadID]
         }
-        let candidates = session.opportunities
+        var seen = Set<String>()
+        let candidates = (relatedStoryItems + session.opportunities)
+            .filter { seen.insert($0.videoID).inserted }
             .enumerated()
             .filter { !storySelectionIDs.contains($0.element.videoID) }
             .filter { item in
@@ -1041,6 +1160,12 @@ struct OpportunityWorkspaceView: View {
             }
             .map(\.element)
         return Array(candidates.prefix(min(5, 5 - storySelectionIDs.count)))
+    }
+
+    private var relatedStoryRequestKey: String {
+        [storySelectionIDs.first ?? "", session.opportunityTimeWindow.rawValue,
+         session.opportunityContentFilter.rawValue, session.channelRegionCode,
+         session.contentLanguage].joined(separator: "|")
     }
 
     private var automaticStorySources: [YouTubeOpportunityCandidate] {

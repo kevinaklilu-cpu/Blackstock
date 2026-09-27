@@ -397,6 +397,12 @@ public struct YouTubeAuthorizedClient: Sendable {
         )
 
         let candidates: [YouTubeOpportunityCandidate] = searchItems.compactMap { item in
+            // Enforce the selected interval at the response boundary too: a
+            // stale/provider-inconsistent row must never appear in a new feed.
+            if let publishedAfter {
+                guard let publishedAt = item.snippet.publishedAt,
+                      publishedAt >= publishedAfter else { return nil }
+            }
             guard let videoID = item.id.videoId else {
                 return nil
             }

@@ -3,6 +3,28 @@ import Foundation
 @testable import BlackstockCore
 
 final class GoogleOAuthAndYouTubeTests: XCTestCase {
+    func testDiscoveryRejectsOldAndUndatedRowsEvenIfProviderReturnsThem() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [OAuthURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { OAuthURLProtocol.handler = nil; session.invalidateAndCancel() }
+        let cutoff = ISO8601DateFormatter().date(from: "2026-09-26T12:00:00Z")!
+        OAuthURLProtocol.handler = { request in
+            let url = try XCTUnwrap(request.url)
+            let json: String
+            if url.path.hasSuffix("/search") {
+                json = #"{"nextPageToken":"next","items":[{"id":{"videoId":"old"},"snippet":{"title":"Old","channelId":"c","channelTitle":"Channel","publishedAt":"2026-09-25T12:00:00Z"}},{"id":{"videoId":"boundary"},"snippet":{"title":"Current","channelId":"c","channelTitle":"Channel","publishedAt":"2026-09-26T12:00:00Z"}},{"id":{"videoId":"unknown"},"snippet":{"title":"Unknown","channelId":"c","channelTitle":"Channel"}}]}"#
+            } else {
+                json = #"{"items":[]}"#
+            }
+            return (HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data(json.utf8))
+        }
+        let page = try await YouTubeAuthorizedClient(accessToken: "test").opportunityPage(
+            query: "", publishedAfter: cutoff, session: session)
+        XCTAssertEqual(page.candidates.map(\.videoID), ["boundary"])
+        XCTAssertEqual(page.nextPageToken, "next")
+    }
+
     func testDiscoveryPaginationPreservesFiltersAndSortsNumericViews() async throws {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [OAuthURLProtocol.self]
