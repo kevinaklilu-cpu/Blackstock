@@ -2849,6 +2849,7 @@ final class StudioState: ObservableObject {
             captureID: captureID
         ) {
             $0.sourceStartSeconds = max(seconds, 0)
+            $0.selectionExplanation = "Ausschnitt manuell gewählt; automatischer Textbeleg wurde zurückgesetzt."
         }
         invalidateSupplementalVideoRender()
         persistWorkspaceIfPossible()
@@ -2862,6 +2863,7 @@ final class StudioState: ObservableObject {
             captureID: captureID
         ) {
             $0.durationSeconds = max(seconds, 0.05)
+            $0.selectionExplanation = "Ausschnittdauer manuell geändert; automatischer Textbeleg wurde zurückgesetzt."
         }
         invalidateSupplementalVideoRender()
         persistWorkspaceIfPossible()
@@ -2903,6 +2905,7 @@ final class StudioState: ObservableObject {
                 setting.timelineStartSeconds = start
                 setting.sourceStartSeconds = 0
                 setting.durationSeconds = duration
+                setting.selectionExplanation = "Zeitlich angeordnet. Über „Passende Szenen suchen“ den Textbezug prüfen."
             }
         }
 
