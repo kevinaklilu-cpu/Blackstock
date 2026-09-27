@@ -41,6 +41,7 @@ final class StudioState: ObservableObject {
     @Published var supplementalCaptures: [SupplementalCaptureAsset] = []
     @Published var supplementalAudioMixSettings: [SupplementalAudioMixSetting] = []
     @Published var supplementalVideoInsertSettings: [SupplementalVideoInsertSetting] = []
+    @Published private(set) var previousStorySceneSettings: [SupplementalVideoInsertSetting]?
     @Published var localClipCandidates: [LocalClipCandidate] = []
     @Published var savedClipSelections: [SavedClipSelection] = []
     @Published var isGeneratingClipCandidates = false
@@ -91,6 +92,7 @@ final class StudioState: ObservableObject {
 
     func loadWorkspace(projectID: UUID) async {
         activeProjectID = projectID
+        previousStorySceneSettings = nil
         processingStopRequested = false
         localClipCandidates = []
         clipCandidateStatusMessage = nil
@@ -1885,7 +1887,7 @@ final class StudioState: ObservableObject {
                 continue
             }
 
-            clipCandidateStatusMessage = "Clip \(completed + 1) von \(ids.count): \(selection.title) wird gerendert …"
+            clipCandidateStatusMessage = "Clip \(completed + 1) von \(ids.count): \(selection.title ?? "Ohne Titel") wird gerendert …"
             await renderSavedClipSelection(
                 selection
             )
@@ -2135,7 +2137,7 @@ final class StudioState: ObservableObject {
             player.replaceCurrentItem(with: AVPlayerItem(url: artifact.fileURL))
             player.volume = 1
             player.playImmediately(atRate: 1)
-            clipCandidateStatusMessage = "Fertige Exportdatei: \(selection.title)"
+            clipCandidateStatusMessage = "Fertige Exportdatei: \(selection.title ?? "Ohne Titel")"
             return
         }
         let candidate = LocalClipCandidate(
@@ -2917,6 +2919,75 @@ final class StudioState: ObservableObject {
         ))
         persistWorkspaceIfPossible()
         errorMessage = nil
+    }
+
+    /// Builds all suggestions before committing them, so cancellation or a
+    /// project switch cannot leave a partially applied scene plan.
+    func refineStoryScenes(captureIDs: [UUID], reference: String,
+                           localeIdentifier: String) async {
+        guard !isGeneratingClipCandidates, !isTranscribing, !isRendering else { return }
+        let projectID = activeProjectID
+        let revisionID = graph.headID
+        let initialSettings = supplementalVideoInsertSettings
+        let transcriber = LocalOnDeviceTranscriber()
+        var planned = initialSettings
+        isGeneratingClipCandidates = true
+        defer { isGeneratingClipCandidates = false }
+        for (index, id) in captureIDs.enumerated() {
+            guard !shouldStopProcessing, activeProjectID == projectID,
+                  graph.headID == revisionID else { return }
+            guard let capture = supplementalCaptures.first(where: { $0.id == id }),
+                  let settingIndex = planned.firstIndex(where: { $0.captureID == id }) else { continue }
+            clipCandidateStatusMessage = "Szenen prüfen · Quelle \(index + 1) von \(captureIDs.count)"
+            do {
+                guard transcriber.authorizationState() == .authorized,
+                      transcriber.isOnDeviceAvailable(localeIdentifier: localeIdentifier) else {
+                    throw CocoaError(.featureUnsupported)
+                }
+                let recognized = try await transcriber.transcribeVideo(
+                    url: capture.fileURL, localeIdentifier: localeIdentifier)
+                guard let scene = StorySceneSelector().select(
+                    transcript: recognized, reference: reference,
+                    sourceDuration: capture.durationSeconds ?? 0,
+                    maximumDuration: planned[settingIndex].durationSeconds) else {
+                    planned[settingIndex].enabled = false
+                    planned[settingIndex].selectionExplanation = "Keine sprachlich belegte Themenübereinstimmung gefunden. Ausgelassen; du kannst einen Ausschnitt manuell wählen und aktivieren."
+                    continue
+                }
+                planned[settingIndex].sourceStartSeconds = scene.range.startSeconds
+                planned[settingIndex].durationSeconds = scene.range.durationSeconds
+                planned[settingIndex].enabled = true
+                planned[settingIndex].selectionExplanation = scene.explanation
+                    + " · Erkannter Text: „" + String(scene.excerpt.prefix(220)) + "“"
+            } catch {
+                guard !shouldStopProcessing else { return }
+                planned[settingIndex].enabled = false
+                planned[settingIndex].selectionExplanation = "Sprache konnte nicht zuverlässig geprüft werden. Ausgelassen; manuelle Auswahl bleibt möglich."
+            }
+        }
+        guard !shouldStopProcessing, activeProjectID == projectID,
+              graph.headID == revisionID,
+              supplementalVideoInsertSettings == initialSettings else { return }
+        previousStorySceneSettings = initialSettings
+        supplementalVideoInsertSettings = planned
+        invalidateSupplementalVideoRender()
+        let accepted = planned.filter { captureIDs.contains($0.captureID) && $0.enabled }.count
+        clipCandidateStatusMessage = "\(accepted) von \(captureIDs.count) Ergänzungen mit belegtem Textbezug eingeplant. Ausgelassene Quellen sind im Schnitt gekennzeichnet."
+        ledger.append(.init(timestamp: Date(), actor: .blackstock, stage: .editing,
+            action: "story-scenes-matched",
+            summary: clipCandidateStatusMessage ?? "Szenenauswahl abgeschlossen.",
+            relatedSourceIDs: captureIDs.map(\.uuidString), reversible: false, correlationID: correlationID))
+        persistWorkspaceIfPossible()
+    }
+
+    func undoStorySceneSelection() {
+        guard !isGeneratingClipCandidates, !isRendering,
+              let previous = previousStorySceneSettings else { return }
+        supplementalVideoInsertSettings = previous
+        previousStorySceneSettings = nil
+        invalidateSupplementalVideoRender()
+        persistWorkspaceIfPossible()
+        clipCandidateStatusMessage = "Vorherige Szenenauswahl wiederhergestellt."
     }
 
     private func updateSupplementalVideoInsertSetting(

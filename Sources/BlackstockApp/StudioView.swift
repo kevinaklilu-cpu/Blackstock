@@ -329,6 +329,26 @@ struct StudioView: View {
                     .help(
                         "Verteilt alle geladenen Ergänzungen ohne Überlappung über das Video."
                     )
+                    Button("Passende Szenen suchen") {
+                        startProcessing {
+                            await state.refineStoryScenes(
+                                captureIDs: loadedStoryVideoCaptures.map(\.id),
+                                reference: session.activeStorySources.first?.title ?? project.title,
+                                localeIdentifier: speechLocaleIdentifier
+                            )
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(!editingEnabled || loadedStoryVideoCaptures.isEmpty)
+                    if state.previousStorySceneSettings != nil {
+                        Button("Szenenauswahl zurücksetzen") {
+                            state.undoStorySceneSelection()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(!editingEnabled)
+                    }
                 }
             }
             .padding(.top, 6)
@@ -3847,6 +3867,19 @@ struct StudioView: View {
                         captureIDs: loadedStoryVideoCaptures.map(\.id)
                     )
                     guard state.errorMessage == nil else { return }
+                    await state.refineStoryScenes(
+                        captureIDs: loadedStoryVideoCaptures.map(\.id),
+                        reference: session.activeStorySources.first?.title ?? project.title,
+                        localeIdentifier: speechLocaleIdentifier
+                    )
+                    guard !Task.isCancelled, session.activeProject?.id == project.id else { return }
+                    let plannedCount = loadedStoryVideoCaptures.filter {
+                        state.supplementalVideoSetting(for: $0.id).enabled
+                    }.count
+                    guard plannedCount == loadedStoryVideoCaptures.count else {
+                        state.clipCandidateStatusMessage = "Story-Entwurf bereit: \(plannedCount) von \(loadedStoryVideoCaptures.count) Ergänzungen passen sprachlich zum Thema. Prüfe die ausgelassenen Quellen im Schnitt und rendere danach die gewünschte Fassung."
+                        return
+                    }
                     state.clipCandidateStatusMessage = "Alle Quellen geladen · gemeinsame Story wird gerendert …"
                     await state.render(projectID: project.id)
                     if state.errorMessage == nil {
@@ -3968,6 +4001,13 @@ struct StudioView: View {
                                 capture.durationSeconds ?? 5,
                                 0.1
                             )
+
+                            if let explanation = setting.selectionExplanation {
+                                Label(explanation, systemImage: setting.enabled ? "text.magnifyingglass" : "exclamationmark.circle")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
 
                             Toggle(
                                 "Als visuelle Einblendung verwenden",

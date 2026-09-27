@@ -11,6 +11,7 @@ public struct SupplementalVideoInsertSetting:
     public var timelineStartSeconds: Double
     public var sourceStartSeconds: Double
     public var durationSeconds: Double
+    public var selectionExplanation: String?
 
     public var id: UUID { captureID }
 

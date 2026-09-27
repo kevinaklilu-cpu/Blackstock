@@ -867,9 +867,13 @@ struct OpportunityWorkspaceView: View {
                                             Text(item.title)
                                                 .font(.caption.weight(.semibold))
                                                 .lineLimit(1)
-                                            Text("Zur Story hinzufügen")
+                                            Text(StoryTopicMatcher().match(
+                                                item.title,
+                                                to: session.opportunities.first(where: { $0.videoID == storySelectionIDs.first })?.title ?? ""
+                                            ).explanation)
                                                 .font(.caption2)
                                                 .foregroundStyle(.secondary)
+                                                .lineLimit(2)
                                         }
                                         Image(systemName: "plus.circle.fill")
                                             .foregroundStyle(BlackstockDesign.accent)
@@ -908,8 +912,8 @@ struct OpportunityWorkspaceView: View {
                         .font(.headline)
                     Text(
                         automaticStorySources.count >= 2
-                            ? "Leitvideo und Ergänzungen sind bereits passend zu Filter, Format und Reichweitensignal zusammengestellt."
-                            : "Sobald mindestens zwei Treffer verfügbar sind, stellt Blackstock automatisch eine Story zusammen."
+                            ? "Diese Quellen teilen Themenbegriffe im Titel. Prüfe die Vorschläge vor dem Start."
+                            : "Noch keine belegbare Themenübereinstimmung für eine automatische Story. Du kannst Quellen selbst auswählen."
                     )
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -1018,6 +1022,10 @@ struct OpportunityWorkspaceView: View {
         let candidates = session.opportunities
             .enumerated()
             .filter { !storySelectionIDs.contains($0.element.videoID) }
+            .filter { item in
+                guard let lead else { return true }
+                return StoryTopicMatcher().match(item.element.title, to: lead.title).isRelated
+            }
             .sorted { lhs, rhs in
                 let lhsScore = storySuggestionScore(
                     lhs.element,
@@ -1039,6 +1047,7 @@ struct OpportunityWorkspaceView: View {
         guard let lead = session.opportunities.first else { return [] }
         let additions = session.opportunities
             .dropFirst()
+            .filter { StoryTopicMatcher().match($0.title, to: lead.title).isRelated }
             .enumerated()
             .sorted {
                 storySuggestionScore(
@@ -1062,7 +1071,8 @@ struct OpportunityWorkspaceView: View {
         originalIndex: Int
     ) -> Int {
         guard let lead else { return -originalIndex }
-        var score = -originalIndex
+        let match = StoryTopicMatcher().match(candidate.title, to: lead.title)
+        var score = Int(match.relevance * 100) + match.terms.count * 40
         if candidate.contentKind == lead.contentKind { score += 20 }
         if candidate.channelID != lead.channelID { score += 8 }
         if let views = candidate.metrics.viewCount {
