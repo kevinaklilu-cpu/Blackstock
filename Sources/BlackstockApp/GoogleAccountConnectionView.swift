@@ -9,52 +9,23 @@ struct GoogleAccountConnectionView: View {
     @State private var showAdvanced = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text("Google und YouTube verbinden").font(.title2.bold())
-            Text("Melde dich bei Google an. Danach wählst du den YouTube-Kanal, mit dem du in Blackstock arbeiten möchtest.")
-                .foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 10) {
-                Label(
-                    session.hasImportedOAuthConfiguration
-                        ? "OAuth-Konfiguration bereit"
-                        : "Desktop-OAuth-Datei hinzufügen",
-                    systemImage: session.hasImportedOAuthConfiguration
-                        ? "checkmark.circle.fill"
-                        : "doc.badge.gearshape"
-                )
-                .font(.callout.weight(.semibold))
-                .foregroundStyle(
-                    session.hasImportedOAuthConfiguration ? .green : .primary
-                )
-                Text(
-                    session.hasImportedOAuthConfiguration
-                        ? "Die Datei ist gültig. Du kannst dich jetzt bei Google anmelden."
-                        : "Wähle deine Desktop-OAuth-JSON aus. Nach einem App-Wechsel kann ein erneuter Import nötig sein, wenn macOS die bisherige Konfiguration nicht freigibt. Erst danach startet die Google-Anmeldung."
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                Button(
-                    session.hasImportedOAuthConfiguration
-                        ? "OAuth-JSON ersetzen …"
-                        : "Desktop-OAuth-JSON auswählen …"
-                ) {
-                    showConfigurationImporter = true
+        ScrollView {
+        VStack(alignment: .leading, spacing: 20) {
+            HStack(spacing: 14) {
+                BlackstockBrandMark(width: 44)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Dein Kanal. Dein Studio.").font(.title2.bold())
+                    Text("Google und YouTube mit Blackstock verbinden")
+                        .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.borderedProminent)
+                Spacer()
             }
-            .padding(12)
-            .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
-
-            Button {
-                Task { await session.connectGoogle() }
-            } label: {
-                HStack {
-                    if session.isWorking { ProgressView().controlSize(.small) }
-                    Text(session.isWorking ? "Verbindung wird hergestellt …" : "Mit Google / YouTube anmelden")
-                }
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(session.isWorking || !session.hasImportedOAuthConfiguration)
+            GoogleConnectionCard(
+                isReady: session.hasImportedOAuthConfiguration,
+                isWorking: session.isWorking,
+                importConfiguration: { showConfigurationImporter = true },
+                signIn: { Task { await session.connectGoogle() } }
+            )
 
             if !session.channels.isEmpty {
                 Text("Deinen Kanal auswählen").font(.headline)
@@ -64,7 +35,13 @@ struct GoogleAccountConnectionView: View {
                             Button {
                                 Task { await session.useConnectedChannel(channel.id) }
                             } label: {
-                                HStack {
+                                HStack(spacing: 12) {
+                                    AsyncImage(url: channel.avatarURL) { image in
+                                        image.resizable().scaledToFill()
+                                    } placeholder: {
+                                        Image(systemName: "person.crop.circle.fill").font(.title)
+                                    }
+                                    .frame(width: 40, height: 40).clipShape(Circle())
                                     VStack(alignment: .leading) {
                                         Text(channel.title).font(.headline)
                                         Text(channel.handle ?? channel.id).font(.caption)
@@ -116,8 +93,9 @@ struct GoogleAccountConnectionView: View {
                 }
             }
         }
-        .padding(24)
-        .frame(width: 560)
+        .padding(28)
+        }
+        .frame(width: 620, height: 680)
         .fileImporter(isPresented: $showConfigurationImporter, allowedContentTypes: [.json]) { result in
             if case .success(let url) = result, session.importOAuthJSON(from: url) {
                 session.connectionStatusMessage = "Google-Anmeldung ist vorbereitet. Du kannst dich jetzt anmelden."

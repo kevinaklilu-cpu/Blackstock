@@ -220,7 +220,19 @@ mkdir -p "$PAYLOAD/Applications"
 cp -R "$APP" "$PAYLOAD/Applications/Blackstock.app"
 
 COMPONENT="$WORK/Blackstock-component.pkg"
-pkgbuild --root "$PAYLOAD" --install-location / --identifier "$BUNDLE_ID" --version "$VERSION" "$COMPONENT"
+# Never let Installer redirect the app to a preview, Trash, or old user copy.
+pkgbuild --root "$PAYLOAD" --component-plist "$ROOT/Build/Blackstock.component.plist" \
+  --install-location / --identifier "$BUNDLE_ID" --version "$VERSION" "$COMPONENT"
+pkgutil --expand "$COMPONENT" "$WORK/component-check"
+python3 - "$WORK/component-check/PackageInfo" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+info = ET.parse(sys.argv[1]).getroot()
+assert info.get("install-location") == "/", "Unexpected install root"
+assert not info.findall("./relocate/bundle"), "App relocation must be disabled"
+assert any(b.get("path", "").removeprefix("./") == "Applications/Blackstock.app"
+           for b in info.findall("./bundle")), "Missing Applications destination"
+PY
 
 if [[ -n "$INSTALLER_SIGN_IDENTITY" ]]; then
   productbuild     "${PRODUCTBUILD_KEYCHAIN_ARGS[@]}"     --sign "$INSTALLER_SIGN_IDENTITY"     --package "$COMPONENT"     "$OUT/Blackstock.pkg"

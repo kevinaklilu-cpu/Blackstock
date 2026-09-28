@@ -35,7 +35,7 @@ require("Sources/BlackstockApp/StudioView.swift", [
     "Bild und Ton werden immer gemeinsam gekürzt",
 ])
 require("Sources/BlackstockApp/FirstRunView.swift", [
-    "Desktop-OAuth-Datei hinzufügen",
+    "GoogleConnectionCard(",
     "Blackstock öffnen",
     "Videos und Mehrquellen-Stories erstellst du anschließend in Entdecken.",
 ])
@@ -71,5 +71,7 @@ require("docs/1.0_RELEASE_NOTES.md", [
     "Blackstock 1.0.0",
     "Developer-ID-Signierung",
 ])
+
+require("Sources/BlackstockApp/GoogleConnectionCard.swift", ["Desktop-OAuth-Datei hinzufügen", "if isReady", ".disabled(isWorking || !isReady)"])
 
 print("BLACKSTOCK_V1_PRODUCT_AUDIT_PASS")

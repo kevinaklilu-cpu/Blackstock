@@ -15,6 +15,8 @@ struct FirstRunView: View {
     var body: some View {
         ZStack {
             Color(nsColor: .windowBackgroundColor).ignoresSafeArea()
+            LinearGradient(colors: [Color.accentColor.opacity(0.09), .clear, .clear],
+                startPoint: .topLeading, endPoint: .bottomTrailing).ignoresSafeArea()
             VStack(spacing: 0) {
                 HStack(spacing: 12) {
                     BlackstockBrandMark(width: 46)
@@ -22,7 +24,7 @@ struct FirstRunView: View {
                         .font(.title2.bold())
                     Spacer()
                     VStack(alignment: .trailing, spacing: 5) {
-                        Text("Einrichtung")
+                        Text("Dein Creator Studio")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
                         ProgressView(
@@ -38,8 +40,11 @@ struct FirstRunView: View {
 
                 Divider()
 
-                contentPane
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ScrollView {
+                    contentPane
+                        .frame(maxWidth: .infinity)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .frame(maxWidth: 880)
         }
@@ -128,53 +133,12 @@ struct FirstRunView: View {
 
     private var welcome: some View {
         VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 10) {
-                Label(
-                    session.hasImportedOAuthConfiguration
-                        ? "OAuth-Konfiguration bereit"
-                        : "Desktop-OAuth-Datei hinzufügen",
-                    systemImage: session.hasImportedOAuthConfiguration
-                        ? "checkmark.circle.fill"
-                        : "doc.badge.gearshape"
-                )
-                .font(.headline)
-                .foregroundStyle(
-                    session.hasImportedOAuthConfiguration ? .green : .primary
-                )
-                Text(
-                    session.hasImportedOAuthConfiguration
-                        ? "Die Desktop-OAuth-Datei ist gültig. Die Google-Anmeldung ist jetzt freigeschaltet."
-                        : "Blackstock öffnet die Google-Anmeldung erst, nachdem eine gültige Desktop-OAuth-Datei geprüft wurde."
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                Button(
-                    session.hasImportedOAuthConfiguration
-                        ? "OAuth-JSON ersetzen …"
-                        : "Desktop-OAuth-JSON auswählen …"
-                ) {
-                    showOAuthImporter = true
-                }
-                .buttonStyle(.borderedProminent)
-            }
-            .padding(14)
-            .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
-
-            Button {
-                Task { await session.connectGoogle() }
-            } label: {
-                HStack {
-                    if session.isWorking { ProgressView().controlSize(.small) }
-                    Image(systemName: "link")
-                    Text(session.isWorking ? "Google wird verbunden …" : "Mit Google / YouTube anmelden")
-                    Spacer()
-                    Image(systemName: "arrow.right")
-                }
-                .padding(.vertical, 10)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .disabled(session.isWorking || !session.hasImportedOAuthConfiguration)
+            GoogleConnectionCard(
+                isReady: session.hasImportedOAuthConfiguration,
+                isWorking: session.isWorking,
+                importConfiguration: { showOAuthImporter = true },
+                signIn: { Task { await session.connectGoogle() } }
+            )
 
             Button {
                 withAnimation { showAdvancedAppSettings.toggle() }
@@ -756,7 +720,7 @@ struct FirstRunView: View {
 
     private var stepTitle: String {
         switch session.step {
-        case .welcome: "Mit Google / YouTube anmelden"
+        case .welcome: "Deine Ideen. Dein Studio."
         case .channel: "YouTube-Kanal auswählen"
         case .topic: "Kanal einrichten"
         case .language: "Sprache und Rechte"
@@ -766,7 +730,7 @@ struct FirstRunView: View {
 
     private var stepSubtitle: String {
         switch session.step {
-        case .welcome: "Verknüpfe deinen YouTube-Kanal."
+        case .welcome: "Entdecken, mehrere Quellen verbinden und deinen nächsten Clip gestalten. Verbinde dafür deinen Kanal mit Blackstock."
         case .channel: "Wähle den Kanal, mit dem du arbeiten willst."
         case .topic: "Wähle Region, Sprache, Kanal-Kategorie und Zielgruppe."
         case .language: "Bestätige die Nutzungsrechte für deinen Arbeitsbereich."
