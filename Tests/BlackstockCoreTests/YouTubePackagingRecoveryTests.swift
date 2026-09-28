@@ -1,4 +1,7 @@
 import Foundation
+import CoreGraphics
+import ImageIO
+import UniformTypeIdentifiers
 import XCTest
 @testable import BlackstockCore
 
@@ -10,7 +13,16 @@ final class YouTubePackagingRecoveryTests: XCTestCase {
         let video = root.appendingPathComponent("video.mp4")
         try Data("committed-video-fixture".utf8).write(to: video)
         let thumbnail = root.appendingPathComponent("thumbnail.png")
-        try XCTUnwrap(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aL1sAAAAASUVORK5CYII=")).write(to: thumbnail)
+        let context = try XCTUnwrap(CGContext(data: nil, width: 1280, height: 720,
+            bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue))
+        context.setFillColor(CGColor(gray: 0.25, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: 1280, height: 720))
+        let image = try XCTUnwrap(context.makeImage())
+        let destination = try XCTUnwrap(CGImageDestinationCreateWithURL(thumbnail as CFURL,
+            UTType.png.identifier as CFString, 1, nil))
+        CGImageDestinationAddImage(destination, image, nil)
+        XCTAssertTrue(CGImageDestinationFinalize(destination))
         let id = UUID()
         let project = BlackstockProject(id: id, title: "Test", targetChannelID: "channel", stage: .publishing,
             strategyVersion: 1, createdAt: Date(), updatedAt: Date())
