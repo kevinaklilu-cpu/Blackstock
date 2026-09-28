@@ -29,7 +29,7 @@ struct GoogleAccountConnectionView: View {
                 Text(
                     session.hasImportedOAuthConfiguration
                         ? "Die Datei ist gültig. Du kannst dich jetzt bei Google anmelden."
-                        : "Die Google-Anmeldung bleibt gesperrt, bis eine gültige Desktop-OAuth-Datei geprüft wurde."
+                        : "Wähle deine Desktop-OAuth-JSON aus. Nach einem App-Wechsel kann ein erneuter Import nötig sein, wenn macOS die bisherige Konfiguration nicht freigibt. Erst danach startet die Google-Anmeldung."
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)

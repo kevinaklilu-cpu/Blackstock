@@ -294,7 +294,7 @@ final class BlackstockSession: ObservableObject {
     }
 
     var hasImportedOAuthConfiguration: Bool {
-        !importedClientID.isEmpty
+        !importedClientID.isEmpty && !BlackstockKeychain.hasBlockedReads
     }
 
     var originalMediaLibraryURL: URL? {
@@ -876,21 +876,10 @@ final class BlackstockSession: ObservableObject {
         guard !isWorking else { return }
         errorMessage = nil
         connectionStatusMessage = nil
-        if BlackstockKeychain.hasBlockedReads {
-            let clientID = effectiveClientID
-            let secret = effectiveClientSecret
-            BlackstockKeychain.startFreshCredentialStore()
-            clearOAuthRuntimeAuthorizationState(clearChannelSelection: true)
-            do {
-                if !clientID.isEmpty {
-                    try BlackstockKeychain.write(clientID, account: "google.oauth.importedClientID")
-                    importedOAuthClientID = clientID
-                }
-                if let secret { try BlackstockKeychain.write(secret, account: "google.oauth.importedClientSecret") }
-            } catch {
-                errorMessage = "Neue Anmeldung konnte nicht vorbereitet werden: " + describe(error)
-                return
-            }
+        guard hasImportedOAuthConfiguration else {
+            errorMessage = "Bitte importiere zuerst deine Desktop-OAuth-JSON. Die gespeicherte Konfiguration fehlt oder ist für diese App-Version im Schlüsselbund nicht zugänglich."
+            showGoogleConnection = true
+            return
         }
         guard !effectiveClientID.isEmpty else {
             errorMessage = "Keine Google-OAuth-Konfiguration verfügbar. Verwende die integrierte Blackstock-Konfiguration oder importiere eine Desktop-OAuth-JSON."
