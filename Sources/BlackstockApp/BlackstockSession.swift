@@ -1138,8 +1138,9 @@ final class BlackstockSession: ObservableObject {
             errorMessage = "Kein aktives Projekt für die Veröffentlichung vorhanden."
             return
         }
-        guard !effectiveClientID.isEmpty else {
-            errorMessage = "Keine Google-OAuth-Konfiguration verfügbar."
+        guard hasImportedOAuthConfiguration else {
+            errorMessage = "Importiere zuerst deine Desktop-OAuth-JSON und verbinde Google erneut."
+            showGoogleConnection = true
             return
         }
 
@@ -1375,6 +1376,14 @@ final class BlackstockSession: ObservableObject {
                 result.publishedRecord
             )
 
+            if let warnings = result.packagingWarnings, !warnings.isEmpty {
+                lastPublishingResult = result
+                errorMessage = warnings.joined(separator: "\n")
+                // The video is committed. Keep only the optional extras
+                // retryable; their journal entries prevent a duplicate upload.
+                return
+            }
+
             guard project.advance(
                 to: .published,
                 at: Date()
@@ -1391,6 +1400,14 @@ final class BlackstockSession: ObservableObject {
         } catch {
             errorMessage = "Veröffentlichung fehlgeschlagen oder wurde unterbrochen: \(describe(error)). Der Protokoll-/Fortsetzungszustand bleibt erhalten."
         }
+    }
+
+    func finishUploadedVideoWithoutExtras() {
+        guard let project = activeProject, project.stage == .publishing,
+              let result = lastPublishingResult,
+              result.publishedRecord.projectID == project.id,
+              !(result.packagingWarnings ?? []).isEmpty else { return }
+        _ = advanceActiveProject(to: .published)
     }
 
     func refreshWorkspaceChannelIdentity() async {
