@@ -276,7 +276,12 @@ public actor LocalVideoRenderer {
             let emphasisCues = VisualEmphasisPlanner().cues(
                 operations: graph.currentOperations,
                 outputDurationSeconds: timeline.outputDurationSeconds
-            )
+            ).filter { cue in
+                !supplementalVideo.contains { insert in
+                    cue.startSeconds < insert.timelineStartSeconds + insert.durationSeconds + 0.4
+                        && cue.startSeconds + cue.durationSeconds > insert.timelineStartSeconds - 0.4
+                }
+            }
             VisualEmphasisComposer.apply(
                 cues: emphasisCues,
                 baseTransform: plan.transform,

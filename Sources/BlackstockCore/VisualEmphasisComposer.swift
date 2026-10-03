@@ -27,10 +27,8 @@ public enum VisualEmphasisComposer {
             previousEnd = max(previousEnd, start + segment.durationSeconds)
             if starts.count == 3 { break }
         }
-        if starts.isEmpty {
-            starts = [0.14, 0.47, 0.76].map { duration * $0 }
-                .filter { $0 >= 1 && $0 + 1.25 <= duration - 0.5 }
-        }
+        // No arbitrary zooms when no speech boundary supports an accent.
+        // Supplemental picture cuts already provide visual variation.
         var lastEnd = -Double.infinity
         return starts.compactMap { start in
             guard start >= lastEnd + 3 else { return nil }

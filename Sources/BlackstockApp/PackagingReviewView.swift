@@ -1028,8 +1028,49 @@ struct PackagingReviewView: View {
             }
             .padding(20)
         }
+        .safeAreaInset(edge: .bottom) {
+            if currentStage == .packaging || currentStage == .review || currentStage == .publishing {
+                Button {
+                    Task { await prepareAndConfirmUpload() }
+                } label: {
+                    Label(session.isPublishing ? "Upload läuft …" : "Zu YouTube hochladen", systemImage: "arrow.up.circle.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(session.isPublishing || session.isAuthorizingPublishing || isCheckingQuality || isGeneratingThumbnail)
+                .padding(14)
+                .background(.regularMaterial)
+            }
+        }
         .accessibilityLabel("Automatische Uploadprüfung")
         .background(Color.primary.opacity(0.02))
+    }
+
+    private func prepareAndConfirmUpload() async {
+        guard session.activeProject?.id == project.id else { return }
+        if currentStage == .packaging {
+            if thumbnailURL == nil { await generateThumbnailFromRender() }
+            await checkAudioAutomatically()
+            guard missingAreas.isEmpty, qualityReview.passesReleaseGate else {
+                session.errorMessage = "Der Upload benötigt noch die oben angezeigten technischen Korrekturen. Untertitel sind optional."
+                return
+            }
+            do {
+                let review = qualityReview
+                try session.savePublishPreparation(package: draftPackage, qualityReview: review, packagingVariants: packagingVariants)
+                guard session.advanceActiveProject(to: .review) else { return }
+                persistedReview = review
+            } catch {
+                session.errorMessage = "Upload konnte nicht vorbereitet werden: \(error.localizedDescription)"
+                return
+            }
+        }
+        if session.publishingAuthorizedChannelID != project.targetChannelID {
+            await session.authorizePublishing()
+        }
+        guard session.activeProject?.id == project.id,
+              session.publishingAuthorizedChannelID == project.targetChannelID else { return }
+        showFinalPublishConfirmation = true
     }
 
     private func checkAudioAutomatically(force: Bool = false) async {

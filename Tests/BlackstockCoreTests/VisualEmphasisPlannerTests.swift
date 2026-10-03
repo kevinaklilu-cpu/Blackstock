@@ -27,6 +27,7 @@ final class VisualEmphasisPlannerTests: XCTestCase {
         XCTAssertEqual(cues.first?.startSeconds, 2.3)
         XCTAssertTrue(cues.allSatisfy { $0.startSeconds + $0.durationSeconds <= 11.5 })
         XCTAssertTrue(VisualEmphasisComposer.automaticCues(duration: 3, transcript: nil).isEmpty)
+        XCTAssertTrue(VisualEmphasisComposer.automaticCues(duration: 300, transcript: nil).isEmpty)
     }
     #endif
 

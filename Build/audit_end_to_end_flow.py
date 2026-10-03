@@ -71,7 +71,7 @@ checks = {
     "Sources/BlackstockApp/StudioState.swift": [
         "createAutomaticHighlights(",
         "LocalHighlightCandidateRanker()",
-        "reframeAspectRatio = .portrait9x16",
+        "reframeAspectRatio = portrait ? .portrait9x16 : .landscape16x9",
         "captionVisualStyle = .strong",
         "burnInCaptionsEnabled = true",
         "renderAllSavedClipSelections()",

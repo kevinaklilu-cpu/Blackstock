@@ -23,7 +23,10 @@ struct StudioView: View {
     @State private var pendingStorySource: YouTubeOpportunityCandidate?
     @State private var queuedStorySources: [YouTubeOpportunityCandidate] = []
     @State private var showOptionalCapture = false
-    @State private var storyTargetDuration: Double = 60
+    @AppStorage("blackstock.story.targetDuration") private var storyTargetDuration: Double = 0
+    @AppStorage("blackstock.story.captionsEnabled") private var storyCaptionsEnabled = false
+    @AppStorage("blackstock.story.speechMatchingEnabled") private var storySpeechMatchingEnabled = false
+    @AppStorage("blackstock.story.portrait") private var storyPortrait = false
     @State private var isFinalizingStory = false
     @State private var mediaImportTask: Task<Void, Never>?
     @State private var isStudioVisible = false
@@ -304,13 +307,18 @@ struct StudioView: View {
                 .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 9))
             }
             Picker("Ziellänge", selection: $storyTargetDuration) {
-                Text("30 Sek.").tag(30.0)
-                Text("60 Sek.").tag(60.0)
-                Text("90 Sek.").tag(90.0)
+                Text("Empfehlung").tag(0.0)
+                Text("90 Sekunden").tag(90.0)
+                Text("3 Minuten").tag(180.0)
+                Text("5 Minuten").tag(300.0)
+                Text("Ganzes Leitvideo").tag(-1.0)
             }
-            .pickerStyle(.segmented)
+            .pickerStyle(.menu)
             .disabled(isImportingMedia || isFinalizingStory)
-            Text("Ziellänge für den nächsten Story-Schnitt; Sprachabschnitte können abweichen.")
+            Toggle("Untertitel erzeugen", isOn: $storyCaptionsEnabled)
+            Toggle("Szenen zusätzlich anhand der Sprache suchen", isOn: $storySpeechMatchingEnabled)
+            Toggle("Hochkant (9:16)", isOn: $storyPortrait)
+            Text("Geplante Länge: \(timeLabel(resolvedStoryDuration)). Ergänzungen liefern Bild, das Leitvideo die durchgehende Erzählung.")
                 .font(.caption2).foregroundStyle(.secondary)
             if pendingStorySource != nil {
                 ProgressView(sourceDownloader.state.germanTitle)
@@ -408,6 +416,13 @@ struct StudioView: View {
             && !isFinalizingStory
     }
 
+    private var resolvedStoryDuration: Double {
+        let duration = state.asset?.durationSeconds ?? 60
+        if storyTargetDuration < 0 { return duration }
+        if storyTargetDuration > 0 { return min(duration, storyTargetDuration) }
+        return min(duration, max(60, duration * 0.35, Double(session.activeStorySources.count) * 30))
+    }
+
     private func finishStory() async {
         guard !isFinalizingStory, !state.isRendering,
               session.activeProject?.id == project.id,
@@ -417,9 +432,11 @@ struct StudioView: View {
         defer { isFinalizingStory = false }
         state.resumeProcessing()
         await state.createAutomaticHighlights(localeIdentifier: speechLocaleIdentifier,
-            maximumHighlights: 1, renderImmediately: false, targetDuration: storyTargetDuration)
+            maximumHighlights: 1, renderImmediately: false, targetDuration: resolvedStoryDuration,
+            analyzeSpeech: false, includeCaptions: storyCaptionsEnabled, portrait: storyPortrait)
         guard state.errorMessage == nil else { return }
         state.autoArrangeSupplementalVideos(captureIDs: loadedStoryVideoCaptures.map(\.id))
+        if storySpeechMatchingEnabled {
         await state.refineStoryScenes(captureIDs: loadedStoryVideoCaptures.map(\.id),
             reference: session.activeStorySources.first?.title ?? project.title,
             localeIdentifier: speechLocaleIdentifier,
@@ -428,6 +445,7 @@ struct StudioView: View {
                       let language = source.audioLanguage else { return nil }
                 return (capture.id, language)
             }))
+        }
         guard !Task.isCancelled, session.activeProject?.id == project.id else { return }
         let count = loadedStoryVideoCaptures.filter { state.supplementalVideoSetting(for: $0.id).enabled }.count
         guard count == loadedStoryVideoCaptures.count else {
@@ -3086,6 +3104,7 @@ struct StudioView: View {
                     Text(workflowStatus)
                         .font(.callout.weight(.semibold))
                     Text(workflowNextAction)
+                        .lineLimit(2)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -3122,7 +3141,7 @@ struct StudioView: View {
                         Text(detail)
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
+                            .lineLimit(2)
                     }
                 }
                 .padding(10)
@@ -3162,6 +3181,17 @@ struct StudioView: View {
                         }
                         .frame(width: 28, height: 28)
 
+                        if index == steps.count - 1 {
+                            Button(step.title) {
+                                if currentStage == .editing {
+                                    guard session.advanceActiveProject(to: .packaging) else { return }
+                                }
+                                showPackagingReview = true
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(!isStoryOutputReady || isProcessingNow)
+                            .help(isStoryOutputReady ? "Export für YouTube vorbereiten und hochladen" : "Zuerst den gemeinsamen Schnitt rendern")
+                        } else {
                         Text(step.title)
                             .font(.caption.weight(
                                 index == workflowStepIndex
@@ -3173,6 +3203,7 @@ struct StudioView: View {
                                     ? Color.primary
                                     : Color.secondary
                             )
+                        }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -3938,7 +3969,10 @@ struct StudioView: View {
                                 localeIdentifier: speechLocaleIdentifier,
                                 maximumHighlights: session.activeStorySources.count > 1 ? 1 : 3,
                                 renderImmediately: session.activeStorySources.count <= 1,
-                                targetDuration: session.activeStorySources.count > 1 ? storyTargetDuration : 45
+                                targetDuration: session.activeStorySources.count > 1 ? resolvedStoryDuration : 45,
+                                analyzeSpeech: session.activeStorySources.count <= 1,
+                                includeCaptions: session.activeStorySources.count > 1 && storyCaptionsEnabled,
+                                portrait: session.activeStorySources.count <= 1 || storyPortrait
                             )
                         } else {
                             _ = session.advanceActiveProject(

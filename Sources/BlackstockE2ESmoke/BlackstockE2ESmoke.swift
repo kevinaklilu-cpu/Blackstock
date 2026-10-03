@@ -150,7 +150,7 @@ private struct CleanMachineScenario {
         try await SyntheticMediaFactory()
             .createSourceMovie(
                 at: supplementalVideoURL,
-                durationSeconds: 2.5
+                durationSeconds: 2.5, redFixture: true
             )
         try require(
             FileManager.default.fileExists(
@@ -466,6 +466,18 @@ private struct CleanMachineScenario {
             artifact.hasCurrentTechnicalValidation,
             "render validation did not pass"
         )
+
+        // Verify pixels of the final movie, not merely that the source exists.
+        let probe = AVAssetImageGenerator(asset: AVURLAsset(url: renderURL))
+        probe.appliesPreferredTrackTransform = true
+        let insertedFrame = try await probe.image(at: CMTime(seconds: 1.2, preferredTimescale: 600)).image
+        var pixel = [UInt8](repeating: 0, count: 4)
+        let context = CGContext(data: &pixel, width: 1, height: 1, bitsPerComponent: 8,
+            bytesPerRow: 4, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        context.draw(insertedFrame, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+        try require(Int(pixel[0]) > Int(pixel[2]) * 2,
+                    "supplemental source is absent from final rendered pixels")
 
         let technical = try await
             LocalAudioTechnicalInspector()
@@ -927,7 +939,7 @@ private final class E2EMockURLProtocol:
 private struct SyntheticMediaFactory {
     func createSourceMovie(
         at outputURL: URL,
-        durationSeconds: Double
+        durationSeconds: Double, redFixture: Bool = false
     ) async throws {
         let videoURL = outputURL
             .deletingLastPathComponent()
@@ -942,7 +954,7 @@ private struct SyntheticMediaFactory {
 
         try await createVideo(
             at: videoURL,
-            durationSeconds: durationSeconds
+            durationSeconds: durationSeconds, redFixture: redFixture
         )
         try createAudio(
             at: audioURL,
@@ -957,7 +969,7 @@ private struct SyntheticMediaFactory {
 
     private func createVideo(
         at url: URL,
-        durationSeconds: Double
+        durationSeconds: Double, redFixture: Bool
     ) async throws {
         try? FileManager.default
             .removeItem(at: url)
@@ -1068,11 +1080,13 @@ private struct SyntheticMediaFactory {
                 let value = UInt8(
                     32 + (frame % 160)
                 )
-                base.initializeMemory(
-                    as: UInt8.self,
-                    repeating: value,
-                    count: size
-                )
+                let pixels = base.assumingMemoryBound(to: UInt8.self)
+                for offset in stride(from: 0, to: size, by: 4) {
+                    pixels[offset] = redFixture ? 20 : value
+                    pixels[offset + 1] = redFixture ? 20 : value
+                    pixels[offset + 2] = redFixture ? 230 : value
+                    pixels[offset + 3] = 255
+                }
             }
             CVPixelBufferUnlockBaseAddress(
                 pixelBuffer,

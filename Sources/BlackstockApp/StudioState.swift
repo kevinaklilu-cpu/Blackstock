@@ -1266,7 +1266,10 @@ final class StudioState: ObservableObject {
         localeIdentifier: String,
         maximumHighlights: Int = 3,
         renderImmediately: Bool = true,
-        targetDuration: Double = 45
+        targetDuration: Double = 45,
+        analyzeSpeech: Bool = true,
+        includeCaptions: Bool = false,
+        portrait: Bool = true
     ) async {
         guard !isCreatingAutomaticHighlights else { return }
 
@@ -1276,18 +1279,20 @@ final class StudioState: ObservableObject {
         clipCandidateStatusMessage =
             "Schritt 1 von 4: Sprache, Pausen und Clip-Bereiche werden lokal analysiert …"
 
-        await generateLocalClipCandidates(
-            localeIdentifier: localeIdentifier
-        )
+        if analyzeSpeech || includeCaptions {
+            await generateLocalClipCandidates(localeIdentifier: localeIdentifier)
+        } else {
+            localClipCandidates = []
+        }
         guard !shouldStopProcessing else {
             return
         }
-        if localClipCandidates.isEmpty, let asset {
+        if (!analyzeSpeech || localClipCandidates.isEmpty), let asset {
             localClipCandidates = automaticTimelineCandidates(
                 duration: asset.durationSeconds, targetDuration: targetDuration
             )
-            clipCandidateStatusMessage =
-                "Keine verlässlichen Sprachblöcke erkannt. Blackstock verwendet gleichmäßig verteilte, zeitbasierte Vorschläge und kennzeichnet sie zur Prüfung."
+            errorMessage = nil
+            clipCandidateStatusMessage = "Zeitbasierter Schnitt vorbereitet. Spracherkennung ist dafür nicht erforderlich."
         }
         guard !localClipCandidates.isEmpty else {
             errorMessage = "Das Video ist zu kurz, um automatisch einen Clip zu erstellen."
@@ -1320,7 +1325,7 @@ final class StudioState: ObservableObject {
             return
         }
 
-        reframeAspectRatio = .portrait9x16
+        reframeAspectRatio = portrait ? .portrait9x16 : .landscape16x9
         reframeFocalX = 0.5
         reframeFocalY = 0.5
         if let asset {
@@ -1336,7 +1341,7 @@ final class StudioState: ObservableObject {
         }
         captionVisualStyle = .strong
         clipCandidateStatusMessage =
-            "Schritt 2 von 4: Die stärksten Bereiche werden geschnitten und für 9:16 vorbereitet …"
+            "Schritt 2 von 4: Schnitt und gewähltes Bildformat werden vorbereitet …"
 
         guard !shouldStopProcessing else {
             clipCandidateStatusMessage = "Verarbeitung gestoppt."
@@ -1347,7 +1352,7 @@ final class StudioState: ObservableObject {
         guard !shouldStopProcessing,
               errorMessage == nil else { return }
 
-        if let firstSaved = savedClipSelections.first,
+        if includeCaptions, let firstSaved = savedClipSelections.first,
            let transcript = firstSaved.transcript {
             self.transcript = transcript
             transcriptStructure = TranscriptStructureAnalyzer()
@@ -1357,15 +1362,17 @@ final class StudioState: ObservableObject {
                 "Schritt 3 von 4: Lesbare Untertitel werden aus der erkannten Sprache erzeugt …"
         } else {
             burnInCaptionsEnabled = false
-            clipCandidateStatusMessage =
-                "Schritt 3 von 4: Keine verlässliche Sprache erkannt; der Clip wird ohne erfundene Untertitel gerendert …"
+            captionURL = nil
+            clipCandidateStatusMessage = includeCaptions
+                ? "Keine verlässliche Sprache erkannt; das Video wird ohne Untertitel gerendert."
+                : "Untertitel deaktiviert · Schnitt wird ohne Spracherkennung fortgesetzt."
         }
 
         let before = graph.headID
         let reframe = EditOperation(
             type: .reframe,
             reframeSpec: ReframeSpec(
-                aspectRatio: .portrait9x16,
+                aspectRatio: reframeAspectRatio,
                 focalX: reframeFocalX,
                 focalY: reframeFocalY
             ),
@@ -1405,7 +1412,7 @@ final class StudioState: ObservableObject {
             stage: .editing,
             action: "automatic-highlights-prepared",
             summary:
-                "\(selected.count) Highlights vorbereitet. Der erste Clip enthält \(emphasisCues.count) Fokus-Zooms, aus Sprachpausen oder ersatzweise rhythmischen Abständen abgeleitet.",
+                "\(selected.count) Highlights vorbereitet. Der erste Clip enthält \(emphasisCues.count) Fokus-Zooms an erkannten Sprachpausen. Ohne belastbare Sprachgrenzen bleiben automatische Zooms aus.",
             relatedSourceIDs: selected.map { $0.id.uuidString },
             beforeRevisionID: before,
             afterRevisionID: graph.headID,
@@ -2894,7 +2901,7 @@ final class StudioState: ObservableObject {
         }
 
         let slot = outputDuration / Double(orderedCaptures.count + 1)
-        let maximumInsertDuration = max(min(slot * 0.7, 5), 0.5)
+        let maximumInsertDuration = max(slot * 0.7, 0.5)
         for (index, capture) in orderedCaptures.enumerated() {
             let duration = min(
                 max(capture.durationSeconds ?? maximumInsertDuration, 0.1),
@@ -2911,9 +2918,9 @@ final class StudioState: ObservableObject {
             ) { setting in
                 setting.enabled = true
                 setting.timelineStartSeconds = start
-                setting.sourceStartSeconds = 0
+                setting.sourceStartSeconds = max(0, ((capture.durationSeconds ?? duration) - duration) * 0.35)
                 setting.durationSeconds = duration
-                setting.selectionExplanation = "Zeitlich angeordnet. Über „Passende Szenen suchen“ den Textbezug prüfen."
+                setting.selectionExplanation = "Zeitbasierter Ausschnitt aus der gewählten Bildquelle. Die Szene wurde nicht inhaltlich verifiziert; Vorschau prüfen."
             }
         }
 
@@ -2962,8 +2969,7 @@ final class StudioState: ObservableObject {
                     transcript: recognized, reference: reference,
                     sourceDuration: capture.durationSeconds ?? 0,
                     maximumDuration: planned[settingIndex].durationSeconds) else {
-                    planned[settingIndex].enabled = false
-                    planned[settingIndex].selectionExplanation = "Keine sprachlich belegte Themenübereinstimmung gefunden. Ausgelassen; du kannst einen Ausschnitt manuell wählen und aktivieren."
+                    planned[settingIndex].selectionExplanation = "Zeitbasierter Bildausschnitt bleibt aktiv. Keine sprachlich belegte Szene gefunden; Vorschau prüfen."
                     continue
                 }
                 planned[settingIndex].sourceStartSeconds = scene.range.startSeconds
@@ -2973,8 +2979,7 @@ final class StudioState: ObservableObject {
                     + " · Erkannter Text: „" + String(scene.excerpt.prefix(220)) + "“"
             } catch {
                 guard !shouldStopProcessing else { return }
-                planned[settingIndex].enabled = false
-                planned[settingIndex].selectionExplanation = "Sprache konnte nicht zuverlässig geprüft werden. Ausgelassen; manuelle Auswahl bleibt möglich."
+                planned[settingIndex].selectionExplanation = "Zeitbasierter Bildausschnitt bleibt aktiv. Sprachanalyse nicht verfügbar; Vorschau prüfen."
             }
         }
         guard !shouldStopProcessing, activeProjectID == projectID,
