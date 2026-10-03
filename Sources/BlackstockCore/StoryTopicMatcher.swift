@@ -15,13 +15,20 @@ public struct StoryTopicMatch: Sendable, Equatable {
 public struct StoryTopicMatcher: Sendable {
     public init() {}
 
-    public func searchQuery(for title: String) -> String {
-        let meaningful = terms(title)
+    public func searchQuery(for title: String, excluding channel: String = "") -> String {
+        let meaningful = terms(title).subtracting(terms(channel))
         var seen = Set<String>()
         return title.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "de_DE"))
             .components(separatedBy: CharacterSet.alphanumerics.inverted)
             .filter { meaningful.contains($0) && seen.insert($0).inserted }
             .prefix(2).joined(separator: " ")
+    }
+
+    public func match(_ candidate: YouTubeOpportunityCandidate, to lead: YouTubeOpportunityCandidate) -> StoryTopicMatch {
+        let reference = terms(lead.title).subtracting(terms(lead.channelTitle))
+        let evidence = terms(candidate.title + " " + String((candidate.description ?? "").prefix(1500)))
+        let shared = reference.intersection(evidence).sorted()
+        return StoryTopicMatch(terms: shared, relevance: Double(shared.count) / Double(max(reference.count, 1)))
     }
 
     public func match(_ text: String, to reference: String) -> StoryTopicMatch {
@@ -34,7 +41,7 @@ public struct StoryTopicMatcher: Sendable {
     }
 
     private func terms(_ text: String) -> Set<String> {
-        let ignored = Set("der die das den dem des ein eine einer einem einen eines und oder aber auch mit ohne für von vom zum zur aus bei nach vor über unter nicht nur noch schon wird werden wurde ist sind war waren hat haben hatte als auf im in am an es ich du er sie wir ihr mein meine dein seine dieser diese dieses dieses the a an and or but with without for from to of on in at is are was were be been this that these those it its you your we our how why what when where video videos short shorts official highlights highlight full best top new neu neue neuer neues heute today jetzt now watch ansehen amazing incredible compilation interview tutorial episode teil part viral trending trend must see erklärt erklärt einfach".split(separator: " ").map(String.init))
+        let ignored = Set("all sports sport news extended der die das den dem des ein eine einer einem einen eines und oder aber auch mit ohne für von vom zum zur aus bei nach vor über unter nicht nur noch schon wird werden wurde ist sind war waren hat haben hatte als auf im in am an es ich du er sie wir ihr mein meine dein seine dieser diese dieses dieses the a an and or but with without for from to of on in at is are was were be been this that these those it its you your we our how why what when where video videos short shorts official highlights highlight full best top new neu neue neuer neues heute today jetzt now watch ansehen amazing incredible compilation interview tutorial episode teil part viral trending trend must see erklärt erklärt einfach".split(separator: " ").map(String.init))
         let normalized = text.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "de_DE"))
         let normalizedIgnored = Set(ignored.map {
             $0.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "de_DE"))

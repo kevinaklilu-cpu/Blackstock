@@ -23,6 +23,10 @@ struct StudioView: View {
     @State private var pendingStorySource: YouTubeOpportunityCandidate?
     @State private var queuedStorySources: [YouTubeOpportunityCandidate] = []
     @State private var showOptionalCapture = false
+    @State private var storyTargetDuration: Double = 60
+    @State private var isFinalizingStory = false
+    @State private var mediaImportTask: Task<Void, Never>?
+    @State private var isStudioVisible = false
     @State private var isResolvingAutomaticSource = false
     @State private var isImportingMedia = false
     @State private var isAcquiringApprovedSource = false
@@ -52,11 +56,6 @@ struct StudioView: View {
                 Divider()
             }
 
-            if session.activeStorySources.count > 1 {
-                storySourcesOverview
-                Divider()
-            }
-
             if let asset = state.asset {
                 editor(asset)
             } else {
@@ -80,6 +79,8 @@ struct StudioView: View {
             rightsSheet
         }
         .task(id: project.id) {
+            isStudioVisible = true
+            state.resumeProcessing()
             if downloadProjectID != nil && downloadProjectID != project.id {
                 sourceDownloader.reset()
                 downloadProjectID = nil
@@ -113,6 +114,11 @@ struct StudioView: View {
             }
         }
         .onDisappear {
+            isStudioVisible = false
+            mediaImportTask?.cancel()
+            mediaImportTask = nil
+            sourceDownloader.cancel()
+            state.requestStopProcessing()
             activeProcessingTask?.cancel()
             activeProcessingTask = nil
             ingestWatcher.stop()
@@ -240,7 +246,7 @@ struct StudioView: View {
                 .buttonStyle(.bordered)
             }
 
-            if state.renderArtifact != nil {
+            if isStoryOutputReady {
                 Button {
                     if currentStage == .editing {
                         if session.advanceActiveProject(to: .packaging) {
@@ -262,35 +268,74 @@ struct StudioView: View {
     }
 
     private var storySourcesOverview: some View {
-        DisclosureGroup(
-            "Mehrquellen-Story · \(session.activeStorySources.count) Videos"
-        ) {
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(
-                    Array(session.activeStorySources.enumerated()),
-                    id: \.element.videoID
-                ) { index, source in
-                    HStack(spacing: 10) {
-                        Text(index == 0 ? "Leitvideo" : "Ergänzung \(index)")
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 82, alignment: .leading)
-                        Text(source.title)
-                            .font(.caption)
-                            .lineLimit(1)
-                        Spacer()
-                        Text(source.channelTitle)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                        if index > 0 {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Deine Story").font(.title3.bold())
+            Text("Eine Erzählung, passende Bilder aus deinen Quellen. Der Ton kommt durchgehend vom Leitvideo.")
+                .font(.caption).foregroundStyle(.secondary)
+            ForEach(Array(session.activeStorySources.enumerated()), id: \.element.videoID) { index, source in
+                HStack(alignment: .top, spacing: 9) {
+                    AsyncImage(url: source.thumbnailURL) { image in
+                        image.resizable().scaledToFill()
+                    } placeholder: { Color.secondary.opacity(0.12) }
+                    .frame(width: 64, height: 40).clipShape(RoundedRectangle(cornerRadius: 5))
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(index == 0 ? "Erzählung + Bild" : "Bildquelle \(index)")
+                            .font(.caption2.bold()).foregroundStyle(.secondary)
+                        Text(source.title).font(.caption.weight(.medium)).lineLimit(2)
+                        if index == 0 {
+                            Text(state.asset == nil ? "Wartet auf Download" : "Geladen · Hauptton")
+                                .font(.caption2)
+                        } else {
                             storySourceStatus(source)
+                            if let capture = loadedStoryVideoCaptures.first(where: { $0.rightsEvidence.contains("YouTube-Ergänzung:\(source.videoID)") }) {
+                                let insert = state.supplementalVideoSetting(for: capture.id)
+                                if insert.enabled {
+                                    Text("\(isStoryOutputReady ? "Im Export" : "Im Schnitt"): \(timeLabel(insert.timelineStartSeconds))–\(timeLabel(insert.timelineStartSeconds + insert.durationSeconds))")
+                                        .font(.caption2.monospacedDigit())
+                                } else if let explanation = insert.selectionExplanation {
+                                    Text(explanation).font(.caption2).foregroundStyle(.orange)
+                                }
+                            }
                         }
                     }
+                    Spacer(minLength: 0)
                 }
-                Text("Die Auswahlreihenfolge bestimmt die Story-Rollen. Geladene Ergänzungen lassen sich im Schnitt zeitlich platzieren und einzeln deaktivieren.")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                HStack(spacing: 8) {
+                .padding(8)
+                .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 9))
+            }
+            Picker("Ziellänge", selection: $storyTargetDuration) {
+                Text("30 Sek.").tag(30.0)
+                Text("60 Sek.").tag(60.0)
+                Text("90 Sek.").tag(90.0)
+            }
+            .pickerStyle(.segmented)
+            .disabled(isImportingMedia || isFinalizingStory)
+            Text("Ziellänge für den nächsten Story-Schnitt; Sprachabschnitte können abweichen.")
+                .font(.caption2).foregroundStyle(.secondary)
+            if pendingStorySource != nil {
+                ProgressView(sourceDownloader.state.germanTitle)
+                if let message = sourceDownloadMessage { Text(message).font(.caption).foregroundStyle(.red) }
+                Button("Download anzeigen") { showSourceDownloader = true }
+            }
+            Button(isFinalizingStory ? "Story wird erstellt …" : "Story erstellen / fortsetzen") {
+                state.errorMessage = nil
+                if case .failed = sourceDownloader.state {
+                    pendingStorySource = nil
+                    sourceDownloader.reset()
+                }
+                if loadedStoryVideoCaptures.count < session.activeStorySources.count - 1 {
+                    beginStorySourceDownloadsIfNeeded()
+                } else {
+                    startProcessing { await finishStory() }
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(state.asset == nil || isImportingMedia || isFinalizingStory || state.isRendering || sourceDownloader.state == .downloading || sourceDownloader.state == .processing)
+            if let message = state.clipCandidateStatusMessage {
+                Text(message).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            DisclosureGroup("Quellen manuell bearbeiten") {
+                VStack(alignment: .leading, spacing: 8) {
                     if pendingStorySource != nil {
                         ProgressView(value: sourceDownloader.progress)
                             .frame(maxWidth: 180)
@@ -350,12 +395,50 @@ struct StudioView: View {
                         .disabled(!editingEnabled)
                     }
                 }
+
             }
-            .padding(.top, 6)
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 10)
-        .background(Color.primary.opacity(0.018))
+    }
+
+    private var isStoryOutputReady: Bool {
+        guard session.activeStorySources.count > 1 else { return state.renderArtifact != nil }
+        return state.renderArtifact?.fileURL.lastPathComponent == "final.mp4"
+            && loadedStoryVideoCaptures.count == session.activeStorySources.count - 1
+            && loadedStoryVideoCaptures.allSatisfy { state.supplementalVideoSetting(for: $0.id).enabled }
+            && !isFinalizingStory
+    }
+
+    private func finishStory() async {
+        guard !isFinalizingStory, !state.isRendering,
+              session.activeProject?.id == project.id,
+              loadedStoryVideoCaptures.count == session.activeStorySources.count - 1,
+              !loadedStoryVideoCaptures.isEmpty else { return }
+        isFinalizingStory = true
+        defer { isFinalizingStory = false }
+        state.resumeProcessing()
+        await state.createAutomaticHighlights(localeIdentifier: speechLocaleIdentifier,
+            maximumHighlights: 1, renderImmediately: false, targetDuration: storyTargetDuration)
+        guard state.errorMessage == nil else { return }
+        state.autoArrangeSupplementalVideos(captureIDs: loadedStoryVideoCaptures.map(\.id))
+        await state.refineStoryScenes(captureIDs: loadedStoryVideoCaptures.map(\.id),
+            reference: session.activeStorySources.first?.title ?? project.title,
+            localeIdentifier: speechLocaleIdentifier,
+            sourceLocales: Dictionary(uniqueKeysWithValues: loadedStoryVideoCaptures.compactMap { capture in
+                guard let source = session.activeStorySources.first(where: { capture.rightsEvidence.contains("YouTube-Ergänzung:\($0.videoID)") }),
+                      let language = source.audioLanguage else { return nil }
+                return (capture.id, language)
+            }))
+        guard !Task.isCancelled, session.activeProject?.id == project.id else { return }
+        let count = loadedStoryVideoCaptures.filter { state.supplementalVideoSetting(for: $0.id).enabled }.count
+        guard count == loadedStoryVideoCaptures.count else {
+            state.clipCandidateStatusMessage = "Noch kein fertiger Story-Export: \(count) von \(loadedStoryVideoCaptures.count) Bildquellen inhaltlich zugeordnet. Ausgelassene Quellen sind markiert."
+            return
+        }
+        state.clipCandidateStatusMessage = "Alle Quellen geladen · gemeinsame Story wird gerendert …"
+        await state.render(projectID: project.id)
+        if state.errorMessage == nil {
+            state.clipCandidateStatusMessage = "Story aus \(session.activeStorySources.count) Quellen fertig. Die Vorschau zeigt genau diese gemeinsame Exportdatei."
+        }
     }
 
     private var loadedStoryVideoCaptures: [SupplementalCaptureAsset] {
@@ -377,7 +460,7 @@ struct StudioView: View {
                 .font(.caption2)
                 .foregroundStyle(BlackstockDesign.accent)
         } else if isStorySourceLoaded(source.videoID) {
-            Label("Im Schnitt", systemImage: "checkmark.circle.fill")
+            Label("Geladen", systemImage: "checkmark.circle.fill")
                 .font(.caption2)
                 .foregroundStyle(.green)
         } else {
@@ -956,7 +1039,7 @@ struct StudioView: View {
                         captionPreviewOverlay
                     }
                 }
-                .frame(minWidth: 400, minHeight: 240)
+                .frame(minWidth: 400, minHeight: 160, maxHeight: .infinity)
                 .background(BlackstockDesign.mediaSurface)
                 .clipShape(
                     RoundedRectangle(
@@ -972,6 +1055,8 @@ struct StudioView: View {
                     .strokeBorder(BlackstockDesign.subtleBorder)
                 )
 
+                ScrollView {
+                VStack(spacing: 12) {
                 timeline(asset)
                     .frame(height: 112)
 
@@ -1026,7 +1111,7 @@ struct StudioView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                if let artifact = state.renderArtifact {
+                if let artifact = state.renderArtifact, isStoryOutputReady {
                     HStack {
                         Label("Video fertig", systemImage: "checkmark.seal.fill")
                             .font(.callout.weight(.semibold))
@@ -1063,6 +1148,9 @@ struct StudioView: View {
                         .foregroundStyle(.red)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                }
+                }
+                .frame(maxHeight: 240)
             }
             .padding(18)
             .frame(minWidth: 440)
@@ -1752,6 +1840,7 @@ struct StudioView: View {
     private func inspector(_ asset: ProductionMediaAsset) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
+                if session.activeStorySources.count > 1 { storySourcesOverview }
                 VStack(alignment: .leading, spacing: 5) {
                     Text(asset.displayName)
                         .font(.headline)
@@ -1785,7 +1874,9 @@ struct StudioView: View {
 
                 Divider()
 
-                localClipCandidatesSection
+                if session.activeStorySources.count <= 1 {
+                    localClipCandidatesSection
+                }
 
                 Divider()
 
@@ -3253,7 +3344,7 @@ struct StudioView: View {
                     Text(sourceDownloader.transferDescription)
                         .font(.caption).foregroundStyle(.secondary)
                 }
-                Text("Bild und Ton werden getrennt geladen. Danach öffnet sich der Schnitt automatisch. Du kannst dieses Fenster währenddessen schließen.")
+                Text("Bild und Ton werden geprüft und zu einer gemeinsamen Datei verarbeitet. Erst danach übernimmt Blackstock das Video in den Schnitt.")
                     .font(.caption).foregroundStyle(.secondary)
 
                 if let destination =
@@ -3503,7 +3594,8 @@ struct StudioView: View {
     }
 
     private func beginStorySourceDownloadsIfNeeded() {
-        guard state.asset != nil,
+        guard isStudioVisible, state.asset != nil, !isImportingMedia,
+              session.activeProject?.isPaused != true,
               pendingStorySource == nil,
               sourceDownloader.state != .downloading,
               sourceDownloader.state != .processing,
@@ -3706,8 +3798,14 @@ struct StudioView: View {
         }
 
         isImportingMedia = true
-        Task {
-            defer { isImportingMedia = false }
+        mediaImportTask = Task {
+            defer {
+                isImportingMedia = false
+                if isStudioVisible, !Task.isCancelled, session.activeProject?.id == project.id, pendingStorySource == nil,
+                   state.errorMessage == nil, session.activeStorySources.count > 1 {
+                    beginStorySourceDownloadsIfNeeded()
+                }
+            }
             let isSupplementalCapture =
                 captureKind == .microphone
                 || captureKind == .systemAudio
@@ -3837,10 +3935,11 @@ struct StudioView: View {
 
                             state.resumeProcessing()
                             await state.createAutomaticHighlights(
-                                localeIdentifier:
-                                    speechLocaleIdentifier
+                                localeIdentifier: speechLocaleIdentifier,
+                                maximumHighlights: session.activeStorySources.count > 1 ? 1 : 3,
+                                renderImmediately: session.activeStorySources.count <= 1,
+                                targetDuration: session.activeStorySources.count > 1 ? storyTargetDuration : 45
                             )
-                            beginStorySourceDownloadsIfNeeded()
                         } else {
                             _ = session.advanceActiveProject(
                                 to: .preview
@@ -3857,37 +3956,17 @@ struct StudioView: View {
                 pendingStorySource = nil
                 if let storySource, !isStorySourceLoaded(storySource.videoID) {
                     queuedStorySources = []
-                    state.clipCandidateStatusMessage = "Die Ergänzung konnte nicht importiert werden. Über „Ergänzungen laden“ erneut versuchen."
+                    state.errorMessage = "Die Ergänzung konnte nicht importiert werden. Bitte den Download erneut starten."
+                    state.clipCandidateStatusMessage = state.errorMessage
                     return
                 }
                 if queuedStorySources.isEmpty,
                    session.activeStorySources.count > 1,
                    session.activeStorySources.dropFirst().allSatisfy({ isStorySourceLoaded($0.videoID) }) {
-                    state.autoArrangeSupplementalVideos(
-                        captureIDs: loadedStoryVideoCaptures.map(\.id)
-                    )
-                    guard state.errorMessage == nil else { return }
-                    await state.refineStoryScenes(
-                        captureIDs: loadedStoryVideoCaptures.map(\.id),
-                        reference: session.activeStorySources.first?.title ?? project.title,
-                        localeIdentifier: speechLocaleIdentifier
-                    )
-                    guard !Task.isCancelled, session.activeProject?.id == project.id else { return }
-                    let plannedCount = loadedStoryVideoCaptures.filter {
-                        state.supplementalVideoSetting(for: $0.id).enabled
-                    }.count
-                    guard plannedCount == loadedStoryVideoCaptures.count else {
-                        state.clipCandidateStatusMessage = "Story-Entwurf bereit: \(plannedCount) von \(loadedStoryVideoCaptures.count) Ergänzungen passen sprachlich zum Thema. Prüfe die ausgelassenen Quellen im Schnitt und rendere danach die gewünschte Fassung."
-                        return
-                    }
-                    state.clipCandidateStatusMessage = "Alle Quellen geladen · gemeinsame Story wird gerendert …"
-                    await state.render(projectID: project.id)
-                    if state.errorMessage == nil {
-                        state.clipCandidateStatusMessage = "Gemeinsame Story aus \(session.activeStorySources.count) Quellen fertig. Die Vorschau zeigt die Exportdatei."
-                    }
-                } else {
-                    startNextStorySourceDownload()
+                    await finishStory()
                 }
+                // The defer starts the next source after this import has fully
+                // released its pending URL and busy state, including cache hits.
             }
         }
     }
@@ -4532,14 +4611,15 @@ struct StudioView: View {
     }
 
     private var speechLocaleIdentifier: String {
-        switch contentLanguage {
+        let language = session.activeStorySources.first?.audioLanguage ?? contentLanguage
+        switch language {
         case "de": return "de-DE"
         case "en": return "en-US"
         case "es": return "es-ES"
         case "fr": return "fr-FR"
         case "it": return "it-IT"
         case "pt": return "pt-PT"
-        default: return contentLanguage
+        default: return language
         }
     }
 

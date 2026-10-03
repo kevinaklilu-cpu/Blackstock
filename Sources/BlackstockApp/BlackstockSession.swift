@@ -2762,7 +2762,7 @@ final class BlackstockSession: ObservableObject {
                 // YouTube search requests are quota-heavy. Automatic feeds
                 // use the inexpensive popularity chart first; a typed/topic
                 // query may scan one additional page only when necessary.
-                let pageLimit = loadMore || searchQuery.isEmpty ? 1 : 2
+                let pageLimit = loadMore ? 1 : 2
                 for _ in 0..<pageLimit {
                     let part = try await client.opportunityPage(
                         query: searchQuery,
@@ -2779,7 +2779,7 @@ final class BlackstockSession: ObservableObject {
                     )
                     candidates.append(contentsOf: part.candidates)
                     returnedNextToken = part.nextPageToken
-                    guard candidates.isEmpty,
+                    guard candidates.count < 24,
                           let following = part.nextPageToken,
                           following != nextToken else { break }
                     nextToken = following
@@ -2854,7 +2854,7 @@ final class BlackstockSession: ObservableObject {
                     : "Aktuelle YouTube-Trends für Kategorie und Region. Zeitraum und Format gelten exakt; die Sprachwahl wurde für mehr passende Treffer erweitert."
                 // A narrow interval often leaves just one chart row. Complete
                 // this with fresh search results instead of stopping there.
-                if initialChart.count < 12 {
+                if initialChart.count < 24 {
                     do {
                         let supplement = try await matchingPage(
                             categoryID: category.isEmpty ? nil : category,
@@ -3009,23 +3009,20 @@ final class BlackstockSession: ObservableObject {
 
     func relatedStorySources(for lead: YouTubeOpportunityCandidate) async throws -> [YouTubeOpportunityCandidate] {
         guard let channelID = selectedChannelID ?? workspaceChannelID else { return [] }
-        let query = StoryTopicMatcher().searchQuery(for: lead.title)
+        let query = StoryTopicMatcher().searchQuery(for: lead.title, excluding: lead.channelTitle)
         guard !query.isEmpty else { return [] }
-        let region = channelRegionCode
         let language = contentLanguage
-        let cutoff = opportunityTimeWindow.publishedAfter(now: Date())
-        let filter = opportunityContentFilter
         let token = try await validatedReadOnlyAccessToken(targetChannelID: channelID)
         try Task.checkCancellation()
         let page = try await YouTubeAuthorizedClient(accessToken: token).opportunityPage(
-            query: query, regionCode: region.isEmpty ? nil : region,
+            query: query, regionCode: nil,
             relevanceLanguage: language.isEmpty ? nil : language,
-            publishedAfter: cutoff, maxResults: 25, order: .relevance,
-            contentFilter: filter
+            publishedAfter: nil, maxResults: 50, order: .relevance,
+            contentFilter: .all
         )
         try Task.checkCancellation()
         return page.candidates.filter {
-            $0.videoID != lead.videoID && StoryTopicMatcher().match($0.title, to: lead.title).isRelated
+            $0.videoID != lead.videoID && StoryTopicMatcher().match($0, to: lead).isRelated
         }
     }
 

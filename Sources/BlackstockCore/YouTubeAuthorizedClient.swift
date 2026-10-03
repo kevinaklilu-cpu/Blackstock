@@ -66,6 +66,8 @@ public struct YouTubeOpportunityCandidate: Codable, Sendable, Equatable, Identif
     public let id: String
     public let videoID: String
     public let title: String
+    public let description: String?
+    public let audioLanguage: String?
     public let channelID: String
     public let channelTitle: String
     public let publishedAt: Date?
@@ -89,11 +91,15 @@ public struct YouTubeOpportunityCandidate: Codable, Sendable, Equatable, Identif
         embeddable: Bool?,
         contentKind: YouTubeOpportunityContentKind = .video,
         durationSeconds: Int? = nil,
-        metrics: YouTubeOpportunityMetrics
+        metrics: YouTubeOpportunityMetrics,
+        description: String? = nil,
+        audioLanguage: String? = nil
     ) {
         self.id = videoID
         self.videoID = videoID
         self.title = title
+        self.description = description
+        self.audioLanguage = audioLanguage
         self.channelID = channelID
         self.channelTitle = channelTitle
         self.publishedAt = publishedAt
@@ -459,7 +465,9 @@ public struct YouTubeAuthorizedClient: Sendable {
                 embeddable: video?.status?.embeddable,
                 contentKind: contentKind,
                 durationSeconds: durationSeconds,
-                metrics: metrics
+                metrics: metrics,
+                description: video?.snippet?.description ?? item.snippet.description,
+                audioLanguage: video?.snippet?.defaultAudioLanguage
             )
         }
         return YouTubeOpportunityPage(candidates: Self.sortedOpportunities(candidates, order: order),
@@ -634,7 +642,9 @@ public struct YouTubeAuthorizedClient: Sendable {
                     },
                     publishedAt: snippet.publishedAt,
                     retrievedAt: now
-                )
+                ),
+                description: snippet.description,
+                audioLanguage: snippet.defaultAudioLanguage
             )
         }
     }
@@ -795,6 +805,8 @@ private struct SearchItem: Decodable {
 }
 private struct SearchID: Decodable { let videoId: String? }
 private struct SearchSnippet: Decodable {
+    let description: String?
+    let defaultAudioLanguage: String?
     let publishedAt: Date?
     let channelId: String
     let title: String

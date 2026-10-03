@@ -7,6 +7,20 @@ final class StoryTopicMatcherTests: XCTestCase {
         XCTAssertEqual(StoryTopicMatcher().searchQuery(for: "Messi MESSI Tor 2026"), "messi tor")
         XCTAssertEqual(StoryTopicMatcher().searchQuery(for: "Best new video 2026"), "")
     }
+    func testChannelBrandDoesNotBecomeStoryTopic() {
+        XCTAssertEqual(StoryTopicMatcher().searchQuery(for: "CORE ALL SPORTS GOLF BATTLE", excluding: "CORE"), "golf battle")
+        let lead = candidate("CORE ALL SPORTS GOLF BATTLE", channel: "CORE")
+        XCTAssertFalse(StoryTopicMatcher().match(candidate("All Core Devs News"), to: lead).isRelated)
+        XCTAssertTrue(StoryTopicMatcher().match(candidate("Final round", description: "A golf battle on the course"), to: lead).isRelated)
+    }
+
+    private func candidate(_ title: String, channel: String = "Channel", description: String? = nil) -> YouTubeOpportunityCandidate {
+        .init(videoID: title, title: title, channelID: channel, channelTitle: channel,
+              publishedAt: nil, thumbnailURL: nil, query: "", retrievedAt: Date(), embeddable: true,
+              metrics: .init(viewCount: nil, likeCount: nil, commentCount: nil, publishedAt: nil, retrievedAt: Date()),
+              description: description)
+    }
+
     func testGenericVideoWordsDoNotMakeTopicsRelated() {
         XCTAssertFalse(StoryTopicMatcher().match("Best football highlights 2026", to: "Best cooking video 2026").isRelated)
     }

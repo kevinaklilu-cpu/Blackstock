@@ -1264,7 +1264,9 @@ final class StudioState: ObservableObject {
 
     func createAutomaticHighlights(
         localeIdentifier: String,
-        maximumHighlights: Int = 3
+        maximumHighlights: Int = 3,
+        renderImmediately: Bool = true,
+        targetDuration: Double = 45
     ) async {
         guard !isCreatingAutomaticHighlights else { return }
 
@@ -1282,7 +1284,7 @@ final class StudioState: ObservableObject {
         }
         if localClipCandidates.isEmpty, let asset {
             localClipCandidates = automaticTimelineCandidates(
-                duration: asset.durationSeconds
+                duration: asset.durationSeconds, targetDuration: targetDuration
             )
             clipCandidateStatusMessage =
                 "Keine verlässlichen Sprachblöcke erkannt. Blackstock verwendet gleichmäßig verteilte, zeitbasierte Vorschläge und kennzeichnet sie zur Prüfung."
@@ -1426,6 +1428,12 @@ final class StudioState: ObservableObject {
             return
         }
 
+        if !renderImmediately {
+            savedClipSelections = []
+            clipCandidateStatusMessage = "Erzählung vorbereitet. Die Ergänzungen werden jetzt geladen; noch kein fertiger Story-Export."
+            persistWorkspaceIfPossible()
+            return
+        }
         await renderAllSavedClipSelections()
         guard !shouldStopProcessing,
               errorMessage == nil else { return }
@@ -1449,10 +1457,10 @@ final class StudioState: ObservableObject {
     }
 
     private func automaticTimelineCandidates(
-        duration: Double
+        duration: Double, targetDuration: Double = 45
     ) -> [LocalClipCandidate] {
         guard duration >= 8 else { return [] }
-        let clipDuration = min(max(duration * 0.12, 20), 45, duration)
+        let clipDuration = min(max(targetDuration, 8), duration)
         let centers = duration > clipDuration * 2 ? [0.2, 0.5, 0.8] : [0.5]
         return centers.enumerated().map { index, fraction in
             let start = min(
@@ -2927,7 +2935,7 @@ final class StudioState: ObservableObject {
     /// Builds all suggestions before committing them, so cancellation or a
     /// project switch cannot leave a partially applied scene plan.
     func refineStoryScenes(captureIDs: [UUID], reference: String,
-                           localeIdentifier: String) async {
+                           localeIdentifier: String, sourceLocales: [UUID: String] = [:]) async {
         guard !isGeneratingClipCandidates, !isTranscribing, !isRendering else { return }
         let projectID = activeProjectID
         let revisionID = graph.headID
@@ -2943,12 +2951,13 @@ final class StudioState: ObservableObject {
                   let settingIndex = planned.firstIndex(where: { $0.captureID == id }) else { continue }
             clipCandidateStatusMessage = "Szenen prüfen · Quelle \(index + 1) von \(captureIDs.count)"
             do {
+                let sourceLocale = sourceLocales[id] ?? localeIdentifier
                 guard transcriber.authorizationState() == .authorized,
-                      transcriber.isOnDeviceAvailable(localeIdentifier: localeIdentifier) else {
+                      transcriber.isOnDeviceAvailable(localeIdentifier: sourceLocale) else {
                     throw CocoaError(.featureUnsupported)
                 }
                 let recognized = try await transcriber.transcribeVideo(
-                    url: capture.fileURL, localeIdentifier: localeIdentifier)
+                    url: capture.fileURL, localeIdentifier: sourceLocale)
                 guard let scene = StorySceneSelector().select(
                     transcript: recognized, reference: reference,
                     sourceDuration: capture.durationSeconds ?? 0,

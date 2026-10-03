@@ -21,6 +21,7 @@ struct OpportunityWorkspaceView: View {
     @State private var hasLoadedInitially = false
 
     var body: some View {
+        GeometryReader { viewport in
         ScrollView {
         VStack(alignment: .leading, spacing: 16) {
             header
@@ -268,6 +269,7 @@ struct OpportunityWorkspaceView: View {
                 emptyState
             } else {
                 opportunityContent
+                    .frame(height: max(360, viewport.size.height - 270))
             }
 
             Spacer(minLength: 0)
@@ -275,6 +277,7 @@ struct OpportunityWorkspaceView: View {
         .padding(24)
         }
         .background(BlackstockDesign.canvas)
+        }
         .sheet(item: $storyPreviewItem) { item in
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
@@ -494,9 +497,8 @@ struct OpportunityWorkspaceView: View {
             }
             .frame(minWidth: 360)
         }
-        // Give both independent panes real space. The surrounding page scrolls
-        // on short windows instead of compressing the player below the filters.
-        .frame(height: 620)
+        // The parent sizes these panes to the current window instead of a
+        // fixed 620-point canvas that pushes controls below smaller screens.
     }
 
     private func opportunityRow(
@@ -945,17 +947,19 @@ struct OpportunityWorkspaceView: View {
                 Text("Ergänzungen konnten nicht geladen werden: \(relatedStoryError)")
                     .font(.caption).foregroundStyle(.secondary)
             } else if suggestedStorySources.isEmpty && storySelectionIDs.count < 5 {
-                Text("Keine weiteren thematisch passenden Videos in diesem Zeitraum gefunden. Erweitere den Zeitraum oder füge selbst eine Quelle hinzu.")
+                Text("Keine passende Ergänzung gefunden. Die Suche berücksichtigt auch ältere Videos und ist unabhängig von den Entdecken-Filtern.")
                     .font(.caption).foregroundStyle(.secondary)
             }
 
             if storySelectionIDs.count < 5,
                !suggestedStorySources.isEmpty {
                 VStack(alignment: .leading, spacing: 7) {
-                    Text("Empfohlene Ergänzungen")
+                    Text("Ergänzungen · unabhängig von Zeitraum und Land")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
-                    ScrollView(.horizontal, showsIndicators: false) {
+                    Text("Vorauswahl aus Titel und Beschreibung. Die gesprochenen Inhalte prüft Blackstock nach dem Laden.")
+                        .font(.caption2).foregroundStyle(.secondary)
+                    ScrollView(.horizontal, showsIndicators: true) {
                         HStack(spacing: 10) {
                             ForEach(suggestedStorySources) { item in
                                 VStack(alignment: .leading, spacing: 8) {
@@ -972,10 +976,9 @@ struct OpportunityWorkspaceView: View {
                                             Text(item.title)
                                                 .font(.caption.weight(.semibold))
                                                 .lineLimit(1)
-                                            Text(StoryTopicMatcher().match(
-                                                item.title,
-                                                to: storySelectionIDs.first.flatMap { storySelectionItems[$0]?.title } ?? ""
-                                            ).explanation)
+                                            Text(storySelectionIDs.first.flatMap { storySelectionItems[$0] }.map {
+                                                StoryTopicMatcher().match(item, to: $0).explanation
+                                            } ?? "Vorauswahl")
                                                 .font(.caption2)
                                                 .foregroundStyle(.secondary)
                                                 .lineLimit(2)
@@ -1143,7 +1146,7 @@ struct OpportunityWorkspaceView: View {
             .filter { !storySelectionIDs.contains($0.element.videoID) }
             .filter { item in
                 guard let lead else { return true }
-                return StoryTopicMatcher().match(item.element.title, to: lead.title).isRelated
+                return StoryTopicMatcher().match(item.element, to: lead).isRelated
             }
             .sorted { lhs, rhs in
                 let lhsScore = storySuggestionScore(
@@ -1163,16 +1166,14 @@ struct OpportunityWorkspaceView: View {
     }
 
     private var relatedStoryRequestKey: String {
-        [storySelectionIDs.first ?? "", session.opportunityTimeWindow.rawValue,
-         session.opportunityContentFilter.rawValue, session.channelRegionCode,
-         session.contentLanguage].joined(separator: "|")
+        [storySelectionIDs.first ?? "", session.contentLanguage].joined(separator: "|")
     }
 
     private var automaticStorySources: [YouTubeOpportunityCandidate] {
         guard let lead = session.opportunities.first else { return [] }
         let additions = session.opportunities
             .dropFirst()
-            .filter { StoryTopicMatcher().match($0.title, to: lead.title).isRelated }
+            .filter { StoryTopicMatcher().match($0, to: lead).isRelated }
             .enumerated()
             .sorted {
                 storySuggestionScore(
@@ -1196,7 +1197,7 @@ struct OpportunityWorkspaceView: View {
         originalIndex: Int
     ) -> Int {
         guard let lead else { return -originalIndex }
-        let match = StoryTopicMatcher().match(candidate.title, to: lead.title)
+        let match = StoryTopicMatcher().match(candidate, to: lead)
         var score = Int(match.relevance * 100) + match.terms.count * 40
         if candidate.contentKind == lead.contentKind { score += 20 }
         if candidate.channelID != lead.channelID { score += 8 }

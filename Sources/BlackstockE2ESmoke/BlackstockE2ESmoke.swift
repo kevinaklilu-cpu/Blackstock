@@ -120,6 +120,29 @@ private struct CleanMachineScenario {
             "synthetic source missing"
         )
 
+        // Exercise the exact download-to-editor boundary with a combined input.
+        // No downloaded stream may bypass this normalization and timing check.
+        let downloadDirectory = root.appendingPathComponent("download", isDirectory: true)
+        try FileManager.default.createDirectory(at: downloadDirectory, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: sourceURL, to: downloadDirectory.appendingPathComponent("source.mp4"))
+        try Data("{\"duration\":4}".utf8).write(to: downloadDirectory.appendingPathComponent("source.info.json"))
+        let normalizedURL = downloadDirectory.appendingPathComponent("normalized.mp4")
+        try await YouTubeMediaAssembler.assemble(directory: downloadDirectory, output: normalizedURL)
+        let normalizedAsset = AVURLAsset(url: normalizedURL)
+        let normalizedVideo = try await normalizedAsset.loadTracks(withMediaType: .video).first!
+        let normalizedAudio = try await normalizedAsset.loadTracks(withMediaType: .audio).first!
+        let videoRange = try await normalizedVideo.load(.timeRange)
+        let audioRange = try await normalizedAudio.load(.timeRange)
+        try require(abs(videoRange.start.seconds - audioRange.start.seconds) < 0.001,
+                    "download normalization introduced a start offset")
+        try require(abs(videoRange.duration.seconds - audioRange.duration.seconds) < 0.025,
+                    "download normalization introduced duration drift")
+        try require(abs(videoRange.duration.seconds - 4) < 0.05,
+                    "download normalization changed playback duration")
+        // Render the normalized file in the rest of the end-to-end test.
+        try FileManager.default.removeItem(at: sourceURL)
+        try FileManager.default.copyItem(at: normalizedURL, to: sourceURL)
+
         let supplementalVideoURL = root
             .appendingPathComponent(
                 "supplemental.mov"
