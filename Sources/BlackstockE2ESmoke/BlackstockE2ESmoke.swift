@@ -120,6 +120,29 @@ private struct CleanMachineScenario {
             "synthetic source missing"
         )
 
+        // Exercise the exact download-to-editor boundary with a combined input.
+        // No downloaded stream may bypass this normalization and timing check.
+        let downloadDirectory = root.appendingPathComponent("download", isDirectory: true)
+        try FileManager.default.createDirectory(at: downloadDirectory, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: sourceURL, to: downloadDirectory.appendingPathComponent("source.mp4"))
+        try Data("{\"duration\":4}".utf8).write(to: downloadDirectory.appendingPathComponent("source.info.json"))
+        let normalizedURL = downloadDirectory.appendingPathComponent("normalized.mp4")
+        try await YouTubeMediaAssembler.assemble(directory: downloadDirectory, output: normalizedURL)
+        let normalizedAsset = AVURLAsset(url: normalizedURL)
+        let normalizedVideo = try await normalizedAsset.loadTracks(withMediaType: .video).first!
+        let normalizedAudio = try await normalizedAsset.loadTracks(withMediaType: .audio).first!
+        let videoRange = try await normalizedVideo.load(.timeRange)
+        let audioRange = try await normalizedAudio.load(.timeRange)
+        try require(abs(videoRange.start.seconds - audioRange.start.seconds) < 0.001,
+                    "download normalization introduced a start offset")
+        try require(abs(videoRange.duration.seconds - audioRange.duration.seconds) < 0.025,
+                    "download normalization introduced duration drift")
+        try require(abs(videoRange.duration.seconds - 4) < 0.05,
+                    "download normalization changed playback duration")
+        // Render the normalized file in the rest of the end-to-end test.
+        try FileManager.default.removeItem(at: sourceURL)
+        try FileManager.default.copyItem(at: normalizedURL, to: sourceURL)
+
         let supplementalVideoURL = root
             .appendingPathComponent(
                 "supplemental.mov"
@@ -127,7 +150,7 @@ private struct CleanMachineScenario {
         try await SyntheticMediaFactory()
             .createSourceMovie(
                 at: supplementalVideoURL,
-                durationSeconds: 2.5
+                durationSeconds: 2.5, redFixture: true
             )
         try require(
             FileManager.default.fileExists(
@@ -443,6 +466,18 @@ private struct CleanMachineScenario {
             artifact.hasCurrentTechnicalValidation,
             "render validation did not pass"
         )
+
+        // Verify pixels of the final movie, not merely that the source exists.
+        let probe = AVAssetImageGenerator(asset: AVURLAsset(url: renderURL))
+        probe.appliesPreferredTrackTransform = true
+        let insertedFrame = try await probe.image(at: CMTime(seconds: 1.2, preferredTimescale: 600)).image
+        var pixel = [UInt8](repeating: 0, count: 4)
+        let context = CGContext(data: &pixel, width: 1, height: 1, bitsPerComponent: 8,
+            bytesPerRow: 4, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        context.draw(insertedFrame, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+        try require(Int(pixel[0]) > Int(pixel[2]) * 2,
+                    "supplemental source is absent from final rendered pixels")
 
         let technical = try await
             LocalAudioTechnicalInspector()
@@ -904,7 +939,7 @@ private final class E2EMockURLProtocol:
 private struct SyntheticMediaFactory {
     func createSourceMovie(
         at outputURL: URL,
-        durationSeconds: Double
+        durationSeconds: Double, redFixture: Bool = false
     ) async throws {
         let videoURL = outputURL
             .deletingLastPathComponent()
@@ -919,7 +954,7 @@ private struct SyntheticMediaFactory {
 
         try await createVideo(
             at: videoURL,
-            durationSeconds: durationSeconds
+            durationSeconds: durationSeconds, redFixture: redFixture
         )
         try createAudio(
             at: audioURL,
@@ -934,7 +969,7 @@ private struct SyntheticMediaFactory {
 
     private func createVideo(
         at url: URL,
-        durationSeconds: Double
+        durationSeconds: Double, redFixture: Bool
     ) async throws {
         try? FileManager.default
             .removeItem(at: url)
@@ -1045,11 +1080,13 @@ private struct SyntheticMediaFactory {
                 let value = UInt8(
                     32 + (frame % 160)
                 )
-                base.initializeMemory(
-                    as: UInt8.self,
-                    repeating: value,
-                    count: size
-                )
+                let pixels = base.assumingMemoryBound(to: UInt8.self)
+                for offset in stride(from: 0, to: size, by: 4) {
+                    pixels[offset] = redFixture ? 20 : value
+                    pixels[offset + 1] = redFixture ? 20 : value
+                    pixels[offset + 2] = redFixture ? 230 : value
+                    pixels[offset + 3] = 255
+                }
             }
             CVPixelBufferUnlockBaseAddress(
                 pixelBuffer,

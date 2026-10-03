@@ -3,11 +3,20 @@ import Foundation
 import Network
 
 final class LoopbackOAuthServer: @unchecked Sendable {
-    enum ServerError: Error {
+    enum ServerError: LocalizedError {
         case failed(NWError)
         case cancelled
         case invalidRequest
         case noPort
+
+        var errorDescription: String? {
+            switch self {
+            case .cancelled: return "Die Google-Anmeldung wurde abgebrochen."
+            case .failed(let error): return "Die Google-Anmeldung konnte nicht gestartet werden: " + error.localizedDescription
+            case .invalidRequest: return "Die Google-Anmeldeantwort ist ungültig."
+            case .noPort: return "Die lokale Google-Anmeldung konnte nicht geöffnet werden."
+            }
+        }
     }
 
     private let listener: NWListener
@@ -50,6 +59,7 @@ final class LoopbackOAuthServer: @unchecked Sendable {
                         self.finishReady(.failure(ServerError.failed(error)))
                         self.finishCallback(.failure(ServerError.failed(error)))
                     case .cancelled:
+                        self.finishReady(.failure(ServerError.cancelled))
                         if self.callbackURL == nil && self.terminalError == nil {
                             self.terminalError = ServerError.cancelled
                             self.finishCallback(.failure(ServerError.cancelled))

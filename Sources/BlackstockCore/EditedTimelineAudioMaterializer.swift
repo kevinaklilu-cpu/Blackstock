@@ -70,31 +70,18 @@ public actor EditedTimelineAudioMaterializer {
             try FileManager.default.removeItem(at: destination)
         }
 
-        exporter.outputURL = destination
-        exporter.outputFileType = .m4a
-
-        let box = EditedTimelineAudioExportBox(exporter)
-        try await withCheckedThrowingContinuation { continuation in
-            box.session.exportAsynchronously {
-                let session = box.session
-                switch session.status {
-                case .completed:
-                    continuation.resume()
-                case .failed, .cancelled:
-                    continuation.resume(
-                        throwing: EditedTimelineAudioMaterializationError.exportFailed(
-                            session.error?.localizedDescription
-                            ?? "Audio-Materialisierung fehlgeschlagen."
-                        )
-                    )
-                default:
-                    continuation.resume(
-                        throwing: EditedTimelineAudioMaterializationError.exportFailed(
-                            "Audio-Materialisierung endete im Zustand \(session.status.rawValue)."
-                        )
-                    )
-                }
-            }
+        do {
+            try await AsyncAVAssetExporter.export(
+                exporter,
+                to: destination,
+                as: .m4a
+            )
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw EditedTimelineAudioMaterializationError.exportFailed(
+                error.localizedDescription
+            )
         }
 
         guard FileManager.default.fileExists(atPath: destination.path) else {

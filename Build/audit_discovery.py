@@ -28,17 +28,17 @@ REQUIRED = {
         "YouTubeOpportunityContentKind",
         "OpportunityTimeWindow",
     ],
-    "Sources/BlackstockApp/FirstRunView.swift": [
-        'Text("Videos")',
-        "YouTube-Ergebnisse für deinen Kanal",
-        "Trend-Zeitraum",
-        "Video-Zeitraum",
+    "Sources/BlackstockApp/WorkspaceProductViews.swift": [
+        'Text("Entdecken")',
+        "Trends finden, Quellen kombinieren, Story starten",
+        'Picker(\n                    "Zeitraum"',
         "Die Angaben stammen direkt von YouTube.",
-        "Datenabruf:",
-        "YouTubeEmbeddedPlayer(videoID:",
+        '"Blackstock Story-Vorschlag"',
+        '"Automatisch erstellen"',
+        "YouTubeEmbeddedPlayer(videoID: item.videoID)",
     ],
     "Sources/BlackstockApp/YouTubeEmbeddedPlayer.swift": [
-        "https://www.youtube.com/embed/",
+        "https://www.youtube-nocookie.com/embed/",
         'forHTTPHeaderField: "Referer"',
         "https://blackstock.app/",
         ".allowsContentJavaScript = true",
@@ -75,4 +75,4 @@ if errors:
         print(f"- {error}", file=sys.stderr)
     sys.exit(1)
 
-print("Discovery audit passed: channel-category discovery uses YouTube parameters, content-format filtering, identified embedded playback, provider ordering and missing-data honesty.")
+print("Discovery audit passed: automatic channel recommendations use YouTube parameters, content-format filtering, resilient thumbnail previews, provider ordering and missing-data honesty.")

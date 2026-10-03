@@ -6,29 +6,45 @@ import BlackstockCore
 struct FirstRunView: View {
     @ObservedObject var session: BlackstockSession
     @State private var showOAuthImporter = false
+    @State private var showAdvancedAppSettings = false
+    // Legacy recovery states can still render the former discovery pane, but
+    // new onboarding never routes through video selection.
     @State private var selectedOpportunityID: String?
     @State private var opportunitySortMode: OpportunitySortMode = .views
 
     var body: some View {
         ZStack {
             Color(nsColor: .windowBackgroundColor).ignoresSafeArea()
+            LinearGradient(colors: [Color.accentColor.opacity(0.09), .clear, .clear],
+                startPoint: .topLeading, endPoint: .bottomTrailing).ignoresSafeArea()
             VStack(spacing: 0) {
                 HStack(spacing: 12) {
                     BlackstockBrandMark(width: 46)
                     Text("Blackstock")
                         .font(.title2.bold())
                     Spacer()
-                    Text("\(session.step.rawValue + 1) / 6")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
+                    VStack(alignment: .trailing, spacing: 5) {
+                        Text("Dein Creator Studio")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        ProgressView(
+                            value: onboardingProgress,
+                            total: 4
+                        )
+                        .frame(width: 120)
+                        .accessibilityLabel("Fortschritt der Einrichtung")
+                    }
                 }
                 .padding(.horizontal, 32)
                 .padding(.vertical, 22)
 
                 Divider()
 
-                contentPane
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ScrollView {
+                    contentPane
+                        .frame(maxWidth: .infinity)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .frame(maxWidth: 880)
         }
@@ -52,9 +68,9 @@ struct FirstRunView: View {
 
             Spacer()
 
-            Text("YouTube-Clips erstellen.")
+            Text("Dein YouTube-Workflow beginnt hier.")
                 .font(.largeTitle.bold())
-            Text("Kanal verbinden, Video auswählen, schneiden und veröffentlichen.")
+            Text("Kanal sicher verbinden und Blackstock auf deine Inhalte abstimmen.")
                 .font(.title3)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -83,10 +99,8 @@ struct FirstRunView: View {
                 topic
             case .language:
                 language
-            case .preparing:
-                preparing
-            case .opportunities:
-                opportunities
+            case .preparing, .opportunities:
+                language
             }
 
             if let error = session.errorMessage {
@@ -119,22 +133,27 @@ struct FirstRunView: View {
 
     private var welcome: some View {
         VStack(alignment: .leading, spacing: 16) {
+            GoogleConnectionCard(
+                isReady: session.hasImportedOAuthConfiguration,
+                isWorking: session.isWorking,
+                importConfiguration: { showOAuthImporter = true },
+                signIn: { Task { await session.connectGoogle() } }
+            )
+
             Button {
-                Task { await session.connectGoogle() }
+                withAnimation { showAdvancedAppSettings.toggle() }
             } label: {
                 HStack {
-                    if session.isWorking { ProgressView().controlSize(.small) }
-                    Image(systemName: "link")
-                    Text(session.isWorking ? "Google wird verbunden …" : "Google verbinden")
+                    Text("Erweiterte App-Einstellungen")
                     Spacer()
-                    Image(systemName: "arrow.right")
+                    Image(systemName: "chevron.right")
+                        .rotationEffect(.degrees(showAdvancedAppSettings ? 90 : 0))
                 }
-                .padding(.vertical, 10)
+                .contentShape(Rectangle())
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .disabled(session.isWorking)
+            .buttonStyle(.plain)
 
+            if showAdvancedAppSettings {
             Menu {
                 Button("Eigene Desktop-OAuth-JSON auswählen …") {
                     showOAuthImporter = true
@@ -153,6 +172,7 @@ struct FirstRunView: View {
             Text("Die OAuth-Datei bleibt lokal. Zugangsdaten werden im macOS-Keychain gespeichert.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -378,11 +398,8 @@ struct FirstRunView: View {
 
             HStack {
                 Spacer()
-                Button("Videos laden") {
-                    Task {
-                        await session
-                            .prepareChannelAndLoadOpportunities()
-                    }
+                Button("Blackstock öffnen") {
+                    session.finishFirstRun()
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(
@@ -453,28 +470,36 @@ struct FirstRunView: View {
 
             if let selected = selectedOpportunity {
                 VStack(alignment: .leading, spacing: 12) {
-                    if selected.embeddable != false {
-                        YouTubeEmbeddedPlayer(videoID: selected.videoID)
-                            .accessibilityLabel("YouTube-Vorschau: \(selected.title)")
-                            .aspectRatio(16.0 / 9.0, contentMode: .fit)
-                            .background(BlackstockDesign.mediaSurface)
-                            .clipShape(RoundedRectangle(cornerRadius: 14))
-                    } else {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 14)
-                                .fill(Color.primary.opacity(0.04))
-                            VStack(spacing: 8) {
-                                Image(systemName: "play.slash")
-                                    .font(.title)
-                                Text("YouTube-Vorschau hier nicht verfügbar.")
-                                    .font(.callout.weight(.semibold))
-                                Text("Dieses Video kann hier nicht eingebettet abgespielt werden.")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
+                    ZStack {
+                        AsyncImage(url: selected.thumbnailURL) { image in
+                            image.resizable().scaledToFill()
+                        } placeholder: {
+                            Rectangle().fill(BlackstockDesign.mediaSurface)
                         }
-                        .frame(minHeight: 260)
+                        .aspectRatio(16.0 / 9.0, contentMode: .fit)
+
+                        LinearGradient(
+                            colors: [.clear, .black.opacity(0.62)],
+                            startPoint: .center,
+                            endPoint: .bottom
+                        )
+
+                        VStack {
+                            Spacer()
+                            HStack {
+                                Label("Video auswählen", systemImage: "play.fill")
+                                    .font(.callout.bold())
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(.black.opacity(0.66), in: Capsule())
+                                Spacer()
+                            }
+                            .padding(14)
+                        }
                     }
+                    .accessibilityLabel("YouTube-Vorschau: \(selected.title)")
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
 
                     VStack(alignment: .leading, spacing: 5) {
                         Text(selected.title)
@@ -675,36 +700,41 @@ struct FirstRunView: View {
     }
 
 
+    private var onboardingProgress: Double {
+        switch session.step {
+        case .welcome: 1
+        case .channel: 2
+        case .topic: 3
+        case .language, .preparing, .opportunities: 4
+        }
+    }
+
     private var stepEyebrow: String {
         switch session.step {
-        case .welcome: "1 · Google"
-        case .channel: "2 · YouTube-Kanal"
-        case .topic: "3 · Kanal"
-        case .language: "4 · Rechte"
-        case .preparing: "5 · Vorbereitung"
-        case .opportunities: "6 · Video"
+        case .welcome: "Sicher verbinden"
+        case .channel: "Dein Arbeitsbereich"
+        case .topic: "Kanalprofil"
+        case .language, .preparing, .opportunities: "Bereit zum Start"
         }
     }
 
     private var stepTitle: String {
         switch session.step {
-        case .welcome: "Google verbinden"
+        case .welcome: "Deine Ideen. Dein Studio."
         case .channel: "YouTube-Kanal auswählen"
         case .topic: "Kanal einrichten"
         case .language: "Sprache und Rechte"
-        case .preparing: "Kanal vorbereiten"
-        case .opportunities: "Video auswählen"
+        case .preparing, .opportunities: "Blackstock ist bereit"
         }
     }
 
     private var stepSubtitle: String {
         switch session.step {
-        case .welcome: "Verknüpfe deinen YouTube-Kanal."
+        case .welcome: "Entdecken, mehrere Quellen verbinden und deinen nächsten Clip gestalten. Verbinde dafür deinen Kanal mit Blackstock."
         case .channel: "Wähle den Kanal, mit dem du arbeiten willst."
         case .topic: "Wähle Region, Sprache, Kanal-Kategorie und Zielgruppe."
         case .language: "Bestätige die Nutzungsrechte für deinen Arbeitsbereich."
-        case .preparing: "Blackstock lädt die benötigten Kanaldaten."
-        case .opportunities: "Wähle ein Video für dein erstes Clip-Projekt."
+        case .preparing, .opportunities: "Videos und Mehrquellen-Stories erstellst du anschließend in Entdecken."
         }
     }
 }

@@ -448,26 +448,12 @@ public actor LocalSupplementalVideoCompositor {
         }
 
         writerInput.markAsFinished()
-        try await withCheckedThrowingContinuation {
-            (
-                continuation:
-                    CheckedContinuation<Void, Error>
-            ) in
-            writer.finishWriting {
-                if writer.status == .completed {
-                    continuation.resume()
-                } else {
-                    continuation.resume(
-                        throwing:
-                            LocalSupplementalVideoError
-                            .exportFailed(
-                                writer.error?
-                                    .localizedDescription
-                                ?? "Software-Compositor konnte die Videodatei nicht abschließen."
-                            )
-                    )
-                }
-            }
+        await writer.finishWriting()
+        guard writer.status == .completed else {
+            throw LocalSupplementalVideoError.exportFailed(
+                writer.error?.localizedDescription
+                    ?? "Software-Compositor konnte die Videodatei nicht abschließen."
+            )
         }
     }
 
@@ -566,41 +552,19 @@ public actor LocalSupplementalVideoCompositor {
             )
         }
 
-        exporter.outputURL = outputURL
-        exporter.outputFileType = .mp4
         exporter.shouldOptimizeForNetworkUse = true
-
-        let box =
-            SupplementalMuxExportSessionBox(exporter)
-        try await withCheckedThrowingContinuation {
-            (
-                continuation:
-                    CheckedContinuation<Void, Error>
-            ) in
-            box.session.exportAsynchronously {
-                switch box.session.status {
-                case .completed:
-                    continuation.resume()
-                case .failed, .cancelled:
-                    continuation.resume(
-                        throwing:
-                            LocalSupplementalVideoError
-                            .exportFailed(
-                                box.session.error?
-                                    .localizedDescription
-                                ?? "Video und Hauptton konnten nicht zusammengeführt werden."
-                            )
-                    )
-                default:
-                    continuation.resume(
-                        throwing:
-                            LocalSupplementalVideoError
-                            .exportFailed(
-                                "Audio/Video-Muxing endete im Zustand \(box.session.status.rawValue)."
-                            )
-                    )
-                }
-            }
+        do {
+            try await AsyncAVAssetExporter.export(
+                exporter,
+                to: outputURL,
+                as: .mp4
+            )
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw LocalSupplementalVideoError.exportFailed(
+                error.localizedDescription
+            )
         }
     }
 

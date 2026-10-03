@@ -253,42 +253,21 @@ public actor LocalCaptionBurnInRenderer {
             )
         }
 
-        exporter.outputURL = outputURL
-        exporter.outputFileType = .mp4
         exporter.shouldOptimizeForNetworkUse = true
         exporter.videoComposition =
             videoComposition
-
-        let box = CaptionExportSessionBox(
-            exporter
-        )
-        try await withCheckedThrowingContinuation {
-            continuation in
-            box.session.exportAsynchronously {
-                let session = box.session
-                switch session.status {
-                case .completed:
-                    continuation.resume()
-                case .failed, .cancelled:
-                    continuation.resume(
-                        throwing:
-                            LocalCaptionBurnInError
-                                .exportFailed(
-                                    session.error?
-                                        .localizedDescription
-                                    ?? "Caption-Export fehlgeschlagen."
-                                )
-                    )
-                default:
-                    continuation.resume(
-                        throwing:
-                            LocalCaptionBurnInError
-                                .exportFailed(
-                                    "Caption-Export endete im Zustand \(session.status.rawValue)."
-                                )
-                    )
-                }
-            }
+        do {
+            try await AsyncAVAssetExporter.export(
+                exporter,
+                to: outputURL,
+                as: .mp4
+            )
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw LocalCaptionBurnInError.exportFailed(
+                error.localizedDescription
+            )
         }
 
         guard FileManager.default.fileExists(

@@ -1,5 +1,6 @@
 #if os(macOS)
 import SwiftUI
+import AVKit
 import UniformTypeIdentifiers
 import BlackstockCore
 
@@ -30,23 +31,18 @@ struct PackagingReviewView: View {
     @State private var thumbnailFramePosition = 0.25
     @State private var isGeneratingThumbnail = false
     @State private var showCaptionImporter = false
-    @State private var manualChecks: Set<CreatorQualityArea> = []
     @State private var persistedReview: CreatorQualityReview?
-    @State private var manualNotes: [CreatorQualityArea: String] = [:]
     @State private var useStoryboardChapters = false
     @State private var thumbnailAssessment: ThumbnailTechnicalAssessment?
     @State private var packagingVariants: PackagingVariantSet
     @State private var showFinalPublishConfirmation = false
+    @State private var isCheckingQuality = false
+    @State private var checkedAudioTechnical: AudioTechnicalAssessment?
+    @State private var checkedAudioSignal: AudioSignalAssessment?
+    @State private var checkedAudioLoudness: AudioLoudnessAssessment?
+    @State private var previewPlayer = AVPlayer()
 
-    private let requiredQualityAreas: Set<CreatorQualityArea> = [
-        .packaging,
-        .retentionStructure,
-        .audio,
-        .captions,
-        .visualComposition,
-        .rightsAndPolicy,
-        .renderIntegrity
-    ]
+    private let requiredQualityAreas = AutomaticPublishReview.requiredAreas
 
     init(
         session: BlackstockSession,
@@ -71,9 +67,10 @@ struct PackagingReviewView: View {
         self.audioSignalAssessment = audioSignalAssessment
         self.audioLoudnessAssessment = audioLoudnessAssessment
         self.storyboard = storyboard
-        let saved = session.loadPublishPreparation(
+        let loaded = session.loadPublishPreparation(
             projectID: project.id
         )
+        let saved = loaded?.package.renderArtifactID == artifact.id ? loaded : nil
         let normalizedSuggestedTitle =
             suggestedTitle?
             .trimmingCharacters(
@@ -84,18 +81,18 @@ struct PackagingReviewView: View {
                 saved?.package.metadata.title
                 ?? (
                     normalizedSuggestedTitle?.isEmpty == false
-                    ? normalizedSuggestedTitle!
-                    : project.title
+                    ? String(normalizedSuggestedTitle!.prefix(100))
+                    : String(project.title.prefix(100))
                 )
         )
         _description = State(
             initialValue: saved?.package.metadata.description
-                ?? ""
+                ?? Self.suggestedDescription(title: project.title, transcript: transcript)
         )
         _tags = State(
             initialValue: saved?.package.metadata.tags
                 .joined(separator: ", ")
-                ?? ""
+                ?? StoryTopicMatcher().searchQuery(for: project.title).split(separator: " ").joined(separator: ", ")
         )
         _privacyStatus = State(
             initialValue: saved?.package.metadata.privacyStatus
@@ -159,33 +156,18 @@ struct PackagingReviewView: View {
             artifact: artifact,
             transcript: transcript,
             captionURL: generatedCaptionURL,
-            audioTechnicalAssessment: audioTechnicalAssessment,
-            audioSignalAssessment: audioSignalAssessment,
-            audioLoudnessAssessment: audioLoudnessAssessment,
+            audioTechnicalAssessment: checkedAudioTechnical ?? audioTechnicalAssessment,
+            audioSignalAssessment: checkedAudioSignal ?? audioSignalAssessment,
+            audioLoudnessAssessment: checkedAudioLoudness ?? audioLoudnessAssessment,
             thumbnailAssessment: thumbnailAssessment
         )
-    }
-
-    private var manualAttestations: [ManualQualityAttestation] {
-        manualChecks.compactMap { area in
-            guard let note = manualNotes[area] else { return nil }
-            let attestation = ManualQualityAttestation(
-                area: area,
-                note: note,
-                confirmedAt: Date()
-            )
-            return attestation.isValid ? attestation : nil
-        }
     }
 
     private var qualityReview: CreatorQualityReview {
         if let persistedReview {
             return persistedReview
         }
-        return QualityReviewComposer().compose(
-            automatic: automaticQualityReview,
-            manualAttestations: manualAttestations
-        )
+        return AutomaticPublishReview().build(base: automaticQualityReview, package: draftPackage)
     }
 
     private var currentStage: BlackstockStage {
@@ -249,11 +231,16 @@ struct PackagingReviewView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     header
+                    BlackstockVideoPlayer(player: previewPlayer)
+                        .aspectRatio(16.0 / 9.0, contentMode: .fit)
                     metadataSection
-                    chaptersSection
                     packagingAssetsSection
-                    packagingVariantsSection
-                    manualReviewSection
+                    DisclosureGroup("Kapitel und alternative Titel") {
+                        chaptersSection
+                        packagingVariantsSection
+                    }
+                    Text("Technische Prüfungen laufen automatisch. Schnittwirkung, Bildgestaltung und inhaltliche Richtigkeit sind Hinweise zur Vorschau – keine Pflichtnotizen für den Upload.")
+                        .font(.caption).foregroundStyle(.secondary)
                     targetSection
                 }
                 .padding(22)
@@ -291,7 +278,7 @@ struct PackagingReviewView: View {
             isPresented: $showFinalPublishConfirmation,
             titleVisibility: .visible
         ) {
-            Button("Jetzt hochladen", role: .destructive) {
+            Button("Jetzt hochladen") {
                 Task {
                     await session.publishPreparedReview(
                         artifact: artifact,
@@ -307,6 +294,7 @@ struct PackagingReviewView: View {
             )
         }
         .task {
+            previewPlayer.replaceCurrentItem(with: AVPlayerItem(url: artifact.fileURL))
             await session.ensureYouTubePublishingOptionsLoaded()
             if categoryID.isEmpty {
                 categoryID =
@@ -319,7 +307,9 @@ struct PackagingReviewView: View {
                persistedReview == nil {
                 await generateThumbnailFromRender()
             }
+            await checkAudioAutomatically()
         }
+        .onDisappear { previewPlayer.pause() }
         .onChange(of: session.activeProject?.stage) { stage in
             if stage == .published {
                 dismiss()
@@ -360,9 +350,9 @@ struct PackagingReviewView: View {
         VStack(alignment: .leading, spacing: 5) {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Veröffentlichungspaket & Prüfung")
+                    Text("Bereit für YouTube")
                         .font(.title2.bold())
-                    Text("Alles prüfen, bevor Blackstock eine externe Aktion zulässt.")
+                    Text("Vorschläge sind vorbereitet. Passe sie bei Bedarf an und starte den Upload.")
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -578,6 +568,15 @@ struct PackagingReviewView: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .disabled(isGeneratingThumbnail)
+                    }
+
+                    if let thumbnailURL, let image = NSImage(contentsOf: thumbnailURL) {
+                        Image(nsImage: image)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(maxWidth: .infinity, maxHeight: 260)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .accessibilityLabel("Erzeugtes Vorschaubild für YouTube")
                     }
 
                     HStack(spacing: 10) {
@@ -825,89 +824,6 @@ struct PackagingReviewView: View {
         }
     }
 
-    private var manualReviewSection: some View {
-        GroupBox("Qualitative Prüfung") {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Blackstock prüft technische Punkte automatisch. Inhaltliche Punkte bestätigst du direkt am Video.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                ForEach(manualReviewAreas, id: \.self) { area in
-                    manualReviewRow(area)
-                    if area != manualReviewAreas.last {
-                        Divider()
-                    }
-                }
-            }
-            .padding(.vertical, 6)
-        }
-    }
-
-    @ViewBuilder
-    private func manualReviewRow(_ area: CreatorQualityArea) -> some View {
-        let automaticallyCovered = automaticQualityReview.coveredAreas.contains(area)
-
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(areaTitle(area))
-                        .font(.headline)
-                    Text(areaQuestion(area))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-
-                if automaticallyCovered {
-                    Label("Automatisch geprüft", systemImage: "checkmark.circle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.green)
-                } else {
-                    Toggle(
-                        "Geprüft",
-                        isOn: Binding(
-                            get: { manualChecks.contains(area) },
-                            set: { enabled in
-                                if enabled {
-                                    manualChecks.insert(area)
-                                } else {
-                                    manualChecks.remove(area)
-                                    manualNotes[area] = ""
-                                }
-                            }
-                        )
-                    )
-                    .toggleStyle(.switch)
-                    .labelsHidden()
-                    .accessibilityLabel("\(areaTitle(area)) geprüft")
-                    .accessibilityHint(areaQuestion(area))
-                    .disabled(reviewFrozen)
-                }
-            }
-
-            if area == .audio {
-                audioFacts
-            }
-
-            if !automaticallyCovered && manualChecks.contains(area) {
-                TextField(
-                    "Kurze Beobachtung festhalten …",
-                    text: Binding(
-                        get: { manualNotes[area] ?? "" },
-                        set: { manualNotes[area] = $0 }
-                    )
-                )
-                .accessibilityLabel("Prüfnotiz: \(areaTitle(area))")
-                .accessibilityHint("Beobachtung festhalten")
-                .textFieldStyle(.roundedBorder)
-
-                Text("Schreibe kurz auf, was du geprüft hast.")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
     @ViewBuilder
     private var audioFacts: some View {
         if let technical = audioTechnicalAssessment {
@@ -970,16 +886,6 @@ struct PackagingReviewView: View {
         }
     }
 
-    private var manualReviewAreas: [CreatorQualityArea] {
-        [
-            .packaging,
-            .retentionStructure,
-            .audio,
-            .captions,
-            .visualComposition
-        ]
-    }
-
     private func areaTitle(_ area: CreatorQualityArea) -> String {
         switch area {
         case .packaging: return "Veröffentlichungspaket"
@@ -990,27 +896,6 @@ struct PackagingReviewView: View {
         case .demandFit: return "Demand Fit"
         case .rightsAndPolicy: return "Rechte & Policy"
         case .renderIntegrity: return "Renderintegrität"
-        }
-    }
-
-    private func areaQuestion(_ area: CreatorQualityArea) -> String {
-        switch area {
-        case .packaging:
-            return "Versprechen Titel und Vorschaubild ehrlich, klar und passend, was das Video tatsächlich liefert?"
-        case .retentionStructure:
-            return "Startet das Video ohne unnötigen Leerlauf und bleibt die Struktur verständlich und fokussiert?"
-        case .audio:
-            return "Ist Sprache verständlich, ohne hörbares Clipping, störende Pegelsprünge oder dominante Nebengeräusche?"
-        case .captions:
-            return "Stimmen die Untertitel bei einer Stichprobe mit dem gesprochenen Inhalt und Timing überein?"
-        case .visualComposition:
-            return "Sind Motiv, Crop, Overlays und Lesbarkeit über die relevanten Abschnitte visuell sauber?"
-        case .demandFit:
-            return "Passt das Thema zur dokumentierten Nachfrage?"
-        case .rightsAndPolicy:
-            return "Sind Rechte und Plattformregeln geklärt?"
-        case .renderIntegrity:
-            return "Ist das Render-Artefakt technisch valide?"
         }
     }
 
@@ -1031,7 +916,7 @@ struct PackagingReviewView: View {
     private var reviewPanel: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Release-Readiness")
+                Text("Upload-Status")
                     .font(.title3.bold())
 
                 qualityRow(
@@ -1047,10 +932,6 @@ struct PackagingReviewView: View {
                     area: .packaging
                 )
                 qualityRow(
-                    title: "Zuschauerbindungs-Struktur",
-                    area: .retentionStructure
-                )
-                qualityRow(
                     title: "Audio",
                     area: .audio
                 )
@@ -1058,15 +939,13 @@ struct PackagingReviewView: View {
                     title: "Untertitel",
                     area: .captions
                 )
-                qualityRow(
-                    title: "Visuals",
-                    area: .visualComposition
-                )
 
                 Divider()
 
-                if missingAreas.isEmpty {
-                    Label("Alle nötigen Qualitätsprüfungen sind abgeschlossen.", systemImage: "checkmark.circle.fill")
+                if isCheckingQuality || isGeneratingThumbnail {
+                    ProgressView("Video und Veröffentlichung werden geprüft …")
+                } else if missingAreas.isEmpty && qualityReview.passesReleaseGate {
+                    Label("Technisch bereit zum Upload.", systemImage: "checkmark.circle.fill")
                         .foregroundStyle(.green)
                 } else {
                     VStack(alignment: .leading, spacing: 6) {
@@ -1076,14 +955,34 @@ struct PackagingReviewView: View {
                         )
                         .font(.headline)
 
-                        Text("Blackstock schaltet die Veröffentlichung frei, sobald alle nötigen Prüfungen abgeschlossen sind.")
+                        Text("Die fehlenden technischen Prüfungen werden automatisch ausgeführt. Du brauchst keine Beobachtungsnotizen einzutragen.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
 
+                ForEach(qualityReview.blockingFindings) { finding in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label(finding.title, systemImage: "exclamationmark.triangle")
+                        if let action = finding.recommendedAction { Text(action).font(.caption) }
+                    }
+                    .foregroundStyle(.red)
+                }
+                if !missingAreas.isEmpty || !qualityReview.blockingFindings.isEmpty {
+                    Button("Automatisch erneut prüfen") {
+                        Task {
+                            persistedReview = nil
+                            if thumbnailURL == nil { await generateThumbnailFromRender() }
+                            await checkAudioAutomatically(force: true)
+                        }
+                    }
+                    .disabled(isCheckingQuality || isGeneratingThumbnail || session.isPublishing)
+                }
+
                 if currentStage == .packaging {
-                    Button("Prüfung abschließen") {
+                    Button("Weiter zum Upload") {
+                        Task {
+                        guard session.activeProject?.id == project.id else { return }
                         do {
                             let review = qualityReview
                             try session.savePublishPreparation(
@@ -1091,21 +990,31 @@ struct PackagingReviewView: View {
                                 qualityReview: review,
                                 packagingVariants: packagingVariants
                             )
-                            persistedReview = review
-                            _ = session.advanceActiveProject(
+                            guard session.advanceActiveProject(
                                 to: .review
-                            )
+                            ) else { return }
+                            persistedReview = review
+                            if session.publishingAuthorizedChannelID != project.targetChannelID {
+                                await session.authorizePublishing()
+                            }
+                            if session.activeProject?.id == project.id,
+                               session.publishingAuthorizedChannelID == project.targetChannelID {
+                                showFinalPublishConfirmation = true
+                            }
                         } catch {
                             session.errorMessage = "Prüfung konnte nicht gespeichert werden: \(error.localizedDescription)"
+                        }
                         }
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(
                         !missingAreas.isEmpty
+                        || !qualityReview.passesReleaseGate
+                        || isCheckingQuality || isGeneratingThumbnail || session.isAuthorizingPublishing
                         || draftPackage.metadata.title.isEmpty
                     )
 
-                    Text("Der Prüfstand wird vor dem Statuswechsel gespeichert. Noch keine externe Aktion.")
+                    Text("Einstellungen werden gespeichert und der Kanal geprüft. Danach bestätigst du den Upload.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 } else if currentStage == .review
@@ -1113,10 +1022,79 @@ struct PackagingReviewView: View {
                             || currentStage == .published {
                     publishingAuthorizationPanel
                 }
+                if let error = session.errorMessage {
+                    Text(error).font(.caption).foregroundStyle(.red)
+                }
             }
             .padding(20)
         }
+        .safeAreaInset(edge: .bottom) {
+            if currentStage == .packaging || currentStage == .review || currentStage == .publishing {
+                Button {
+                    Task { await prepareAndConfirmUpload() }
+                } label: {
+                    Label(session.isPublishing ? "Upload läuft …" : "Zu YouTube hochladen", systemImage: "arrow.up.circle.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(session.isPublishing || session.isAuthorizingPublishing || isCheckingQuality || isGeneratingThumbnail)
+                .padding(14)
+                .background(.regularMaterial)
+            }
+        }
+        .accessibilityLabel("Automatische Uploadprüfung")
         .background(Color.primary.opacity(0.02))
+    }
+
+    private func prepareAndConfirmUpload() async {
+        guard session.activeProject?.id == project.id else { return }
+        if currentStage == .packaging {
+            if thumbnailURL == nil { await generateThumbnailFromRender() }
+            await checkAudioAutomatically()
+            guard missingAreas.isEmpty, qualityReview.passesReleaseGate else {
+                session.errorMessage = "Der Upload benötigt noch die oben angezeigten technischen Korrekturen. Untertitel sind optional."
+                return
+            }
+            do {
+                let review = qualityReview
+                try session.savePublishPreparation(package: draftPackage, qualityReview: review, packagingVariants: packagingVariants)
+                guard session.advanceActiveProject(to: .review) else { return }
+                persistedReview = review
+            } catch {
+                session.errorMessage = "Upload konnte nicht vorbereitet werden: \(error.localizedDescription)"
+                return
+            }
+        }
+        if session.publishingAuthorizedChannelID != project.targetChannelID {
+            await session.authorizePublishing()
+        }
+        guard session.activeProject?.id == project.id,
+              session.publishingAuthorizedChannelID == project.targetChannelID else { return }
+        showFinalPublishConfirmation = true
+    }
+
+    private func checkAudioAutomatically(force: Bool = false) async {
+        guard !isCheckingQuality else { return }
+        isCheckingQuality = true
+        defer { isCheckingQuality = false }
+        do {
+            if force || audioTechnicalAssessment == nil {
+                checkedAudioTechnical = try await LocalAudioTechnicalInspector().inspect(url: artifact.fileURL)
+            }
+            if force || audioSignalAssessment == nil {
+                checkedAudioSignal = try await LocalAudioSignalAnalyzer().analyze(url: artifact.fileURL)
+            }
+            if force || audioLoudnessAssessment == nil {
+                checkedAudioLoudness = try await LocalLoudnessAnalyzer().analyze(url: artifact.fileURL)
+            }
+        } catch {
+            session.errorMessage = "Automatische Tonprüfung fehlgeschlagen: \(error.localizedDescription)"
+        }
+    }
+
+    private static func suggestedDescription(title: String, transcript: LocalTranscript?) -> String {
+        let excerpt = transcript?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return excerpt.isEmpty ? title : title + "\n\nAuszug aus dem Video:\n" + String(excerpt.prefix(700))
     }
 
     @ViewBuilder
@@ -1151,7 +1129,9 @@ struct PackagingReviewView: View {
                             Label(
                                 session.isPublishing
                                     ? "Upload läuft …"
-                                    : "Final zu YouTube hochladen …",
+                                    : (session.lastPublishingResult?.packagingWarnings?.isEmpty == false
+                                       ? "Fehlende Extras erneut übertragen"
+                                       : "Zu YouTube hochladen …"),
                                 systemImage: "arrow.up.circle.fill"
                             )
                         }
@@ -1170,6 +1150,15 @@ struct PackagingReviewView: View {
                         Text("Video-ID: \(result.videoID)")
                             .font(.caption.monospaced())
                             .textSelection(.enabled)
+                        Link("Video auf YouTube ansehen", destination: URL(string: "https://www.youtube.com/watch?v=\(result.videoID)")!)
+                        if let warnings = result.packagingWarnings, !warnings.isEmpty {
+                            ForEach(warnings, id: \.self) { Text($0).font(.caption).foregroundStyle(.orange) }
+                            Button("Video ohne offene Extras abschließen") {
+                                session.finishUploadedVideoWithoutExtras()
+                            }
+                            Text("Das Video bleibt hochgeladen. Nicht übertragene Zusatzdateien werden nicht als erfolgreich markiert.")
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
                         if result.uploadReused {
                             Text("Der bereits protokollierte YouTube-Upload wurde wiederverwendet; kein Doppel-Upload.")
                                 .font(.caption2)
@@ -1219,6 +1208,7 @@ struct PackagingReviewView: View {
         area: CreatorQualityArea
     ) -> some View {
         let covered = qualityReview.coveredAreas.contains(area)
+            && qualityReview.findings(in: area).allSatisfy { $0.severity != .blocker }
         return HStack(spacing: 10) {
             Image(systemName: covered ? "checkmark.circle.fill" : "circle.dashed")
                 .foregroundStyle(covered ? .green : .secondary)
