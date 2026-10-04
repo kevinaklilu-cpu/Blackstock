@@ -1,6 +1,6 @@
 import Foundation
 
-/// Distributes selected picture ranges over a continuous lead narration.
+/// Distributes selected source ranges over the lead timeline, preserving each audio mode.
 /// It plans pacing and coverage, not semantic correspondence to spoken claims.
 public enum StoryMontagePlanner {
     public static func distribute(_ inputs: [SupplementalVideoInsertInput], outputDuration: Double,
@@ -32,7 +32,7 @@ public enum StoryMontagePlanner {
             let input = inputs[chunk.index]
             let result = SupplementalVideoInsertInput(captureID: input.captureID, fileURL: input.fileURL,
                 timelineStartSeconds: cursor, sourceStartSeconds: input.sourceStartSeconds + chunk.offset,
-                durationSeconds: chunk.duration)
+                durationSeconds: chunk.duration, usesOriginalAudio: input.usesOriginalAudio)
             cursor += chunk.duration + gap
             return result
         }

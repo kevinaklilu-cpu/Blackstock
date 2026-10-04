@@ -89,6 +89,7 @@ final class BlackstockSession: ObservableObject {
     @Published private(set) var publishingAuthorizedChannelID: String?
     @Published var isAuthorizingPublishing = false
     @Published var isPublishing = false
+    @Published var publishingProgress: Double = 0
     @Published private(set) var lastPublishingResult: YouTubePublishingResult?
     @Published private(set) var analyticsAuthorizedChannelID: String?
     @Published var isAuthorizingAnalytics = false
@@ -1277,6 +1278,7 @@ final class BlackstockSession: ObservableObject {
         }
 
         isPublishing = true
+        publishingProgress = 0
         defer { isPublishing = false }
         errorMessage = nil
 
@@ -1356,7 +1358,10 @@ final class BlackstockSession: ObservableObject {
 
             let result = try await YouTubePublishingCoordinator(
                 uploadClient: .init(
-                    accessToken: accessToken
+                    accessToken: accessToken,
+                    onProgress: { [weak self] value in
+                        Task { @MainActor in self?.publishingProgress = value }
+                    }
                 ),
                 packagingClient: .init(
                     accessToken: accessToken

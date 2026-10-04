@@ -6,6 +6,9 @@ import NaturalLanguage
 /// evidence, not a claim that an image proves the spoken statement.
 public actor SemanticSceneMatcher {
     public init() {}
+    private static func endsSentence(_ text: String) -> Bool {
+        text.trimmingCharacters(in: .whitespacesAndNewlines).last.map { ".!?…。！？".contains($0) } ?? false
+    }
     public func select(transcript: LocalTranscript, reference: String,
                        sourceDuration: Double, maximumDuration: Double,
                        excluding: [EditTimeRange] = []) -> StorySceneSelection? {
@@ -27,11 +30,25 @@ public actor SemanticSceneMatcher {
         for index in stride(from: 0, to: segments.count, by: strideSize) {
             if Task.isCancelled { return nil }
             let first = segments[index]
+            // A semantic match must not start halfway through a spoken phrase.
+            if index > 0 {
+                let previous = segments[index - 1]
+                guard first.startSeconds - previous.startSeconds - previous.durationSeconds >= 0.25
+                    || Self.endsSentence(previous.text) else { continue }
+            }
             var window: [TranscriptSegment] = []
             for segment in segments[index...] {
                 guard segment.startSeconds + segment.durationSeconds - first.startSeconds <= maximumDuration else { break }
                 if let last = window.last, segment.startSeconds - last.startSeconds - last.durationSeconds > 1.5 { break }
                 window.append(segment)
+            }
+            // Keep the last complete phrase that fits, rather than filling the
+            // duration budget by cutting through the following sentence.
+            while let last = window.last {
+                let end = last.startSeconds + last.durationSeconds
+                let next = segments.first { $0.startSeconds >= end - 0.001 && $0.startSeconds > last.startSeconds }
+                if Self.endsSentence(last.text) || next == nil || (next!.startSeconds - end >= 0.25) { break }
+                window.removeLast()
             }
             guard let last = window.last else { continue }
             let text = window.map(\.text).joined(separator: " ")

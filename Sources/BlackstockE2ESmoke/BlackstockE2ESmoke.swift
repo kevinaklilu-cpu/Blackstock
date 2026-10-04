@@ -465,14 +465,14 @@ private struct CleanMachineScenario {
                         fileURL: supplementalVideoURL,
                         timelineStartSeconds: 0.8,
                         sourceStartSeconds: 0.7,
-                        durationSeconds: 0.5
+                        durationSeconds: 0.5, usesOriginalAudio: true
                     ),
                     SupplementalVideoInsertInput(
                         captureID: UUID(),
                         fileURL: supplementalVideoURL,
                         timelineStartSeconds: 1.8,
                         sourceStartSeconds: 1.3,
-                        durationSeconds: 0.5
+                        durationSeconds: 0.5, usesOriginalAudio: true
                     )
                 ]
             )
@@ -496,6 +496,33 @@ private struct CleanMachineScenario {
             let isInsert = Int(pixel[0]) > Int(pixel[2]) * 2
             try require(isInsert == expectInsert,
                         "picture sequence disagrees with planned source at \(time)s: \(pixel)")
+        }
+
+        // Decode short windows: audible source must switch with each picture.
+        for (time, expectedFrequency) in [(1.0, 499.0), (1.55, 997.0), (2.0, 499.0)] {
+            let audioAsset = AVURLAsset(url: renderURL)
+            let track = try unwrap(try await audioAsset.loadTracks(withMediaType: .audio).first, "missing audio")
+            let reader = try AVAssetReader(asset: audioAsset)
+            let samples = AVAssetReaderTrackOutput(track: track, outputSettings: [
+                AVFormatIDKey: kAudioFormatLinearPCM, AVLinearPCMIsFloatKey: true,
+                AVLinearPCMBitDepthKey: 32, AVNumberOfChannelsKey: 1,
+                AVSampleRateKey: 48_000, AVLinearPCMIsNonInterleaved: false
+            ])
+            reader.add(samples)
+            reader.timeRange = CMTimeRange(start: CMTime(seconds: time, preferredTimescale: 600),
+                duration: CMTime(seconds: 0.12, preferredTimescale: 600))
+            try require(reader.startReading(), "audio source verification did not start")
+            var values: [Float] = []
+            while let sample = samples.copyNextSampleBuffer(), let block = CMSampleBufferGetDataBuffer(sample) {
+                let length = CMBlockBufferGetDataLength(block)
+                var data = Data(count: length)
+                _ = data.withUnsafeMutableBytes { CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: length, destination: $0.baseAddress!) }
+                values += data.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
+            }
+            let crossings = zip(values, values.dropFirst()).filter { $0 < 0 && $1 >= 0 }.count
+            let frequency = Double(crossings) * 48_000 / Double(max(values.count, 1))
+            try require(abs(frequency - expectedFrequency) < 45,
+                "audio does not follow selected scene at \(time)s: \(frequency) Hz")
         }
 
         let technical = try await
@@ -977,7 +1004,7 @@ private struct SyntheticMediaFactory {
         )
         try createAudio(
             at: audioURL,
-            durationSeconds: durationSeconds
+            durationSeconds: durationSeconds, frequency: redFixture ? 499 : 997
         )
         try await mux(
             videoURL: videoURL,
@@ -1136,7 +1163,7 @@ private struct SyntheticMediaFactory {
 
     private func createAudio(
         at url: URL,
-        durationSeconds: Double
+        durationSeconds: Double, frequency: Double = 997
     ) throws {
         try? FileManager.default
             .removeItem(at: url)
@@ -1178,7 +1205,7 @@ private struct SyntheticMediaFactory {
                 * sin(
                     2
                     * Double.pi
-                    * 997
+                    * frequency
                     * Double(frame)
                     / 48_000
                 )

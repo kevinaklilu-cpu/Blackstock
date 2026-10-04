@@ -47,7 +47,8 @@ public actor LocalVideoRenderer {
         burnInCaptions: Bool = false,
         captionStyle: CaptionVisualStyle = .clear,
         supplementalAudio: [SupplementalAudioMixInput] = [],
-        supplementalVideo: [SupplementalVideoInsertInput] = []
+        supplementalVideo: [SupplementalVideoInsertInput] = [],
+        onProgress: @Sendable (String) -> Void = { _ in }
     ) async throws -> RenderArtifact {
         guard asset.mayEnterProduction else {
             throw LocalRenderError.unauthorizedMedia
@@ -286,6 +287,7 @@ public actor LocalVideoRenderer {
                 cues: emphasisCues,
                 baseTransform: plan.transform,
                 renderSize: renderSize,
+                anchor: plan.emphasisAnchor(for: reframe),
                 to: layer
             )
             instruction.layerInstructions = [layer]
@@ -313,6 +315,7 @@ public actor LocalVideoRenderer {
             )
         }
 
+        onProgress("Leitvideo schneiden · Bildformat und Ton vorbereiten …")
         exporter.shouldOptimizeForNetworkUse = true
         do {
             try await AsyncAVAssetExporter.export(
@@ -357,12 +360,16 @@ public actor LocalVideoRenderer {
                     supplementalVideo:
                         supplementalVideo,
                     outputURL: visualOutputURL,
-                    preset: preset
+                    preset: preset,
+                    onProgress: { fraction in
+                        onProgress("Alle Quellen zusammensetzen · \(Int(fraction * 100)) % · Bild und Ton folgen dem Schnittplan")
+                    }
                 )
             postProcessInputURL = visualOutputURL
         }
 
         if hasCaptionPostProcess {
+            onProgress("Untertitel und Einblendungen in den Zusammenschnitt setzen …")
             try await LocalCaptionBurnInRenderer()
                 .render(
                     inputURL: postProcessInputURL,

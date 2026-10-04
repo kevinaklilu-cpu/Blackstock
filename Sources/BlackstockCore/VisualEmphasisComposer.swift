@@ -37,10 +37,16 @@ public enum VisualEmphasisComposer {
         }
     }
 
+    public static func zoomTransform(base: CGAffineTransform, scale: Double, anchor: CGPoint) -> CGAffineTransform {
+        base.concatenating(CGAffineTransform(translationX: anchor.x, y: anchor.y)
+            .scaledBy(x: scale, y: scale).translatedBy(x: -anchor.x, y: -anchor.y))
+    }
+
     public static func apply(
         cues: [VisualEmphasisCue],
         baseTransform: CGAffineTransform,
         renderSize: CGSize,
+        anchor: CGPoint? = nil,
         to layer: AVMutableVideoCompositionLayerInstruction
     ) {
         layer.setTransform(baseTransform, at: .zero)
@@ -51,7 +57,7 @@ public enum VisualEmphasisComposer {
                 preferredTimescale: 600
             )
             let duration = cue.durationSeconds
-            let rampDuration = min(0.24, max(duration * 0.22, 0.12))
+            let rampDuration = min(0.45, max(duration * 0.28, 0.18))
             let rampIn = CMTimeRange(
                 start: start,
                 duration: CMTime(
@@ -68,28 +74,25 @@ public enum VisualEmphasisComposer {
                 duration: rampIn.duration
             )
 
-            let centerX = renderSize.width / 2
-            let centerY = renderSize.height / 2
-            let zoom = CGAffineTransform(
-                translationX: centerX,
-                y: centerY
-            )
-            .scaledBy(x: cue.scale, y: cue.scale)
-            .translatedBy(x: -centerX, y: -centerY)
-            let emphasized = baseTransform.concatenating(zoom)
-
-            layer.setTransform(baseTransform, at: start)
-            layer.setTransformRamp(
-                fromStart: baseTransform,
-                toEnd: emphasized,
-                timeRange: rampIn
-            )
+            let focal = anchor ?? CGPoint(x: renderSize.width / 2, y: renderSize.height / 2)
+            let emphasized = zoomTransform(base: baseTransform, scale: cue.scale, anchor: focal)
             layer.setTransform(emphasized, at: CMTimeAdd(start, rampIn.duration))
-            layer.setTransformRamp(
-                fromStart: emphasized,
-                toEnd: baseTransform,
-                timeRange: rampOut
-            )
+            // Piecewise smoothstep avoids abrupt acceleration while preserving
+            // exactly the same transform and timing in preview and export.
+            for step in 0..<6 {
+                let t0 = Double(step) / 6
+                let t1 = Double(step + 1) / 6
+                let ease0 = t0 * t0 * (3 - 2 * t0)
+                let ease1 = t1 * t1 * (3 - 2 * t1)
+                let from = zoomTransform(base: baseTransform, scale: 1 + (cue.scale - 1) * ease0, anchor: focal)
+                let to = zoomTransform(base: baseTransform, scale: 1 + (cue.scale - 1) * ease1, anchor: focal)
+                layer.setTransformRamp(fromStart: from, toEnd: to, timeRange: CMTimeRange(
+                    start: CMTimeAdd(start, CMTime(seconds: rampDuration * t0, preferredTimescale: 600)),
+                    duration: CMTime(seconds: rampDuration / 6, preferredTimescale: 600)))
+                layer.setTransformRamp(fromStart: to, toEnd: from, timeRange: CMTimeRange(
+                    start: CMTimeAdd(rampOutStart, CMTime(seconds: rampDuration * (1 - t1), preferredTimescale: 600)),
+                    duration: CMTime(seconds: rampDuration / 6, preferredTimescale: 600)))
+            }
             layer.setTransform(
                 baseTransform,
                 at: CMTimeAdd(rampOut.start, rampOut.duration)

@@ -20,6 +20,12 @@ public struct ReframeTransformPlan: Sendable, Equatable {
         self.transform = transform
     }
 
+    /// The detected subject in output coordinates, after crop and scaling.
+    public func emphasisAnchor(for spec: ReframeSpec) -> CGPoint {
+        CGPoint(x: min(max((spec.focalX * crop.sourceWidth - crop.cropX) / crop.cropWidth, 0), 1) * renderWidth,
+                y: min(max((spec.focalY * crop.sourceHeight - crop.cropY) / crop.cropHeight, 0), 1) * renderHeight)
+    }
+
     public static func make(
         naturalSize: CGSize,
         preferredTransform: CGAffineTransform,

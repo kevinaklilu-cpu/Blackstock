@@ -28,6 +28,7 @@ struct StudioView: View {
     @AppStorage("blackstock.story.captionsEnabled") private var storyCaptionsEnabled = false
     @AppStorage("blackstock.story.aiSceneMatchingEnabled") private var storySpeechMatchingEnabled = true
     @AppStorage("blackstock.story.portrait") private var storyPortrait = false
+    @AppStorage("blackstock.story.originalSceneAudio") private var storyOriginalAudio = true
     @State private var isFinalizingStory = false
     @State private var mediaImportTask: Task<Void, Never>?
     @State private var isStudioVisible = false
@@ -175,14 +176,14 @@ struct StudioView: View {
                     project: project,
                     asset: asset,
                     artifact: artifact,
-                    transcript: state.transcript,
+                    transcript: state.storyOutputTranscript,
                     generatedCaptionURL: state.captionURL,
                     audioTechnicalAssessment: state.audioTechnicalAssessment,
                     audioSignalAssessment: state.audioSignalAssessment,
                     audioLoudnessAssessment: state.audioLoudnessAssessment,
                     storyboard: state.storyboard,
-                    suggestedTitle:
-                        state.packagingSuggestedTitle
+                    suggestedTitle: publicationDraft?.title ?? state.packagingSuggestedTitle,
+                    storyDraft: publicationDraft
                 )
             }
         }
@@ -251,15 +252,7 @@ struct StudioView: View {
             }
 
             if isStoryOutputReady {
-                Button {
-                    if currentStage == .editing {
-                        if session.advanceActiveProject(to: .packaging) {
-                            showPackagingReview = true
-                        }
-                    } else {
-                        showPackagingReview = true
-                    }
-                } label: {
+                Button { openPublishing()                } label: {
                     Label("Veröffentlichen", systemImage: "arrow.up.circle.fill")
                 }
                 .buttonStyle(.borderedProminent)
@@ -281,7 +274,7 @@ struct StudioView: View {
                 Spacer()
                 Image(systemName: "rectangle.stack.fill").font(.title2).foregroundStyle(BlackstockDesign.accent)
             }
-            Text("Eine Erzählung, passende Bilder aus deinen Quellen. Der Ton kommt durchgehend vom Leitvideo.")
+            Text("Deine Quellen werden zu einem gemeinsamen Schnitt zusammengestellt. Jede Szene zeigt ihre Herkunft und ihren Ton.")
                 .font(.caption).foregroundStyle(.secondary)
             HStack(spacing: 8) {
                 Label("\(session.activeStorySources.count) Quellen", systemImage: "square.stack.3d.up")
@@ -294,9 +287,23 @@ struct StudioView: View {
                     .font(.caption).lineLimit(2)
                     .padding(10).frame(maxWidth: .infinity, alignment: .leading)
                     .background(BlackstockDesign.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
-                Text("Durchgehender Hauptton · Bildquellen wechseln darunter")
+                Text("Leitvideo · Einstieg und roter Faden")
                     .font(.caption2).foregroundStyle(.secondary)
             }
+            let scenes = state.plannedStorySequence()
+            if !scenes.isEmpty {
+                StoryTimelineView(scenes: scenes, duration: state.currentOutputDurationSeconds,
+                    leadTitle: session.activeStorySources.first?.title ?? "Leitvideo",
+                    sourceTitles: Dictionary(uniqueKeysWithValues: loadedStoryVideoCaptures.map { capture in
+                        (capture.id, session.activeStorySources.first(where: {
+                            capture.rightsEvidence.contains("YouTube-Ergänzung:\($0.videoID)")
+                        })?.title ?? "Zusatzquelle")
+                    }), canPlay: isStoryOutputReady) { seconds in
+                        state.player.seek(to: CMTime(seconds: seconds, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+                        state.player.play()
+                    }
+            }
+            DisclosureGroup("Quellen, Vorschauen und Auswahlgründe") {
             ForEach(Array(session.activeStorySources.dropFirst().enumerated()), id: \.element.videoID) { index, source in
                 if let capture = loadedStoryVideoCaptures.first(where: { $0.rightsEvidence.contains("YouTube-Ergänzung:\(source.videoID)") }) {
                     let insert = state.supplementalVideoSetting(for: capture.id)
@@ -324,6 +331,13 @@ struct StudioView: View {
                         .blackstockSurface()
                 }
             }
+            }
+            Picker("Ton im nächsten Schnitt", selection: $storyOriginalAudio) {
+                Text("Originalton jeder Szene").tag(true)
+                Text("Durchgehende Haupterzählung").tag(false)
+            }.pickerStyle(.menu)
+            Text(storyOriginalAudio ? "Bild und Ton wechseln gemeinsam zur ausgewählten Quelle." : "Zusatzbilder unterstützen den durchgehenden Ton des Leitvideos.")
+                .font(.caption).foregroundStyle(.secondary)
             DisclosureGroup("Länge, Format und Untertitel") {
             Picker("Ziellänge", selection: $storyTargetDuration) {
                 Text("Automatische Länge").tag(0.0)
@@ -428,6 +442,38 @@ struct StudioView: View {
         }
     }
 
+    private var publicationDraft: StoryPublicationDraft? {
+        let sequence = state.plannedStorySequence()
+        let used = Set(sequence.map(\.captureID))
+        let sources = session.activeStorySources.enumerated().compactMap { index, source in
+            index == 0 || state.supplementalCaptures.contains(where: {
+                used.contains($0.id) && $0.rightsEvidence.contains("YouTube-Ergänzung:\(source.videoID)")
+            }) ? source : nil
+        }
+        let excerpts = state.supplementalVideoInsertSettings.filter { used.contains($0.captureID) && $0.usesOriginalAudio == true }
+            .flatMap { $0.matchedScenes ?? [] }.compactMap { scene -> String? in
+                let text = scene.spokenSegments?.map(\.text).joined(separator: " ") ?? ""
+                return text.isEmpty ? nil : text
+            }
+        return StoryPublicationDraft.make(sources: sources, language: contentLanguage, excerpts: excerpts)
+    }
+
+    private func openPublishing() {
+        guard let artifact = state.renderArtifact, artifact.hasCurrentTechnicalValidation else {
+            state.errorMessage = "Der fertige Export fehlt noch. Bitte den Schnitt zuerst rendern."
+            return
+        }
+        if currentStage == .editing, !session.advanceActiveProject(to: .packaging) {
+            state.errorMessage = session.errorMessage ?? "Veröffentlichung konnte nicht geöffnet werden."
+            return
+        }
+        guard [.packaging, .review, .publishing, .published].contains(currentStage) else {
+            state.errorMessage = "Projekt ist noch nicht zur Veröffentlichung bereit. Aktueller Schritt: \(currentStage.rawValue)."
+            return
+        }
+        showPackagingReview = true
+    }
+
     private var isStoryOutputReady: Bool {
         guard session.activeStorySources.count > 1 else { return state.renderArtifact != nil }
         return state.renderArtifact?.fileURL.lastPathComponent == "final.mp4"
@@ -456,7 +502,7 @@ struct StudioView: View {
             analyzeSpeech: storySpeechMatchingEnabled, includeCaptions: storyCaptionsEnabled, portrait: storyPortrait)
         guard state.errorMessage == nil, !Task.isCancelled,
               session.activeProject?.id == project.id else { return }
-        state.autoArrangeSupplementalVideos(captureIDs: loadedStoryVideoCaptures.map(\.id))
+        state.autoArrangeSupplementalVideos(captureIDs: loadedStoryVideoCaptures.map(\.id), usesOriginalAudio: storyOriginalAudio)
         await state.refineStoryPictures(captureIDs: loadedStoryVideoCaptures.map(\.id))
         if storySpeechMatchingEnabled {
         await state.matchStoryNarration(captureIDs: loadedStoryVideoCaptures.map(\.id),
@@ -1158,18 +1204,7 @@ struct StudioView: View {
                         Text(String(artifact.sha256.prefix(12)) + "…")
                             .font(.caption.monospaced())
                             .foregroundStyle(.secondary)
-                        Button("Weiter zum Veröffentlichen") {
-                            if currentStage == .editing {
-                                if session.advanceActiveProject(
-                                    to: .packaging
-                                ) {
-                                    showPackagingReview = true
-                                }
-                            } else if currentStage == .packaging
-                                        || currentStage == .review {
-                                showPackagingReview = true
-                            }
-                        }
+                        Button("Weiter zum Veröffentlichen") { openPublishing() }
                         .buttonStyle(.borderedProminent)
                         .disabled(
                             currentStage != .editing
@@ -3222,14 +3257,9 @@ struct StudioView: View {
                         .frame(width: 28, height: 28)
 
                         if index == steps.count - 1 {
-                            Button(step.title) {
-                                if currentStage == .editing {
-                                    guard session.advanceActiveProject(to: .packaging) else { return }
-                                }
-                                showPackagingReview = true
-                            }
+                            Button(step.title) { openPublishing() }
                             .buttonStyle(.borderedProminent)
-                            .disabled(!isStoryOutputReady || isProcessingNow)
+                            .disabled(!isStoryOutputReady || state.isRendering)
                             .help(isStoryOutputReady ? "Export für YouTube vorbereiten und hochladen" : "Zuerst den gemeinsamen Schnitt rendern")
                         } else {
                         Text(step.title)
@@ -3298,7 +3328,7 @@ struct StudioView: View {
         default:
             break
         }
-        if isImportingMedia || state.isLoading { return "Quelle vorbereiten" }
+        if isImportingMedia || state.isLoading { return state.preparationStatus.isEmpty ? "Quelle vorbereiten" : state.preparationStatus }
         if state.isTranscribing { return "Sprache erkennen" }
         if state.isRenderingSavedClipBatch { return "Clips rendern" }
         if state.isCreatingAutomaticHighlights {
@@ -3331,7 +3361,7 @@ struct StudioView: View {
         if state.isCreatingAutomaticHighlights || state.isGeneratingClipCandidates {
             return "Schritt 3 · Highlights werden gesucht und Schnitte vorbereitet."
         }
-        if isImportingMedia || state.isLoading { return "Schritt 2 · Video wird in dein Projekt geladen." }
+        if isImportingMedia || state.isLoading { return "Quelle " + String(loadedStoryVideoCaptures.count + 1) + " von " + String(max(session.activeStorySources.count, 1)) + " · " + state.preparationStatus }
         if state.renderArtifact != nil { return "Schritt 4 abgeschlossen · Video fertig. Weiter zum Veröffentlichen, um Titel, Vorschaubild und Veröffentlichung zu prüfen." }
         switch sourceDownloader.state {
         case .downloading: return "Schritt 1 · " + sourceDownloader.transferDescription

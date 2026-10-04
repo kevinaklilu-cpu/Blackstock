@@ -15,6 +15,13 @@ final class StoryTopicMatcherTests: XCTestCase {
         XCTAssertEqual(matcher.searchQuery(for: lead.title), "wonderkid position")
     }
 
+    func testGrandDoesNotConnectDifferentSports() {
+        let matcher = StoryTopicMatcher()
+        let lead = candidate("Qualifying Highlights | 2026 Bahrain Grand Prix in Malaysia", channel: "FORMULA 1")
+        XCTAssertFalse(matcher.match(candidate("Grand Final Highlights | Warrington Wolves v WakeField Trinity | Betfred Super League"), to: lead).isRelated)
+        XCTAssertTrue(matcher.match(candidate("Russell reacts to Bahrain qualifying"), to: lead).isRelated)
+    }
+
     func testChannelBrandDoesNotBecomeStoryTopic() {
         XCTAssertEqual(StoryTopicMatcher().searchQuery(for: "CORE ALL SPORTS GOLF BATTLE", excluding: "CORE"), "golf battle")
         let lead = candidate("CORE ALL SPORTS GOLF BATTLE", channel: "CORE")

@@ -75,6 +75,7 @@ public struct LocalVisionFocalPointSuggester: Sendable {
 
     public func suggest(
         url: URL,
+        sourceRange: EditTimeRange? = nil,
         sampleCount: Int = 7,
         now: Date = Date()
     ) async throws -> VisionFocalPointProposal {
@@ -85,7 +86,8 @@ public struct LocalVisionFocalPointSuggester: Sendable {
             throw LocalVisionFocalPointError.invalidDuration
         }
 
-        let count = min(max(sampleCount, 3), 15)
+        let times = Self.sampleTimes(duration: seconds, sourceRange: sourceRange, sampleCount: sampleCount)
+        guard !times.isEmpty else { throw LocalVisionFocalPointError.invalidDuration }
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
         generator.maximumSize = CGSize(width: 1280, height: 1280)
@@ -101,10 +103,10 @@ public struct LocalVisionFocalPointSuggester: Sendable {
         var observations: [VisionFocalObservation] = []
         var sampledFrames = 0
 
-        for index in 0..<count {
-            let fraction = Double(index + 1) / Double(count + 1)
+        for seconds in times {
+            try Task.checkCancellation()
             let time = CMTime(
-                seconds: seconds * fraction,
+                seconds: seconds,
                 preferredTimescale: 600
             )
 
@@ -131,6 +133,18 @@ public struct LocalVisionFocalPointSuggester: Sendable {
             throw LocalVisionFocalPointError.noRelevantObservation
         }
         return proposal
+    }
+
+    public static func sampleTimes(duration: Double, sourceRange: EditTimeRange?, sampleCount: Int = 7) -> [Double] {
+        guard duration.isFinite, duration > 0 else { return [] }
+        let start = sourceRange?.startSeconds ?? 0
+        let length = sourceRange?.durationSeconds ?? duration
+        guard start.isFinite, length.isFinite, length > 0 else { return [] }
+        let lower = max(0, start)
+        let upper = min(duration, start + length)
+        guard upper > lower else { return [] }
+        let count = min(max(sampleCount, 3), 15)
+        return (1...count).map { lower + (upper - lower) * Double($0) / Double(count + 1) }
     }
 
     public static func aggregate(

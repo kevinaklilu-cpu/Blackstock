@@ -15,6 +15,7 @@ struct PackagingReviewView: View {
     let audioSignalAssessment: AudioSignalAssessment?
     let audioLoudnessAssessment: AudioLoudnessAssessment?
     let storyboard: StoryboardPlan?
+    let storyDraft: StoryPublicationDraft?
 
     @Environment(\.dismiss) private var dismiss
 
@@ -37,6 +38,8 @@ struct PackagingReviewView: View {
     @State private var packagingVariants: PackagingVariantSet
     @State private var showFinalPublishConfirmation = false
     @State private var isCheckingQuality = false
+    @State private var isPreparingUpload = false
+    @State private var uploadPreparationStatus: String?
     @State private var checkedAudioTechnical: AudioTechnicalAssessment?
     @State private var checkedAudioSignal: AudioSignalAssessment?
     @State private var checkedAudioLoudness: AudioLoudnessAssessment?
@@ -55,7 +58,8 @@ struct PackagingReviewView: View {
         audioSignalAssessment: AudioSignalAssessment?,
         audioLoudnessAssessment: AudioLoudnessAssessment?,
         storyboard: StoryboardPlan?,
-        suggestedTitle: String? = nil
+        suggestedTitle: String? = nil,
+        storyDraft: StoryPublicationDraft? = nil
     ) {
         self.session = session
         self.project = project
@@ -67,6 +71,7 @@ struct PackagingReviewView: View {
         self.audioSignalAssessment = audioSignalAssessment
         self.audioLoudnessAssessment = audioLoudnessAssessment
         self.storyboard = storyboard
+        self.storyDraft = storyDraft
         let loaded = session.loadPublishPreparation(
             projectID: project.id
         )
@@ -87,11 +92,13 @@ struct PackagingReviewView: View {
         )
         _description = State(
             initialValue: saved?.package.metadata.description
+                ?? storyDraft?.description
                 ?? Self.suggestedDescription(title: project.title, transcript: transcript)
         )
         _tags = State(
             initialValue: saved?.package.metadata.tags
                 .joined(separator: ", ")
+                ?? storyDraft?.tags.joined(separator: ", ")
                 ?? StoryTopicMatcher().searchQuery(for: project.title).split(separator: " ").joined(separator: ", ")
         )
         _privacyStatus = State(
@@ -298,10 +305,9 @@ struct PackagingReviewView: View {
                 }
             }
         }
-        .confirmationDialog(
-            "Wirklich zu YouTube hochladen?",
-            isPresented: $showFinalPublishConfirmation,
-            titleVisibility: .visible
+        .alert(
+            "Video zu YouTube hochladen",
+            isPresented: $showFinalPublishConfirmation
         ) {
             Button("Jetzt hochladen") {
                 Task {
@@ -396,6 +402,15 @@ struct PackagingReviewView: View {
                 TextField("Titel", text: $title)
                     .textFieldStyle(.roundedBorder)
 
+                if let storyDraft {
+                    Menu("Weitere Titelvorschläge") {
+                        ForEach(storyDraft.alternativeTitles, id: \.self) { suggestion in
+                            Button(suggestion) { title = suggestion }
+                        }
+                    }
+                    Text("Vorschlag aus den verwendeten Quellen. Prüfe Titel und Beschreibung vor dem Upload.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 TextEditor(text: $description)
                     .accessibilityLabel("YouTube-Beschreibung")
                     .font(.body)
@@ -942,6 +957,17 @@ struct PackagingReviewView: View {
     private var reviewPanel: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                if let uploadPreparationStatus {
+                    Label(uploadPreparationStatus, systemImage: isPreparingUpload ? "hourglass" : "info.circle")
+                        .font(.callout).fixedSize(horizontal: false, vertical: true)
+                }
+                if session.isPublishing {
+                    ProgressView(value: session.publishingProgress)
+                    Text(session.publishingProgress >= 1
+                         ? "Video übertragen · Vorschaubild und Zusatzdateien abschließen …"
+                         : "Video hochladen · \(Int(session.publishingProgress * 100)) %")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 Text("Upload-Status")
                     .font(.title3.bold())
 
@@ -1026,7 +1052,7 @@ struct PackagingReviewView: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(session.isPublishing || session.isAuthorizingPublishing || isCheckingQuality || isGeneratingThumbnail)
+                .disabled(isPreparingUpload || session.isPublishing || session.isAuthorizingPublishing || isCheckingQuality || isGeneratingThumbnail)
                 .padding(14)
                 .background(.regularMaterial)
             }
@@ -1036,7 +1062,14 @@ struct PackagingReviewView: View {
     }
 
     private func prepareAndConfirmUpload() async {
-        guard session.activeProject?.id == project.id else { return }
+        guard !isPreparingUpload else { return }
+        guard session.activeProject?.id == project.id else {
+            session.errorMessage = "Das Projekt wurde gewechselt. Öffne den Upload im gewünschten Projekt erneut."
+            return
+        }
+        isPreparingUpload = true
+        defer { isPreparingUpload = false }
+        uploadPreparationStatus = "Video und Vorschaubild prüfen …"
         if currentStage == .packaging || currentStage == .review {
             if thumbnailURL == nil { await generateThumbnailFromRender() }
             await checkAudioAutomatically()
@@ -1056,11 +1089,13 @@ struct PackagingReviewView: View {
                 return
             }
         }
+        uploadPreparationStatus = "Verbindung zu deinem YouTube-Kanal prüfen …"
         if session.publishingAuthorizedChannelID != project.targetChannelID {
             await session.authorizePublishing()
         }
         guard session.activeProject?.id == project.id,
               session.publishingAuthorizedChannelID == project.targetChannelID else { return }
+        uploadPreparationStatus = "Bereit. Bitte Kanal und Sichtbarkeit bestätigen."
         showFinalPublishConfirmation = true
     }
 
@@ -1069,13 +1104,13 @@ struct PackagingReviewView: View {
         isCheckingQuality = true
         defer { isCheckingQuality = false }
         do {
-            if force || audioTechnicalAssessment == nil {
+            if force || (audioTechnicalAssessment == nil && checkedAudioTechnical == nil) {
                 checkedAudioTechnical = try await LocalAudioTechnicalInspector().inspect(url: artifact.fileURL)
             }
-            if force || audioSignalAssessment == nil {
+            if force || (audioSignalAssessment == nil && checkedAudioSignal == nil) {
                 checkedAudioSignal = try await LocalAudioSignalAnalyzer().analyze(url: artifact.fileURL)
             }
-            if force || audioLoudnessAssessment == nil {
+            if force || (audioLoudnessAssessment == nil && checkedAudioLoudness == nil) {
                 checkedAudioLoudness = try await LocalLoudnessAnalyzer().analyze(url: artifact.fileURL)
             }
         } catch {

@@ -1,4 +1,5 @@
 import XCTest
+import CoreGraphics
 @testable import BlackstockCore
 
 final class VisualEmphasisPlannerTests: XCTestCase {
@@ -17,6 +18,19 @@ final class VisualEmphasisPlannerTests: XCTestCase {
     }
 
     #if os(macOS)
+    func testZoomKeepsOffCenterSubjectFixedAfterPortraitCrop() throws {
+        let spec = ReframeSpec(aspectRatio: .portrait9x16, focalX: 0.72, focalY: 0.25)
+        let plan = try XCTUnwrap(ReframeTransformPlan.make(naturalSize: CGSize(width: 1920, height: 1080),
+            preferredTransform: .identity, spec: spec, renderSize: CGSize(width: 1080, height: 1920)))
+        let subject = CGPoint(x: 1920 * spec.focalX, y: 1080 * spec.focalY)
+        let before = subject.applying(plan.transform)
+        let zoom = VisualEmphasisComposer.zoomTransform(base: plan.transform, scale: 1.12,
+            anchor: plan.emphasisAnchor(for: spec))
+        let after = subject.applying(zoom)
+        XCTAssertEqual(before.x, after.x, accuracy: 0.0001)
+        XCTAssertEqual(before.y, after.y, accuracy: 0.0001)
+    }
+
     func testAutomaticZoomUsesSpeechPauseAndStaysInsideClip() {
         let transcript = LocalTranscript(localeIdentifier: "de-DE", text: "Hallo Welt",
             segments: [

@@ -86,7 +86,8 @@ public actor LocalSupplementalVideoCompositor {
         inputURL: URL,
         supplementalVideo: [SupplementalVideoInsertInput],
         outputURL: URL,
-        preset: LocalRenderPreset
+        preset: LocalRenderPreset,
+        onProgress: @Sendable (Double) -> Void = { _ in }
     ) async throws {
         let baseAsset = AVURLAsset(url: inputURL)
         let baseTracks = try await baseAsset.loadTracks(
@@ -209,13 +210,15 @@ public actor LocalSupplementalVideoCompositor {
             renderSize: renderSize,
             prepared: prepared,
             outputURL: videoOnlyURL,
-            preset: preset
+            preset: preset,
+            onProgress: onProgress
         )
 
         try await muxBaseAudio(
             baseAsset: baseAsset,
             videoURL: videoOnlyURL,
-            outputURL: outputURL
+            outputURL: outputURL,
+            supplementalVideo: supplementalVideo
         )
 
         guard FileManager.default.fileExists(
@@ -234,7 +237,8 @@ public actor LocalSupplementalVideoCompositor {
         renderSize: CGSize,
         prepared: [PreparedInsert],
         outputURL: URL,
-        preset: LocalRenderPreset
+        preset: LocalRenderPreset,
+        onProgress: @Sendable (Double) -> Void
     ) async throws {
         if FileManager.default.fileExists(
             atPath: outputURL.path
@@ -347,7 +351,7 @@ public actor LocalSupplementalVideoCompositor {
 
         // Use the deterministic renderer; sequential source decoding avoids
         // the expensive per-frame seeks without depending on GPU availability.
-        let context = CIContext(options: [.useSoftwareRenderer: true, .cacheIntermediates: false])
+        let context = CIContext(options: [.cacheIntermediates: false])
         let colorSpace = CGColorSpaceCreateDeviceRGB()
         let outputRect = CGRect(
             origin: .zero,
@@ -466,6 +470,9 @@ public actor LocalSupplementalVideoCompositor {
                     )
             }
             appendedFrameCount += 1
+            if appendedFrameCount % 30 == 0 {
+                onProgress(min(1, max(0, relativeTime.seconds / baseTimeRange.duration.seconds)))
+            }
         }
 
         if reader.status == .failed {
@@ -495,7 +502,8 @@ public actor LocalSupplementalVideoCompositor {
     private func muxBaseAudio(
         baseAsset: AVURLAsset,
         videoURL: URL,
-        outputURL: URL
+        outputURL: URL,
+        supplementalVideo: [SupplementalVideoInsertInput]
     ) async throws {
         let videoAsset = AVURLAsset(url: videoURL)
         let videoTracks = try await videoAsset.loadTracks(
@@ -530,6 +538,9 @@ public actor LocalSupplementalVideoCompositor {
         let audioTracks = try await baseAsset.loadTracks(
             withMediaType: .audio
         )
+        let originalScenes = supplementalVideo.filter(\.usesOriginalAudio)
+            .sorted { $0.timelineStartSeconds < $1.timelineStartSeconds }
+        if originalScenes.isEmpty {
         for audioTrack in audioTracks {
             guard let destination =
                     composition.addMutableTrack(
@@ -563,6 +574,43 @@ public actor LocalSupplementalVideoCompositor {
                 of: audioTrack,
                 at: .zero
             )
+        }
+
+        } else {
+            guard let destination = composition.addMutableTrack(withMediaType: .audio,
+                preferredTrackID: kCMPersistentTrackID_Invalid) else {
+                throw LocalSupplementalVideoError.exportFailed("Tonspur konnte nicht erstellt werden.")
+            }
+            func insertAudio(_ track: AVAssetTrack, start: Double, duration: Double, at: Double) async throws {
+                let wanted = CMTimeRange(start: CMTime(seconds: start, preferredTimescale: 600),
+                    duration: CMTime(seconds: duration, preferredTimescale: 600))
+                let available = try await track.load(.timeRange)
+                let overlap = CMTimeRangeGetIntersection(wanted, otherRange: available)
+                guard overlap.duration.seconds > 0 else { return }
+                // Keep the source's offset; never stretch audio to fill a picture range.
+                let position = at + overlap.start.seconds - start
+                try destination.insertTimeRange(overlap, of: track,
+                    at: CMTime(seconds: position, preferredTimescale: 600))
+            }
+            var cursor = 0.0
+            for scene in originalScenes {
+                try Task.checkCancellation()
+                if scene.timelineStartSeconds > cursor, let leadAudio = audioTracks.first {
+                    try await insertAudio(leadAudio, start: cursor,
+                        duration: scene.timelineStartSeconds - cursor, at: cursor)
+                }
+                let source = AVURLAsset(url: scene.fileURL)
+                guard let sourceAudio = try await source.loadTracks(withMediaType: .audio).first else {
+                    throw LocalSupplementalVideoError.exportFailed("Eine Szene hat keinen Originalton. Wähle für diese Story die durchgehende Haupterzählung oder eine andere Quelle.")
+                }
+                try await insertAudio(sourceAudio, start: scene.sourceStartSeconds,
+                    duration: scene.durationSeconds, at: scene.timelineStartSeconds)
+                cursor = scene.timelineStartSeconds + scene.durationSeconds
+            }
+            if cursor < videoRange.duration.seconds, let leadAudio = audioTracks.first {
+                try await insertAudio(leadAudio, start: cursor,
+                    duration: videoRange.duration.seconds - cursor, at: cursor)
+            }
         }
 
         guard let exporter = AVAssetExportSession(

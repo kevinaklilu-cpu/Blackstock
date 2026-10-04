@@ -15,6 +15,7 @@ final class StudioState: ObservableObject {
     @Published var lastUndoneRevisionID: UUID?
     @Published var errorMessage: String?
     @Published var isLoading = false
+    @Published var preparationStatus = ""
     @Published var isRendering = false
     @Published var renderPreset: LocalRenderPreset = .hd1080
     @Published var renderArtifact: RenderArtifact?
@@ -58,6 +59,10 @@ final class StudioState: ObservableObject {
     @Published var overlayEnd: Double = 3
     @Published var overlayVerticalPosition: Double = 0.18
     @Published var masterVolume: Double = 1
+
+    var storyOutputTranscript: LocalTranscript? {
+        StoryTranscriptComposer.compose(lead: transcript, inputs: plannedStorySequence(), settings: supplementalVideoInsertSettings)
+    }
 
     var currentOutputDurationSeconds: Double {
         guard let asset else { return 0 }
@@ -238,20 +243,27 @@ final class StudioState: ObservableObject {
                     if FileManager.default.fileExists(
                         atPath: asset.sourceURL.path
                     ) {
-                        try await rebuildPreview()
+                        if let artifact = renderArtifact {
+                            player.pause()
+                            player.defaultRate = 1
+                            player.replaceCurrentItem(with: AVPlayerItem(url: artifact.fileURL))
+                            player.volume = 1
+                        } else {
+                            try await rebuildPreview()
+                        }
 
+                        // Stored results stay valid until edits invalidate the render.
+                        // Opening an editor must not decode all audio again.
                         let audioQCURL: URL
-                        if let artifact = renderArtifact,
-                           FileManager.default.fileExists(
-                                atPath: artifact.fileURL.path
-                           ) {
+                        if let artifact = renderArtifact {
                             audioQCURL = artifact.fileURL
                         } else {
                             audioQCURL = asset.sourceURL
                         }
-                        await refreshAudioInspection(
-                            for: audioQCURL
-                        )
+                        if audioTechnicalAssessment == nil {
+                            audioTechnicalAssessment = try? await LocalAudioTechnicalInspector().inspect(url: audioQCURL)
+                        }
+
                     } else {
                         errorMessage = "Das gespeicherte Produktionsmedium fehlt im Projekt-Arbeitsbereich."
                     }
@@ -406,11 +418,12 @@ final class StudioState: ObservableObject {
                 }
             }
 
-            let durableURL = try store.importMedia(
-                sourceURL: url,
-                projectID: projectID,
-                assetID: assetID
-            )
+            preparationStatus = "Leitvideo im Projekt sichern …"
+            let durableURL = try await Task.detached(priority: .userInitiated) {
+                try store.importMedia(sourceURL: url, projectID: projectID, assetID: assetID)
+            }.value
+            guard !shouldStopProcessing, activeProjectID == projectID else { return }
+            preparationStatus = "Länge und Videospur lesen …"
             let avAsset = AVURLAsset(url: durableURL)
             let duration = try await avAsset.load(.duration)
             let seconds = max(CMTimeGetSeconds(duration), 0)
@@ -434,6 +447,7 @@ final class StudioState: ObservableObject {
                 return
             }
 
+            guard !shouldStopProcessing, activeProjectID == projectID else { return }
             asset = imported
             localClipCandidates = []
             savedClipSelections = []
@@ -476,9 +490,10 @@ final class StudioState: ObservableObject {
 
             try await rebuildPreview()
 
-            await refreshAudioInspection(
-                for: imported.sourceURL
-            )
+            // Analyze the final cut at export, not the entire long source before
+            // allowing other sources to load.
+            preparationStatus = "Videovorschau bereit"
+            audioTechnicalAssessment = try? await LocalAudioTechnicalInspector().inspect(url: imported.sourceURL)
             persistWorkspaceIfPossible()
             errorMessage = nil
         } catch {
@@ -521,23 +536,17 @@ final class StudioState: ObservableObject {
             workspaceStore = store
 
             let captureID = UUID()
-            let durableURL: URL
-            switch kind {
-            case .camera, .screen:
-                durableURL = try store
-                    .importSupplementalVideoCapture(
-                        sourceURL: url,
-                        projectID: projectID,
-                        assetID: captureID
-                    )
-            case .microphone, .systemAudio:
-                durableURL = try store
-                    .importSupplementalCapture(
-                        sourceURL: url,
-                        projectID: projectID,
-                        assetID: captureID
-                    )
-            }
+            preparationStatus = "Zusatzquelle im Projekt sichern …"
+            let durableURL = try await Task.detached(priority: .userInitiated) {
+                switch kind {
+                case .camera, .screen:
+                    return try store.importSupplementalVideoCapture(sourceURL: url, projectID: projectID, assetID: captureID)
+                case .microphone, .systemAudio:
+                    return try store.importSupplementalCapture(sourceURL: url, projectID: projectID, assetID: captureID)
+                }
+            }.value
+            guard !shouldStopProcessing, activeProjectID == projectID else { return false }
+            preparationStatus = "Zusatzquelle: Länge und Spuren lesen …"
 
             let mimeType: String
             switch kind {
@@ -582,6 +591,7 @@ final class StudioState: ObservableObject {
                 return false
             }
 
+            guard !shouldStopProcessing, activeProjectID == projectID else { return false }
             supplementalCaptures.removeAll {
                 $0.id == capture.id
             }
@@ -929,7 +939,7 @@ final class StudioState: ObservableObject {
 
         do {
             let proposal = try await LocalVisionFocalPointSuggester()
-                .suggest(url: asset.sourceURL)
+                .suggest(url: asset.sourceURL, sourceRange: .init(startSeconds: trimStart, durationSeconds: trimEnd - trimStart))
             focalPointProposal = proposal
             reframeFocalX = proposal.focalX
             reframeFocalY = proposal.focalY
@@ -1332,7 +1342,7 @@ final class StudioState: ObservableObject {
         if let asset {
             do {
                 let proposal = try await LocalVisionFocalPointSuggester()
-                    .suggest(url: asset.sourceURL)
+                    .suggest(url: asset.sourceURL, sourceRange: primary.sourceRange)
                 focalPointProposal = proposal
                 reframeFocalX = proposal.focalX
                 reframeFocalY = proposal.focalY
@@ -1961,13 +1971,22 @@ final class StudioState: ObservableObject {
                 actor: .user
             )
 
-            if let reframe = graph.currentOperations
-                .last(
-                    where: {
-                        $0.type == .reframe
-                    }
-                )?
-                .reframeSpec {
+            let reframeOperation = graph.currentOperations.last { $0.type == .reframe }
+            var clipReframe = reframeOperation?.reframeSpec
+            let automaticFraming = reframeOperation.map { operation in
+                graph.revisions.first { $0.operation?.id == operation.id }?.actor == .acceptedAIProposal
+            } ?? false
+            if automaticFraming, let base = clipReframe {
+                clipCandidateStatusMessage = "Bildausschnitt für diesen Clip wird geprüft …"
+                if let proposal = try? await LocalVisionFocalPointSuggester().suggest(
+                    url: asset.sourceURL, sourceRange: selection.sourceRange
+                ) {
+                    clipReframe = ReframeSpec(aspectRatio: base.aspectRatio,
+                        focalX: proposal.focalX, focalY: proposal.focalY)
+                }
+            }
+            guard !shouldStopProcessing, activeProjectID == projectID else { return }
+            if let reframe = clipReframe {
                 _ = clipGraph.apply(
                     EditOperation(
                         type: .reframe,
@@ -2063,6 +2082,7 @@ final class StudioState: ObservableObject {
             }
             savedClipSelections[index] =
                 savedClipSelections[index]
+                .withReframeSpec(clipReframe)
                 .withRenderArtifact(
                     artifact
                 )
@@ -2187,9 +2207,19 @@ final class StudioState: ObservableObject {
             segmentIDs: []
         )
         await applyLocalClipCandidate(candidate)
-        guard errorMessage == nil,
-              let clipTranscript =
-                selection.transcript else {
+        guard errorMessage == nil else { return }
+        if let reframe = selection.reframeSpec {
+            _ = graph.apply(.init(type: .reframe, reframeSpec: reframe, createdAt: Date()), actor: .user)
+            reframeAspectRatio = reframe.aspectRatio
+            reframeFocalX = reframe.focalX
+            reframeFocalY = reframe.focalY
+            try? await rebuildPreview()
+        }
+        guard let clipTranscript = selection.transcript else {
+            transcript = nil
+            captionURL = nil
+            burnInCaptionsEnabled = false
+            persistWorkspaceIfPossible()
             return
         }
 
@@ -2892,7 +2922,7 @@ final class StudioState: ObservableObject {
     }
 
     func autoArrangeSupplementalVideos(
-        captureIDs: [UUID]
+        captureIDs: [UUID], usesOriginalAudio: Bool = false
     ) {
         let orderedCaptures = captureIDs.compactMap { id in
             supplementalCaptures.first {
@@ -2925,6 +2955,7 @@ final class StudioState: ObservableObject {
             ) { setting in
                 setting.enabled = true
                 setting.distributedScenes = true
+                setting.usesOriginalAudio = usesOriginalAudio
                 setting.timelineStartSeconds = start
                 setting.sourceStartSeconds = max(0, ((capture.durationSeconds ?? duration) - duration) * 0.35)
                 setting.durationSeconds = duration
@@ -2982,11 +3013,20 @@ final class StudioState: ObservableObject {
                     sourceDuration: capture.durationSeconds ?? 0, maximumDuration: slot.durationSeconds, excluding: used) {
                     scenes.append(.init(outputStart: slot.timelineStartSeconds, sourceStart: scene.range.startSeconds,
                         duration: scene.range.durationSeconds, explanation: scene.explanation))
+                    scenes[scenes.count - 1].spokenSegments = recognized.segments.filter {
+                        $0.startSeconds >= scene.range.startSeconds && $0.startSeconds + $0.durationSeconds <= scene.range.endSeconds + 0.001
+                    }.map { .init(start: $0.startSeconds, duration: $0.durationSeconds, text: $0.text, confidence: $0.confidence) }
                     used.append(scene.range)
                     matchCount += 1
                 } else {
                     scenes.append(.init(outputStart: slot.timelineStartSeconds, sourceStart: slot.sourceStartSeconds,
                         duration: slot.durationSeconds, explanation: "Kein belastbarer KI-Inhaltsmatch. Visuell/zeitbasiert vorgeschlagen; Inhalt vor Veröffentlichung prüfen."))
+                }
+                if scenes.last?.spokenSegments == nil, let recognized, !scenes.isEmpty {
+                    let selected = scenes[scenes.count - 1]
+                    scenes[scenes.count - 1].spokenSegments = recognized.segments.filter {
+                        $0.startSeconds >= selected.sourceStart && $0.startSeconds + $0.durationSeconds <= selected.sourceStart + selected.duration + 0.001
+                    }.map { .init(start: $0.startSeconds, duration: $0.durationSeconds, text: $0.text, confidence: $0.confidence) }
                 }
             }
             planned[position].matchedScenes = scenes
@@ -3173,7 +3213,8 @@ final class StudioState: ObservableObject {
                         fileURL: capture.fileURL,
                         timelineStartSeconds: plan.timelineStartSeconds,
                         sourceStartSeconds: plan.sourceStartSeconds,
-                        durationSeconds: plan.durationSeconds
+                        durationSeconds: plan.durationSeconds,
+                        usesOriginalAudio: setting.usesOriginalAudio == true
                     )
                 }
 
@@ -3192,12 +3233,12 @@ final class StudioState: ObservableObject {
                 return (setting.matchedScenes ?? []).map { scene in
                     .init(captureID: capture.id, fileURL: capture.fileURL,
                         timelineStartSeconds: scene.outputStart, sourceStartSeconds: scene.sourceStart,
-                        durationSeconds: scene.duration)
+                        durationSeconds: scene.duration, usesOriginalAudio: setting.usesOriginalAudio == true)
                 }
             }.sorted { $0.timelineStartSeconds < $1.timelineStartSeconds }
         }
         if !active.isEmpty && active.allSatisfy({ $0.distributedScenes == true }) {
-            return StoryMontagePlanner.distribute(inputs, outputDuration: outputDuration)
+            return StoryMontagePlanner.distribute(inputs, outputDuration: outputDuration, shotDuration: active.contains { $0.usesOriginalAudio == true } ? 12 : 6)
         }
         return inputs
     }
@@ -3259,17 +3300,27 @@ final class StudioState: ObservableObject {
                 return
             }
 
+            let outputTranscript = storyOutputTranscript
+            if burnInCaptionsEnabled, let outputTranscript {
+                let directory = try store.captionDirectory(projectID: projectID)
+                let url = directory.appendingPathComponent("story.vtt")
+                try WebVTTCaptionWriter().write(transcript: outputTranscript, to: url)
+                captionURL = url
+            }
             let artifact = try await LocalVideoRenderer().render(
                 projectID: projectID,
                 asset: asset,
                 graph: graph,
                 outputURL: outputURL,
                 preset: renderPreset,
-                transcript: transcript,
+                transcript: outputTranscript,
                 burnInCaptions: burnInCaptionsEnabled,
                 captionStyle: captionVisualStyle,
                 supplementalAudio: supplementalAudio,
-                supplementalVideo: supplementalVideo
+                supplementalVideo: supplementalVideo,
+                onProgress: { [weak self] message in
+                    Task { @MainActor in self?.clipCandidateStatusMessage = message }
+                }
             )
             guard !shouldStopProcessing else {
                 try? FileManager.default.removeItem(
@@ -3285,6 +3336,7 @@ final class StudioState: ObservableObject {
                 let outputStart: Double
                 let sourceStart: Double
                 let duration: Double
+                let originalAudio: Bool
             }
             struct RenderReceipt: Encodable {
                 let renderID: UUID
@@ -3294,20 +3346,21 @@ final class StudioState: ObservableObject {
             let receipt = RenderReceipt(renderID: artifact.id, mainAudioFile: asset.sourceURL.lastPathComponent,
                 pictureSources: supplementalVideo.map { .init(captureID: $0.captureID,
                     fileName: $0.fileURL.lastPathComponent, outputStart: $0.timelineStartSeconds,
-                    sourceStart: $0.sourceStartSeconds, duration: $0.durationSeconds) })
+                    sourceStart: $0.sourceStartSeconds, duration: $0.durationSeconds, originalAudio: $0.usesOriginalAudio) })
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             try encoder.encode(receipt).write(to: outputURL.deletingPathExtension().appendingPathExtension("sources.json"), options: .atomic)
 
+            clipCandidateStatusMessage = "Export prüfen · Ton und Lautstärke des fertigen Schnitts …"
+            await refreshAudioInspection(for: artifact.fileURL)
+            guard !shouldStopProcessing else { return }
             renderArtifact = artifact
             player.replaceCurrentItem(
                 with: AVPlayerItem(url: artifact.fileURL)
             )
             player.volume = 1
             packagingSuggestedTitle = nil
-            await refreshAudioInspection(
-                for: artifact.fileURL
-            )
+
             ledger.append(.init(
                 timestamp: Date(),
                 actor: .blackstock,
@@ -3409,6 +3462,7 @@ final class StudioState: ObservableObject {
                         cues: emphasisCues,
                         baseTransform: plan.transform,
                         renderSize: renderSize,
+                        anchor: plan.emphasisAnchor(for: reframe),
                         to: layer
                     )
                     instruction.layerInstructions = [layer]
