@@ -86,6 +86,19 @@ private struct CleanMachineE2EResult:
 
 @MainActor
 private struct CleanMachineScenario {
+    private func sampledPixel(_ frame: CGImage) throws -> [UInt8] {
+        var pixel = [UInt8](repeating: 0, count: 4)
+        try pixel.withUnsafeMutableBytes { bytes in
+            guard let context = CGContext(data: bytes.baseAddress, width: 1, height: 1,
+                bitsPerComponent: 8, bytesPerRow: 4, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
+                throw E2EError(message: "pixel probe allocation failed")
+            }
+            context.draw(frame, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+        }
+        return pixel
+    }
+
     func run() async throws
         -> CleanMachineE2EResult {
         let root = FileManager.default
@@ -160,6 +173,14 @@ private struct CleanMachineScenario {
             ),
             "synthetic supplemental video missing"
         )
+
+        let fixtureProbe = AVAssetImageGenerator(asset: AVURLAsset(url: supplementalVideoURL))
+        fixtureProbe.requestedTimeToleranceBefore = .zero
+        fixtureProbe.requestedTimeToleranceAfter = .zero
+        let fixtureFrame = try await fixtureProbe.image(at: CMTime(seconds: 0.9, preferredTimescale: 600)).image
+        let fixturePixel = try sampledPixel(fixtureFrame)
+        try require(Int(fixturePixel[0]) > Int(fixturePixel[2]) * 2,
+                    "supplemental source fixture is not red before rendering: \(fixturePixel)")
 
         let visualSelection = try await VisualSceneSelector().select(url: supplementalVideoURL,
             sourceDuration: 2.5, requestedDuration: 0.25)
@@ -488,11 +509,7 @@ private struct CleanMachineScenario {
         probe.requestedTimeToleranceAfter = .zero
         for (time, expectInsert) in [(1.0, true), (1.55, false), (2.0, true)] {
             let frame = try await probe.image(at: CMTime(seconds: time, preferredTimescale: 600)).image
-            var pixel = [UInt8](repeating: 0, count: 4)
-            let context = CGContext(data: &pixel, width: 1, height: 1, bitsPerComponent: 8,
-                bytesPerRow: 4, space: CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
-            context.draw(frame, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+            let pixel = try sampledPixel(frame)
             let isInsert = Int(pixel[0]) > Int(pixel[2]) * 2
             try require(isInsert == expectInsert,
                         "picture sequence disagrees with planned source at \(time)s: \(pixel)")
@@ -990,14 +1007,18 @@ private struct SyntheticMediaFactory {
         let videoURL = outputURL
             .deletingLastPathComponent()
             .appendingPathComponent(
-                "synthetic-video.mov"
+                "synthetic-video-\(UUID().uuidString).mov"
             )
         let audioURL = outputURL
             .deletingLastPathComponent()
             .appendingPathComponent(
-                "synthetic-audio.caf"
+                "synthetic-audio-\(UUID().uuidString).caf"
             )
 
+        defer {
+            try? FileManager.default.removeItem(at: videoURL)
+            try? FileManager.default.removeItem(at: audioURL)
+        }
         try await createVideo(
             at: videoURL,
             durationSeconds: durationSeconds, redFixture: redFixture
