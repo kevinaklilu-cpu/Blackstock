@@ -4,6 +4,7 @@ import BlackstockCore
 import CoreMedia
 import CoreVideo
 import Foundation
+import ImageIO
 
 @main
 struct BlackstockE2ESmokeMain {
@@ -86,6 +87,26 @@ private struct CleanMachineE2EResult:
 
 @MainActor
 private struct CleanMachineScenario {
+    private func traceFrames(_ url: URL, stage: String) async throws {
+        let probe = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+        probe.appliesPreferredTrackTransform = true
+        probe.requestedTimeToleranceBefore = .zero
+        probe.requestedTimeToleranceAfter = .zero
+        for time in [0.9, 1.0, 1.1, 1.55, 2.0] {
+            let result = try await probe.image(at: CMTime(seconds: time, preferredTimescale: 600))
+            print("E2E_FRAME", stage, time, result.actualTime.seconds, try sampledPixel(result.image))
+            if let directory = ProcessInfo.processInfo.environment["BLACKSTOCK_E2E_DIAGNOSTICS_DIR"] {
+                let dir = URL(fileURLWithPath: directory)
+                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                let output = dir.appendingPathComponent("\(stage)-\(time).png")
+                if let destination = CGImageDestinationCreateWithURL(output as CFURL, "public.png" as CFString, 1, nil) {
+                    CGImageDestinationAddImage(destination, result.image, nil)
+                    CGImageDestinationFinalize(destination)
+                }
+            }
+        }
+    }
+
     private func sampledPixel(_ frame: CGImage) throws -> [UInt8] {
         var pixel = [UInt8](repeating: 0, count: 4)
         try pixel.withUnsafeMutableBytes { bytes in
@@ -461,6 +482,20 @@ private struct CleanMachineScenario {
             "text overlay cues missing"
         )
 
+        // Separate composition from Core Animation caption burn-in so a
+        // platform-specific image regression identifies the failing stage.
+        var plainGraph = graph
+        _ = plainGraph.undo() // Last operation is the text overlay.
+        let plainURL = root.appendingPathComponent("without-captions.mp4")
+        _ = try await LocalVideoRenderer().render(projectID: projectID, asset: asset, graph: plainGraph,
+            outputURL: plainURL, preset: .hd1080, supplementalVideo: [
+                .init(captureID: UUID(), fileURL: supplementalVideoURL, timelineStartSeconds: 0.8,
+                      sourceStartSeconds: 0.7, durationSeconds: 0.5, usesOriginalAudio: true),
+                .init(captureID: UUID(), fileURL: supplementalVideoURL, timelineStartSeconds: 1.8,
+                      sourceStartSeconds: 1.3, durationSeconds: 0.5, usesOriginalAudio: true)
+            ])
+        try await traceFrames(plainURL, stage: "composition")
+
         let renderURL = root
             .appendingPathComponent("final.mp4")
         let artifact = try await LocalVideoRenderer()
@@ -501,6 +536,8 @@ private struct CleanMachineScenario {
             artifact.hasCurrentTechnicalValidation,
             "render validation did not pass"
         )
+
+        try await traceFrames(renderURL, stage: "captions")
 
         // Verify pixels of the final movie, not merely that the source exists.
         let probe = AVAssetImageGenerator(asset: AVURLAsset(url: renderURL))
