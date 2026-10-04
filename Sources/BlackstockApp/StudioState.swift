@@ -1147,6 +1147,7 @@ final class StudioState: ObservableObject {
         let revision = graph.apply(operation, actor: .user)
         lastUndoneRevisionID = nil
         renderArtifact = nil
+        savedClipSelections = savedClipSelections.map { $0.withReframeSpec(spec) }
         invalidateSavedClipRenders()
         audioTechnicalAssessment = nil
         audioSignalAssessment = nil
@@ -1972,11 +1973,11 @@ final class StudioState: ObservableObject {
             )
 
             let reframeOperation = graph.currentOperations.last { $0.type == .reframe }
-            var clipReframe = reframeOperation?.reframeSpec
+            var clipReframe = selection.reframeSpec ?? reframeOperation?.reframeSpec
             let automaticFraming = reframeOperation.map { operation in
                 graph.revisions.first { $0.operation?.id == operation.id }?.actor == .acceptedAIProposal
             } ?? false
-            if automaticFraming, let base = clipReframe {
+            if selection.reframeSpec == nil, automaticFraming, let base = clipReframe {
                 clipCandidateStatusMessage = "Bildausschnitt für diesen Clip wird geprüft …"
                 if let proposal = try? await LocalVisionFocalPointSuggester().suggest(
                     url: asset.sourceURL, sourceRange: selection.sourceRange
