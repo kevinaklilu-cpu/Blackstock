@@ -99,9 +99,11 @@ private struct CleanMachineScenario {
             withIntermediateDirectories: true
         )
         defer {
-            try? FileManager.default.removeItem(
-                at: root
-            )
+            if ProcessInfo.processInfo.environment["BLACKSTOCK_E2E_KEEP_FILES"] == "1" {
+                print("E2E_FIXTURES", root.path)
+            } else {
+                try? FileManager.default.removeItem(at: root)
+            }
             E2EMockURLProtocol.handler = nil
         }
 
@@ -158,6 +160,11 @@ private struct CleanMachineScenario {
             ),
             "synthetic supplemental video missing"
         )
+
+        let visualSelection = try await VisualSceneSelector().select(url: supplementalVideoURL,
+            sourceDuration: 2.5, requestedDuration: 0.25)
+        try require((visualSelection?.startSeconds ?? 0) >= 0.5,
+                    "visual scene selection failed to avoid black opening frames")
 
         let sourceAsset = AVURLAsset(
             url: sourceURL
@@ -457,8 +464,15 @@ private struct CleanMachineScenario {
                         captureID: UUID(),
                         fileURL: supplementalVideoURL,
                         timelineStartSeconds: 0.8,
-                        sourceStartSeconds: 0.2,
-                        durationSeconds: 1.4
+                        sourceStartSeconds: 0.7,
+                        durationSeconds: 0.5
+                    ),
+                    SupplementalVideoInsertInput(
+                        captureID: UUID(),
+                        fileURL: supplementalVideoURL,
+                        timelineStartSeconds: 1.8,
+                        sourceStartSeconds: 1.3,
+                        durationSeconds: 0.5
                     )
                 ]
             )
@@ -470,14 +484,19 @@ private struct CleanMachineScenario {
         // Verify pixels of the final movie, not merely that the source exists.
         let probe = AVAssetImageGenerator(asset: AVURLAsset(url: renderURL))
         probe.appliesPreferredTrackTransform = true
-        let insertedFrame = try await probe.image(at: CMTime(seconds: 1.2, preferredTimescale: 600)).image
-        var pixel = [UInt8](repeating: 0, count: 4)
-        let context = CGContext(data: &pixel, width: 1, height: 1, bitsPerComponent: 8,
-            bytesPerRow: 4, space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
-        context.draw(insertedFrame, in: CGRect(x: 0, y: 0, width: 1, height: 1))
-        try require(Int(pixel[0]) > Int(pixel[2]) * 2,
-                    "supplemental source is absent from final rendered pixels")
+        probe.requestedTimeToleranceBefore = .zero
+        probe.requestedTimeToleranceAfter = .zero
+        for (time, expectInsert) in [(1.0, true), (1.55, false), (2.0, true)] {
+            let frame = try await probe.image(at: CMTime(seconds: time, preferredTimescale: 600)).image
+            var pixel = [UInt8](repeating: 0, count: 4)
+            let context = CGContext(data: &pixel, width: 1, height: 1, bitsPerComponent: 8,
+                bytesPerRow: 4, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            context.draw(frame, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+            let isInsert = Int(pixel[0]) > Int(pixel[2]) * 2
+            try require(isInsert == expectInsert,
+                        "picture sequence disagrees with planned source at \(time)s: \(pixel)")
+        }
 
         let technical = try await
             LocalAudioTechnicalInspector()
@@ -1082,9 +1101,9 @@ private struct SyntheticMediaFactory {
                 )
                 let pixels = base.assumingMemoryBound(to: UInt8.self)
                 for offset in stride(from: 0, to: size, by: 4) {
-                    pixels[offset] = redFixture ? 20 : value
-                    pixels[offset + 1] = redFixture ? 20 : value
-                    pixels[offset + 2] = redFixture ? 230 : value
+                    pixels[offset] = redFixture ? (frame < 15 ? 0 : 20) : value
+                    pixels[offset + 1] = redFixture ? (frame < 15 ? 0 : 20) : value
+                    pixels[offset + 2] = redFixture ? (frame < 15 ? 0 : 230) : value
                     pixels[offset + 3] = 255
                 }
             }

@@ -164,7 +164,7 @@ struct PackagingReviewView: View {
     }
 
     private var qualityReview: CreatorQualityReview {
-        if let persistedReview {
+        if reviewFrozen, let persistedReview {
             return persistedReview
         }
         return AutomaticPublishReview().build(base: automaticQualityReview, package: draftPackage)
@@ -175,8 +175,7 @@ struct PackagingReviewView: View {
     }
 
     private var reviewFrozen: Bool {
-        currentStage == .review
-        || currentStage == .publishing
+        currentStage == .publishing
         || currentStage == .published
     }
 
@@ -194,6 +193,18 @@ struct PackagingReviewView: View {
             .split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
+    }
+
+    private var targetChannelName: String {
+        session.channels.first(where: { $0.id == project.targetChannelID })?.title ?? project.targetChannelID
+    }
+
+    private var visibilityLabel: String {
+        switch privacyStatus {
+        case .privateVideo: return "Privat"
+        case .unlisted: return "Nicht gelistet"
+        case .publicVideo: return "Öffentlich"
+        }
     }
 
     private var draftPackage: PublishPackage {
@@ -233,8 +244,22 @@ struct PackagingReviewView: View {
                     header
                     BlackstockVideoPlayer(player: previewPlayer)
                         .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                    if let thumbnailURL, let image = NSImage(contentsOf: thumbnailURL) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("Dieses Vorschaubild wird hochgeladen", systemImage: "photo.fill")
+                                .font(.headline)
+                            Image(nsImage: image).resizable().scaledToFit()
+                                .frame(maxWidth: .infinity, maxHeight: 240)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .accessibilityLabel("Ausgewähltes YouTube-Vorschaubild")
+                        }.padding(14).blackstockSurface(raised: true)
+                    } else if isGeneratingThumbnail {
+                        ProgressView("Vorschaubild wird aus dem fertigen Video erstellt …")
+                    }
                     metadataSection
-                    packagingAssetsSection
+                    DisclosureGroup("Vorschaubild anpassen und Untertiteldateien") {
+                        packagingAssetsSection
+                    }
                     DisclosureGroup("Kapitel und alternative Titel") {
                         chaptersSection
                         packagingVariantsSection
@@ -290,7 +315,7 @@ struct PackagingReviewView: View {
             Button("Abbrechen", role: .cancel) {}
         } message: {
             Text(
-                "Zielkanal: \(project.targetChannelID) · Sichtbarkeit: \(draftPackage.metadata.privacyStatus.rawValue). Diese Aktion erstellt bzw. setzt reale YouTube-Ressourcen."
+                "\(targetChannelName) · \(visibilityLabel)\n\(title)\nVideo, Vorschaubild und ausgewählte Untertitel werden hochgeladen."
             )
         }
         .task {
@@ -359,11 +384,8 @@ struct PackagingReviewView: View {
                 Button("Schließen") { dismiss() }
             }
 
-            Label(
-                "Render: " + String(artifact.sha256.prefix(12)) + "…",
-                systemImage: "checkmark.seal"
-            )
-            .font(.caption.monospaced())
+            Label("Fertiges Video ausgewählt", systemImage: "checkmark.seal")
+            .font(.caption)
             .foregroundStyle(.secondary)
         }
     }
@@ -414,6 +436,10 @@ struct PackagingReviewView: View {
                     }
                 }
                 .pickerStyle(.segmented)
+                if !session.publicPublishingAllowed {
+                    Text("Diese Anbindung unterstützt derzeit private Uploads. Nach dem Upload kannst du das Video über den Link in YouTube Studio verwalten.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
 
                 Picker(
                     "YouTube-Zielgruppe",
@@ -902,9 +928,9 @@ struct PackagingReviewView: View {
     private var targetSection: some View {
         GroupBox("Ziel") {
             VStack(alignment: .leading, spacing: 6) {
-                Label(project.targetChannelID, systemImage: "person.crop.rectangle")
-                    .font(.callout.monospaced())
-                Text("Dieser Zielkanal ist Teil des Projekts und kann bei der Veröffentlichung nicht still überschrieben werden.")
+                Label(targetChannelName, systemImage: "person.crop.rectangle")
+                    .font(.callout)
+                Text("Dein fertiges Video wird auf diesen Kanal hochgeladen.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -979,47 +1005,7 @@ struct PackagingReviewView: View {
                     .disabled(isCheckingQuality || isGeneratingThumbnail || session.isPublishing)
                 }
 
-                if currentStage == .packaging {
-                    Button("Weiter zum Upload") {
-                        Task {
-                        guard session.activeProject?.id == project.id else { return }
-                        do {
-                            let review = qualityReview
-                            try session.savePublishPreparation(
-                                package: draftPackage,
-                                qualityReview: review,
-                                packagingVariants: packagingVariants
-                            )
-                            guard session.advanceActiveProject(
-                                to: .review
-                            ) else { return }
-                            persistedReview = review
-                            if session.publishingAuthorizedChannelID != project.targetChannelID {
-                                await session.authorizePublishing()
-                            }
-                            if session.activeProject?.id == project.id,
-                               session.publishingAuthorizedChannelID == project.targetChannelID {
-                                showFinalPublishConfirmation = true
-                            }
-                        } catch {
-                            session.errorMessage = "Prüfung konnte nicht gespeichert werden: \(error.localizedDescription)"
-                        }
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(
-                        !missingAreas.isEmpty
-                        || !qualityReview.passesReleaseGate
-                        || isCheckingQuality || isGeneratingThumbnail || session.isAuthorizingPublishing
-                        || draftPackage.metadata.title.isEmpty
-                    )
-
-                    Text("Einstellungen werden gespeichert und der Kanal geprüft. Danach bestätigst du den Upload.")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                } else if currentStage == .review
-                            || currentStage == .publishing
-                            || currentStage == .published {
+                if currentStage == .review || currentStage == .publishing || currentStage == .published {
                     publishingAuthorizationPanel
                 }
                 if let error = session.errorMessage {
@@ -1033,7 +1019,10 @@ struct PackagingReviewView: View {
                 Button {
                     Task { await prepareAndConfirmUpload() }
                 } label: {
-                    Label(session.isPublishing ? "Upload läuft …" : "Zu YouTube hochladen", systemImage: "arrow.up.circle.fill")
+                    Label(session.isPublishing ? "Upload läuft …" :
+                          (session.lastPublishingResult?.packagingWarnings?.isEmpty == false
+                           ? "Fehlende Extras erneut übertragen" : "Zu YouTube hochladen"),
+                          systemImage: "arrow.up.circle.fill")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
@@ -1048,7 +1037,7 @@ struct PackagingReviewView: View {
 
     private func prepareAndConfirmUpload() async {
         guard session.activeProject?.id == project.id else { return }
-        if currentStage == .packaging {
+        if currentStage == .packaging || currentStage == .review {
             if thumbnailURL == nil { await generateThumbnailFromRender() }
             await checkAudioAutomatically()
             guard missingAreas.isEmpty, qualityReview.passesReleaseGate else {
@@ -1058,7 +1047,9 @@ struct PackagingReviewView: View {
             do {
                 let review = qualityReview
                 try session.savePublishPreparation(package: draftPackage, qualityReview: review, packagingVariants: packagingVariants)
-                guard session.advanceActiveProject(to: .review) else { return }
+                if currentStage == .packaging {
+                    guard session.advanceActiveProject(to: .review) else { return }
+                }
                 persistedReview = review
             } catch {
                 session.errorMessage = "Upload konnte nicht vorbereitet werden: \(error.localizedDescription)"
@@ -1109,36 +1100,13 @@ struct PackagingReviewView: View {
             if session.publishingAuthorizedChannelID
                 == project.targetChannelID {
                 Label(
-                    "Veröffentlichungsberechtigung für diesen Zielkanal verifiziert",
+                    "Mit deinem Zielkanal verbunden",
                     systemImage: "person.crop.circle.badge.checkmark"
                 )
                 .font(.caption)
 
-                Text("Der echte Upload bleibt bis zur finalen Bestätigung der externen Aktion getrennt. Öffentlich/Nicht gelistet ist nur nach extern verifiziertem YouTube-Compliance-Gate verfügbar.")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-
-                if currentStage == .review || currentStage == .publishing {
-                    Button {
-                        showFinalPublishConfirmation = true
-                    } label: {
-                        HStack {
-                            if session.isPublishing {
-                                ProgressView().controlSize(.small)
-                            }
-                            Label(
-                                session.isPublishing
-                                    ? "Upload läuft …"
-                                    : (session.lastPublishingResult?.packagingWarnings?.isEmpty == false
-                                       ? "Fehlende Extras erneut übertragen"
-                                       : "Zu YouTube hochladen …"),
-                                systemImage: "arrow.up.circle.fill"
-                            )
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(session.isPublishing)
-                }
+                Text("Ein Klick auf „Zu YouTube hochladen“ bereitet alles vor. Danach bestätigst du Kanal und Sichtbarkeit.")
+                    .font(.caption2).foregroundStyle(.secondary)
 
                 if let result = session.lastPublishingResult {
                     VStack(alignment: .leading, spacing: 4) {
@@ -1151,6 +1119,7 @@ struct PackagingReviewView: View {
                             .font(.caption.monospaced())
                             .textSelection(.enabled)
                         Link("Video auf YouTube ansehen", destination: URL(string: "https://www.youtube.com/watch?v=\(result.videoID)")!)
+                        Link("In YouTube Studio öffnen", destination: URL(string: "https://studio.youtube.com/video/\(result.videoID)/edit")!)
                         if let warnings = result.packagingWarnings, !warnings.isEmpty {
                             ForEach(warnings, id: \.self) { Text($0).font(.caption).foregroundStyle(.orange) }
                             Button("Video ohne offene Extras abschließen") {

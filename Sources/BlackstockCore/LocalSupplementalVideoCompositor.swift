@@ -27,11 +27,54 @@ private final class SupplementalMuxExportSessionBox:
     }
 }
 
+private final class SequentialInsertFrames {
+    let asset: AVAsset
+    let track: AVAssetTrack
+    let transform: CGAffineTransform
+    let start: Double
+    let duration: Double
+    var reader: AVAssetReader?
+    var output: AVAssetReaderTrackOutput?
+    var previous: CMSampleBuffer?
+    var next: CMSampleBuffer?
+
+    init(asset: AVAsset, track: AVAssetTrack, transform: CGAffineTransform,
+         start: Double, duration: Double) throws {
+        self.asset = asset; self.track = track; self.transform = transform
+        self.start = start; self.duration = duration
+    }
+
+    func image(at seconds: Double) throws -> CIImage {
+        if reader == nil {
+            let decoder = try AVAssetReader(asset: asset)
+            let frames = AVAssetReaderTrackOutput(track: track, outputSettings: [
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+            ])
+            frames.alwaysCopiesSampleData = false
+            decoder.add(frames)
+            decoder.timeRange = CMTimeRange(start: CMTime(seconds: start, preferredTimescale: 600),
+                duration: CMTime(seconds: duration, preferredTimescale: 600))
+            guard decoder.startReading() else { throw decoder.error ?? CocoaError(.fileReadCorruptFile) }
+            reader = decoder; output = frames; next = frames.copyNextSampleBuffer()
+        }
+        while let sample = next, CMSampleBufferGetPresentationTimeStamp(sample).seconds <= seconds + 0.0005 {
+            previous = sample
+            next = output?.copyNextSampleBuffer()
+        }
+        if reader?.status == .failed { throw reader?.error ?? CocoaError(.fileReadCorruptFile) }
+        guard let sample = previous ?? next, let pixel = CMSampleBufferGetImageBuffer(sample) else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        return CIImage(cvPixelBuffer: pixel).transformed(by: transform)
+    }
+    func cancel() { reader?.cancelReading(); reader = nil; output = nil; previous = nil; next = nil }
+}
+
 public actor LocalSupplementalVideoCompositor {
     private struct PreparedInsert {
         let order: Int
         let captureID: UUID
-        let generator: AVAssetImageGenerator
+        let frames: SequentialInsertFrames
         let sourceStartSeconds: Double
         let timelineStartSeconds: Double
         let timelineEndSeconds: Double
@@ -87,6 +130,7 @@ public actor LocalSupplementalVideoCompositor {
         }
 
         var prepared: [PreparedInsert] = []
+        defer { prepared.forEach { $0.frames.cancel() } }
         for (order, input) in supplementalVideo.enumerated() {
             let asset = AVURLAsset(url: input.fileURL)
             let tracks = try await asset.loadTracks(
@@ -123,20 +167,15 @@ public actor LocalSupplementalVideoCompositor {
                 continue
             }
 
-            let generator = AVAssetImageGenerator(
-                asset: asset
-            )
-            generator.appliesPreferredTrackTransform = true
-            generator.requestedTimeToleranceBefore =
-                CMTime(seconds: 1.0 / 120.0, preferredTimescale: 600)
-            generator.requestedTimeToleranceAfter =
-                CMTime(seconds: 1.0 / 120.0, preferredTimescale: 600)
+            let frames = try SequentialInsertFrames(asset: asset, track: track,
+                transform: try await track.load(.preferredTransform),
+                start: sourceStart, duration: duration)
 
             prepared.append(
                 PreparedInsert(
                     order: order,
                     captureID: input.captureID,
-                    generator: generator,
+                    frames: frames,
                     sourceStartSeconds: sourceStart,
                     timelineStartSeconds: timelineStart,
                     timelineEndSeconds:
@@ -229,6 +268,10 @@ public actor LocalSupplementalVideoCompositor {
             outputURL: outputURL,
             fileType: .mp4
         )
+        defer {
+            if reader.status == .reading { reader.cancelReading() }
+            if writer.status == .writing { writer.cancelWriting() }
+        }
         let width = max(
             Int(renderSize.width.rounded()),
             2
@@ -302,11 +345,9 @@ public actor LocalSupplementalVideoCompositor {
         }
         writer.startSession(atSourceTime: .zero)
 
-        let context = CIContext(
-            options: [
-                .useSoftwareRenderer: true
-            ]
-        )
+        // Use the deterministic renderer; sequential source decoding avoids
+        // the expensive per-frame seeks without depending on GPU availability.
+        let context = CIContext(options: [.useSoftwareRenderer: true, .cacheIntermediates: false])
         let colorSpace = CGColorSpaceCreateDeviceRGB()
         let outputRect = CGRect(
             origin: .zero,
@@ -317,13 +358,12 @@ public actor LocalSupplementalVideoCompositor {
         )
 
         var appendedFrameCount = 0
+        var activeInsertOrder: Int?
 
         while reader.status == .reading,
               let sample =
                 readerOutput.copyNextSampleBuffer() {
-            autoreleasepool {
-                _ = sample
-            }
+            try Task.checkCancellation()
 
             guard let imageBuffer =
                     CMSampleBufferGetImageBuffer(
@@ -356,23 +396,16 @@ public actor LocalSupplementalVideoCompositor {
                 .max(by: {
                     $0.order < $1.order
                 }) {
+                if activeInsertOrder != insert.order {
+                    prepared.first(where: { $0.order == activeInsertOrder })?.frames.cancel()
+                    activeInsertOrder = insert.order
+                }
                 let sourceSeconds =
                     insert.sourceStartSeconds
                     + timelineSeconds
                     - insert.timelineStartSeconds
                 do {
-                    let cgImage =
-                        try insert.generator.copyCGImage(
-                            at: CMTime(
-                                seconds: sourceSeconds,
-                                preferredTimescale: 600
-                            ),
-                            actualTime: nil
-                        )
-                    image = Self.aspectFill(
-                        CIImage(cgImage: cgImage),
-                        into: outputRect
-                    )
+                    image = Self.aspectFill(try insert.frames.image(at: sourceSeconds), into: outputRect)
                 } catch {
                     throw LocalSupplementalVideoError
                         .exportFailed(
@@ -381,6 +414,8 @@ public actor LocalSupplementalVideoCompositor {
                         )
                 }
             } else {
+                prepared.first(where: { $0.order == activeInsertOrder })?.frames.cancel()
+                activeInsertOrder = nil
                 let baseImage = CIImage(
                     cvPixelBuffer: imageBuffer
                 )

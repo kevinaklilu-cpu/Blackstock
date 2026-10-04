@@ -1177,6 +1177,7 @@ final class StudioState: ObservableObject {
         }
 
         isGeneratingClipCandidates = true
+        clipCandidateSourceTranscript = nil
         clipCandidateStatusMessage = nil
         defer { isGeneratingClipCandidates = false }
 
@@ -1287,7 +1288,7 @@ final class StudioState: ObservableObject {
         guard !shouldStopProcessing else {
             return
         }
-        if (!analyzeSpeech || localClipCandidates.isEmpty), let asset {
+        if (!renderImmediately || !analyzeSpeech || localClipCandidates.isEmpty), let asset {
             localClipCandidates = automaticTimelineCandidates(
                 duration: asset.durationSeconds, targetDuration: targetDuration
             )
@@ -1352,6 +1353,7 @@ final class StudioState: ObservableObject {
         guard !shouldStopProcessing,
               errorMessage == nil else { return }
 
+        self.transcript = savedClipSelections.first?.transcript
         if includeCaptions, let firstSaved = savedClipSelections.first,
            let transcript = firstSaved.transcript {
             self.transcript = transcript
@@ -1474,15 +1476,20 @@ final class StudioState: ObservableObject {
                 max(duration * fraction - clipDuration / 2, 0),
                 max(duration - clipDuration, 0)
             )
+            let segments = clipCandidateSourceTranscript?.segments.filter {
+                $0.startSeconds < start + clipDuration
+                    && $0.startSeconds + $0.durationSeconds > start
+            } ?? []
+            let text = segments.map(\.text).joined(separator: " ")
             return LocalClipCandidate(
                 sourceRange: EditTimeRange(
                     startSeconds: start,
                     durationSeconds: clipDuration
                 ),
-                transcriptPreview: "Zeitbasierter Vorschlag \(index + 1)",
-                wordCount: 0,
+                transcriptPreview: text.isEmpty ? "Zeitbasierter Vorschlag \(index + 1)" : text,
+                wordCount: text.split(whereSeparator: { $0.isWhitespace }).count,
                 averageConfidence: nil,
-                segmentIDs: []
+                segmentIDs: segments.map(\.id)
             )
         }
     }
@@ -2917,6 +2924,7 @@ final class StudioState: ObservableObject {
                 captureID: capture.id
             ) { setting in
                 setting.enabled = true
+                setting.distributedScenes = true
                 setting.timelineStartSeconds = start
                 setting.sourceStartSeconds = max(0, ((capture.durationSeconds ?? duration) - duration) * 0.35)
                 setting.durationSeconds = duration
@@ -2939,6 +2947,96 @@ final class StudioState: ObservableObject {
         errorMessage = nil
     }
 
+    func matchStoryNarration(captureIDs: [UUID], defaultLocale: String, sourceLocales: [UUID: String]) async {
+        guard !isRendering, !isGeneratingClipCandidates, let narration = transcript else {
+            clipCandidateStatusMessage = "Keine auswertbare Haupterzählung: Bildauswahl ist noch kein KI-Inhaltsmatch."
+            return
+        }
+        let initial = supplementalVideoInsertSettings
+        let projectID = activeProjectID
+        let revisionID = graph.headID
+        let sequence = plannedStorySequence()
+        var planned = initial
+        isGeneratingClipCandidates = true
+        defer { isGeneratingClipCandidates = false }
+        let transcriber = LocalOnDeviceTranscriber()
+        let matcher = SemanticSceneMatcher()
+        var matchCount = 0
+        for (index, id) in captureIDs.enumerated() {
+            guard !shouldStopProcessing, !Task.isCancelled, activeProjectID == projectID else { return }
+            guard let capture = supplementalCaptures.first(where: { $0.id == id }),
+                  let position = planned.firstIndex(where: { $0.captureID == id }) else { continue }
+            clipCandidateStatusMessage = "KI-Inhaltsabgleich · Quelle \(index + 1) von \(captureIDs.count)"
+            var scenes: [MatchedStoryScene] = []
+            let slots = sequence.filter { $0.captureID == id }
+            let recognized = try? await transcriber.transcribeVideo(url: capture.fileURL,
+                localeIdentifier: sourceLocales[id] ?? defaultLocale)
+            var used: [EditTimeRange] = []
+            for slot in slots {
+                guard !Task.isCancelled, !shouldStopProcessing else { return }
+                let reference = narration.segments.filter {
+                    $0.startSeconds < slot.timelineStartSeconds + slot.durationSeconds + 2
+                        && $0.startSeconds + $0.durationSeconds > slot.timelineStartSeconds - 2
+                }.map(\.text).joined(separator: " ")
+                if let recognized, let scene = await matcher.select(transcript: recognized, reference: reference,
+                    sourceDuration: capture.durationSeconds ?? 0, maximumDuration: slot.durationSeconds, excluding: used) {
+                    scenes.append(.init(outputStart: slot.timelineStartSeconds, sourceStart: scene.range.startSeconds,
+                        duration: scene.range.durationSeconds, explanation: scene.explanation))
+                    used.append(scene.range)
+                    matchCount += 1
+                } else {
+                    scenes.append(.init(outputStart: slot.timelineStartSeconds, sourceStart: slot.sourceStartSeconds,
+                        duration: slot.durationSeconds, explanation: "Kein belastbarer KI-Inhaltsmatch. Visuell/zeitbasiert vorgeschlagen; Inhalt vor Veröffentlichung prüfen."))
+                }
+            }
+            planned[position].matchedScenes = scenes
+            planned[position].selectionExplanation = scenes.map(\.explanation).joined(separator: "\n\n")
+        }
+        guard !Task.isCancelled, !shouldStopProcessing, activeProjectID == projectID,
+              graph.headID == revisionID, supplementalVideoInsertSettings == initial else { return }
+        supplementalVideoInsertSettings = planned
+        invalidateSupplementalVideoRender()
+        clipCandidateStatusMessage = "\(matchCount) von \(sequence.count) Szenen mit lokaler KI sprachlich zugeordnet. Übrige Vorschläge sind ausdrücklich markiert."
+        persistWorkspaceIfPossible()
+    }
+
+    func refineStoryPictures(captureIDs: [UUID]) async {
+        guard !isRendering, !isGeneratingClipCandidates else { return }
+        let projectID = activeProjectID
+        let initial = supplementalVideoInsertSettings
+        let revisionID = graph.headID
+        var planned = initial
+        isGeneratingClipCandidates = true
+        defer { isGeneratingClipCandidates = false }
+        let selector = VisualSceneSelector()
+        for (index, id) in captureIDs.enumerated() {
+            guard !shouldStopProcessing, !Task.isCancelled, activeProjectID == projectID else { return }
+            guard let capture = supplementalCaptures.first(where: { $0.id == id }),
+                  let position = planned.firstIndex(where: { $0.captureID == id }) else { continue }
+            clipCandidateStatusMessage = "Bildauswahl · Quelle \(index + 1) von \(captureIDs.count) · Helligkeit und Bildstruktur prüfen …"
+            do {
+                if let scene = try await selector.select(url: capture.fileURL,
+                    sourceDuration: capture.durationSeconds ?? 0,
+                    requestedDuration: planned[position].durationSeconds) {
+                    planned[position].sourceStartSeconds = scene.startSeconds
+                    planned[position].durationSeconds = scene.durationSeconds
+                    planned[position].selectionExplanation = scene.explanation
+                } else {
+                    planned[position].selectionExplanation = "Keine ausreichend bewertbare Bildfolge gefunden. Zeitbasierte Auswahl beibehalten; Vorschau prüfen."
+                }
+            } catch {
+                if Task.isCancelled { return }
+                planned[position].selectionExplanation = "Bildprüfung nicht verfügbar. Zeitbasierte Auswahl beibehalten; Vorschau prüfen."
+            }
+        }
+        guard !shouldStopProcessing, !Task.isCancelled, activeProjectID == projectID,
+              graph.headID == revisionID, supplementalVideoInsertSettings == initial else { return }
+        previousStorySceneSettings = initial
+        supplementalVideoInsertSettings = planned
+        invalidateSupplementalVideoRender()
+        persistWorkspaceIfPossible()
+    }
+
     /// Builds all suggestions before committing them, so cancellation or a
     /// project switch cannot leave a partially applied scene plan.
     func refineStoryScenes(captureIDs: [UUID], reference: String,
@@ -2956,6 +3054,7 @@ final class StudioState: ObservableObject {
                   graph.headID == revisionID else { return }
             guard let capture = supplementalCaptures.first(where: { $0.id == id }),
                   let settingIndex = planned.firstIndex(where: { $0.captureID == id }) else { continue }
+            planned[settingIndex].matchedScenes = nil
             clipCandidateStatusMessage = "Szenen prüfen · Quelle \(index + 1) von \(captureIDs.count)"
             do {
                 let sourceLocale = sourceLocales[id] ?? localeIdentifier
@@ -3014,6 +3113,8 @@ final class StudioState: ObservableObject {
         if let index = supplementalVideoInsertSettings.firstIndex(
             where: { $0.captureID == captureID }
         ) {
+            supplementalVideoInsertSettings[index].distributedScenes = false
+            supplementalVideoInsertSettings[index].matchedScenes = nil
             change(&supplementalVideoInsertSettings[index])
             return
         }
@@ -3031,6 +3132,74 @@ final class StudioState: ObservableObject {
         audioTechnicalAssessment = nil
         audioSignalAssessment = nil
         audioLoudnessAssessment = nil
+    }
+
+    func plannedStorySequence() -> [SupplementalVideoInsertInput] {
+            let outputDuration = currentOutputDurationSeconds
+            let inputs =
+                supplementalVideoInsertSettings
+                .compactMap { setting -> SupplementalVideoInsertInput? in
+                    guard let capture = supplementalCaptures.first(
+                        where: {
+                            $0.id == setting.captureID
+                                && $0.mayBeUsedInProduction
+                                && (
+                                    $0.kind == .camera
+                                    || $0.kind == .screen
+                                )
+                        }
+                    ) else {
+                        return nil
+                    }
+
+                    let sourceDuration =
+                        capture.durationSeconds
+                        ?? max(
+                            setting.sourceStartSeconds
+                                + setting.durationSeconds,
+                            setting.durationSeconds
+                        )
+                    guard let plan = SupplementalVideoInsertPlanner()
+                        .plan(
+                            setting: setting,
+                            sourceDurationSeconds: sourceDuration,
+                            outputDurationSeconds: outputDuration
+                        ) else {
+                        return nil
+                    }
+
+                    return SupplementalVideoInsertInput(
+                        captureID: capture.id,
+                        fileURL: capture.fileURL,
+                        timelineStartSeconds: plan.timelineStartSeconds,
+                        sourceStartSeconds: plan.sourceStartSeconds,
+                        durationSeconds: plan.durationSeconds
+                    )
+                }
+
+        let active = supplementalVideoInsertSettings.filter(\.enabled)
+        if !active.isEmpty && active.allSatisfy({ $0.matchedScenes?.isEmpty == false }) {
+            return active.flatMap { setting -> [SupplementalVideoInsertInput] in
+                guard let capture = supplementalCaptures.first(where: { $0.id == setting.captureID }) else { return [] }
+                guard capture.mayBeUsedInProduction,
+                      let sourceDuration = capture.durationSeconds,
+                      (setting.matchedScenes ?? []).allSatisfy({ scene in
+                          scene.outputStart.isFinite && scene.sourceStart.isFinite && scene.duration.isFinite
+                              && scene.outputStart >= 0 && scene.sourceStart >= 0 && scene.duration >= 0.05
+                              && scene.outputStart + scene.duration <= outputDuration + 0.001
+                              && scene.sourceStart + scene.duration <= sourceDuration + 0.001
+                      }) else { return [] }
+                return (setting.matchedScenes ?? []).map { scene in
+                    .init(captureID: capture.id, fileURL: capture.fileURL,
+                        timelineStartSeconds: scene.outputStart, sourceStartSeconds: scene.sourceStart,
+                        durationSeconds: scene.duration)
+                }
+            }.sorted { $0.timelineStartSeconds < $1.timelineStartSeconds }
+        }
+        if !active.isEmpty && active.allSatisfy({ $0.distributedScenes == true }) {
+            return StoryMontagePlanner.distribute(inputs, outputDuration: outputDuration)
+        }
+        return inputs
     }
 
     func render(projectID: UUID) async {
@@ -3074,47 +3243,21 @@ final class StudioState: ObservableObject {
                     )
                 }
 
-            let outputDuration = currentOutputDurationSeconds
-            let supplementalVideo =
-                supplementalVideoInsertSettings
-                .compactMap { setting -> SupplementalVideoInsertInput? in
-                    guard let capture = supplementalCaptures.first(
-                        where: {
-                            $0.id == setting.captureID
-                                && $0.mayBeUsedInProduction
-                                && (
-                                    $0.kind == .camera
-                                    || $0.kind == .screen
-                                )
-                        }
-                    ) else {
-                        return nil
-                    }
+            let supplementalVideo = plannedStorySequence()
 
-                    let sourceDuration =
-                        capture.durationSeconds
-                        ?? max(
-                            setting.sourceStartSeconds
-                                + setting.durationSeconds,
-                            setting.durationSeconds
-                        )
-                    guard let plan = SupplementalVideoInsertPlanner()
-                        .plan(
-                            setting: setting,
-                            sourceDurationSeconds: sourceDuration,
-                            outputDurationSeconds: outputDuration
-                        ) else {
-                        return nil
-                    }
+            let selectedCaptureIDs = Set(supplementalVideoInsertSettings.filter(\.enabled).map(\.captureID))
+            guard selectedCaptureIDs == Set(supplementalVideo.map(\.captureID)) else {
+                errorMessage = "Mindestens eine ausgewählte Bildquelle hat keinen gültigen Ausschnitt. Bitte im Schnittplan prüfen; es wurde kein unvollständiger Export gestartet."
+                return
+            }
 
-                    return SupplementalVideoInsertInput(
-                        captureID: capture.id,
-                        fileURL: capture.fileURL,
-                        timelineStartSeconds: plan.timelineStartSeconds,
-                        sourceStartSeconds: plan.sourceStartSeconds,
-                        durationSeconds: plan.durationSeconds
-                    )
-                }
+            let orderedScenes = supplementalVideo.sorted { $0.timelineStartSeconds < $1.timelineStartSeconds }
+            guard zip(orderedScenes, orderedScenes.dropFirst()).allSatisfy({ previous, next in
+                previous.timelineStartSeconds + previous.durationSeconds <= next.timelineStartSeconds + 0.001
+            }) else {
+                errorMessage = "Zwei Bildszenen überlappen sich. Bitte im Schnittplan die Zeiten anpassen oder die Quellen neu anordnen."
+                return
+            }
 
             let artifact = try await LocalVideoRenderer().render(
                 projectID: projectID,
@@ -3135,6 +3278,26 @@ final class StudioState: ObservableObject {
                 errorMessage = "Verarbeitung wurde gestoppt."
                 return
             }
+
+            struct SourceReceipt: Encodable {
+                let captureID: UUID
+                let fileName: String
+                let outputStart: Double
+                let sourceStart: Double
+                let duration: Double
+            }
+            struct RenderReceipt: Encodable {
+                let renderID: UUID
+                let mainAudioFile: String
+                let pictureSources: [SourceReceipt]
+            }
+            let receipt = RenderReceipt(renderID: artifact.id, mainAudioFile: asset.sourceURL.lastPathComponent,
+                pictureSources: supplementalVideo.map { .init(captureID: $0.captureID,
+                    fileName: $0.fileURL.lastPathComponent, outputStart: $0.timelineStartSeconds,
+                    sourceStart: $0.sourceStartSeconds, duration: $0.durationSeconds) })
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try encoder.encode(receipt).write(to: outputURL.deletingPathExtension().appendingPathExtension("sources.json"), options: .atomic)
 
             renderArtifact = artifact
             player.replaceCurrentItem(
