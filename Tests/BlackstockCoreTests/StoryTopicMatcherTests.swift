@@ -7,6 +7,14 @@ final class StoryTopicMatcherTests: XCTestCase {
         XCTAssertEqual(StoryTopicMatcher().searchQuery(for: "Messi MESSI Tor 2026"), "messi tor")
         XCTAssertEqual(StoryTopicMatcher().searchQuery(for: "Best new video 2026"), "")
     }
+    func testGenericSelectionWordsDoNotSuggestGamingForFootball() {
+        let matcher = StoryTopicMatcher()
+        let lead = candidate("Picking The World's BEST Wonderkid In EVERY Position! | Saturday Social")
+        XCTAssertFalse(matcher.match(candidate("ULTIMATE TBC Classic Class Picking Guide | World of Warcraft"), to: lead).isRelated)
+        XCTAssertTrue(matcher.match(candidate("Picking the BEST WONDERKID in WORLD FOOTBALL"), to: lead).isRelated)
+        XCTAssertEqual(matcher.searchQuery(for: lead.title), "wonderkid position")
+    }
+
     func testChannelBrandDoesNotBecomeStoryTopic() {
         XCTAssertEqual(StoryTopicMatcher().searchQuery(for: "CORE ALL SPORTS GOLF BATTLE", excluding: "CORE"), "golf battle")
         let lead = candidate("CORE ALL SPORTS GOLF BATTLE", channel: "CORE")
