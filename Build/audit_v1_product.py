@@ -57,7 +57,7 @@ require("Sources/BlackstockApp/WorkspaceProductViews.swift", [
 require("Sources/BlackstockApp/BlackstockSession.swift", [
     "OpportunityTimeWindow = .last7Days",
     "publishedAfter: window.publishedAfter",
-    "Kategorie, Sprache und Region wurden erweitert; Zeitraum und Format bleiben strikt aktiv.",
+    "OpportunityPageAccumulator",
 ])
 require("Sources/BlackstockApp/StudioView.swift", [
     "activeStorySources",

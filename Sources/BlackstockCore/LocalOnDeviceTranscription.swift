@@ -156,7 +156,8 @@ public final class LocalOnDeviceTranscriber {
     public func transcribeVideo(
         url: URL,
         localeIdentifier: String,
-        contextualTerms: [String] = []
+        contextualTerms: [String] = [],
+        progress: (@Sendable (Double) async -> Void)? = nil
     ) async throws -> LocalTranscript {
         switch authorizationState() {
         case .notDetermined, .denied:
@@ -176,45 +177,48 @@ public final class LocalOnDeviceTranscriber {
             throw LocalTranscriptionError.onDeviceRecognitionUnsupported
         }
 
-        let audioURL = try await extractAudio(from: url)
-        defer { try? FileManager.default.removeItem(at: audioURL) }
-
-        let request = SFSpeechURLRecognitionRequest(url: audioURL)
-        request.requiresOnDeviceRecognition = true
-        request.shouldReportPartialResults = false
-        request.taskHint = .dictation
-        request.contextualStrings = Array(contextualTerms.prefix(100))
-        if #available(macOS 13.0, *) {
-            request.addsPunctuation = true
+        let duration = try await AVURLAsset(url: url).load(.duration).seconds
+        let chunks = SpeechAnalysisChunk.plan(duration: duration)
+        guard !chunks.isEmpty else { throw LocalTranscriptionError.emptyTranscript }
+        var segments: [TranscriptSegment] = []
+        for (index, chunk) in chunks.enumerated() {
+            try Task.checkCancellation()
+            await progress?(Double(index) / Double(chunks.count))
+            let audioURL = try await extractAudio(from: url, range: chunk)
+            defer { try? FileManager.default.removeItem(at: audioURL) }
+            let request = SFSpeechURLRecognitionRequest(url: audioURL)
+            request.requiresOnDeviceRecognition = true
+            request.shouldReportPartialResults = false
+            request.taskHint = .dictation
+            request.contextualStrings = Array(contextualTerms.prefix(100))
+            if #available(macOS 13.0, *) { request.addsPunctuation = true }
+            do {
+                let result = try await recognize(recognizer: recognizer, request: request)
+                let transcription = result.bestTranscription
+                let formatted = transcription.formattedString as NSString
+                let words = transcription.segments
+                let local = words.enumerated().map { offset, word in
+                    // Speech substrings omit punctuation. Retain it from the formatted
+                    // result so complete sentence boundaries can guide clip selection.
+                    let begin = min(word.substringRange.location, formatted.length)
+                    let end = min(offset + 1 < words.count ? words[offset + 1].substringRange.location : formatted.length, formatted.length)
+                    let text = formatted.substring(with: NSRange(location: begin, length: max(0, end - begin)))
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    return TranscriptSegment(startSeconds: word.timestamp, durationSeconds: word.duration,
+                        text: text.isEmpty ? word.substring : text, confidence: word.confidence)
+                }
+                segments.append(contentsOf: chunk.project(local))
+            } catch let error as LocalTranscriptionError where error == .emptyTranscript {
+                // Silence in one chunk does not discard later speech.
+            }
         }
-
-        let result = try await recognize(recognizer: recognizer, request: request)
-        let transcription = result.bestTranscription
-        let text = transcription.formattedString
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else {
-            throw LocalTranscriptionError.emptyTranscript
-        }
-
-        let segments = transcription.segments.map {
-            TranscriptSegment(
-                startSeconds: $0.timestamp,
-                durationSeconds: $0.duration,
-                text: $0.substring,
-                confidence: $0.confidence
-            )
-        }
-
-        return LocalTranscript(
-            localeIdentifier: localeIdentifier,
-            text: text,
-            segments: segments,
-            onDevice: true,
-            createdAt: Date()
-        )
+        await progress?(1)
+        guard !segments.isEmpty else { throw LocalTranscriptionError.emptyTranscript }
+        return .init(localeIdentifier: localeIdentifier, text: segments.map(\.text).joined(separator: " "),
+                     segments: segments, onDevice: true, createdAt: Date())
     }
 
-    private func extractAudio(from videoURL: URL) async throws -> URL {
+    private func extractAudio(from videoURL: URL, range: SpeechAnalysisChunk) async throws -> URL {
         let asset = AVURLAsset(url: videoURL)
         guard let exporter = AVAssetExportSession(
             asset: asset,
@@ -223,6 +227,8 @@ public final class LocalOnDeviceTranscriber {
             throw LocalTranscriptionError.audioExtractionUnavailable
         }
 
+        exporter.timeRange = CMTimeRange(start: CMTime(seconds: range.sourceStart, preferredTimescale: 600),
+            duration: CMTime(seconds: range.duration, preferredTimescale: 600))
         let destination = FileManager.default.temporaryDirectory
             .appendingPathComponent("blackstock-speech-\(UUID().uuidString)")
             .appendingPathExtension("m4a")
@@ -249,11 +255,23 @@ public final class LocalOnDeviceTranscriber {
         request: SFSpeechURLRecognitionRequest
     ) async throws -> SFSpeechRecognitionResult {
         let state = SpeechRecognitionState()
+        let timeout = Task {
+            do {
+                try await Task.sleep(nanoseconds: 180_000_000_000)
+                state.fail(LocalTranscriptionError.recognitionFailed("Die Spracherkennung antwortet nicht. Bitte erneut versuchen; dein Video bleibt erhalten."))
+            } catch { }
+        }
+        defer { timeout.cancel() }
         let box: SpeechRecognitionResultBox = try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 state.install(continuation)
                 let task = recognizer.recognitionTask(with: request) { result, error in
                     if let error {
+                        let nsError = error as NSError
+                        if nsError.domain == "kAFAssistantErrorDomain", nsError.code == 1110 {
+                            state.fail(LocalTranscriptionError.emptyTranscript)
+                            return
+                        }
                         state.fail(
                             LocalTranscriptionError.recognitionFailed(
                                 Self.recognitionFailureMessage(error)

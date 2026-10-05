@@ -2674,6 +2674,7 @@ final class BlackstockSession: ObservableObject {
         )
     }
 
+    @Published var opportunityCategoryID = UserDefaults.standard.string(forKey: "blackstock.discovery.categoryID") ?? ""
     @Published var isLoadingOpportunities = false
     @Published var opportunityNextPageToken: String?
     private var opportunityRequestID = UUID()
@@ -2699,7 +2700,7 @@ final class BlackstockSession: ObservableObject {
         let filter = contentFilter ?? opportunityContentFilter
         // Capture every input before the first suspension. Earlier requests must
         // never overwrite a more recently selected country, query, or sort.
-        let category = channelCategoryID
+        let category = opportunityCategoryID
         let region = channelRegionCode
         let language = contentLanguage
         let key = [resolvedQuery, order.rawValue, window.rawValue, filter.rawValue,
@@ -2730,10 +2731,11 @@ final class BlackstockSession: ObservableObject {
         opportunityRequestID = requestID
         opportunityRequestKey = key
         opportunityContentFilter = filter
+        opportunityTimeWindow = window
         let defaults = UserDefaults.standard
         defaults.set(filter.rawValue, forKey: "blackstock.workspace.opportunityContentFilter")
         defaults.set(window.rawValue, forKey: "blackstock.workspace.opportunityTimeWindow")
-        defaults.set(category, forKey: "blackstock.workspace.channelCategoryID")
+        defaults.set(category, forKey: "blackstock.discovery.categoryID")
         defaults.set(region, forKey: "blackstock.workspace.regionCode")
         defaults.set(language, forKey: "blackstock.workspace.contentLanguage")
         defaults.set(primaryTopic, forKey: "blackstock.workspace.primaryTopic")
@@ -2761,41 +2763,34 @@ final class BlackstockSession: ObservableObject {
                 relevanceLanguage: String?,
                 initialToken: String? = nil
             ) async throws -> YouTubeOpportunityPage {
-                var candidates: [YouTubeOpportunityCandidate] = []
-                var nextToken = initialToken
-                var returnedNextToken: String?
-                // YouTube search requests are quota-heavy. Automatic feeds
-                // use the inexpensive popularity chart first. Scan at most
-                // three pages per action to fill sparse filtered results.
-                let pageLimit = 3
-                for _ in 0..<pageLimit {
-                    let part = try await client.opportunityPage(
-                        query: searchQuery,
-                        categoryID: categoryID,
-                        regionCode: regionCode,
-                        relevanceLanguage: relevanceLanguage,
-                        publishedAfter: window.publishedAfter(
-                            now: searchDate
-                        ),
-                        maxResults: 50,
-                        order: order,
-                        contentFilter: filter,
-                        pageToken: nextToken
-                    )
-                    candidates.append(contentsOf: part.candidates)
-                    returnedNextToken = part.nextPageToken
-                    guard Set(candidates.map(\.videoID)).subtracting(existingOpportunities.map(\.videoID)).count < 48,
-                          let following = part.nextPageToken,
-                          following != nextToken else { break }
-                    nextToken = following
+                var accumulator = OpportunityPageAccumulator(
+                    existingIDs: existingOpportunities.map(\.videoID), initialToken: initialToken)
+                // The cap bounds one action, never the total accessible results.
+                for pageIndex in 0..<4 {
+                    try Task.checkCancellation()
+                    guard opportunityRequestID == requestID else { throw CancellationError() }
+                    do {
+                        let part = try await client.opportunityPage(
+                            query: searchQuery, categoryID: categoryID, regionCode: regionCode,
+                            relevanceLanguage: relevanceLanguage,
+                            publishedAfter: window.publishedAfter(now: searchDate),
+                            maxResults: 50, order: order, contentFilter: filter,
+                            pageToken: accumulator.nextPageToken)
+                        accumulator.append(part)
+                    } catch {
+                        if pageIndex == 0 || accumulator.candidates.isEmpty { throw error }
+                        // Keep successful pages and retry the failed cursor on the next action.
+                        break
+                    }
+                    if !accumulator.needsMore() { break }
                 }
                 pageParameters = OpportunitySearchParameters(
                     query: searchQuery, category: categoryID,
                     region: regionCode, language: relevanceLanguage
                 )
                 return YouTubeOpportunityPage(
-                    candidates: candidates,
-                    nextPageToken: returnedNextToken
+                    candidates: accumulator.candidates,
+                    nextPageToken: accumulator.nextPageToken
                 )
             }
 
@@ -2834,8 +2829,9 @@ final class BlackstockSession: ObservableObject {
 
             var recommendationNote = ""
             var page: YouTubeOpportunityPage
+            // A missing regional chart must not prevent normal search.
             let initialChart = !loadMore && resolvedQuery.isEmpty
-                ? try await filteredPopularChart(categoryID: category)
+                ? ((try? await filteredPopularChart(categoryID: category)) ?? [])
                 : []
             if loadMore, let parameters = pageParameters {
                 page = try await matchingPage(
@@ -2877,59 +2873,18 @@ final class BlackstockSession: ObservableObject {
                     } catch {
                         // A quota/network failure must not discard usable
                         // chart results that already meet the selected filters.
-                        recommendationNote += " Weitere Treffer konnten nicht geladen werden: \(describe(error))"
+                        recommendationNote += " Weitere Treffer konnten nicht geladen werden."
+                        errorMessage = "Die Trends sind sichtbar, aber die Videosuche ist fehlgeschlagen: \(describe(error))"
                     }
 
             } else {
                 page = try await matchingPage(
-                    // A typed query expresses the user's intent and must not
-                    // be restricted to the saved channel category.
-                    categoryID: resolvedQuery.isEmpty
-                        ? (category.isEmpty ? nil : category)
-                        : nil,
+                    // Only an explicitly chosen discovery category restricts search.
+                    categoryID: category.isEmpty ? nil : category,
                     regionCode: region.isEmpty ? nil : region,
                     relevanceLanguage: language.isEmpty ? nil : language,
                     initialToken: token
                 )
-            }
-            // An empty search field means automatic recommendations. Narrow
-            // time/category combinations can legitimately return no search
-            // rows, so fall back to YouTube's regional popularity chart.
-            if !loadMore, resolvedQuery.isEmpty, page.candidates.isEmpty,
-               !category.isEmpty {
-                page = try await matchingPage(
-                    categoryID: nil,
-                    regionCode: region.isEmpty ? nil : region,
-                    relevanceLanguage: language.isEmpty ? nil : language
-                )
-                if !page.candidates.isEmpty {
-                    recommendationNote =
-                        "Im gewählten Zeitraum gab es in der Kategorie zu wenige Treffer. Die Kategorie wurde erweitert; Zeitraum, Region und Format bleiben strikt aktiv."
-                }
-            }
-            if !loadMore, resolvedQuery.isEmpty, page.candidates.isEmpty,
-               !language.isEmpty {
-                page = try await matchingPage(
-                    categoryID: nil,
-                    regionCode: region.isEmpty ? nil : region,
-                    relevanceLanguage: nil
-                )
-                if !page.candidates.isEmpty {
-                    recommendationNote =
-                        "Für Sprache und Kategorie gab es zu wenige Treffer. Sprache und Kategorie wurden erweitert; Zeitraum, Region und Format bleiben strikt aktiv."
-                }
-            }
-            if !loadMore, resolvedQuery.isEmpty, page.candidates.isEmpty,
-               !region.isEmpty {
-                page = try await matchingPage(
-                    categoryID: nil,
-                    regionCode: nil,
-                    relevanceLanguage: nil
-                )
-                if !page.candidates.isEmpty {
-                    recommendationNote =
-                        "Für die enge Auswahl gab es zu wenige Treffer. Kategorie, Sprache und Region wurden erweitert; Zeitraum und Format bleiben strikt aktiv."
-                }
             }
             // Some YouTube accounts/regions return an empty category-only
             // search even though normal keyword search has current results.
@@ -2947,7 +2902,7 @@ final class BlackstockSession: ObservableObject {
                 if !automaticTopic.isEmpty {
                     page = try await matchingPage(
                         searchQuery: automaticTopic,
-                        categoryID: nil,
+                        categoryID: category.isEmpty ? nil : category,
                         regionCode: region.isEmpty ? nil : region,
                         relevanceLanguage: language.isEmpty ? nil : language
                     )
@@ -2962,12 +2917,9 @@ final class BlackstockSession: ObservableObject {
             // locally so the selected time window and format remain true.
             if !loadMore, resolvedQuery.isEmpty, page.candidates.isEmpty,
                !region.isEmpty {
-                var chart = try await filteredPopularChart(
+                let chart = try await filteredPopularChart(
                     categoryID: category
                 )
-                if chart.isEmpty, !category.isEmpty {
-                    chart = try await filteredPopularChart(categoryID: "")
-                }
                 if !chart.isEmpty {
                     page = YouTubeOpportunityPage(
                         candidates: YouTubeAuthorizedClient
@@ -2979,18 +2931,21 @@ final class BlackstockSession: ObservableObject {
                 }
             }
             guard opportunityRequestID == requestID,
-                  channelCategoryID == category, channelRegionCode == region,
+                  opportunityCategoryID == category, channelRegionCode == region,
                   contentLanguage == language,
                   (selectedChannelID ?? workspaceChannelID) == channelID else { return }
             opportunityRecommendationNote = recommendationNote
             var seen = Set(existingOpportunities.map(\.videoID))
             let added = page.candidates.filter { seen.insert($0.videoID).inserted }
-            opportunities = YouTubeAuthorizedClient.sortedOpportunities(
-                existingOpportunities + added,
-                order: order
-            )
+            opportunities = loadMore ? existingOpportunities + added
+                : YouTubeAuthorizedClient.sortedOpportunities(added, order: order)
             opportunityNextPageToken = page.nextPageToken == token ? nil : page.nextPageToken
-            opportunityPageParameters = page.nextPageToken == nil ? nil : pageParameters
+            opportunityPageParameters = opportunityNextPageToken == nil ? nil : pageParameters
+            if loadMore {
+                opportunityRecommendationNote = added.isEmpty
+                    ? "Keine neuen Treffer auf diesen Seiten. " + (opportunityNextPageToken == nil ? "Ende dieser Suche erreicht." : "Weitere Seiten sind verfügbar.")
+                    : "\(added.count) weitere Videos geladen · \(opportunities.count) insgesamt."
+            }
             if opportunities.isEmpty {
                 errorMessage = opportunityNextPageToken == nil
                     ? "Keine passenden Videos gefunden. Erweitere Zeitraum oder Format oder ändere den Suchbegriff."
@@ -3001,6 +2956,12 @@ final class BlackstockSession: ObservableObject {
             opportunityRecommendationNote = ""
             errorMessage = "Videos konnten nicht geladen werden: \(describe(error))"
         }
+    }
+
+    func loadMoreWorkspaceOpportunities(order: OpportunitySortMode) async {
+        // Unsubmitted text in the search field must not invalidate the visible feed's cursor.
+        guard let query = opportunityRequestKey.first else { return }
+        await loadWorkspaceOpportunities(query: query, order: order, loadMore: true)
     }
 
     func useOpportunity(_ opportunity: YouTubeOpportunityCandidate) {

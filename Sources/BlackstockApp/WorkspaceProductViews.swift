@@ -119,11 +119,11 @@ struct OpportunityWorkspaceView: View {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 250), spacing: 16)], alignment: .leading, spacing: 12) {
                 Picker(
                     "Kategorie",
-                    selection: $session.channelCategoryID
+                    selection: $session.opportunityCategoryID
                 ) {
                     Text("Alle Kategorien").tag("")
-                    if session.youtubeVideoCategories.isEmpty && !session.channelCategoryID.isEmpty {
-                        Text(session.primaryTopic.isEmpty ? "Gespeicherte Kategorie" : session.primaryTopic).tag(session.channelCategoryID)
+                    if session.youtubeVideoCategories.isEmpty && !session.opportunityCategoryID.isEmpty {
+                        Text(session.primaryTopic.isEmpty ? "Gespeicherte Kategorie" : session.primaryTopic).tag(session.opportunityCategoryID)
                     }
                     ForEach(
                         session.youtubeVideoCategories
@@ -188,14 +188,7 @@ struct OpportunityWorkspaceView: View {
             .blackstockSurface(raised: true)
 
             HStack {
-                Text(
-                    "\(session.opportunities.count) Videos · "
-                    + session.opportunityTimeWindow.germanTitle
-                    + " · "
-                    + session.opportunityContentFilter.germanTitle
-                    + " · "
-                    + sortMode.germanTitle
-                )
+                Text(resultSummary)
                     .font(.callout.weight(.semibold))
                 Spacer()
                 if session.isLoadingOpportunities {
@@ -204,9 +197,7 @@ struct OpportunityWorkspaceView: View {
                 } else if session.opportunityNextPageToken != nil {
                     Button("Mehr laden") {
                         Task {
-                            await session.loadWorkspaceOpportunities(query: query, order: sortMode,
-                                timeWindow: session.opportunityTimeWindow,
-                                contentFilter: session.opportunityContentFilter, loadMore: true)
+                            await session.loadMoreWorkspaceOpportunities(order: sortMode)
                         }
                     }
                 }
@@ -297,14 +288,8 @@ struct OpportunityWorkspaceView: View {
             guard hasLoadedInitially else { return }
             Task { await loadOpportunities() }
         }
-        .onChange(of: session.channelCategoryID) { categoryID in
+        .onChange(of: session.opportunityCategoryID) { categoryID in
             guard hasLoadedInitially else { return }
-            if let category =
-                    session.youtubeVideoCategories.first(
-                        where: { $0.id == categoryID }
-                    ) {
-                session.primaryTopic = category.title
-            }
             Task { await loadOpportunities() }
         }
         .onChange(of: session.channelRegionCode) { _ in
@@ -321,6 +306,13 @@ struct OpportunityWorkspaceView: View {
                 await loadOpportunities()
             }
         }
+    }
+
+    private var resultSummary: String {
+        let category = session.opportunityCategoryID.isEmpty ? "Alle Kategorien"
+            : (session.youtubeVideoCategories.first(where: { $0.id == session.opportunityCategoryID })?.title ?? "Gewählte Kategorie")
+        return ["\(session.opportunities.count) Videos", session.opportunityTimeWindow.germanTitle,
+                session.opportunityContentFilter.germanTitle, sortMode.germanTitle, category].joined(separator: " · ")
     }
 
     private var header: some View {
@@ -422,6 +414,7 @@ struct OpportunityWorkspaceView: View {
                     ForEach(session.opportunities) { item in
                         opportunityRow(item)
                     }
+                    discoveryPageFooter
                 }
                 .padding(.vertical, 2)
             }
@@ -442,6 +435,32 @@ struct OpportunityWorkspaceView: View {
         }
         // The parent sizes these panes to the current window instead of a
         // fixed 620-point canvas that pushes controls below smaller screens.
+    }
+
+    private var discoveryPageFooter: some View {
+        VStack(spacing: 10) {
+            if session.isLoadingOpportunities {
+                ProgressView("Weitere Videos werden geladen …")
+            } else if session.opportunityNextPageToken != nil {
+                Button {
+                    Task { await session.loadMoreWorkspaceOpportunities(order: sortMode) }
+                } label: {
+                    Label("Weitere Videos laden", systemImage: "arrow.down.circle")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+            } else if session.errorMessage != nil {
+                Button("Videosuche erneut versuchen") { Task { await loadOpportunities() } }
+                    .buttonStyle(.bordered)
+            } else {
+                Text("Alle verfügbaren Treffer dieser Suche geladen")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Text("\(session.opportunities.count) Videos in dieser Liste")
+                .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 16)
     }
 
     private func opportunityRow(

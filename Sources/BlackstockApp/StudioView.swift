@@ -448,7 +448,7 @@ struct StudioView: View {
         if session.activeStorySources.count <= 1 {
             return StoryPublicationDraft.forClip(transcript: state.transcript,
                 sourceURL: opportunitySource?.pageURL, start: state.trimStart,
-                duration: state.currentOutputDurationSeconds, isShort: clipOutputFormat == "short")
+                duration: state.currentOutputDurationSeconds, isShort: state.reframeAspectRatio == .portrait9x16)
         }
         let sequence = state.plannedStorySequence()
         let used = Set(sequence.map(\.captureID))

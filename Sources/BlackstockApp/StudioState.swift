@@ -1150,8 +1150,11 @@ final class StudioState: ObservableObject {
         let revision = graph.apply(operation, actor: .user)
         lastUndoneRevisionID = nil
         renderArtifact = nil
-        savedClipSelections = savedClipSelections.map { $0.withReframeSpec(spec) }
-        invalidateSavedClipRenders()
+        savedClipSelections = savedClipSelections.map { selection in
+            let isCurrent = abs(selection.sourceRange.startSeconds - trimStart) < 0.01
+                && abs(selection.sourceRange.endSeconds - trimEnd) < 0.01
+            return isCurrent ? selection.withReframeSpec(spec).withRenderArtifact(nil) : selection
+        }
         audioTechnicalAssessment = nil
         audioSignalAssessment = nil
         audioLoudnessAssessment = nil
@@ -1191,10 +1194,15 @@ final class StudioState: ObservableObject {
             return
         }
 
+        let requestedProjectID = activeProjectID
+        let requestedAssetID = asset.id
         isGeneratingClipCandidates = true
-        clipCandidateSourceTranscript = nil
         clipCandidateStatusMessage = nil
-        defer { isGeneratingClipCandidates = false }
+        defer {
+            if activeProjectID == requestedProjectID, self.asset?.id == requestedAssetID {
+                isGeneratingClipCandidates = false
+            }
+        }
 
         let transcriber = LocalOnDeviceTranscriber()
         var authorization = transcriber.authorizationState()
@@ -1222,12 +1230,20 @@ final class StudioState: ObservableObject {
         }
 
         do {
-            let sourceTranscript =
-                try await transcriber.transcribeVideo(
-                    url: asset.sourceURL,
-                    localeIdentifier: localeIdentifier
-                )
+            let sourceTranscript: LocalTranscript
+            if let cached = clipCandidateSourceTranscript, cached.localeIdentifier == localeIdentifier {
+                sourceTranscript = cached
+            } else {
+                sourceTranscript = try await transcriber.transcribeVideo(
+                    url: asset.sourceURL, localeIdentifier: localeIdentifier,
+                    progress: { [weak self] fraction in
+                        await MainActor.run {
+                            self?.clipCandidateStatusMessage = "Sprache analysieren · \(Int(fraction * 100)) % des Videos"
+                        }
+                    })
+            }
 
+            guard activeProjectID == requestedProjectID, self.asset?.id == requestedAssetID else { return }
             guard !shouldStopProcessing else {
                 localClipCandidates = []
                 clipCandidateStatusMessage =
@@ -1275,6 +1291,7 @@ final class StudioState: ObservableObject {
             persistWorkspaceIfPossible()
             errorMessage = nil
         } catch {
+            guard activeProjectID == requestedProjectID, self.asset?.id == requestedAssetID else { return }
             localClipCandidates = []
             clipCandidateStatusMessage = error is CancellationError
                 ? "Verarbeitung gestoppt."
@@ -1990,10 +2007,7 @@ final class StudioState: ObservableObject {
 
             let reframeOperation = graph.currentOperations.last { $0.type == .reframe }
             var clipReframe = selection.reframeSpec ?? reframeOperation?.reframeSpec
-            let automaticFraming = reframeOperation.map { operation in
-                graph.revisions.first { $0.operation?.id == operation.id }?.actor == .acceptedAIProposal
-            } ?? false
-            if selection.reframeSpec == nil, automaticFraming, let base = clipReframe {
+            if selection.reframeSpec == nil, let base = clipReframe {
                 clipCandidateStatusMessage = "Bildausschnitt für diesen Clip wird geprüft …"
                 if let proposal = try? await LocalVisionFocalPointSuggester().suggest(
                     url: asset.sourceURL, sourceRange: selection.sourceRange
@@ -2214,6 +2228,7 @@ final class StudioState: ObservableObject {
     func applySavedClipSelection(
         _ selection: SavedClipSelection
     ) async {
+        let includeCaptions = burnInCaptionsEnabled
         let candidate = LocalClipCandidate(
             id: selection.id,
             sourceRange: selection.sourceRange,
@@ -2225,13 +2240,25 @@ final class StudioState: ObservableObject {
         )
         await applyLocalClipCandidate(candidate)
         guard errorMessage == nil else { return }
-        if let reframe = selection.reframeSpec {
+        var selectedFrame = selection.reframeSpec
+        if selectedFrame == nil, let asset,
+           let proposal = try? await LocalVisionFocalPointSuggester().suggest(url: asset.sourceURL, sourceRange: selection.sourceRange) {
+            selectedFrame = ReframeSpec(aspectRatio: reframeAspectRatio, focalX: proposal.focalX,
+                focalY: proposal.focalY, preserveFullFrame: proposal.preserveFullFrame)
+        }
+        if let reframe = selectedFrame {
             _ = graph.apply(.init(type: .reframe, reframeSpec: reframe, createdAt: Date()), actor: .user)
             reframeAspectRatio = reframe.aspectRatio
             reframeFocalX = reframe.focalX
             reframeFocalY = reframe.focalY
-                    reframePreserveFullFrame = reframe.preserveFullFrame == true
-            try? await rebuildPreview()
+            reframePreserveFullFrame = reframe.preserveFullFrame == true
+            if let index = savedClipSelections.firstIndex(where: { $0.id == selection.id }) {
+                savedClipSelections[index] = savedClipSelections[index].withReframeSpec(reframe)
+            }
+            do { try await rebuildPreview() } catch {
+                errorMessage = "Die Clip-Vorschau konnte nicht aufgebaut werden: " + error.localizedDescription
+                return
+            }
         }
         guard let clipTranscript = selection.transcript else {
             transcript = nil
@@ -2242,6 +2269,7 @@ final class StudioState: ObservableObject {
         }
 
         transcript = clipTranscript
+        burnInCaptionsEnabled = includeCaptions
         transcriptStructure =
             TranscriptStructureAnalyzer()
             .analyze(
