@@ -2765,9 +2765,9 @@ final class BlackstockSession: ObservableObject {
                 var nextToken = initialToken
                 var returnedNextToken: String?
                 // YouTube search requests are quota-heavy. Automatic feeds
-                // use the inexpensive popularity chart first; a typed/topic
-                // query may scan one additional page only when necessary.
-                let pageLimit = loadMore ? 1 : 2
+                // use the inexpensive popularity chart first. Scan at most
+                // three pages per action to fill sparse filtered results.
+                let pageLimit = 3
                 for _ in 0..<pageLimit {
                     let part = try await client.opportunityPage(
                         query: searchQuery,
@@ -2784,7 +2784,7 @@ final class BlackstockSession: ObservableObject {
                     )
                     candidates.append(contentsOf: part.candidates)
                     returnedNextToken = part.nextPageToken
-                    guard candidates.count < 24,
+                    guard Set(candidates.map(\.videoID)).subtracting(existingOpportunities.map(\.videoID)).count < 48,
                           let following = part.nextPageToken,
                           following != nextToken else { break }
                     nextToken = following
@@ -2857,9 +2857,7 @@ final class BlackstockSession: ObservableObject {
                 recommendationNote = language.isEmpty
                     ? "Aktuelle YouTube-Trends für Kategorie und Region. Zeitraum und Format wurden exakt angewendet."
                     : "Aktuelle YouTube-Trends für Kategorie und Region. Zeitraum und Format gelten exakt; die Sprachwahl wurde für mehr passende Treffer erweitert."
-                // A narrow interval often leaves just one chart row. Complete
-                // this with fresh search results instead of stopping there.
-                if initialChart.count < 24 {
+                // Retain search pagination even when the trend chart is full.
                     do {
                         let supplement = try await matchingPage(
                             categoryID: category.isEmpty ? nil : category,
@@ -2881,7 +2879,7 @@ final class BlackstockSession: ObservableObject {
                         // chart results that already meet the selected filters.
                         recommendationNote += " Weitere Treffer konnten nicht geladen werden: \(describe(error))"
                     }
-                }
+
             } else {
                 page = try await matchingPage(
                     // A typed query expresses the user's intent and must not

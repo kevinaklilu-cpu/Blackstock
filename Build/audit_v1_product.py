@@ -51,8 +51,8 @@ require("Sources/BlackstockApp/WorkspaceProductViews.swift", [
     "session.opportunityTimeWindow = .last7Days",
     'Picker(\n                    "Land"',
     "session.opportunityContentFilter.germanTitle",
-    '"Blackstock Story-Vorschlag"',
-    '"Als passendes Ergänzungsvideo wählen"',
+    "session.useOpportunityAsClip(",
+    '"Video schneiden"',
 ])
 require("Sources/BlackstockApp/BlackstockSession.swift", [
     "OpportunityTimeWindow = .last7Days",

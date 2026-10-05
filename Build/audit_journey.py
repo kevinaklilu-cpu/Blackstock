@@ -34,7 +34,7 @@ checks = {
     ],
     "Sources/BlackstockApp/WorkspaceProductViews.swift": [
         "struct OpportunityWorkspaceView",
-        "Neues Projekt",
+        "Video schneiden",
         "Video schneiden",
         "struct ProjectLibraryView",
         "Video finden",
@@ -58,7 +58,7 @@ checks = {
         "LocalHighlightCandidateRanker",
         "targetDurationSeconds",
         "speechDensity",
-        "durationFit",
+        "completeEnding",
     ],
     "Sources/BlackstockCore/LocalClipCandidateGenerator.swift": [
         "LocalClipCandidateGenerator",
@@ -104,7 +104,7 @@ checks = {
     ],
     "Sources/BlackstockApp/StudioView.swift": [
         "Automatischer Schnitt",
-        "Automatik starten",
+        "Passende Momente finden",
         "Diesen Ausschnitt übernehmen",
         "Exportieren …",
         "Zum Veröffentlichen verwenden",
@@ -118,7 +118,7 @@ checks = {
         "In Timeline laden",
         "Übernehmen",
         "Zurück zur aktuellen Schnittvorschau",
-        "Blackstock findet die stärksten Ausschnitte",
+        "Dein nächster Clip",
         "Sichtbare Untertitel ins Video rendern",
         "Untertitelstil",
         "Ausgabe-Preset vorbereiten",
@@ -128,8 +128,8 @@ checks = {
     "Sources/BlackstockCore/LocalCaptionBurnInRenderer.swift": [
         "CaptionBurnInPlanner",
         "LocalCaptionBurnInRenderer",
-        "AVVideoCompositionCoreAnimationTool",
-        "AVCoreAnimationBeginTimeAtZero",
+        "LocalSupplementalVideoCompositor",
+        "TimedVideoOverlay",
     ],
     "Tests/BlackstockCoreTests/CaptionBurnInPlannerTests.swift": [
         "testPlannerKeepsValidTranscriptTiming",

@@ -278,7 +278,7 @@ public actor LocalVideoRenderer {
                 operations: graph.currentOperations,
                 outputDurationSeconds: timeline.outputDurationSeconds
             ).filter { cue in
-                !supplementalVideo.contains { insert in
+                reframe.preserveFullFrame != true && !supplementalVideo.contains { insert in
                     cue.startSeconds < insert.timelineStartSeconds + insert.durationSeconds + 0.4
                         && cue.startSeconds + cue.durationSeconds > insert.timelineStartSeconds - 0.4
                 }

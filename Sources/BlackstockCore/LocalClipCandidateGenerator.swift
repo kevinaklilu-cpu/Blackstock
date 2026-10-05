@@ -38,7 +38,7 @@ public struct LocalClipCandidateGenerator: Sendable {
         minimumDurationSeconds: Double = 15,
         maximumDurationSeconds: Double = 75,
         pauseBoundarySeconds: Double = 2.5,
-        maximumCandidates: Int = 8
+        maximumCandidates: Int = 24
     ) -> [LocalClipCandidate] {
         let minimumDuration = max(minimumDurationSeconds, 1)
         let maximumDuration = max(
@@ -127,6 +127,13 @@ public struct LocalClipCandidateGenerator: Sendable {
                 } else {
                     chunk.append(segment)
                 }
+                if let first = chunk.first,
+                   segment.startSeconds + segment.durationSeconds - first.startSeconds >= minimumDuration,
+                   segment.text.trimmingCharacters(in: .whitespacesAndNewlines).last.map({ ".!?…。！？".contains($0) }) == true {
+                    appendCandidate(from: chunk, sourceDurationSeconds: sourceDuration,
+                        minimumDurationSeconds: minimumDuration, maximumDurationSeconds: maximumDuration, to: &candidates)
+                    chunk = []
+                }
             }
 
             appendCandidate(
@@ -137,13 +144,12 @@ public struct LocalClipCandidateGenerator: Sendable {
                 to: &candidates
             )
 
-            if candidates.count >= maximumCandidates {
-                break
-            }
+
         }
 
         return Array(
-            candidates.prefix(maximumCandidates)
+            LocalHighlightCandidateRanker().rank(candidates).prefix(maximumCandidates)
+                .sorted { $0.sourceRange.startSeconds < $1.sourceRange.startSeconds }
         )
     }
 

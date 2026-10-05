@@ -11,13 +11,6 @@ struct OpportunityWorkspaceView: View {
     @State private var query = ""
     @State private var sortMode: OpportunitySortMode = .views
     @State private var selectedOpportunityID: String?
-    @State private var storySelectionIDs: [String] = []
-    @State private var storySelectionItems: [String: YouTubeOpportunityCandidate] = [:]
-    @State private var relatedStoryItems: [YouTubeOpportunityCandidate] = []
-    @State private var isLoadingRelatedStoryItems = false
-    @State private var relatedStoryError: String?
-    @State private var storyPreviewItem: YouTubeOpportunityCandidate?
-    @State private var storyCreationFeedback: String?
     @State private var hasLoadedInitially = false
 
     var body: some View {
@@ -28,7 +21,7 @@ struct OpportunityWorkspaceView: View {
 
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Label("Recherche einstellen", systemImage: "slider.horizontal.3")
+                    Label("Video entdecken", systemImage: "play.rectangle")
                         .font(.headline)
                     Spacer()
                 }
@@ -218,11 +211,6 @@ struct OpportunityWorkspaceView: View {
                     }
                 }
             }
-            if !storySelectionIDs.isEmpty {
-                storySelectionBar
-            } else if !session.opportunities.isEmpty {
-                storySelectionHint
-            }
             HStack(spacing: 6) {
                 Image(systemName: query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                       ? "wand.and.stars" : "line.3.horizontal.decrease.circle")
@@ -277,51 +265,6 @@ struct OpportunityWorkspaceView: View {
         .padding(24)
         }
         .background(BlackstockDesign.canvas)
-        }
-        .sheet(item: $storyPreviewItem) { item in
-            VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    Text("Quellenvorschau").font(.title2.bold())
-                    Spacer()
-                    Button("Schließen") { storyPreviewItem = nil }
-                }
-                YouTubeEmbeddedPlayer(videoID: item.videoID)
-                    .aspectRatio(16.0 / 9.0, contentMode: .fit)
-                Text(item.title).font(.headline)
-                Text(item.channelTitle).foregroundStyle(.secondary)
-                HStack {
-                    Button(storySelectionIDs.contains(item.videoID) ? "Aus Story entfernen" : "Zur Story hinzufügen") {
-                        toggleStorySelection(item)
-                    }
-                    .disabled(!storySelectionIDs.contains(item.videoID) && storySelectionIDs.count >= 5)
-                    .buttonStyle(.borderedProminent)
-                    Link("Auf YouTube ansehen", destination: URL(string: "https://www.youtube.com/watch?v=\(item.videoID)")!)
-                }
-            }
-            .padding(24)
-            .frame(width: 700)
-        }
-        .task(id: relatedStoryRequestKey) {
-            relatedStoryItems = []
-            relatedStoryError = nil
-            guard let id = storySelectionIDs.first, let lead = storySelectionItems[id] else {
-                isLoadingRelatedStoryItems = false
-                return
-            }
-            isLoadingRelatedStoryItems = true
-            do {
-                try await Task.sleep(for: .milliseconds(350))
-                let items = try await session.relatedStorySources(for: lead)
-                try Task.checkCancellation()
-                relatedStoryItems = items
-                isLoadingRelatedStoryItems = false
-            } catch is CancellationError {
-                // The replacement task owns the new selection's loading state.
-            } catch {
-                guard !Task.isCancelled else { return }
-                relatedStoryError = error.localizedDescription
-                isLoadingRelatedStoryItems = false
-            }
         }
         .task {
             guard !hasLoadedInitially else { return }
@@ -403,7 +346,7 @@ struct OpportunityWorkspaceView: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text("Entdecken")
                     .font(.title2.bold())
-                Text("Trends finden, Quellen kombinieren, Story starten")
+                Text("Videos entdecken. Starke Momente finden.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
@@ -519,16 +462,6 @@ struct OpportunityWorkspaceView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 9))
 
                 VStack(alignment: .leading, spacing: 5) {
-                    if storySelectionIDs.first == item.videoID {
-                        Text("LEITVIDEO")
-                            .font(.caption2.weight(.black))
-                            .foregroundStyle(BlackstockDesign.accent)
-                    } else if !storySelectionIDs.isEmpty,
-                              !storySelectionIDs.contains(item.videoID) {
-                        Text("ERGÄNZUNGSVORSCHLAG")
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(.secondary)
-                    }
                     Text(item.title)
                         .font(.headline)
                         .lineLimit(2)
@@ -567,11 +500,7 @@ struct OpportunityWorkspaceView: View {
                 }
 
                 Spacer()
-                if storySelectionIDs.contains(item.videoID) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(BlackstockDesign.accent)
-                        .accessibilityLabel("Für Mehrquellen-Story ausgewählt")
-                }
+
             }
             .padding(10)
             .background(
@@ -598,31 +527,7 @@ struct OpportunityWorkspaceView: View {
             }
             .buttonStyle(.plain)
 
-            Button {
-                toggleStorySelection(item)
-            } label: {
-                Image(
-                    systemName: storySelectionIDs.contains(item.videoID)
-                        ? "checkmark.circle.fill"
-                        : "rectangle.stack.badge.plus"
-                )
-                .font(.title3)
-                .padding(9)
-                .background(.ultraThinMaterial, in: Circle())
-            }
-            .buttonStyle(.plain)
-            .padding(8)
-            .accessibilityLabel(
-                storySelectionIDs.contains(item.videoID)
-                    ? "Aus Mehrquellen-Story entfernen"
-                    : (storySelectionIDs.isEmpty
-                        ? "Als Leitvideo wählen"
-                        : "Als passendes Ergänzungsvideo wählen")
-            )
-            .disabled(
-                !storySelectionIDs.contains(item.videoID)
-                && storySelectionIDs.count >= 5
-            )
+
         }
     }
 
@@ -735,40 +640,6 @@ struct OpportunityWorkspaceView: View {
 
             VStack(alignment: .leading, spacing: 10) {
                 Button {
-                    toggleStorySelection(item)
-                } label: {
-                    Label(
-                        storySelectionIDs.contains(item.videoID)
-                            ? "Aus Story entfernen"
-                            : (storySelectionIDs.isEmpty
-                                ? "Als Leitvideo wählen"
-                                : "Zur Story hinzufügen"),
-                        systemImage: storySelectionIDs.contains(item.videoID)
-                            ? "minus.circle"
-                            : "rectangle.stack.badge.plus"
-                    )
-                }
-                .buttonStyle(.bordered)
-                .disabled(
-                    !storySelectionIDs.contains(item.videoID)
-                    && storySelectionIDs.count >= 5
-                )
-
-                Button {
-                    let previousID = session.activeProject?.id
-                    session.useOpportunity(item)
-                    if session.activeProject?.id != previousID {
-                        onProjectCreated()
-                    }
-                } label: {
-                    Label(
-                        "Neues Projekt",
-                        systemImage: "plus.rectangle.on.folder"
-                    )
-                }
-                .buttonStyle(.bordered)
-
-                Button {
                     let previousID = session.activeProject?.id
                     session.useOpportunityAsClip(item)
                     if session.activeProject?.id != previousID {
@@ -868,343 +739,10 @@ struct OpportunityWorkspaceView: View {
         if let selectedOpportunityID,
            let selected = session.opportunities.first(
                 where: { $0.id == selectedOpportunityID }
-           ) ?? storySelectionItems.values.first(where: { $0.id == selectedOpportunityID })
-             ?? relatedStoryItems.first(where: { $0.id == selectedOpportunityID }) {
+           ) {
             return selected
         }
         return session.opportunities.first
-    }
-
-    private var storySelectionBar: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 12) {
-                Image(systemName: "rectangle.stack.fill")
-                    .foregroundStyle(BlackstockDesign.accent)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Mehrquellen-Story · \(storySelectionIDs.count) von 5")
-                        .font(.callout.weight(.semibold))
-                    Text(storySelectionIDs.count < 2
-                         ? "Blackstock schlägt passende Ergänzungen aus den aktuellen Treffern vor."
-                         : "Leitvideo und Ergänzungen sind gewählt. Reihenfolge: Auswahlreihenfolge.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Button("Leeren") {
-                    storySelectionIDs = []
-                    storySelectionItems = [:]
-                }
-                .buttonStyle(.bordered)
-                Button("Story erstellen") {
-                    let selected = storySelectionIDs.compactMap { id in
-                        storySelectionItems[id]
-                    }
-                    if session.useMultiSourceStory(selected) {
-                        storyCreationFeedback = "Story erstellt · Editor wird geöffnet"
-                        onProjectCreated()
-                    } else {
-                        storyCreationFeedback = session.errorMessage
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(storySelectionIDs.count < 2)
-            }
-
-            if let storyCreationFeedback {
-                Label(storyCreationFeedback, systemImage: "info.circle")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(Array(storySelectionIDs.enumerated()), id: \.element) { index, id in
-                        if let item = storySelectionItems[id] {
-                            HStack(spacing: 6) {
-                                Button {
-                                    storyPreviewItem = item
-                                } label: {
-                                    Label("\(index == 0 ? "Erzählung" : "Bildquelle \(index)"): \(item.title)", systemImage: "play.circle")
-                                        .lineLimit(1)
-                                        .frame(maxWidth: 230)
-                                }
-                                .buttonStyle(.bordered)
-                                Button { toggleStorySelection(item) } label: {
-                                    Image(systemName: "xmark.circle")
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel("\(item.title) aus Story entfernen")
-                            }
-                        }
-                    }
-                }
-            }
-
-            if isLoadingRelatedStoryItems {
-                HStack { ProgressView().controlSize(.small); Text("Passende Ergänzungen werden auf YouTube gesucht …") }
-                    .font(.caption)
-            } else if let relatedStoryError {
-                Text("Ergänzungen konnten nicht geladen werden: \(relatedStoryError)")
-                    .font(.caption).foregroundStyle(.secondary)
-            } else if suggestedStorySources.isEmpty && storySelectionIDs.count < 5 {
-                Text("Keine passende Ergänzung gefunden. Die Suche berücksichtigt auch ältere Videos und ist unabhängig von den Entdecken-Filtern.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-
-            if storySelectionIDs.count < 5,
-               !suggestedStorySources.isEmpty {
-                VStack(alignment: .leading, spacing: 7) {
-                    Text("Ergänzungen · unabhängig von Zeitraum und Land")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Text("Vorauswahl aus Titel und Beschreibung. Die gesprochenen Inhalte prüft Blackstock nach dem Laden.")
-                        .font(.caption2).foregroundStyle(.secondary)
-                    ScrollView(.horizontal, showsIndicators: true) {
-                        HStack(spacing: 10) {
-                            ForEach(suggestedStorySources) { item in
-                                VStack(alignment: .leading, spacing: 8) {
-                                Button { storyPreviewItem = item } label: {
-                                    HStack(spacing: 8) {
-                                        AsyncImage(url: item.thumbnailURL) { image in
-                                            image.resizable().scaledToFill()
-                                        } placeholder: {
-                                            Rectangle().fill(BlackstockDesign.mediaSurface)
-                                        }
-                                        .frame(width: 68, height: 38)
-                                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(item.title)
-                                                .font(.caption.weight(.semibold))
-                                                .lineLimit(1)
-                                            Text(storySelectionIDs.first.flatMap { storySelectionItems[$0] }.map {
-                                                StoryTopicMatcher().match(item, to: $0).explanation
-                                            } ?? "Vorauswahl")
-                                                .font(.caption2)
-                                                .foregroundStyle(.secondary)
-                                                .lineLimit(2)
-                                        }
-                                        Image(systemName: "play.circle.fill")
-                                            .foregroundStyle(BlackstockDesign.accent)
-                                    }
-                                    .frame(width: 260, alignment: .leading)
-                                    .padding(7)
-                                    .background(
-                                        BlackstockDesign.mutedFill,
-                                        in: RoundedRectangle(cornerRadius: 10)
-                                    )
-                                }
-                                .buttonStyle(.plain)
-                                .help("Vorschau: \(item.title)")
-                                Button {
-                                    toggleStorySelection(item)
-                                } label: {
-                                    Label("Zur Story hinzufügen", systemImage: "plus.circle")
-                                }
-                                .buttonStyle(.bordered)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        .padding(12)
-        .blackstockSurface(raised: true)
-    }
-
-    private var storySelectionHint: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(BlackstockDesign.accent.opacity(0.12))
-                    Image(systemName: "wand.and.stars")
-                        .foregroundStyle(BlackstockDesign.accent)
-                }
-                .frame(width: 38, height: 38)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Blackstock Story-Vorschlag")
-                        .font(.headline)
-                    Text(
-                        automaticStorySources.count >= 2
-                            ? "Diese Quellen teilen Themenbegriffe im Titel. Prüfe die Vorschläge vor dem Start."
-                            : "Noch keine belegbare Themenübereinstimmung für eine automatische Story. Du kannst Quellen selbst auswählen."
-                    )
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                }
-                Spacer()
-                if automaticStorySources.count >= 2 {
-                    Button("Vorschlag anpassen") {
-                        storySelectionIDs = automaticStorySources.map(\.videoID)
-                        storySelectionItems = Dictionary(uniqueKeysWithValues:
-                            automaticStorySources.map { ($0.videoID, $0) })
-                    }
-                    .buttonStyle(.bordered)
-                    Button {
-                        if session.useMultiSourceStory(automaticStorySources) {
-                            storyCreationFeedback = "Story erstellt · Editor wird geöffnet"
-                            onProjectCreated()
-                        } else {
-                            storyCreationFeedback = session.errorMessage
-                        }
-                    } label: {
-                        Label("Automatisch erstellen", systemImage: "sparkles")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(BlackstockDesign.accent)
-                    .disabled(!session.workspaceRightsResponsibilityAccepted)
-                }
-            }
-
-            if !automaticStorySources.isEmpty {
-                HStack(spacing: 10) {
-                    ForEach(
-                        Array(automaticStorySources.enumerated()),
-                        id: \.element.videoID
-                    ) { index, item in
-                        HStack(spacing: 8) {
-                            ZStack(alignment: .topLeading) {
-                                AsyncImage(url: item.thumbnailURL) { image in
-                                    image.resizable().scaledToFill()
-                                } placeholder: {
-                                    Rectangle().fill(BlackstockDesign.mediaSurface)
-                                }
-                                .frame(width: 76, height: 44)
-                                .clipShape(RoundedRectangle(cornerRadius: 7))
-                                Text(index == 0 ? "LEAD" : "+\(index)")
-                                    .font(.system(size: 8, weight: .black))
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 5)
-                                    .padding(.vertical, 3)
-                                    .background(
-                                        index == 0
-                                            ? BlackstockDesign.accent
-                                            : Color.black.opacity(0.72),
-                                        in: Capsule()
-                                    )
-                                    .padding(4)
-                            }
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(item.title)
-                                    .font(.caption.weight(.semibold))
-                                    .lineLimit(2)
-                                Text(item.channelTitle)
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
-            }
-        }
-        .padding(16)
-        .background(
-            LinearGradient(
-                colors: [
-                    BlackstockDesign.accent.opacity(0.09),
-                    BlackstockDesign.surface
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            in: RoundedRectangle(
-                cornerRadius: BlackstockDesign.cornerRadius,
-                style: .continuous
-            )
-        )
-        .overlay(
-            RoundedRectangle(
-                cornerRadius: BlackstockDesign.cornerRadius,
-                style: .continuous
-            )
-            .strokeBorder(BlackstockDesign.accent.opacity(0.20))
-        )
-    }
-
-    private func toggleStorySelection(_ item: YouTubeOpportunityCandidate) {
-        if let index = storySelectionIDs.firstIndex(of: item.videoID) {
-            storySelectionIDs.remove(at: index)
-            storySelectionItems.removeValue(forKey: item.videoID)
-        } else if storySelectionIDs.count < 5 {
-            storySelectionIDs.append(item.videoID)
-            storySelectionItems[item.videoID] = item
-        }
-        storyCreationFeedback = nil
-    }
-
-    private var suggestedStorySources: [YouTubeOpportunityCandidate] {
-        let lead = storySelectionIDs.first.flatMap { leadID in
-            storySelectionItems[leadID]
-        }
-        var seen = Set<String>()
-        let candidates = (relatedStoryItems + session.opportunities)
-            .filter { seen.insert($0.videoID).inserted }
-            .enumerated()
-            .filter { !storySelectionIDs.contains($0.element.videoID) }
-            .filter { item in
-                guard let lead else { return true }
-                return StoryTopicMatcher().match(item.element, to: lead).isRelated
-            }
-            .sorted { lhs, rhs in
-                let lhsScore = storySuggestionScore(
-                    lhs.element,
-                    lead: lead,
-                    originalIndex: lhs.offset
-                )
-                let rhsScore = storySuggestionScore(
-                    rhs.element,
-                    lead: lead,
-                    originalIndex: rhs.offset
-                )
-                return lhsScore > rhsScore
-            }
-            .map(\.element)
-        return Array(candidates.prefix(min(5, 5 - storySelectionIDs.count)))
-    }
-
-    private var relatedStoryRequestKey: String {
-        [storySelectionIDs.first ?? "", session.contentLanguage].joined(separator: "|")
-    }
-
-    private var automaticStorySources: [YouTubeOpportunityCandidate] {
-        guard let lead = session.opportunities.first else { return [] }
-        let additions = session.opportunities
-            .dropFirst()
-            .filter { StoryTopicMatcher().match($0, to: lead).isRelated }
-            .enumerated()
-            .sorted {
-                storySuggestionScore(
-                    $0.element,
-                    lead: lead,
-                    originalIndex: $0.offset
-                ) > storySuggestionScore(
-                    $1.element,
-                    lead: lead,
-                    originalIndex: $1.offset
-                )
-            }
-            .prefix(2)
-            .map(\.element)
-        return [lead] + additions
-    }
-
-    private func storySuggestionScore(
-        _ candidate: YouTubeOpportunityCandidate,
-        lead: YouTubeOpportunityCandidate?,
-        originalIndex: Int
-    ) -> Int {
-        guard let lead else { return -originalIndex }
-        let match = StoryTopicMatcher().match(candidate, to: lead)
-        var score = Int(match.relevance * 100) + match.terms.count * 40
-        if candidate.contentKind == lead.contentKind { score += 20 }
-        if candidate.channelID != lead.channelID { score += 8 }
-        if let views = candidate.metrics.viewCount {
-            score += min(12, Int(log10(Double(max(views, 1)))))
-        }
-        return score
     }
 
     private func loadOpportunities() async {

@@ -28,6 +28,7 @@ public struct VisionFocalObservation: Codable, Sendable, Equatable {
 }
 
 public struct VisionFocalPointProposal: Codable, Sendable, Equatable {
+    public var preserveFullFrame: Bool?
     public let focalX: Double
     public let focalY: Double
     public let observationCount: Int
@@ -102,6 +103,7 @@ public struct LocalVisionFocalPointSuggester: Sendable {
 
         var observations: [VisionFocalObservation] = []
         var sampledFrames = 0
+        var multipleSubjects = false
 
         for seconds in times {
             try Task.checkCancellation()
@@ -115,7 +117,10 @@ public struct LocalVisionFocalPointSuggester: Sendable {
             }
             sampledFrames += 1
 
-            if let face = Self.largestFace(in: frame) {
+            let faces = Self.faces(in: frame)
+            if faces.count > 1,
+               (faces.map(\.normalizedX).max()! - faces.map(\.normalizedX).min()!) > 0.20 { multipleSubjects = true }
+            if let face = faces.max(by: { $0.weight < $1.weight }) {
                 observations.append(face)
                 continue
             }
@@ -125,13 +130,15 @@ public struct LocalVisionFocalPointSuggester: Sendable {
             }
         }
 
-        guard let proposal = Self.aggregate(
+        guard var proposal = Self.aggregate(
             observations,
             sampledFrameCount: sampledFrames,
             now: now
         ) else {
             throw LocalVisionFocalPointError.noRelevantObservation
         }
+        let spread = (observations.map(\.normalizedX).max() ?? 0) - (observations.map(\.normalizedX).min() ?? 0)
+        proposal.preserveFullFrame = multipleSubjects || spread > 0.25
         return proposal
     }
 
@@ -179,30 +186,12 @@ public struct LocalVisionFocalPointSuggester: Sendable {
         )
     }
 
-    private static func largestFace(
-        in image: CGImage
-    ) -> VisionFocalObservation? {
+    private static func faces(in image: CGImage) -> [VisionFocalObservation] {
         let request = VNDetectFaceRectanglesRequest()
-        let handler = VNImageRequestHandler(cgImage: image)
-        do {
-            try handler.perform([request])
-        } catch {
-            return nil
+        do { try VNImageRequestHandler(cgImage: image).perform([request]) } catch { return [] }
+        return (request.results ?? []).filter { $0.confidence >= 0.5 }.map {
+            focalObservation(boundingBox: $0.boundingBox, confidence: Double($0.confidence), kind: .face)
         }
-
-        guard let observation = request.results?
-            .max(by: {
-                $0.boundingBox.width * $0.boundingBox.height
-                < $1.boundingBox.width * $1.boundingBox.height
-            }) else {
-            return nil
-        }
-
-        return focalObservation(
-            boundingBox: observation.boundingBox,
-            confidence: Double(observation.confidence),
-            kind: .face
-        )
     }
 
     private static func largestHuman(

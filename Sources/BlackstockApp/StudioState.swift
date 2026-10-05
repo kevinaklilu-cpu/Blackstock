@@ -30,6 +30,7 @@ final class StudioState: ObservableObject {
     @Published var audioSignalAssessment: AudioSignalAssessment?
     @Published var audioLoudnessAssessment: AudioLoudnessAssessment?
     @Published var reframeAspectRatio: ReframeAspectRatio = .landscape16x9
+    @Published var reframePreserveFullFrame = false
     @Published var reframeFocalX: Double = 0.5
     @Published var reframeFocalY: Double = 0.5
     @Published var isSuggestingFocalPoint = false
@@ -214,6 +215,7 @@ final class StudioState: ObservableObject {
                     reframeAspectRatio = reframe.aspectRatio
                     reframeFocalX = reframe.focalX
                     reframeFocalY = reframe.focalY
+                    reframePreserveFullFrame = reframe.preserveFullFrame == true
                 }
 
                 if let transcript {
@@ -943,6 +945,7 @@ final class StudioState: ObservableObject {
             focalPointProposal = proposal
             reframeFocalX = proposal.focalX
             reframeFocalY = proposal.focalY
+                reframePreserveFullFrame = proposal.preserveFullFrame == true
 
             ledger.append(.init(
                 timestamp: Date(),
@@ -1137,7 +1140,7 @@ final class StudioState: ObservableObject {
         let spec = ReframeSpec(
             aspectRatio: reframeAspectRatio,
             focalX: reframeFocalX,
-            focalY: reframeFocalY
+            focalY: reframeFocalY, preserveFullFrame: reframePreserveFullFrame
         )
         let operation = EditOperation(
             type: .reframe,
@@ -1175,7 +1178,8 @@ final class StudioState: ObservableObject {
     }
 
     func generateLocalClipCandidates(
-        localeIdentifier: String
+        localeIdentifier: String,
+        forShort: Bool = true
     ) async {
         guard !isGeneratingClipCandidates, !isTranscribing else {
             clipCandidateStatusMessage = "Die Spracherkennung läuft bereits."
@@ -1238,13 +1242,17 @@ final class StudioState: ObservableObject {
                 .generate(
                     transcript: sourceTranscript,
                     sourceDurationSeconds:
-                        asset.durationSeconds
+                        asset.durationSeconds,
+                    minimumDurationSeconds: forShort ? 12 : 25,
+                    maximumDurationSeconds: forShort ? 90 : 360,
+                    pauseBoundarySeconds: 0.8,
+                    maximumCandidates: 48
                 )
 
             localClipCandidates = candidates
             if candidates.isEmpty {
                 clipCandidateStatusMessage =
-                    "Keine mindestens 15 Sekunden langen zusammenhängenden Sprachblöcke gefunden. Blackstock erfindet deshalb keine Clip-Vorschläge."
+                    "Keine ausreichend langen zusammenhängenden Sprachblöcke gefunden. Blackstock erfindet deshalb keine Clip-Vorschläge."
             } else {
                 clipCandidateStatusMessage =
                     "\(candidates.count) lokale Clip-Kandidaten aus Sprachsegmenten und gemessenen Pausen gefunden."
@@ -1278,7 +1286,7 @@ final class StudioState: ObservableObject {
         localeIdentifier: String,
         maximumHighlights: Int = 3,
         renderImmediately: Bool = true,
-        targetDuration: Double = 45,
+        targetDuration: Double = 0,
         analyzeSpeech: Bool = true,
         includeCaptions: Bool = false,
         portrait: Bool = true
@@ -1292,14 +1300,14 @@ final class StudioState: ObservableObject {
             "Schritt 1 von 4: Sprache, Pausen und Clip-Bereiche werden lokal analysiert …"
 
         if analyzeSpeech || includeCaptions {
-            await generateLocalClipCandidates(localeIdentifier: localeIdentifier)
+            await generateLocalClipCandidates(localeIdentifier: localeIdentifier, forShort: portrait)
         } else {
             localClipCandidates = []
         }
         guard !shouldStopProcessing else {
             return
         }
-        if (!renderImmediately || !analyzeSpeech || localClipCandidates.isEmpty), let asset {
+        if targetDuration > 0, let asset {
             localClipCandidates = automaticTimelineCandidates(
                 duration: asset.durationSeconds, targetDuration: targetDuration
             )
@@ -1307,12 +1315,16 @@ final class StudioState: ObservableObject {
             clipCandidateStatusMessage = "Zeitbasierter Schnitt vorbereitet. Spracherkennung ist dafür nicht erforderlich."
         }
         guard !localClipCandidates.isEmpty else {
-            errorMessage = "Das Video ist zu kurz, um automatisch einen Clip zu erstellen."
+            errorMessage = "Keine belastbaren Momente erkannt. Prüfe die Spracherkennung oder wähle einen Ausschnitt manuell. Es werden keine zufälligen 45-Sekunden-Clips erstellt."
             return
         }
 
-        let ranked = LocalHighlightCandidateRanker()
-            .rank(localClipCandidates)
+        var ranked = LocalHighlightCandidateRanker().rank(localClipCandidates)
+        clipCandidateStatusMessage = "Momente werden nach Verständlichkeit und Aussage geordnet …"
+        if let editorial = await LocalClipEditorialAdvisor().rank(ranked, locale: localeIdentifier) {
+            ranked = editorial
+        }
+        guard !shouldStopProcessing else { return }
         let selected = Array(
             ranked.prefix(max(maximumHighlights, 1))
         )
@@ -1340,6 +1352,7 @@ final class StudioState: ObservableObject {
         reframeAspectRatio = portrait ? .portrait9x16 : .landscape16x9
         reframeFocalX = 0.5
         reframeFocalY = 0.5
+        reframePreserveFullFrame = false
         if let asset {
             do {
                 let proposal = try await LocalVisionFocalPointSuggester()
@@ -1347,6 +1360,7 @@ final class StudioState: ObservableObject {
                 focalPointProposal = proposal
                 reframeFocalX = proposal.focalX
                 reframeFocalY = proposal.focalY
+                reframePreserveFullFrame = proposal.preserveFullFrame == true
             } catch {
                 focalPointProposal = nil
             }
@@ -1378,7 +1392,7 @@ final class StudioState: ObservableObject {
             captionURL = nil
             clipCandidateStatusMessage = includeCaptions
                 ? "Keine verlässliche Sprache erkannt; das Video wird ohne Untertitel gerendert."
-                : "Untertitel deaktiviert · Schnitt wird ohne Spracherkennung fortgesetzt."
+                : "Untertitel deaktiviert · die Sprachanalyse bleibt Grundlage der Momentwahl."
         }
 
         let before = graph.headID
@@ -1387,7 +1401,7 @@ final class StudioState: ObservableObject {
             reframeSpec: ReframeSpec(
                 aspectRatio: reframeAspectRatio,
                 focalX: reframeFocalX,
-                focalY: reframeFocalY
+                focalY: reframeFocalY, preserveFullFrame: reframePreserveFullFrame
             ),
             createdAt: Date()
         )
@@ -1396,7 +1410,7 @@ final class StudioState: ObservableObject {
             actor: .acceptedAIProposal
         )
         let clipDuration = primary.sourceRange.durationSeconds
-        let emphasisCues = automaticVisualDynamicsEnabled
+        let emphasisCues = automaticVisualDynamicsEnabled && !reframePreserveFullFrame
             ? VisualEmphasisComposer.automaticCues(
                 duration: clipDuration, transcript: savedClipSelections.first?.transcript)
             : []
@@ -1449,8 +1463,10 @@ final class StudioState: ObservableObject {
         }
 
         if !renderImmediately {
-            savedClipSelections = []
-            clipCandidateStatusMessage = "Erzählung vorbereitet. Die Ergänzungen werden jetzt geladen; noch kein fertiger Story-Export."
+            if targetDuration > 0 { savedClipSelections = [] }
+            clipCandidateStatusMessage = targetDuration > 0
+                ? "Erzählung vorbereitet. Noch kein fertiger Export."
+                : "\(savedClipSelections.count) Momente vorgeschlagen. Prüfe die Vorschau und erstelle den passenden Clip."
             persistWorkspaceIfPossible()
             return
         }
@@ -1983,7 +1999,7 @@ final class StudioState: ObservableObject {
                     url: asset.sourceURL, sourceRange: selection.sourceRange
                 ) {
                     clipReframe = ReframeSpec(aspectRatio: base.aspectRatio,
-                        focalX: proposal.focalX, focalY: proposal.focalY)
+                        focalX: proposal.focalX, focalY: proposal.focalY, preserveFullFrame: proposal.preserveFullFrame)
                 }
             }
             guard !shouldStopProcessing, activeProjectID == projectID else { return }
@@ -2002,7 +2018,7 @@ final class StudioState: ObservableObject {
                 operations: graph.currentOperations,
                 outputDurationSeconds: currentOutputDurationSeconds
             ).isEmpty
-            let clipCues = dynamicsActive ? VisualEmphasisComposer.automaticCues(
+            let clipCues = dynamicsActive && clipReframe?.preserveFullFrame != true ? VisualEmphasisComposer.automaticCues(
                 duration: selection.sourceRange.durationSeconds,
                 transcript: selection.transcript
             ) : []
@@ -2214,6 +2230,7 @@ final class StudioState: ObservableObject {
             reframeAspectRatio = reframe.aspectRatio
             reframeFocalX = reframe.focalX
             reframeFocalY = reframe.focalY
+                    reframePreserveFullFrame = reframe.preserveFullFrame == true
             try? await rebuildPreview()
         }
         guard let clipTranscript = selection.transcript else {

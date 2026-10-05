@@ -30,11 +30,11 @@ REQUIRED = {
     ],
     "Sources/BlackstockApp/WorkspaceProductViews.swift": [
         'Text("Entdecken")',
-        "Trends finden, Quellen kombinieren, Story starten",
+        "Videos entdecken. Starke Momente finden.",
         'Picker(\n                    "Zeitraum"',
         "Die Angaben stammen direkt von YouTube.",
-        '"Blackstock Story-Vorschlag"',
-        '"Automatisch erstellen"',
+        "session.useOpportunityAsClip(",
+        '"Video schneiden"',
         "YouTubeEmbeddedPlayer(videoID: item.videoID)",
     ],
     "Sources/BlackstockApp/YouTubeEmbeddedPlayer.swift": [

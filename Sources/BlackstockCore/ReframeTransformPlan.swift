@@ -47,6 +47,18 @@ public struct ReframeTransformPlan: Sendable, Equatable {
         let orientedWidth = abs(transformedBounds.width)
         let orientedHeight = abs(transformedBounds.height)
 
+        if spec.preserveFullFrame == true {
+            let scale = min(renderSize.width / orientedWidth, renderSize.height / orientedHeight)
+            let transform = preferredTransform
+                .concatenating(CGAffineTransform(translationX: -transformedBounds.minX, y: -transformedBounds.minY))
+                .concatenating(CGAffineTransform(scaleX: scale, y: scale))
+                .concatenating(CGAffineTransform(translationX: (renderSize.width - orientedWidth * scale) / 2,
+                    y: (renderSize.height - orientedHeight * scale) / 2))
+            return .init(renderWidth: renderSize.width, renderHeight: renderSize.height,
+                crop: .init(sourceWidth: orientedWidth, sourceHeight: orientedHeight, cropX: 0, cropY: 0,
+                    cropWidth: orientedWidth, cropHeight: orientedHeight), transform: transform)
+        }
+
         guard let crop = ReframeCropPlan.make(
             sourceWidth: orientedWidth,
             sourceHeight: orientedHeight,

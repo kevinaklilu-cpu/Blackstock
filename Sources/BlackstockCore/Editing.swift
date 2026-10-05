@@ -133,12 +133,15 @@ public struct ReframeSpec: Codable, Sendable, Equatable {
     public let aspectRatio: ReframeAspectRatio
     public let focalX: Double
     public let focalY: Double
+    public let preserveFullFrame: Bool?
 
     public init(
         aspectRatio: ReframeAspectRatio,
         focalX: Double = 0.5,
-        focalY: Double = 0.5
+        focalY: Double = 0.5,
+        preserveFullFrame: Bool? = nil
     ) {
+        self.preserveFullFrame = preserveFullFrame
         self.aspectRatio = aspectRatio
         self.focalX = min(max(focalX, 0), 1)
         self.focalY = min(max(focalY, 0), 1)
@@ -186,7 +189,7 @@ public struct ReframeCropPlan: Codable, Sendable, Equatable {
             return .init(
                 sourceWidth: sourceWidth,
                 sourceHeight: sourceHeight,
-                cropX: maxX * spec.focalX,
+                cropX: min(max(sourceWidth * spec.focalX - cropWidth / 2, 0), maxX),
                 cropY: 0,
                 cropWidth: cropWidth,
                 cropHeight: cropHeight
@@ -200,7 +203,7 @@ public struct ReframeCropPlan: Codable, Sendable, Equatable {
             sourceWidth: sourceWidth,
             sourceHeight: sourceHeight,
             cropX: 0,
-            cropY: maxY * spec.focalY,
+            cropY: min(max(sourceHeight * spec.focalY - cropHeight / 2, 0), maxY),
             cropWidth: cropWidth,
             cropHeight: cropHeight
         )

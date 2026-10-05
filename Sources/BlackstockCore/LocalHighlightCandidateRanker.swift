@@ -36,24 +36,14 @@ public struct LocalHighlightCandidateRanker: Sendable {
             max(wordsPerSecond / 2.8, 0),
             1
         )
-        let durationFit = max(
-            0,
-            1 - abs(duration - targetDurationSeconds)
-                / targetDurationSeconds
-        )
-        let openingBias = max(
-            0,
-            1 - candidate.sourceRange.startSeconds / 600
-        )
         let hookStrength = transcriptHookStrength(
             candidate.transcriptPreview
         )
 
-        return confidence * 0.25
-            + speechDensity * 0.25
-            + durationFit * 0.20
-            + hookStrength * 0.20
-            + openingBias * 0.10
+        let completeEnding = candidate.transcriptPreview.trimmingCharacters(in: .whitespacesAndNewlines)
+            .last.map { ".!?…。！？".contains($0) } == true ? 1.0 : 0.0
+        return confidence * 0.35 + speechDensity * 0.25
+            + hookStrength * 0.25 + completeEnding * 0.15
     }
 
     private func transcriptHookStrength(_ text: String) -> Double {

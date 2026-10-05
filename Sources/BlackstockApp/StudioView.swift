@@ -23,7 +23,9 @@ struct StudioView: View {
     @State private var pendingStorySource: YouTubeOpportunityCandidate?
     @State private var queuedStorySources: [YouTubeOpportunityCandidate] = []
     @State private var showOptionalCapture = false
-    @State private var inspectorTab = "story"
+    @AppStorage("blackstock.clip.outputFormat") private var clipOutputFormat = "short"
+    @AppStorage("blackstock.clip.untertitel") private var clipIncludeCaptions = false
+    @State private var inspectorTab = "moments"
     @AppStorage("blackstock.story.targetDuration") private var storyTargetDuration: Double = 0
     @AppStorage("blackstock.story.captionsEnabled") private var storyCaptionsEnabled = false
     @AppStorage("blackstock.story.aiSceneMatchingEnabled") private var storySpeechMatchingEnabled = true
@@ -443,6 +445,11 @@ struct StudioView: View {
     }
 
     private var publicationDraft: StoryPublicationDraft? {
+        if session.activeStorySources.count <= 1 {
+            return StoryPublicationDraft.forClip(transcript: state.transcript,
+                sourceURL: opportunitySource?.pageURL, start: state.trimStart,
+                duration: state.currentOutputDurationSeconds, isShort: clipOutputFormat == "short")
+        }
         let sequence = state.plannedStorySequence()
         let used = Set(sequence.map(\.captureID))
         let sources = session.activeStorySources.enumerated().compactMap { index, source in
@@ -1265,10 +1272,19 @@ struct StudioView: View {
 
     private var localClipCandidatesSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Automatischer Schnitt")
-                .font(.headline)
+            Text("Dein nächster Clip")
+                .font(.title2.bold())
+            Picker("Veröffentlichungsformat", selection: $clipOutputFormat) {
+                Text("Short · Hochkant").tag("short")
+                Text("Video · Querformat").tag("video")
+            }.pickerStyle(.segmented)
+            Text("Die Länge folgt der Aussage. Jeder Vorschlag zeigt seinen eigenen Anfang und Abschluss.")
+                .font(.caption).foregroundStyle(.secondary)
+            Toggle("Gesprochene Worte als Untertitel", isOn: $clipIncludeCaptions)
+                .toggleStyle(.switch)
+                .disabled(state.isCreatingAutomaticHighlights)
 
-            Text("Blackstock findet die stärksten Ausschnitte, setzt auf Wunsch gezielte Fokus-Zooms, bereitet Hochkantformat und Untertitel vor und rendert daraus fertige Clips. Du kannst jeden Schritt anschließend ändern.")
+            Text("Blackstock untersucht die erkannten Aussagen im gesamten Video. Wähle einen vorgeschlagenen Moment, prüfe Bild und Ton und erstelle daraus deinen Clip.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -1294,7 +1310,9 @@ struct StudioView: View {
                     } else {
                         startProcessing {
                             await state.createAutomaticHighlights(
-                                localeIdentifier: speechLocaleIdentifier
+                                localeIdentifier: speechLocaleIdentifier,
+                                renderImmediately: false, targetDuration: 0,
+                                includeCaptions: clipIncludeCaptions, portrait: clipOutputFormat == "short"
                             )
                         }
                     }
@@ -1307,7 +1325,7 @@ struct StudioView: View {
                         Label(
                             state.isCreatingAutomaticHighlights
                                 ? "Highlight-Erstellung stoppen"
-                                : "Automatik starten",
+                                : "Passende Momente finden",
                             systemImage: "sparkles.rectangle.stack"
                         )
                     }
@@ -1926,7 +1944,17 @@ struct StudioView: View {
                     inspectorTools(asset)
                 }
             } else {
-                inspectorTools(asset)
+                Picker("Clip-Arbeitsbereich", selection: $inspectorTab) {
+                    Text("Momente").tag("moments")
+                    Text("Feinschliff").tag("tools")
+                }
+                .pickerStyle(.segmented).padding(14)
+                Divider()
+                if inspectorTab == "moments" {
+                    ScrollView { localClipCandidatesSection.padding(18) }
+                } else {
+                    inspectorTools(asset)
+                }
             }
         }
     }
@@ -1963,21 +1991,17 @@ struct StudioView: View {
 
                 Divider()
 
-                storyboardSection
+                if session.activeStorySources.count > 1 { storyboardSection }
 
                 Divider()
 
-                if session.activeStorySources.count <= 1 {
-                    localClipCandidatesSection
-                }
-
-                Divider()
-
-                textOverlaySection(asset)
+                DisclosureGroup("Texteinblendungen und eigene Akzente") { textOverlaySection(asset) }
 
                 Divider()
 
                 VStack(alignment: .leading, spacing: 10) {
+                    Toggle("Ganzes Bild erhalten · keine Personen abschneiden", isOn: $state.reframePreserveFullFrame)
+                        .toggleStyle(.switch)
                     Text("Bildformat & Fokus")
                         .font(.headline)
 
@@ -3345,7 +3369,7 @@ struct StudioView: View {
         case 0:
             return "Als Nächstes: Video laden oder eine lokale Datei auswählen."
         case 1:
-            return "Als Nächstes: Abspielbereich festlegen und Schnitt anwenden."
+            return "Als Nächstes: Short oder Video wählen und passende Momente finden."
         case 2:
             return "Als Nächstes: Clips und Untertitel prüfen, dann das Video erstellen."
         case 3:
@@ -3357,7 +3381,7 @@ struct StudioView: View {
 
     private var workflowStatus: String {
         if state.isRendering || state.isRenderingSavedClipBatch { return "Schritt 4 · Clip wird gerendert. Bitte warte auf die fertige Datei." }
-        if state.isTranscribing { return "Schritt 3 · Sprache wird erkannt und Untertitel werden erstellt." }
+        if state.isTranscribing { return "Sprache wird analysiert. Untertitel bleiben eine eigene Auswahl." }
         if state.isCreatingAutomaticHighlights || state.isGeneratingClipCandidates {
             return "Schritt 3 · Highlights werden gesucht und Schnitte vorbereitet."
         }
@@ -4038,11 +4062,11 @@ struct StudioView: View {
                             await state.createAutomaticHighlights(
                                 localeIdentifier: speechLocaleIdentifier,
                                 maximumHighlights: session.activeStorySources.count > 1 ? 1 : 3,
-                                renderImmediately: session.activeStorySources.count <= 1,
-                                targetDuration: session.activeStorySources.count > 1 ? resolvedStoryDuration : 45,
+                                renderImmediately: false,
+                                targetDuration: session.activeStorySources.count > 1 ? resolvedStoryDuration : 0,
                                 analyzeSpeech: session.activeStorySources.count <= 1,
-                                includeCaptions: session.activeStorySources.count > 1 && storyCaptionsEnabled,
-                                portrait: session.activeStorySources.count <= 1 || storyPortrait
+                                includeCaptions: session.activeStorySources.count > 1 ? storyCaptionsEnabled : clipIncludeCaptions,
+                                portrait: session.activeStorySources.count > 1 ? storyPortrait : clipOutputFormat == "short"
                             )
                         } else {
                             _ = session.advanceActiveProject(

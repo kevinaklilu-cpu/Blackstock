@@ -70,6 +70,13 @@ private final class SequentialInsertFrames {
     func cancel() { reader?.cancelReading(); reader = nil; output = nil; previous = nil; next = nil }
 }
 
+public struct TimedVideoOverlay: @unchecked Sendable {
+    let imageData: Data
+    let frame: CGRect
+    let start: Double
+    let duration: Double
+}
+
 public actor LocalSupplementalVideoCompositor {
     private struct PreparedInsert {
         let order: Int
@@ -87,6 +94,7 @@ public actor LocalSupplementalVideoCompositor {
         supplementalVideo: [SupplementalVideoInsertInput],
         outputURL: URL,
         preset: LocalRenderPreset,
+        overlays: [TimedVideoOverlay] = [],
         onProgress: @Sendable (Double) -> Void = { _ in }
     ) async throws {
         let baseAsset = AVURLAsset(url: inputURL)
@@ -185,7 +193,7 @@ public actor LocalSupplementalVideoCompositor {
             )
         }
 
-        guard !prepared.isEmpty else {
+        guard !prepared.isEmpty || !overlays.isEmpty else {
             throw LocalSupplementalVideoError
                 .noUsableInsert
         }
@@ -209,6 +217,7 @@ public actor LocalSupplementalVideoCompositor {
             basePreferredTransform: preferredTransform,
             renderSize: renderSize,
             prepared: prepared,
+            overlays: overlays,
             outputURL: videoOnlyURL,
             preset: preset,
             onProgress: onProgress
@@ -236,6 +245,7 @@ public actor LocalSupplementalVideoCompositor {
         basePreferredTransform: CGAffineTransform,
         renderSize: CGSize,
         prepared: [PreparedInsert],
+        overlays: [TimedVideoOverlay],
         outputURL: URL,
         preset: LocalRenderPreset,
         onProgress: @Sendable (Double) -> Void
@@ -361,6 +371,7 @@ public actor LocalSupplementalVideoCompositor {
             )
         )
 
+        var overlayCache: [Int: CIImage] = [:]
         var appendedFrameCount = 0
         var activeInsertOrder: Int?
 
@@ -389,7 +400,7 @@ public actor LocalSupplementalVideoCompositor {
                 0
             )
 
-            let image: CIImage
+            var image: CIImage
             if let insert = prepared
                 .filter({
                     $0.timelineStartSeconds
@@ -429,6 +440,22 @@ public actor LocalSupplementalVideoCompositor {
                         basePreferredTransform,
                     into: outputRect
                 )
+            }
+
+            let activeOverlays = overlays.indices.filter {
+                timelineSeconds >= overlays[$0].start && timelineSeconds < overlays[$0].start + overlays[$0].duration
+            }
+            overlayCache = overlayCache.filter { activeOverlays.contains($0.key) }
+            for index in activeOverlays {
+                if overlayCache[index] == nil {
+                    let overlay = overlays[index]
+                    guard let decoded = CIImage(data: overlay.imageData) else {
+                        throw LocalSupplementalVideoError.exportFailed("Eine Texteinblendung konnte nicht dekodiert werden.")
+                    }
+                    overlayCache[index] = decoded.transformed(by:
+                        CGAffineTransform(translationX: overlay.frame.minX, y: overlay.frame.minY))
+                }
+                if let layer = overlayCache[index] { image = layer.composited(over: image) }
             }
 
             while !writerInput.isReadyForMoreMediaData {

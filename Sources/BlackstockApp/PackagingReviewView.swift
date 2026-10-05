@@ -19,6 +19,8 @@ struct PackagingReviewView: View {
 
     @Environment(\.dismiss) private var dismiss
 
+    @State private var editorialStatus: String?
+    @State private var isDraftingEditorial = false
     @State private var title: String
     @State private var description = ""
     @State private var tags = ""
@@ -44,6 +46,25 @@ struct PackagingReviewView: View {
     @State private var checkedAudioSignal: AudioSignalAssessment?
     @State private var checkedAudioLoudness: AudioLoudnessAssessment?
     @State private var previewPlayer = AVPlayer()
+
+    private func improveEditorialDraft() async {
+        guard !isDraftingEditorial, let transcript else { return }
+        isDraftingEditorial = true
+        defer { isDraftingEditorial = false }
+        let previousTitle = title, previousDescription = description, previousTags = tags
+        guard let draft = await LocalClipEditorialAdvisor().publication(transcript: transcript) else {
+            editorialStatus = "Lokale KI nicht verfügbar. Ausschnittbezogene Textvorschläge bleiben bearbeitbar."
+            return
+        }
+        guard title == previousTitle, description == previousDescription, tags == previousTags else {
+            editorialStatus = "Deine laufenden Textänderungen wurden beibehalten."
+            return
+        }
+        title = draft.title
+        description = draft.description
+        tags = draft.tags.joined(separator: ", ")
+        editorialStatus = "Lokal aus diesem Ausschnitt formuliert · bitte vor dem Upload prüfen."
+    }
 
     private let requiredQualityAreas = AutomaticPublishReview.requiredAreas
 
@@ -87,7 +108,7 @@ struct PackagingReviewView: View {
                 ?? (
                     normalizedSuggestedTitle?.isEmpty == false
                     ? String(normalizedSuggestedTitle!.prefix(100))
-                    : String(project.title.prefix(100))
+                    : (storyDraft?.title ?? "Titel für diesen Ausschnitt ergänzen")
                 )
         )
         _description = State(
@@ -339,6 +360,9 @@ struct PackagingReviewView: View {
                 await generateThumbnailFromRender()
             }
             await checkAudioAutomatically()
+            if persistedReview == nil, title == storyDraft?.title {
+                await improveEditorialDraft()
+            }
         }
         .onDisappear { previewPlayer.pause() }
         .onChange(of: session.activeProject?.stage) { stage in
@@ -399,6 +423,11 @@ struct PackagingReviewView: View {
     private var metadataSection: some View {
         GroupBox("YouTube-Metadaten") {
             VStack(alignment: .leading, spacing: 12) {
+                Button(isDraftingEditorial ? "Textvorschläge werden formuliert …" : "Eigene Textvorschläge formulieren") {
+                    Task { await improveEditorialDraft() }
+                }
+                .disabled(isDraftingEditorial || transcript == nil)
+                if let editorialStatus { Text(editorialStatus).font(.caption).foregroundStyle(.secondary) }
                 TextField("Titel", text: $title)
                     .textFieldStyle(.roundedBorder)
 
@@ -408,7 +437,7 @@ struct PackagingReviewView: View {
                             Button(suggestion) { title = suggestion }
                         }
                     }
-                    Text("Vorschlag aus den verwendeten Quellen. Prüfe Titel und Beschreibung vor dem Upload.")
+                    Text("Vorschlag aus dem gewählten Ausschnitt. Prüfe Titel und Beschreibung vor dem Upload.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 TextEditor(text: $description)
