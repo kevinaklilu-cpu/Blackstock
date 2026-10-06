@@ -2,7 +2,7 @@ import Foundation
 
 /// Counts new, distinct results rather than raw provider rows. Keeps a usable
 /// cursor when a bounded fetch ends so a subsequent user action can continue.
-public struct OpportunityPageAccumulator {
+public struct OpportunityPageAccumulator: Sendable {
     public private(set) var candidates: [YouTubeOpportunityCandidate] = []
     public private(set) var nextPageToken: String?
     private var seenIDs: Set<String>
