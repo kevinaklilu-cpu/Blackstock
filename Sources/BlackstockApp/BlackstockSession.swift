@@ -2937,8 +2937,9 @@ final class BlackstockSession: ObservableObject {
             opportunityRecommendationNote = recommendationNote
             var seen = Set(existingOpportunities.map(\.videoID))
             let added = page.candidates.filter { seen.insert($0.videoID).inserted }
-            opportunities = loadMore ? existingOpportunities + added
-                : YouTubeAuthorizedClient.sortedOpportunities(added, order: order)
+            opportunities = YouTubeAuthorizedClient.sortedOpportunities(
+                loadMore ? existingOpportunities + added : added, order: order
+            )
             opportunityNextPageToken = page.nextPageToken == token ? nil : page.nextPageToken
             opportunityPageParameters = opportunityNextPageToken == nil ? nil : pageParameters
             if loadMore {
