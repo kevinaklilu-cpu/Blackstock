@@ -19,6 +19,7 @@ struct PackagingReviewView: View {
 
     @Environment(\.dismiss) private var dismiss
 
+    @State private var hasRestoredEditorDraft = false
     @State private var editorialStatus: String?
     @State private var isDraftingEditorial = false
     @State private var title: String
@@ -29,6 +30,7 @@ struct PackagingReviewView: View {
     @State private var categoryID = ""
     @State private var containsSyntheticMedia = false
     @State private var thumbnailURL: URL?
+    @State private var thumbnailOptions: [URL] = []
     @State private var captionTracks: [PublishCaptionTrack] = []
     @State private var showThumbnailImporter = false
     @State private var thumbnailFramePosition = 0.25
@@ -97,6 +99,11 @@ struct PackagingReviewView: View {
             projectID: project.id
         )
         let saved = loaded?.package.renderArtifactID == artifact.id ? loaded : nil
+        let editorKey = "blackstock.publication.editor." + project.id.uuidString + "." + artifact.id.uuidString
+        let editorDraft = UserDefaults.standard.data(forKey: editorKey)
+            .flatMap { try? JSONDecoder().decode(PublicationEditorDraft.self, from: $0) }
+
+        _hasRestoredEditorDraft = State(initialValue: editorDraft != nil)
         let normalizedSuggestedTitle =
             suggestedTitle?
             .trimmingCharacters(
@@ -104,7 +111,7 @@ struct PackagingReviewView: View {
             )
         _title = State(
             initialValue:
-                saved?.package.metadata.title
+                editorDraft?.title ?? saved?.package.metadata.title
                 ?? (
                     normalizedSuggestedTitle?.isEmpty == false
                     ? String(normalizedSuggestedTitle!.prefix(100))
@@ -112,12 +119,12 @@ struct PackagingReviewView: View {
                 )
         )
         _description = State(
-            initialValue: saved?.package.metadata.description
+            initialValue: editorDraft?.description ?? saved?.package.metadata.description
                 ?? storyDraft?.description
                 ?? Self.suggestedDescription(title: project.title, transcript: transcript)
         )
         _tags = State(
-            initialValue: saved?.package.metadata.tags
+            initialValue: editorDraft?.tags ?? saved?.package.metadata.tags
                 .joined(separator: ", ")
                 ?? storyDraft?.tags.joined(separator: ", ")
                 ?? StoryTopicMatcher().searchQuery(for: project.title).split(separator: " ").joined(separator: ", ")
@@ -144,8 +151,9 @@ struct PackagingReviewView: View {
                 saved?.package.metadata.containsSyntheticMedia
                 ?? false
         )
-        let savedThumbnailURL = saved?.package.thumbnail?.fileURL
+        let savedThumbnailURL = editorDraft?.thumbnailURL ?? saved?.package.thumbnail?.fileURL
         _thumbnailURL = State(initialValue: savedThumbnailURL)
+        _thumbnailOptions = State(initialValue: editorDraft?.thumbnailOptions ?? savedThumbnailURL.map { [$0] } ?? [])
         _thumbnailAssessment = State(
             initialValue: savedThumbnailURL.flatMap {
                 try? ThumbnailTechnicalInspector().inspect(url: $0)
@@ -317,6 +325,7 @@ struct PackagingReviewView: View {
                         projectID: project.id,
                         kind: .thumbnail
                     )
+                    if !thumbnailOptions.contains(durableURL) { thumbnailOptions.append(durableURL) }
                     thumbnailURL = durableURL
                     thumbnailAssessment = try ThumbnailTechnicalInspector()
                         .inspect(url: durableURL)
@@ -357,14 +366,19 @@ struct PackagingReviewView: View {
             }
             if thumbnailURL == nil,
                persistedReview == nil {
-                await generateThumbnailFromRender()
+                await generateThumbnailChoices()
             }
             await checkAudioAutomatically()
-            if persistedReview == nil, title == storyDraft?.title {
+            if persistedReview == nil, title == storyDraft?.title,
+               !hasRestoredEditorDraft {
                 await improveEditorialDraft()
             }
         }
-        .onDisappear { previewPlayer.pause() }
+        .task(id: editorDraftSnapshot) {
+            do { try await Task.sleep(for: .milliseconds(350)) } catch { return }
+            saveEditorDraft()
+        }
+        .onDisappear { previewPlayer.pause(); saveEditorDraft() }
         .onChange(of: session.activeProject?.stage) { stage in
             if stage == .published {
                 dismiss()
@@ -640,6 +654,29 @@ struct PackagingReviewView: View {
                         .disabled(isGeneratingThumbnail)
                     }
 
+                    if thumbnailOptions.count > 1 {
+                        ScrollView(.horizontal) {
+                            HStack(spacing: 12) {
+                                ForEach(thumbnailOptions, id: \.self) { option in
+                                    if let image = NSImage(contentsOf: option) {
+                                        Button {
+                                            thumbnailURL = option
+                                            thumbnailAssessment = try? ThumbnailTechnicalInspector().inspect(url: option)
+                                        } label: {
+                                            Image(nsImage: image).resizable().scaledToFit()
+                                                .frame(width: 160, height: 90)
+                                                .overlay(RoundedRectangle(cornerRadius: 8)
+                                                    .stroke(thumbnailURL == option ? Color.accentColor : Color.clear, lineWidth: 3))
+                                        }
+                                        .buttonStyle(.plain)
+                                        .accessibilityLabel("Thumbnail-Variante auswählen")
+                                        .accessibilityAddTraits(thumbnailURL == option ? .isSelected : [])
+                                    }
+                                }
+                            }.padding(4)
+                        }
+                    }
+
                     if let thumbnailURL, let image = NSImage(contentsOf: thumbnailURL) {
                         Image(nsImage: image)
                             .resizable()
@@ -703,7 +740,32 @@ struct PackagingReviewView: View {
         }
     }
 
-    private func generateThumbnailFromRender() async {
+    private var editorDraftSnapshot: PublicationEditorDraft {
+        .init(title: title, description: description, tags: tags,
+              thumbnailURL: thumbnailURL, thumbnailOptions: thumbnailOptions)
+    }
+
+    private func saveEditorDraft() {
+        guard let data = try? JSONEncoder().encode(editorDraftSnapshot) else { return }
+        UserDefaults.standard.set(data, forKey:
+            "blackstock.publication.editor." + project.id.uuidString + "." + artifact.id.uuidString)
+    }
+
+    private func generateThumbnailChoices() async {
+        let originalPosition = thumbnailFramePosition
+        for position in [0.18, 0.5, 0.82] {
+            guard !Task.isCancelled else { break }
+            thumbnailFramePosition = position
+            await generateThumbnailFromRender(selectResult: false)
+        }
+        thumbnailFramePosition = originalPosition
+        if thumbnailURL == nil, let first = thumbnailOptions.first {
+            thumbnailURL = first
+            thumbnailAssessment = try? ThumbnailTechnicalInspector().inspect(url: first)
+        }
+    }
+
+    private func generateThumbnailFromRender(selectResult: Bool = true) async {
         isGeneratingThumbnail = true
         defer { isGeneratingThumbnail = false }
 
@@ -729,8 +791,11 @@ struct PackagingReviewView: View {
             )
             let assessment = try ThumbnailTechnicalInspector()
                 .inspect(url: durableURL)
-            thumbnailURL = durableURL
-            thumbnailAssessment = assessment
+            if !thumbnailOptions.contains(durableURL) { thumbnailOptions.append(durableURL) }
+            if selectResult {
+                thumbnailURL = durableURL
+                thumbnailAssessment = assessment
+            }
             session.errorMessage = nil
         } catch {
             session.errorMessage =
@@ -1149,7 +1214,7 @@ struct PackagingReviewView: View {
 
     private static func suggestedDescription(title: String, transcript: LocalTranscript?) -> String {
         let excerpt = transcript?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return excerpt.isEmpty ? title : title + "\n\nAuszug aus dem Video:\n" + String(excerpt.prefix(700))
+        return String(excerpt.prefix(1200))
     }
 
     @ViewBuilder

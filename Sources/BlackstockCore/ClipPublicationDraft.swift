@@ -43,11 +43,8 @@ public extension StoryPublicationDraft {
                 if tag == .noun, word.count >= 3, unique.insert(word.lowercased()).inserted { keywords.append(word) }
                 return keywords.count < 15
             }
-        func time(_ seconds: Double) -> String { String(format: "%d:%02d", Int(max(0, seconds)) / 60, Int(max(0, seconds)) % 60) }
         let excerpt = sentences.prefix(4).joined(separator: " ")
-        var description = excerpt.isEmpty ? "Beschreibung des ausgewählten Moments ergänzen." : excerpt
-        description += "\n\n" + (isShort ? "Short" : "Video") + " · Ausschnitt " + time(start) + "–" + time(start + duration)
-        if let sourceURL { description += "\nQuelle: " + sourceURL.absoluteString }
+        let description = excerpt.isEmpty ? "" : excerpt
         return .init(title: selected, description: String(description.prefix(5000)), tags: keywords,
             alternativeTitles: Array(options.prefix(3)))
     }
