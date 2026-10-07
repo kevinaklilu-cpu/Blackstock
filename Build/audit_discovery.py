@@ -21,8 +21,6 @@ REQUIRED = {
         'name: "relevanceLanguage"',
         'name: "publishedAfter"',
         'name: "chart", value: "mostPopular"',
-        'name: "videoEmbeddable"',
-        'name: "videoSyndicated"',
         'name: "eventType", value: "live"',
         "OpportunityContentFilter",
         "YouTubeOpportunityContentKind",

@@ -320,14 +320,6 @@ public struct YouTubeAuthorizedClient: Sendable {
             .init(
                 name: "order",
                 value: order.youtubeOrderParameter
-            ),
-            .init(
-                name: "videoEmbeddable",
-                value: "true"
-            ),
-            .init(
-                name: "videoSyndicated",
-                value: "true"
             )
         ]
         if contentFilter == .live {

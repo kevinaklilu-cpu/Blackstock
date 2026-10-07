@@ -1284,7 +1284,7 @@ struct StudioView: View {
                 .toggleStyle(.switch)
                 .disabled(state.isCreatingAutomaticHighlights)
 
-            Text("Blackstock untersucht die erkannten Aussagen im gesamten Video. Wähle einen vorgeschlagenen Moment, prüfe Bild und Ton und erstelle daraus deinen Clip.")
+            Text("Blackstock untersucht Sprache, Bildbewegung und Szenenwechsel. Auch ohne Kommentar sind visuelle Vorschläge möglich. Prüfe den gewählten Moment vor dem Export.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -1333,8 +1333,8 @@ struct StudioView: View {
                 .buttonStyle(.borderedProminent)
                 .tint(BlackstockDesign.accent)
                 .disabled(
-                    state.isGeneratingClipCandidates
-                    || !projectEditingEnabled
+                    !state.isCreatingAutomaticHighlights
+                    && (state.isGeneratingClipCandidates || !projectEditingEnabled)
                 )
 
                 Button {

@@ -1309,6 +1309,8 @@ final class StudioState: ObservableObject {
         portrait: Bool = true
     ) async {
         guard !isCreatingAutomaticHighlights else { return }
+        let requestedProjectID = activeProjectID
+        let requestedAssetID = asset?.id
 
         isCreatingAutomaticHighlights = true
         defer { isCreatingAutomaticHighlights = false }
@@ -1324,6 +1326,39 @@ final class StudioState: ObservableObject {
         guard !shouldStopProcessing else {
             return
         }
+        // Visual analysis remains available when speech is absent or unavailable.
+        if let asset, targetDuration == 0 {
+            let speechStatus = clipCandidateStatusMessage
+            do {
+                let visual = try await VisualMomentAnalyzer().analyze(
+                    url: asset.sourceURL, duration: asset.durationSeconds,
+                    maximumDuration: portrait ? 90 : 360,
+                    progress: { [weak self] fraction in
+                        await MainActor.run {
+                            guard self?.activeProjectID == requestedProjectID,
+                                  self?.asset?.id == requestedAssetID else { return }
+                            self?.clipCandidateStatusMessage = "Bildbewegung und Szenenwechsel analysieren · \(Int(fraction * 100)) %"
+                        }
+                    })
+                guard !shouldStopProcessing, activeProjectID == requestedProjectID,
+                      self.asset?.id == requestedAssetID else { return }
+                let speech = localClipCandidates
+                localClipCandidates += visual.filter { candidate in
+                    !speech.contains { spoken in
+                        let overlap = min(spoken.sourceRange.endSeconds, candidate.sourceRange.endSeconds)
+                            - max(spoken.sourceRange.startSeconds, candidate.sourceRange.startSeconds)
+                        return overlap > candidate.sourceRange.durationSeconds * 0.5
+                    }
+                }
+                if localClipCandidates.isEmpty { clipCandidateStatusMessage = speechStatus }
+                else { errorMessage = nil }
+            } catch {
+                guard !shouldStopProcessing else { return }
+                if localClipCandidates.isEmpty {
+                    clipCandidateStatusMessage = "Bildanalyse fehlgeschlagen: " + error.localizedDescription
+                }
+            }
+        }
         if targetDuration > 0, let asset {
             localClipCandidates = automaticTimelineCandidates(
                 duration: asset.durationSeconds, targetDuration: targetDuration
@@ -1332,16 +1367,19 @@ final class StudioState: ObservableObject {
             clipCandidateStatusMessage = "Zeitbasierter Schnitt vorbereitet. Spracherkennung ist dafür nicht erforderlich."
         }
         guard !localClipCandidates.isEmpty else {
-            errorMessage = "Keine belastbaren Momente erkannt. Prüfe die Spracherkennung oder wähle einen Ausschnitt manuell. Es werden keine zufälligen 45-Sekunden-Clips erstellt."
+            errorMessage = clipCandidateStatusMessage ?? "Keine passenden Momente gefunden. Prüfe die erkannte Sprache oder wähle einen Ausschnitt manuell."
             return
         }
 
         var ranked = LocalHighlightCandidateRanker().rank(localClipCandidates)
         clipCandidateStatusMessage = "Momente werden nach Verständlichkeit und Aussage geordnet …"
-        if let editorial = await LocalClipEditorialAdvisor().rank(ranked, locale: localeIdentifier) {
+        if ranked.allSatisfy({ $0.wordCount > 0 }),
+           let editorial = await LocalClipEditorialAdvisor().rank(ranked, locale: localeIdentifier) {
             ranked = editorial
         }
-        guard !shouldStopProcessing else { return }
+        guard !shouldStopProcessing,
+              activeProjectID == requestedProjectID,
+              asset?.id == requestedAssetID else { return }
         let selected = Array(
             ranked.prefix(max(maximumHighlights, 1))
         )
@@ -1374,6 +1412,9 @@ final class StudioState: ObservableObject {
             do {
                 let proposal = try await LocalVisionFocalPointSuggester()
                     .suggest(url: asset.sourceURL, sourceRange: primary.sourceRange)
+                guard !shouldStopProcessing,
+                      activeProjectID == requestedProjectID,
+                      self.asset?.id == requestedAssetID else { return }
                 focalPointProposal = proposal
                 reframeFocalX = proposal.focalX
                 reframeFocalY = proposal.focalY
@@ -1382,6 +1423,8 @@ final class StudioState: ObservableObject {
                 focalPointProposal = nil
             }
         }
+        // A visual activity peak does not identify a face or ball to crop around.
+        if primary.wordCount == 0 { reframePreserveFullFrame = true }
         captionVisualStyle = .strong
         clipCandidateStatusMessage =
             "Schritt 2 von 4: Schnitt und gewähltes Bildformat werden vorbereitet …"
@@ -1483,7 +1526,7 @@ final class StudioState: ObservableObject {
             if targetDuration > 0 { savedClipSelections = [] }
             clipCandidateStatusMessage = targetDuration > 0
                 ? "Erzählung vorbereitet. Noch kein fertiger Export."
-                : "\(savedClipSelections.count) Momente vorgeschlagen. Prüfe die Vorschau und erstelle den passenden Clip."
+                : "\(savedClipSelections.count) Momente gefunden · der erste ist auf \(Int(primary.sourceRange.durationSeconds.rounded())) Sekunden zugeschnitten und in der Vorschau bereit. Mit „Video erstellen“ speicherst du den fertigen Clip."
             persistWorkspaceIfPossible()
             return
         }
@@ -1559,7 +1602,9 @@ final class StudioState: ObservableObject {
            !firstSentence.isEmpty {
             return String(firstSentence.prefix(72))
         }
-        return "Highlight \(index + 1)"
+        return candidate.visualActivityScore != nil
+            ? "Visueller Moment \(index + 1)"
+            : "Highlight \(index + 1)"
     }
 
     func saveLocalClipCandidate(

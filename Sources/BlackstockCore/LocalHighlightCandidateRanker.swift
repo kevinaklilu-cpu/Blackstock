@@ -23,6 +23,7 @@ public struct LocalHighlightCandidateRanker: Sendable {
         _ candidate: LocalClipCandidate,
         targetDurationSeconds: Double
     ) -> Double {
+        if candidate.wordCount == 0, let visual = candidate.visualActivityScore { return visual }
         let duration = max(
             candidate.sourceRange.durationSeconds,
             1

@@ -9,13 +9,12 @@ struct OpportunityWorkspaceView: View {
     let onProjectCreated: () -> Void
 
     @State private var query = ""
-    @State private var sortMode: OpportunitySortMode = .views
+    @State private var sortMode: OpportunitySortMode = .relevance
     @State private var selectedOpportunityID: String?
     @State private var hasLoadedInitially = false
 
     var body: some View {
         GeometryReader { viewport in
-        ScrollView {
         VStack(alignment: .leading, spacing: 16) {
             header
 
@@ -248,13 +247,13 @@ struct OpportunityWorkspaceView: View {
                 emptyState
             } else {
                 opportunityContent
-                    .frame(height: max(360, viewport.size.height - 270))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
             Spacer(minLength: 0)
         }
-        .padding(24)
-        }
+        .padding(20)
+        .frame(width: viewport.size.width, height: viewport.size.height, alignment: .topLeading)
         .background(BlackstockDesign.canvas)
         }
         .task {
@@ -581,6 +580,10 @@ struct OpportunityWorkspaceView: View {
                 .buttonStyle(.link)
             }
 
+            if item.embeddable == false {
+                Label("Der Kanal erlaubt die Vorschau nur auf YouTube.", systemImage: "arrow.up.right.square")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Text(item.title)
                 .font(.title2.bold())
                 .textSelection(.enabled)

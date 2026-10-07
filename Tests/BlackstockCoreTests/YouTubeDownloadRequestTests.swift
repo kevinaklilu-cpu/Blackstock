@@ -24,6 +24,7 @@ final class YouTubeDownloadRequestTests: XCTestCase {
         let output = URL(fileURLWithPath: "/tmp/a space/video.mp4")
         let args = YouTubeDownloadRequest.arguments(url: url, output: output)
         XCTAssertTrue(args.contains("--ignore-config"))
+        XCTAssertTrue(args.contains("--check-formats"))
         XCTAssertTrue(args.contains("--no-playlist"))
         XCTAssertTrue(args.contains("--fragment-retries"))
         XCTAssertTrue(args.contains(where: { $0.contains("fps<=30") }))

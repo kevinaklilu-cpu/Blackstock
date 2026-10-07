@@ -11,6 +11,8 @@ public struct LocalClipCandidate:
     public let wordCount: Int
     public let averageConfidence: Float?
     public let segmentIDs: [UUID]
+    public let visualActivityScore: Double?
+    public let selectionExplanation: String?
 
     public init(
         id: UUID = UUID(),
@@ -18,7 +20,9 @@ public struct LocalClipCandidate:
         transcriptPreview: String,
         wordCount: Int,
         averageConfidence: Float?,
-        segmentIDs: [UUID]
+        segmentIDs: [UUID],
+        visualActivityScore: Double? = nil,
+        selectionExplanation: String? = nil
     ) {
         self.id = id
         self.sourceRange = sourceRange
@@ -26,6 +30,8 @@ public struct LocalClipCandidate:
         self.wordCount = max(wordCount, 0)
         self.averageConfidence = averageConfidence
         self.segmentIDs = segmentIDs
+        self.visualActivityScore = visualActivityScore
+        self.selectionExplanation = selectionExplanation
     }
 }
 
