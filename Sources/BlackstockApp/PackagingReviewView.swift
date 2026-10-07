@@ -671,7 +671,7 @@ struct PackagingReviewView: View {
                                                     .stroke(thumbnailURL == option ? Color.accentColor : Color.clear, lineWidth: 3))
                                         }
                                         .buttonStyle(.plain)
-                                        .accessibilityLabel("Thumbnail-Variante auswählen")
+                                        .accessibilityLabel("Vorschaubild auswählen")
                                         .accessibilityAddTraits(thumbnailURL == option ? .isSelected : [])
                                     }
                                 }
