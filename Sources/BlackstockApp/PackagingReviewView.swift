@@ -119,9 +119,11 @@ struct PackagingReviewView: View {
                 )
         )
         _description = State(
-            initialValue: editorDraft?.description ?? saved?.package.metadata.description
+            initialValue: editorDraft?.description ?? PublicationEditorDraft.removingGeneratedSourceFooter(
+                saved?.package.metadata.description
                 ?? storyDraft?.description
                 ?? Self.suggestedDescription(title: project.title, transcript: transcript)
+            )
         )
         _tags = State(
             initialValue: editorDraft?.tags ?? saved?.package.metadata.tags
@@ -753,7 +755,7 @@ struct PackagingReviewView: View {
 
     private func generateThumbnailChoices() async {
         let originalPosition = thumbnailFramePosition
-        for position in [0.18, 0.5, 0.82] {
+        for position in [0.18, 0.42, 0.66] {
             guard !Task.isCancelled else { break }
             thumbnailFramePosition = position
             await generateThumbnailFromRender(selectResult: false)

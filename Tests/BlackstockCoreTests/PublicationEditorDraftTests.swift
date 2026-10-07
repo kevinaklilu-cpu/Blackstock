@@ -8,6 +8,10 @@ final class PublicationEditorDraftTests: XCTestCase {
             tags: "Sport, Finale", thumbnailURL: options[1], thumbnailOptions: options)
         XCTAssertEqual(try JSONDecoder().decode(PublicationEditorDraft.self, from: JSONEncoder().encode(draft)), draft)
     }
+    func testLegacyFooterCleanupPreservesDescription() {
+        let original = "Eigene Beschreibung.\n\nShort · Ausschnitt 2:03–2:25\nQuelle: https://youtube.com/watch?v=source"
+        XCTAssertEqual(PublicationEditorDraft.removingGeneratedSourceFooter(original), "Eigene Beschreibung.")
+    }
     func testPublicDescriptionDoesNotInsertSourceBoilerplate() {
         let draft = StoryPublicationDraft.forClip(transcript: nil, sourceURL: URL(string: "https://youtube.com/watch?v=source"),
             start: 123, duration: 22, isShort: true)
