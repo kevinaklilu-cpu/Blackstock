@@ -7,3 +7,5 @@ Automatic clipping also samples image changes across the video, groups activity 
 The stop control stays usable during speech analysis. Project identity guards protect asynchronous visual analysis and focus results. Completion text distinguishes a prepared cut from a rendered file. Download format reachability is checked before selection.
 
 Validation: local build and discovery audit; planner tests for still images, distinct variable-length activity intervals and bounds; actual silent tennis video analysis produced eight candidates; the reported tennis download completed both tracks with format checking. Full app UI and end-to-end publishing still require separate verification. No live upload was performed.
+
+Crash follow-up: the 2026-10-07 crash report points to the TimelineView callback in StudioView.textOverlayPreview (EXC_BAD_ACCESS in executor identity checking). Both text and caption preview clocks now use an explicitly MainActor-isolated view with a cancellation-bound task instead of TimelineView callbacks. NativePlayerSmoke exercises twenty mount/play/seek/unmount cycles with both overlays.

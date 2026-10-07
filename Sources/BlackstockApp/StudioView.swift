@@ -2935,18 +2935,7 @@ struct StudioView: View {
     @ViewBuilder
     private var textOverlayPreview: some View {
         GeometryReader { geometry in
-            TimelineView(
-                .periodic(
-                    from: .now,
-                    by: 0.10
-                )
-            ) { _ in
-                let timeSeconds = max(
-                    CMTimeGetSeconds(
-                        state.player.currentTime()
-                    ),
-                    0
-                )
+            PlayerTimedOverlay(player: state.player) { timeSeconds in
                 let cues = TextOverlayPlanner().cues(
                     operations: state.graph.currentOperations,
                     outputDurationSeconds:
@@ -2994,20 +2983,10 @@ struct StudioView: View {
     @ViewBuilder
     private var captionPreviewOverlay: some View {
         if let transcript = state.transcript {
-            TimelineView(
-                .periodic(
-                    from: .now,
-                    by: 0.10
-                )
-            ) { _ in
+            PlayerTimedOverlay(player: state.player) { timeSeconds in
                 if let text = activeCaptionText(
                     transcript: transcript,
-                    timeSeconds: max(
-                        CMTimeGetSeconds(
-                            state.player.currentTime()
-                        ),
-                        0
-                    )
+                    timeSeconds: timeSeconds
                 ) {
                     Text(text)
                         .font(

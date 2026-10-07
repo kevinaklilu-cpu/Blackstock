@@ -15,8 +15,20 @@ struct NativePlayerSmoke {
         Task { @MainActor in
             do {
                 _ = try await AVURLAsset(url: url).load(.duration)
-                for index in 0..<5 {
-                    window.contentView = NSHostingView(rootView: BlackstockVideoPlayer(player: player))
+                for index in 0..<20 {
+                    window.contentView = NSHostingView(rootView: BlackstockVideoPlayer(player: player)
+                        .overlay {
+                            PlayerTimedOverlay(player: player) { seconds in
+                                Text("Overlay " + String(format: "%.1f", seconds))
+                            }
+                        }
+                        .overlay(alignment: .bottom) {
+                            PlayerTimedOverlay(player: player) { seconds in
+                                if seconds.truncatingRemainder(dividingBy: 2) < 1 {
+                                    Text("Untertitel-Test")
+                                }
+                            }
+                        })
                     window.makeKeyAndOrderFront(nil)
                     await player.seek(to: CMTime(seconds: Double(index * 10), preferredTimescale: 600))
                     player.play()
@@ -28,7 +40,7 @@ struct NativePlayerSmoke {
                     window.contentView = nil
                 }
                 window.close()
-                print("NATIVE_PLAYER_PASS: five mount/play/seek/unmount cycles")
+                print("NATIVE_PLAYER_PASS: twenty mount/play/seek/unmount cycles with timed text and caption overlays")
                 app.terminate(nil)
             } catch { fatalError("Player failed: \(error)") }
         }
