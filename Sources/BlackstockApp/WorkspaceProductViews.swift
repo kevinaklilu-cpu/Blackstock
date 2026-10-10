@@ -12,10 +12,11 @@ struct OpportunityWorkspaceView: View {
     @State private var sortMode: OpportunitySortMode = .relevance
     @State private var selectedOpportunityID: String?
     @State private var hasLoadedInitially = false
+    @State private var showDiscoveryFilters = false
 
     var body: some View {
         GeometryReader { viewport in
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 12) {
             header
 
             VStack(alignment: .leading, spacing: 10) {
@@ -114,7 +115,13 @@ struct OpportunityWorkspaceView: View {
                 .disabled(session.isLoadingOpportunities)
             }
 
-            DisclosureGroup("Kategorie, Land und Sprache") {
+            Button {
+                showDiscoveryFilters.toggle()
+            } label: {
+                Label("Kategorie, Land und Sprache", systemImage: "slider.horizontal.3")
+            }
+            .buttonStyle(.bordered)
+            .popover(isPresented: $showDiscoveryFilters, arrowEdge: .bottom) {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 250), spacing: 16)], alignment: .leading, spacing: 12) {
                 Picker(
                     "Kategorie",
@@ -180,15 +187,17 @@ struct OpportunityWorkspaceView: View {
                     .foregroundStyle(.secondary)
                 }
             }
-            .padding(.top, 2)
+            .padding(20)
+            .frame(width: 380)
             }
             }
-            .padding(14)
+            .padding(12)
             .blackstockSurface(raised: true)
 
             HStack {
                 Text(resultSummary)
                     .font(.callout.weight(.semibold))
+                    .lineLimit(2)
                 Spacer()
                 if session.isLoadingOpportunities {
                     ProgressView().controlSize(.small)
@@ -354,8 +363,7 @@ struct OpportunityWorkspaceView: View {
             .padding(.vertical, 8)
             .background(Color.green.opacity(0.09), in: Capsule())
         }
-        .padding(16)
-        .blackstockSurface(raised: true)
+        .padding(.vertical, 4)
     }
 
     private var emptyState: some View {
@@ -415,23 +423,45 @@ struct OpportunityWorkspaceView: View {
                     }
                     discoveryPageFooter
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, 4)
+                .padding(.trailing, 12)
             }
-            .frame(minWidth: 280, idealWidth: 320)
+            .scrollIndicators(.visible)
+            .accessibilityLabel("Videotreffer")
+            .id(session.opportunities.first?.id)
+            .frame(minWidth: 300, idealWidth: 380)
 
             ScrollView {
                 if let selectedOpportunity {
                     opportunityDetail(selectedOpportunity)
-                        .padding(.leading, 18)
-                        .id(selectedOpportunity.id)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 4)
                 } else {
                     Text("Wähle links ein Video aus.")
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, minHeight: 280)
                 }
             }
-            .frame(minWidth: 360)
+            .scrollIndicators(.visible)
+            .accessibilityLabel("Videovorschau und Details")
+            .id(selectedOpportunity?.id)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if let item = selectedOpportunity {
+                    HStack {
+                        Text("Dein nächster Clip")
+                            .font(.callout.weight(.semibold))
+                        Spacer()
+                        startClipButton(item)
+                    }
+                    .padding(12)
+                    .background(BlackstockDesign.surface)
+                    .overlay(alignment: .top) { Divider() }
+                }
+            }
+            .frame(minWidth: 340)
         }
+        .frame(maxHeight: .infinity)
+        .layoutPriority(1)
         // The parent sizes these panes to the current window instead of a
         // fixed 620-point canvas that pushes controls below smaller screens.
     }
@@ -476,7 +506,7 @@ struct OpportunityWorkspaceView: View {
                     Rectangle()
                         .fill(Color.primary.opacity(0.06))
                 }
-                .frame(width: 150, height: 84)
+                .frame(width: 112, height: 63)
                 .clipShape(RoundedRectangle(cornerRadius: 9))
 
                 VStack(alignment: .leading, spacing: 5) {
@@ -660,26 +690,21 @@ struct OpportunityWorkspaceView: View {
                 .foregroundStyle(.secondary)
             }
 
-            VStack(alignment: .leading, spacing: 10) {
-                Button {
-                    let previousID = session.activeProject?.id
-                    session.useOpportunityAsClip(item)
-                    if session.activeProject?.id != previousID {
-                        onProjectCreated()
-                    }
-                } label: {
-                    Label(
-                        "Video schneiden",
-                        systemImage: "scissors"
-                    )
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(BlackstockDesign.accent)
-                .disabled(
-                    !session.workspaceRightsResponsibilityAccepted
-                )
-            }
         }
+    }
+
+    private func startClipButton(_ item: YouTubeOpportunityCandidate) -> some View {
+        Button {
+            let previousID = session.activeProject?.id
+            session.useOpportunityAsClip(item)
+            if session.activeProject?.id != previousID { onProjectCreated() }
+        } label: {
+            Label("Video schneiden", systemImage: "scissors")
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(BlackstockDesign.accent)
+        .controlSize(.large)
+        .disabled(!session.workspaceRightsResponsibilityAccepted)
     }
 
     private func videoFacts(

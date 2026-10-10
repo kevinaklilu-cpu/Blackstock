@@ -1278,7 +1278,10 @@ struct StudioView: View {
             Picker("Veröffentlichungsformat", selection: $clipOutputFormat) {
                 Text("Short · Hochkant").tag("short")
                 Text("Video · Querformat").tag("video")
-            }.pickerStyle(.segmented)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .accessibilityLabel("Veröffentlichungsformat")
             Text("Die Länge folgt der Aussage. Jeder Vorschlag zeigt seinen eigenen Anfang und Abschluss.")
                 .font(.caption).foregroundStyle(.secondary)
             Toggle("Gesprochene Worte als Untertitel", isOn: $clipIncludeCaptions)
