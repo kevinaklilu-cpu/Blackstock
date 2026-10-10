@@ -19,6 +19,23 @@ public struct LocalHighlightCandidateRanker: Sendable {
         }
     }
 
+    /// Suppress near-duplicate excerpts while preserving ranking order.
+    public func distinct(_ ranked: [LocalClipCandidate], limit: Int) -> [LocalClipCandidate] {
+        var selected: [LocalClipCandidate] = []
+        guard limit > 0 else { return [] }
+        for candidate in ranked where candidate.sourceRange.durationSeconds > 0 {
+            let range = candidate.sourceRange
+            guard !selected.contains(where: {
+                let other = $0.sourceRange
+                let overlap = max(0, min(range.endSeconds, other.endSeconds) - max(range.startSeconds, other.startSeconds))
+                return overlap / min(range.durationSeconds, other.durationSeconds) > 0.6
+            }) else { continue }
+            selected.append(candidate)
+            if selected.count == limit { break }
+        }
+        return selected
+    }
+
     private func score(
         _ candidate: LocalClipCandidate,
         targetDurationSeconds: Double

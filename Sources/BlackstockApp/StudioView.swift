@@ -187,6 +187,7 @@ struct StudioView: View {
                     suggestedTitle: publicationDraft?.title ?? state.packagingSuggestedTitle,
                     storyDraft: publicationDraft
                 )
+                .id(artifact.id)
             }
         }
     }
@@ -1436,7 +1437,9 @@ struct StudioView: View {
                         }
 
                         Text(
-                            candidate.transcriptPreview
+                            candidate.transcriptPreview.isEmpty
+                                ? (candidate.selectionExplanation ?? "Visuell ausgewählter Moment")
+                                : candidate.transcriptPreview
                         )
                         .font(.caption)
                         .textSelection(.enabled)
@@ -4040,7 +4043,7 @@ struct StudioView: View {
                             state.resumeProcessing()
                             await state.createAutomaticHighlights(
                                 localeIdentifier: speechLocaleIdentifier,
-                                maximumHighlights: session.activeStorySources.count > 1 ? 1 : 3,
+                                maximumHighlights: session.activeStorySources.count > 1 ? 1 : 8,
                                 renderImmediately: false,
                                 targetDuration: session.activeStorySources.count > 1 ? resolvedStoryDuration : 0,
                                 analyzeSpeech: session.activeStorySources.count <= 1,

@@ -1301,7 +1301,7 @@ final class StudioState: ObservableObject {
 
     func createAutomaticHighlights(
         localeIdentifier: String,
-        maximumHighlights: Int = 3,
+        maximumHighlights: Int = 8,
         renderImmediately: Bool = true,
         targetDuration: Double = 0,
         analyzeSpeech: Bool = true,
@@ -1343,7 +1343,17 @@ final class StudioState: ObservableObject {
                 guard !shouldStopProcessing, activeProjectID == requestedProjectID,
                       self.asset?.id == requestedAssetID else { return }
                 let speech = localClipCandidates
-                localClipCandidates += visual.filter { candidate in
+                let groundedVisual = visual.map { candidate -> LocalClipCandidate in
+                    guard let source = clipCandidateSourceTranscript,
+                          let excerpt = ClipTranscriptProjector().project(source: source, candidate: candidate) else { return candidate }
+                    return LocalClipCandidate(id: candidate.id, sourceRange: candidate.sourceRange,
+                        transcriptPreview: excerpt.text,
+                        wordCount: excerpt.text.split(whereSeparator: \.isWhitespace).count,
+                        averageConfidence: nil, segmentIDs: excerpt.segments.map(\.id),
+                        visualActivityScore: candidate.visualActivityScore,
+                        selectionExplanation: candidate.selectionExplanation)
+                }
+                localClipCandidates += groundedVisual.filter { candidate in
                     !speech.contains { spoken in
                         let overlap = min(spoken.sourceRange.endSeconds, candidate.sourceRange.endSeconds)
                             - max(spoken.sourceRange.startSeconds, candidate.sourceRange.startSeconds)
@@ -1380,9 +1390,9 @@ final class StudioState: ObservableObject {
         guard !shouldStopProcessing,
               activeProjectID == requestedProjectID,
               asset?.id == requestedAssetID else { return }
-        let selected = Array(
-            ranked.prefix(max(maximumHighlights, 1))
-        )
+        ranked = LocalHighlightCandidateRanker().distinct(ranked, limit: 48)
+        localClipCandidates = ranked
+        let selected = Array(ranked.prefix(max(maximumHighlights, 1)))
 
         savedClipSelections = selected.enumerated().map {
             index, candidate in

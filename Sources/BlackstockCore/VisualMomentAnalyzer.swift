@@ -28,7 +28,7 @@ public enum VisualMomentPlanner {
             let range = EditTimeRange(startSeconds: start, durationSeconds: end - start)
             guard !selected.contains(where: { min($0.endSeconds, end) - max($0.startSeconds, start) > min($0.durationSeconds, range.durationSeconds) * 0.35 }) else { continue }
             selected.append(range)
-            if selected.count == 8 { break }
+            if selected.count == 16 { break }
         }
         return selected
     }

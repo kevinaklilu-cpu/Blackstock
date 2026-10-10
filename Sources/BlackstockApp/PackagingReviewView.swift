@@ -35,6 +35,7 @@ struct PackagingReviewView: View {
     @State private var showThumbnailImporter = false
     @State private var thumbnailFramePosition = 0.25
     @State private var isGeneratingThumbnail = false
+    @State private var isGeneratingThumbnailChoices = false
     @State private var showCaptionImporter = false
     @State private var persistedReview: CreatorQualityReview?
     @State private var useStoryboardChapters = false
@@ -153,9 +154,15 @@ struct PackagingReviewView: View {
                 saved?.package.metadata.containsSyntheticMedia
                 ?? false
         )
-        let savedThumbnailURL = editorDraft?.thumbnailURL ?? saved?.package.thumbnail?.fileURL
+        let availableOptions = (editorDraft?.thumbnailOptions ?? []).filter {
+            FileManager.default.fileExists(atPath: $0.path)
+        }
+        let preferredThumbnail = editorDraft?.thumbnailURL ?? saved?.package.thumbnail?.fileURL
+        let savedThumbnailURL = preferredThumbnail.flatMap {
+            FileManager.default.fileExists(atPath: $0.path) ? $0 : nil
+        } ?? availableOptions.first
         _thumbnailURL = State(initialValue: savedThumbnailURL)
-        _thumbnailOptions = State(initialValue: editorDraft?.thumbnailOptions ?? savedThumbnailURL.map { [$0] } ?? [])
+        _thumbnailOptions = State(initialValue: availableOptions.isEmpty ? (savedThumbnailURL.map { [$0] } ?? []) : availableOptions)
         _thumbnailAssessment = State(
             initialValue: savedThumbnailURL.flatMap {
                 try? ThumbnailTechnicalInspector().inspect(url: $0)
@@ -366,8 +373,7 @@ struct PackagingReviewView: View {
                     )
                     ?? session.channelCategoryID
             }
-            if thumbnailURL == nil,
-               persistedReview == nil {
+            if thumbnailOptions.count < 3, !reviewFrozen {
                 await generateThumbnailChoices()
             }
             await checkAudioAutomatically()
@@ -653,7 +659,7 @@ struct PackagingReviewView: View {
                             }
                         }
                         .buttonStyle(.borderedProminent)
-                        .disabled(isGeneratingThumbnail)
+                        .disabled(isGeneratingThumbnail || isGeneratingThumbnailChoices)
                     }
 
                     if thumbnailOptions.count > 1 {
@@ -754,9 +760,12 @@ struct PackagingReviewView: View {
     }
 
     private func generateThumbnailChoices() async {
+        guard !isGeneratingThumbnailChoices, !isGeneratingThumbnail else { return }
+        isGeneratingThumbnailChoices = true
+        defer { isGeneratingThumbnailChoices = false }
         let originalPosition = thumbnailFramePosition
         for position in [0.18, 0.42, 0.66] {
-            guard !Task.isCancelled else { break }
+            guard !Task.isCancelled, thumbnailOptions.count < 3 else { break }
             thumbnailFramePosition = position
             await generateThumbnailFromRender(selectResult: false)
         }
@@ -768,6 +777,7 @@ struct PackagingReviewView: View {
     }
 
     private func generateThumbnailFromRender(selectResult: Bool = true) async {
+        guard !isGeneratingThumbnail, !Task.isCancelled else { return }
         isGeneratingThumbnail = true
         defer { isGeneratingThumbnail = false }
 
@@ -786,6 +796,7 @@ struct PackagingReviewView: View {
                 normalizedPosition: thumbnailFramePosition,
                 outputURL: temporaryURL
             )
+            try Task.checkCancellation()
             let durableURL = try session.importPackagingAsset(
                 from: temporaryURL,
                 projectID: project.id,
@@ -799,6 +810,8 @@ struct PackagingReviewView: View {
                 thumbnailAssessment = assessment
             }
             session.errorMessage = nil
+        } catch is CancellationError {
+            return
         } catch {
             session.errorMessage =
                 "Vorschaubild konnte nicht lokal aus dem Video erzeugt werden: "
@@ -1148,7 +1161,7 @@ struct PackagingReviewView: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(isPreparingUpload || session.isPublishing || session.isAuthorizingPublishing || isCheckingQuality || isGeneratingThumbnail)
+                .disabled(isPreparingUpload || session.isPublishing || session.isAuthorizingPublishing || isCheckingQuality || isGeneratingThumbnail || isGeneratingThumbnailChoices)
                 .padding(14)
                 .background(.regularMaterial)
             }

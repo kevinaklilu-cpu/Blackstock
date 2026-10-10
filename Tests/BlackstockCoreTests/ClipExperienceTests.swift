@@ -31,7 +31,8 @@ final class ClipExperienceTests: XCTestCase {
         XCTAssertNotEqual(first.title, second.title)
         XCTAssertTrue(first.title.contains("Kamera"))
         XCTAssertFalse(second.description.contains("Kamera"))
-        XCTAssertTrue(second.description.contains("Video"))
+        XCTAssertTrue(second.description.contains("Pflanzen"))
+        XCTAssertFalse(second.description.contains("Video · Ausschnitt"))
         XCTAssertLessThanOrEqual(first.title.count, 90)
     }
 
