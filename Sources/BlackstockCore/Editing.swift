@@ -129,19 +129,33 @@ public enum ReframeAspectRatio: String, Codable, Sendable, CaseIterable, Hashabl
     }
 }
 
+public struct ReframeFocalSample: Codable, Sendable, Equatable {
+    public let sourceSeconds: Double
+    public let focalX: Double
+    public let focalY: Double
+    public init(sourceSeconds: Double, focalX: Double, focalY: Double) {
+        self.sourceSeconds = sourceSeconds
+        self.focalX = min(max(focalX, 0), 1)
+        self.focalY = min(max(focalY, 0), 1)
+    }
+}
+
 public struct ReframeSpec: Codable, Sendable, Equatable {
     public let aspectRatio: ReframeAspectRatio
     public let focalX: Double
     public let focalY: Double
     public let preserveFullFrame: Bool?
+    public let focalPath: [ReframeFocalSample]?
 
     public init(
         aspectRatio: ReframeAspectRatio,
         focalX: Double = 0.5,
         focalY: Double = 0.5,
-        preserveFullFrame: Bool? = nil
+        preserveFullFrame: Bool? = nil,
+        focalPath: [ReframeFocalSample]? = nil
     ) {
         self.preserveFullFrame = preserveFullFrame
+        self.focalPath = focalPath
         self.aspectRatio = aspectRatio
         self.focalX = min(max(focalX, 0), 1)
         self.focalY = min(max(focalY, 0), 1)

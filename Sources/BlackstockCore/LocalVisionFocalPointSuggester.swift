@@ -28,6 +28,7 @@ public struct VisionFocalObservation: Codable, Sendable, Equatable {
 }
 
 public struct VisionFocalPointProposal: Codable, Sendable, Equatable {
+    public var focalPath: [ReframeFocalSample]?
     public var preserveFullFrame: Bool?
     public let focalX: Double
     public let focalY: Double
@@ -104,6 +105,7 @@ public struct LocalVisionFocalPointSuggester: Sendable {
         var observations: [VisionFocalObservation] = []
         var sampledFrames = 0
         var multipleSubjects = false
+        var focalPath: [ReframeFocalSample] = []
 
         for seconds in times {
             try Task.checkCancellation()
@@ -122,11 +124,13 @@ public struct LocalVisionFocalPointSuggester: Sendable {
                (faces.map(\.normalizedX).max()! - faces.map(\.normalizedX).min()!) > 0.20 { multipleSubjects = true }
             if let face = faces.max(by: { $0.weight < $1.weight }) {
                 observations.append(face)
+                focalPath.append(.init(sourceSeconds: seconds, focalX: face.normalizedX, focalY: face.normalizedYFromTop))
                 continue
             }
 
             if let human = Self.largestHuman(in: frame) {
                 observations.append(human)
+                focalPath.append(.init(sourceSeconds: seconds, focalX: human.normalizedX, focalY: human.normalizedYFromTop))
             }
         }
 
@@ -138,6 +142,7 @@ public struct LocalVisionFocalPointSuggester: Sendable {
             throw LocalVisionFocalPointError.noRelevantObservation
         }
         let spread = (observations.map(\.normalizedX).max() ?? 0) - (observations.map(\.normalizedX).min() ?? 0)
+        proposal.focalPath = focalPath
         proposal.preserveFullFrame = multipleSubjects || spread > 0.25
         return proposal
     }
@@ -150,7 +155,7 @@ public struct LocalVisionFocalPointSuggester: Sendable {
         let lower = max(0, start)
         let upper = min(duration, start + length)
         guard upper > lower else { return [] }
-        let count = min(max(sampleCount, 3), 15)
+        let count = min(max(sampleCount, 3), 60)
         return (1...count).map { lower + (upper - lower) * Double($0) / Double(count + 1) }
     }
 

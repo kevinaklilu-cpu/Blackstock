@@ -5,6 +5,12 @@ public struct StoryPublicationDraft: Sendable {
     public let description: String
     public let tags: [String]
     public let alternativeTitles: [String]
+    public let alternativeDescriptions: [String]
+
+    public init(title: String, description: String, tags: [String], alternativeTitles: [String], alternativeDescriptions: [String] = []) {
+        self.title = title; self.description = description; self.tags = tags
+        self.alternativeTitles = alternativeTitles; self.alternativeDescriptions = alternativeDescriptions
+    }
 
     public static func make(sources: [YouTubeOpportunityCandidate], language: String,
                             excerpts: [String] = []) -> StoryPublicationDraft? {

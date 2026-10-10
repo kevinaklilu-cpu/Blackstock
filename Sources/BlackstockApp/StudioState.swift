@@ -945,7 +945,7 @@ final class StudioState: ObservableObject {
             focalPointProposal = proposal
             reframeFocalX = proposal.focalX
             reframeFocalY = proposal.focalY
-                reframePreserveFullFrame = proposal.preserveFullFrame == true
+                reframePreserveFullFrame = reframeAspectRatio != .portrait9x16 && proposal.preserveFullFrame == true
 
             ledger.append(.init(
                 timestamp: Date(),
@@ -1259,7 +1259,7 @@ final class StudioState: ObservableObject {
                     transcript: sourceTranscript,
                     sourceDurationSeconds:
                         asset.durationSeconds,
-                    minimumDurationSeconds: forShort ? 12 : 25,
+                    minimumDurationSeconds: forShort ? ClipOutputProfile.short.minimumDuration : ClipOutputProfile.video.minimumDuration,
                     maximumDurationSeconds: forShort ? 90 : 360,
                     pauseBoundarySeconds: 0.8,
                     maximumCandidates: 48
@@ -1332,7 +1332,7 @@ final class StudioState: ObservableObject {
             do {
                 let visual = try await VisualMomentAnalyzer().analyze(
                     url: asset.sourceURL, duration: asset.durationSeconds,
-                    maximumDuration: portrait ? 90 : 360,
+                    maximumDuration: portrait ? 90 : 360, profile: portrait ? .short : .video,
                     progress: { [weak self] fraction in
                         await MainActor.run {
                             guard self?.activeProjectID == requestedProjectID,
@@ -1421,20 +1421,20 @@ final class StudioState: ObservableObject {
         if let asset {
             do {
                 let proposal = try await LocalVisionFocalPointSuggester()
-                    .suggest(url: asset.sourceURL, sourceRange: primary.sourceRange)
+                    .suggest(url: asset.sourceURL, sourceRange: primary.sourceRange, sampleCount: min(60, max(7, Int(primary.sourceRange.durationSeconds))))
                 guard !shouldStopProcessing,
                       activeProjectID == requestedProjectID,
                       self.asset?.id == requestedAssetID else { return }
                 focalPointProposal = proposal
                 reframeFocalX = proposal.focalX
                 reframeFocalY = proposal.focalY
-                reframePreserveFullFrame = proposal.preserveFullFrame == true
+                reframePreserveFullFrame = reframeAspectRatio != .portrait9x16 && proposal.preserveFullFrame == true
             } catch {
                 focalPointProposal = nil
             }
         }
-        // A visual activity peak does not identify a face or ball to crop around.
-        if primary.wordCount == 0 { reframePreserveFullFrame = true }
+        // Portrait intent fills the canvas; the full-frame option remains available for wide action.
+        if portrait { reframePreserveFullFrame = false }
         captionVisualStyle = .strong
         clipCandidateStatusMessage =
             "Schritt 2 von 4: Schnitt und gewähltes Bildformat werden vorbereitet …"
@@ -1471,7 +1471,7 @@ final class StudioState: ObservableObject {
             reframeSpec: ReframeSpec(
                 aspectRatio: reframeAspectRatio,
                 focalX: reframeFocalX,
-                focalY: reframeFocalY, preserveFullFrame: reframePreserveFullFrame
+                focalY: reframeFocalY, preserveFullFrame: reframePreserveFullFrame, focalPath: focalPointProposal?.focalPath
             ),
             createdAt: Date()
         )
@@ -2065,10 +2065,10 @@ final class StudioState: ObservableObject {
             if selection.reframeSpec == nil, let base = clipReframe {
                 clipCandidateStatusMessage = "Bildausschnitt für diesen Clip wird geprüft …"
                 if let proposal = try? await LocalVisionFocalPointSuggester().suggest(
-                    url: asset.sourceURL, sourceRange: selection.sourceRange
+                    url: asset.sourceURL, sourceRange: selection.sourceRange, sampleCount: min(60, max(7, Int(selection.sourceRange.durationSeconds)))
                 ) {
                     clipReframe = ReframeSpec(aspectRatio: base.aspectRatio,
-                        focalX: proposal.focalX, focalY: proposal.focalY, preserveFullFrame: proposal.preserveFullFrame)
+                        focalX: proposal.focalX, focalY: proposal.focalY, preserveFullFrame: base.aspectRatio != .portrait9x16 && proposal.preserveFullFrame == true, focalPath: proposal.focalPath)
                 }
             }
             guard !shouldStopProcessing, activeProjectID == projectID else { return }
@@ -2297,9 +2297,9 @@ final class StudioState: ObservableObject {
         guard errorMessage == nil else { return }
         var selectedFrame = selection.reframeSpec
         if selectedFrame == nil, let asset,
-           let proposal = try? await LocalVisionFocalPointSuggester().suggest(url: asset.sourceURL, sourceRange: selection.sourceRange) {
+           let proposal = try? await LocalVisionFocalPointSuggester().suggest(url: asset.sourceURL, sourceRange: selection.sourceRange, sampleCount: min(60, max(7, Int(selection.sourceRange.durationSeconds)))) {
             selectedFrame = ReframeSpec(aspectRatio: reframeAspectRatio, focalX: proposal.focalX,
-                focalY: proposal.focalY, preserveFullFrame: proposal.preserveFullFrame)
+                focalY: proposal.focalY, preserveFullFrame: reframeAspectRatio != .portrait9x16 && proposal.preserveFullFrame == true, focalPath: proposal.focalPath)
         }
         if let reframe = selectedFrame {
             _ = graph.apply(.init(type: .reframe, reframeSpec: reframe, createdAt: Date()), actor: .user)
@@ -3559,6 +3559,8 @@ final class StudioState: ObservableObject {
                         operations: graph.currentOperations,
                         outputDurationSeconds: timeline.outputDurationSeconds
                     )
+                    if !TrackedReframeComposer.apply(spec: reframe, timeline: timeline, naturalSize: naturalSize,
+                        preferredTransform: preferredTransform, renderSize: renderSize, cues: emphasisCues, to: layer) {
                     VisualEmphasisComposer.apply(
                         cues: emphasisCues,
                         baseTransform: plan.transform,
@@ -3566,6 +3568,7 @@ final class StudioState: ObservableObject {
                         anchor: plan.emphasisAnchor(for: reframe),
                         to: layer
                     )
+                    }
                     instruction.layerInstructions = [layer]
 
                     let videoComposition = AVMutableVideoComposition()

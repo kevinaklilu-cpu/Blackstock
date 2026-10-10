@@ -11,7 +11,19 @@ public struct VisualMomentSample: Sendable {
 
 /// Image-change measurements, not semantic goal detection or predicted audience response.
 public enum VisualMomentPlanner {
-    public static func ranges(samples: [VisualMomentSample], duration: Double, maximumDuration: Double) -> [EditTimeRange] {
+    public static func activityScore(samples: [VisualMomentSample], range: EditTimeRange, duration: Double) -> Double {
+        let values = samples.filter { $0.time >= range.startSeconds && $0.time <= range.endSeconds && $0.activity.isFinite }
+            .map { max(0, $0.activity) }
+        guard !values.isEmpty else { return 0 }
+        let mean = values.reduce(0, +) / Double(values.count)
+        let peak = values.max() ?? 0
+        let evidence = mean * 0.8 + peak * 0.2
+        // Continuous scoring avoids the previous saturated ties, which favored the intro.
+        let edgeWeight = duration > 60 && (range.startSeconds < 3 || range.endSeconds > duration - 3) ? 0.7 : 1.0
+        return evidence / (evidence + 0.15) * edgeWeight
+    }
+
+    public static func ranges(samples: [VisualMomentSample], duration: Double, maximumDuration: Double, profile: ClipOutputProfile = .short) -> [EditTimeRange] {
         guard duration.isFinite, duration >= 8, maximumDuration.isFinite, maximumDuration >= 8 else { return [] }
         let valid = samples.filter { $0.time.isFinite && $0.activity.isFinite && $0.time >= 0 && $0.time < duration }
             .sorted { $0.time < $1.time }
@@ -22,8 +34,8 @@ public enum VisualMomentPlanner {
         for peak in valid.sorted(by: { $0.activity > $1.activity }) where peak.activity >= threshold {
             let before = valid.last { $0.time < peak.time - 3 && $0.activity < mean * 0.8 }?.time ?? max(0, peak.time - 8)
             let after = valid.first { $0.time > peak.time + 4 && $0.activity < mean * 0.8 }?.time ?? min(duration, peak.time + 10)
-            let start = max(0, max(before - 2, peak.time - maximumDuration * 0.5))
-            let end = min(duration, min(max(after + 2, start + 8), start + maximumDuration))
+            let start = max(0, max(before - profile.leadIn, peak.time - maximumDuration * 0.5))
+            let end = min(duration, min(max(after + profile.leadOut, start + min(profile.minimumDuration, maximumDuration)), start + maximumDuration))
             guard end - start >= 8 else { continue }
             let range = EditTimeRange(startSeconds: start, durationSeconds: end - start)
             guard !selected.contains(where: { min($0.endSeconds, end) - max($0.startSeconds, start) > min($0.durationSeconds, range.durationSeconds) * 0.35 }) else { continue }
@@ -36,7 +48,7 @@ public enum VisualMomentPlanner {
 
 public actor VisualMomentAnalyzer {
     public init() {}
-    public func analyze(url: URL, duration: Double, maximumDuration: Double,
+    public func analyze(url: URL, duration: Double, maximumDuration: Double, profile: ClipOutputProfile = .short,
         progress: @escaping @Sendable (Double) async -> Void) async throws -> [LocalClipCandidate] {
         guard duration.isFinite, duration >= 8 else { return [] }
         let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
@@ -62,10 +74,10 @@ public actor VisualMomentAnalyzer {
             await progress(Double(index + 1) / Double(count))
         }
         try Task.checkCancellation()
-        return VisualMomentPlanner.ranges(samples: samples, duration: duration, maximumDuration: maximumDuration).map { range in
-            let activity = samples.filter { $0.time >= range.startSeconds && $0.time <= range.endSeconds }.map(\.activity).max() ?? 0
+        return VisualMomentPlanner.ranges(samples: samples, duration: duration, maximumDuration: maximumDuration, profile: profile).map { range in
+            let activity = VisualMomentPlanner.activityScore(samples: samples, range: range, duration: duration)
             return LocalClipCandidate(sourceRange: range, transcriptPreview: "", wordCount: 0,
-                averageConfidence: nil, segmentIDs: [], visualActivityScore: min(1, activity * 4),
+                averageConfidence: nil, segmentIDs: [], visualActivityScore: activity,
                 selectionExplanation: "Bildbewegung und Szenenwechsel gemessen. Mit Vorlauf und Ausklang; kein automatisch bestätigtes Tor oder Spielereignis.")
         }
     }

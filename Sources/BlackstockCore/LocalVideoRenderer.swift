@@ -283,6 +283,8 @@ public actor LocalVideoRenderer {
                         && cue.startSeconds + cue.durationSeconds > insert.timelineStartSeconds - 0.4
                 }
             }
+            if !TrackedReframeComposer.apply(spec: reframe, timeline: timeline, naturalSize: naturalSize,
+                preferredTransform: preferredTransform, renderSize: renderSize, cues: emphasisCues, to: layer) {
             VisualEmphasisComposer.apply(
                 cues: emphasisCues,
                 baseTransform: plan.transform,
@@ -290,6 +292,7 @@ public actor LocalVideoRenderer {
                 anchor: plan.emphasisAnchor(for: reframe),
                 to: layer
             )
+            }
             instruction.layerInstructions = [layer]
 
             let videoComposition = AVMutableVideoComposition()

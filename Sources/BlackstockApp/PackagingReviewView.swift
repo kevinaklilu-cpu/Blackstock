@@ -20,6 +20,10 @@ struct PackagingReviewView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var hasRestoredEditorDraft = false
+    @State private var alternativeTitles: [String] = []
+    @State private var alternativeDescriptions: [String] = []
+    @State private var outputFormatLabel = "Ausgabe wird geprüft …"
+    @State private var isShortOutput = false
     @State private var editorialStatus: String?
     @State private var isDraftingEditorial = false
     @State private var title: String
@@ -51,18 +55,28 @@ struct PackagingReviewView: View {
     @State private var previewPlayer = AVPlayer()
 
     private func improveEditorialDraft() async {
-        guard !isDraftingEditorial, let transcript else { return }
+        guard !isDraftingEditorial else { return }
+        guard let transcript, !transcript.text.isEmpty else {
+            editorialStatus = "Für diesen Export fehlt erkannter Sprachinhalt. Ohne Inhaltsanalyse kann Blackstock keine verlässlichen KI-Texte erstellen."
+            return
+        }
         isDraftingEditorial = true
         defer { isDraftingEditorial = false }
         let previousTitle = title, previousDescription = description, previousTags = tags
-        guard let draft = await LocalClipEditorialAdvisor().publication(transcript: transcript) else {
-            editorialStatus = "Lokale KI nicht verfügbar. Ausschnittbezogene Textvorschläge bleiben bearbeitbar."
+        guard LocalRetentionAdvisor().availability(localeIdentifier: transcript.localeIdentifier) == .available else {
+            editorialStatus = "Apple Intelligence ist für diese Sprache noch nicht bereit. Die bisherigen Textauszüge sind keine KI-Neufassung. Prüfe Apple Intelligence in den Systemeinstellungen."
+            return
+        }
+        guard let draft = await LocalClipEditorialAdvisor().publication(transcript: transcript, isShort: isShortOutput) else {
+            editorialStatus = "Die KI-Antwort konnte nicht übernommen werden. Deine Texte bleiben erhalten; versuche es erneut."
             return
         }
         guard title == previousTitle, description == previousDescription, tags == previousTags else {
             editorialStatus = "Deine laufenden Textänderungen wurden beibehalten."
             return
         }
+        alternativeTitles = draft.alternativeTitles
+        alternativeDescriptions = draft.alternativeDescriptions
         title = draft.title
         description = draft.description
         tags = draft.tags.joined(separator: ", ")
@@ -105,6 +119,8 @@ struct PackagingReviewView: View {
             .flatMap { try? JSONDecoder().decode(PublicationEditorDraft.self, from: $0) }
 
         _hasRestoredEditorDraft = State(initialValue: editorDraft != nil)
+        _alternativeTitles = State(initialValue: editorDraft?.alternativeTitles ?? storyDraft?.alternativeTitles ?? [])
+        _alternativeDescriptions = State(initialValue: editorDraft?.alternativeDescriptions ?? storyDraft?.alternativeDescriptions ?? [])
         let normalizedSuggestedTitle =
             suggestedTitle?
             .trimmingCharacters(
@@ -365,6 +381,18 @@ struct PackagingReviewView: View {
         }
         .task {
             previewPlayer.replaceCurrentItem(with: AVPlayerItem(url: artifact.fileURL))
+            do {
+                let rendered = AVURLAsset(url: artifact.fileURL)
+                let duration = try await rendered.load(.duration).seconds
+                if let track = try await rendered.loadTracks(withMediaType: .video).first {
+                    let size = try await track.load(.naturalSize)
+                    let transform = try await track.load(.preferredTransform)
+                    let bounds = CGRect(origin: .zero, size: size).applying(transform)
+                    isShortOutput = ClipOutputProfile.isYouTubeShort(width: abs(bounds.width), height: abs(bounds.height), duration: duration)
+                    outputFormatLabel = (isShortOutput ? "YouTube Short" : "YouTube Video") + " · " + String(Int(duration.rounded())) + " Sekunden"
+                }
+            } catch { outputFormatLabel = "Ausgabeformat konnte nicht geprüft werden" }
+            if transcript == nil { editorialStatus = "Kein Sprachtext für diesen Export vorhanden. Titel und Beschreibung benötigen eine Inhaltsprüfung." }
             await session.ensureYouTubePublishingOptionsLoaded()
             if categoryID.isEmpty {
                 categoryID =
@@ -436,7 +464,7 @@ struct PackagingReviewView: View {
                 Button("Schließen") { dismiss() }
             }
 
-            Label("Fertiges Video ausgewählt", systemImage: "checkmark.seal")
+            Label(outputFormatLabel, systemImage: "checkmark.seal")
             .font(.caption)
             .foregroundStyle(.secondary)
         }
@@ -448,19 +476,26 @@ struct PackagingReviewView: View {
                 Button(isDraftingEditorial ? "Textvorschläge werden formuliert …" : "Eigene Textvorschläge formulieren") {
                     Task { await improveEditorialDraft() }
                 }
-                .disabled(isDraftingEditorial || transcript == nil)
+                .disabled(isDraftingEditorial)
                 if let editorialStatus { Text(editorialStatus).font(.caption).foregroundStyle(.secondary) }
                 TextField("Titel", text: $title)
                     .textFieldStyle(.roundedBorder)
 
-                if let storyDraft {
+                if !alternativeTitles.isEmpty {
                     Menu("Weitere Titelvorschläge") {
-                        ForEach(storyDraft.alternativeTitles, id: \.self) { suggestion in
+                        ForEach(alternativeTitles, id: \.self) { suggestion in
                             Button(suggestion) { title = suggestion }
                         }
                     }
                     Text("Vorschlag aus dem gewählten Ausschnitt. Prüfe Titel und Beschreibung vor dem Upload.")
                         .font(.caption).foregroundStyle(.secondary)
+                }
+                if !alternativeDescriptions.isEmpty {
+                    Menu("Beschreibung auswählen") {
+                        ForEach(Array(alternativeDescriptions.enumerated()), id: \.offset) { index, proposal in
+                            Button(index == 0 ? "Kompakte Beschreibung" : "Ausführliche Beschreibung") { description = proposal }
+                        }
+                    }
                 }
                 TextEditor(text: $description)
                     .accessibilityLabel("YouTube-Beschreibung")
@@ -750,7 +785,8 @@ struct PackagingReviewView: View {
 
     private var editorDraftSnapshot: PublicationEditorDraft {
         .init(title: title, description: description, tags: tags,
-              thumbnailURL: thumbnailURL, thumbnailOptions: thumbnailOptions)
+              thumbnailURL: thumbnailURL, thumbnailOptions: thumbnailOptions,
+              alternativeTitles: alternativeTitles, alternativeDescriptions: alternativeDescriptions)
     }
 
     private func saveEditorDraft() {

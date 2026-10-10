@@ -1282,7 +1282,10 @@ struct StudioView: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .accessibilityLabel("Veröffentlichungsformat")
-            Text("Die Länge folgt der Aussage. Jeder Vorschlag zeigt seinen eigenen Anfang und Abschluss.")
+            .disabled(state.isCreatingAutomaticHighlights || state.isRendering)
+            Text(clipOutputFormat == "short"
+                 ? "Short: ein kompakter Moment mit schnellem Einstieg und bildfüllendem Hochkant-Ausschnitt. Nach einem Formatwechsel die Momente neu suchen."
+                 : "Video: mehr Vorlauf und Kontext im Querformat. Nach einem Formatwechsel die Momente neu suchen.")
                 .font(.caption).foregroundStyle(.secondary)
             Toggle("Gesprochene Worte als Untertitel", isOn: $clipIncludeCaptions)
                 .toggleStyle(.switch)
@@ -1347,7 +1350,7 @@ struct StudioView: View {
                     } else {
                         startProcessing {
                             await state.generateLocalClipCandidates(
-                                localeIdentifier: speechLocaleIdentifier
+                                localeIdentifier: speechLocaleIdentifier, forShort: clipOutputFormat == "short"
                             )
                         }
                     }
