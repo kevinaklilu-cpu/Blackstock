@@ -12,6 +12,7 @@ public struct SavedClipSelection:
     public let wordCount: Int
     public let transcript: LocalTranscript?
     public let renderArtifact: RenderArtifact?
+    public let reframeSpec: ReframeSpec?
     public let savedAt: Date
 
     public init(
@@ -22,6 +23,7 @@ public struct SavedClipSelection:
         wordCount: Int,
         transcript: LocalTranscript? = nil,
         renderArtifact: RenderArtifact? = nil,
+        reframeSpec: ReframeSpec? = nil,
         savedAt: Date
     ) {
         self.id = id
@@ -38,6 +40,7 @@ public struct SavedClipSelection:
         self.wordCount = max(wordCount, 0)
         self.transcript = transcript
         self.renderArtifact = renderArtifact
+        self.reframeSpec = reframeSpec
         self.savedAt = savedAt
     }
 
@@ -52,8 +55,16 @@ public struct SavedClipSelection:
             wordCount: wordCount,
             transcript: transcript,
             renderArtifact: artifact,
+            reframeSpec: reframeSpec,
             savedAt: savedAt
         )
+    }
+
+    public func withReframeSpec(_ spec: ReframeSpec?) -> SavedClipSelection {
+        .init(id: id, sourceRange: sourceRange, title: title,
+              transcriptPreview: transcriptPreview, wordCount: wordCount,
+              transcript: transcript, renderArtifact: renderArtifact,
+              reframeSpec: spec, savedAt: savedAt)
     }
 
     public var displayTitle: String {
@@ -71,6 +82,7 @@ public struct SavedClipSelection:
             wordCount: wordCount,
             transcript: transcript,
             renderArtifact: renderArtifact,
+            reframeSpec: reframeSpec,
             savedAt: savedAt
         )
     }

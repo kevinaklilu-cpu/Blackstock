@@ -3,6 +3,7 @@ import Foundation
 @preconcurrency import AVFoundation
 import AppKit
 import QuartzCore
+import ImageIO
 
 public struct CaptionBurnInCue:
     Sendable,
@@ -41,7 +42,7 @@ public struct CaptionBurnInPlanner: Sendable {
             return []
         }
 
-        return transcript.segments.compactMap {
+        let raw: [CaptionBurnInCue] = transcript.segments.compactMap {
             segment in
             let text = segment.text
                 .trimmingCharacters(
@@ -77,6 +78,20 @@ public struct CaptionBurnInPlanner: Sendable {
                 text: text
             )
         }
+        var grouped: [CaptionBurnInCue] = []
+        for cue in raw.sorted(by: { $0.startSeconds < $1.startSeconds }) {
+            if let previous = grouped.last,
+               cue.startSeconds - previous.startSeconds - previous.durationSeconds < 0.35,
+               cue.startSeconds >= previous.startSeconds + previous.durationSeconds - 0.05,
+               cue.startSeconds + cue.durationSeconds - previous.startSeconds <= 3.2,
+               (previous.text + " " + cue.text).split(whereSeparator: \.isWhitespace).count <= 7,
+               previous.text.last.map({ !".!?".contains($0) }) == true {
+                grouped[grouped.count - 1] = .init(id: previous.id, startSeconds: previous.startSeconds,
+                    durationSeconds: cue.startSeconds + cue.durationSeconds - previous.startSeconds,
+                    text: previous.text + " " + cue.text)
+            } else { grouped.append(cue) }
+        }
+        return grouped
     }
 }
 
@@ -90,15 +105,6 @@ public enum LocalCaptionBurnInError:
     case unsupportedOutputType
     case exportFailed(String)
     case missingOutput
-}
-
-private final class CaptionExportSessionBox:
-    @unchecked Sendable {
-    let session: AVAssetExportSession
-
-    init(_ session: AVAssetExportSession) {
-        self.session = session
-    }
 }
 
 public actor LocalCaptionBurnInRenderer {
@@ -145,158 +151,48 @@ public actor LocalCaptionBurnInRenderer {
                 .invalidVideoSize
         }
 
-        let instruction =
-            AVMutableVideoCompositionInstruction()
-        instruction.timeRange = CMTimeRange(
-            start: .zero,
-            duration: duration
-        )
-
-        let layerInstruction =
-            AVMutableVideoCompositionLayerInstruction(
-                assetTrack: videoTrack
-            )
-        var transform = preferredTransform
-        transform = transform.concatenating(
-            CGAffineTransform(
-                translationX:
-                    -transformedBounds.minX,
-                y:
-                    -transformedBounds.minY
-            )
-        )
-        layerInstruction.setTransform(
-            transform,
-            at: .zero
-        )
-        instruction.layerInstructions = [
-            layerInstruction
-        ]
-
-        let videoComposition =
-            AVMutableVideoComposition()
-        videoComposition.instructions = [
-            instruction
-        ]
-        videoComposition.renderSize = renderSize
-        videoComposition.frameDuration = CMTime(
-            value: 1,
-            timescale: 30
-        )
-
-        let parentLayer = CALayer()
-        parentLayer.frame = CGRect(
-            origin: .zero,
-            size: renderSize
-        )
-
-        let videoLayer = CALayer()
-        videoLayer.frame = parentLayer.frame
-        parentLayer.addSublayer(videoLayer)
-
-        let overlayLayer = CALayer()
-        overlayLayer.frame = parentLayer.frame
-        parentLayer.addSublayer(overlayLayer)
-
         let captionCues = transcript.map {
-            CaptionBurnInPlanner().cues(
-                transcript: $0,
-                outputDurationSeconds:
-                    durationSeconds
-            )
+            CaptionBurnInPlanner().cues(transcript: $0, outputDurationSeconds: durationSeconds)
         } ?? []
-        for cue in captionCues {
-            overlayLayer.addSublayer(
-                Self.captionLayer(
-                    cue: cue,
-                    renderSize: renderSize,
-                    style: style
-                )
-            )
-        }
-
-        for cue in textOverlays {
-            overlayLayer.addSublayer(
-                Self.textOverlayLayer(
-                    cue: cue,
-                    renderSize: renderSize
-                )
-            )
-        }
-
-        videoComposition.animationTool =
-            AVVideoCompositionCoreAnimationTool(
-                postProcessingAsVideoLayer:
-                    videoLayer,
-                in: parentLayer
-            )
-
-        guard let exporter =
-            AVAssetExportSession(
-                asset: asset,
-                presetName: preset.avPresetName
-            ) else {
-            throw LocalCaptionBurnInError
-                .exportSessionUnavailable
-        }
-        guard exporter.supportedFileTypes
-            .contains(.mp4) else {
-            throw LocalCaptionBurnInError
-                .unsupportedOutputType
-        }
-
-        if FileManager.default.fileExists(
-            atPath: outputURL.path
-        ) {
-            try FileManager.default.removeItem(
-                at: outputURL
-            )
-        }
-
-        exporter.outputURL = outputURL
-        exporter.outputFileType = .mp4
-        exporter.shouldOptimizeForNetworkUse = true
-        exporter.videoComposition =
-            videoComposition
-
-        let box = CaptionExportSessionBox(
-            exporter
-        )
-        try await withCheckedThrowingContinuation {
-            continuation in
-            box.session.exportAsynchronously {
-                let session = box.session
-                switch session.status {
-                case .completed:
-                    continuation.resume()
-                case .failed, .cancelled:
-                    continuation.resume(
-                        throwing:
-                            LocalCaptionBurnInError
-                                .exportFailed(
-                                    session.error?
-                                        .localizedDescription
-                                    ?? "Caption-Export fehlgeschlagen."
-                                )
-                    )
-                default:
-                    continuation.resume(
-                        throwing:
-                            LocalCaptionBurnInError
-                                .exportFailed(
-                                    "Caption-Export endete im Zustand \(session.status.rawValue)."
-                                )
-                    )
-                }
+        let overlays: [TimedVideoOverlay] = try await MainActor.run {
+            var result: [TimedVideoOverlay] = []
+            func rasterize(_ layer: CALayer, start: Double, duration: Double) throws {
+                layer.removeAllAnimations()
+                layer.opacity = 1
+                let frame = layer.frame
+                guard let context = CGContext(data: nil, width: Int(ceil(frame.width)),
+                    height: Int(ceil(frame.height)), bitsPerComponent: 8, bytesPerRow: 0,
+                    space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+                else { throw LocalCaptionBurnInError.invalidVideoSize }
+                layer.displayIfNeeded()
+                layer.render(in: context)
+                guard let image = context.makeImage() else { throw LocalCaptionBurnInError.invalidVideoSize }
+                let data = NSMutableData()
+                guard let destination = CGImageDestinationCreateWithData(data, "public.png" as CFString, 1, nil)
+                else { throw LocalCaptionBurnInError.invalidVideoSize }
+                CGImageDestinationAddImage(destination, image, nil)
+                guard CGImageDestinationFinalize(destination) else { throw LocalCaptionBurnInError.invalidVideoSize }
+                result.append(.init(imageData: data as Data, frame: frame, start: start, duration: duration))
             }
+            for cue in captionCues {
+                try rasterize(Self.captionLayer(cue: cue, renderSize: renderSize, style: style),
+                    start: cue.startSeconds, duration: cue.durationSeconds)
+            }
+            for cue in textOverlays {
+                try rasterize(Self.textOverlayLayer(cue: cue, renderSize: renderSize),
+                    start: cue.startSeconds, duration: cue.durationSeconds)
+            }
+            return result
         }
-
-        guard FileManager.default.fileExists(
-            atPath: outputURL.path
-        ) else {
-            throw LocalCaptionBurnInError
-                .missingOutput
+        guard !overlays.isEmpty else {
+            if FileManager.default.fileExists(atPath: outputURL.path) { try FileManager.default.removeItem(at: outputURL) }
+            try FileManager.default.copyItem(at: inputURL, to: outputURL)
+            return
         }
+        // Composite text into each decoded source frame. Core Animation is only
+        // used to rasterize a static text image, never to advance video timing.
+        try await LocalSupplementalVideoCompositor().render(inputURL: inputURL,
+            supplementalVideo: [], outputURL: outputURL, preset: preset, overlays: overlays)
     }
 
     private static func textOverlayLayer(

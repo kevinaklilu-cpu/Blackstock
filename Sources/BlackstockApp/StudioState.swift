@@ -15,11 +15,13 @@ final class StudioState: ObservableObject {
     @Published var lastUndoneRevisionID: UUID?
     @Published var errorMessage: String?
     @Published var isLoading = false
+    @Published var preparationStatus = ""
     @Published var isRendering = false
     @Published var renderPreset: LocalRenderPreset = .hd1080
     @Published var renderArtifact: RenderArtifact?
     @Published var isTranscribing = false
     @Published var transcript: LocalTranscript?
+    @Published var speechCleanupPlan = SpeechCleanupPlan(suggestions: [])
     @Published var captionURL: URL?
     @Published var burnInCaptionsEnabled = false
     @Published var captionVisualStyle: CaptionVisualStyle = .clear
@@ -28,6 +30,7 @@ final class StudioState: ObservableObject {
     @Published var audioSignalAssessment: AudioSignalAssessment?
     @Published var audioLoudnessAssessment: AudioLoudnessAssessment?
     @Published var reframeAspectRatio: ReframeAspectRatio = .landscape16x9
+    @Published var reframePreserveFullFrame = false
     @Published var reframeFocalX: Double = 0.5
     @Published var reframeFocalY: Double = 0.5
     @Published var isSuggestingFocalPoint = false
@@ -40,10 +43,12 @@ final class StudioState: ObservableObject {
     @Published var supplementalCaptures: [SupplementalCaptureAsset] = []
     @Published var supplementalAudioMixSettings: [SupplementalAudioMixSetting] = []
     @Published var supplementalVideoInsertSettings: [SupplementalVideoInsertSetting] = []
+    @Published private(set) var previousStorySceneSettings: [SupplementalVideoInsertSetting]?
     @Published var localClipCandidates: [LocalClipCandidate] = []
     @Published var savedClipSelections: [SavedClipSelection] = []
     @Published var isGeneratingClipCandidates = false
     @Published var isCreatingAutomaticHighlights = false
+    @Published var automaticVisualDynamicsEnabled = true
     @Published var clipCandidateStatusMessage: String?
     @Published var previewedLocalClipCandidateID: UUID?
     @Published var renderingSavedClipID: UUID?
@@ -55,6 +60,10 @@ final class StudioState: ObservableObject {
     @Published var overlayEnd: Double = 3
     @Published var overlayVerticalPosition: Double = 0.18
     @Published var masterVolume: Double = 1
+
+    var storyOutputTranscript: LocalTranscript? {
+        StoryTranscriptComposer.compose(lead: transcript, inputs: plannedStorySequence(), settings: supplementalVideoInsertSettings)
+    }
 
     var currentOutputDurationSeconds: Double {
         guard let asset else { return 0 }
@@ -89,12 +98,14 @@ final class StudioState: ObservableObject {
 
     func loadWorkspace(projectID: UUID) async {
         activeProjectID = projectID
+        previousStorySceneSettings = nil
         processingStopRequested = false
         localClipCandidates = []
         clipCandidateStatusMessage = nil
         previewedLocalClipCandidateID = nil
         renderingSavedClipID = nil
         clipCandidateSourceTranscript = nil
+        speechCleanupPlan = SpeechCleanupPlan(suggestions: [])
         packagingSuggestedTitle = nil
         isGeneratingClipCandidates = false
         overlayText = ""
@@ -143,6 +154,7 @@ final class StudioState: ObservableObject {
                 trimStart = snapshot.trimStart
                 trimEnd = snapshot.trimEnd
                 transcript = snapshot.transcript
+                refreshSpeechCleanupPlan()
                 captionURL = snapshot.captionURL
                 burnInCaptionsEnabled =
                     snapshot.burnInCaptionsEnabled
@@ -203,6 +215,7 @@ final class StudioState: ObservableObject {
                     reframeAspectRatio = reframe.aspectRatio
                     reframeFocalX = reframe.focalX
                     reframeFocalY = reframe.focalY
+                    reframePreserveFullFrame = reframe.preserveFullFrame == true
                 }
 
                 if let transcript {
@@ -232,20 +245,27 @@ final class StudioState: ObservableObject {
                     if FileManager.default.fileExists(
                         atPath: asset.sourceURL.path
                     ) {
-                        try await rebuildPreview()
+                        if let artifact = renderArtifact {
+                            player.pause()
+                            player.defaultRate = 1
+                            player.replaceCurrentItem(with: AVPlayerItem(url: artifact.fileURL))
+                            player.volume = 1
+                        } else {
+                            try await rebuildPreview()
+                        }
 
+                        // Stored results stay valid until edits invalidate the render.
+                        // Opening an editor must not decode all audio again.
                         let audioQCURL: URL
-                        if let artifact = renderArtifact,
-                           FileManager.default.fileExists(
-                                atPath: artifact.fileURL.path
-                           ) {
+                        if let artifact = renderArtifact {
                             audioQCURL = artifact.fileURL
                         } else {
                             audioQCURL = asset.sourceURL
                         }
-                        await refreshAudioInspection(
-                            for: audioQCURL
-                        )
+                        if audioTechnicalAssessment == nil {
+                            audioTechnicalAssessment = try? await LocalAudioTechnicalInspector().inspect(url: audioQCURL)
+                        }
+
                     } else {
                         errorMessage = "Das gespeicherte Produktionsmedium fehlt im Projekt-Arbeitsbereich."
                     }
@@ -400,11 +420,12 @@ final class StudioState: ObservableObject {
                 }
             }
 
-            let durableURL = try store.importMedia(
-                sourceURL: url,
-                projectID: projectID,
-                assetID: assetID
-            )
+            preparationStatus = "Leitvideo im Projekt sichern …"
+            let durableURL = try await Task.detached(priority: .userInitiated) {
+                try store.importMedia(sourceURL: url, projectID: projectID, assetID: assetID)
+            }.value
+            guard !shouldStopProcessing, activeProjectID == projectID else { return }
+            preparationStatus = "Länge und Videospur lesen …"
             let avAsset = AVURLAsset(url: durableURL)
             let duration = try await avAsset.load(.duration)
             let seconds = max(CMTimeGetSeconds(duration), 0)
@@ -428,6 +449,7 @@ final class StudioState: ObservableObject {
                 return
             }
 
+            guard !shouldStopProcessing, activeProjectID == projectID else { return }
             asset = imported
             localClipCandidates = []
             savedClipSelections = []
@@ -442,6 +464,7 @@ final class StudioState: ObservableObject {
             lastUndoneRevisionID = nil
             renderArtifact = nil
             transcript = nil
+            speechCleanupPlan = SpeechCleanupPlan(suggestions: [])
             captionURL = nil
             burnInCaptionsEnabled = false
             captionVisualStyle = .clear
@@ -469,9 +492,10 @@ final class StudioState: ObservableObject {
 
             try await rebuildPreview()
 
-            await refreshAudioInspection(
-                for: imported.sourceURL
-            )
+            // Analyze the final cut at export, not the entire long source before
+            // allowing other sources to load.
+            preparationStatus = "Videovorschau bereit"
+            audioTechnicalAssessment = try? await LocalAudioTechnicalInspector().inspect(url: imported.sourceURL)
             persistWorkspaceIfPossible()
             errorMessage = nil
         } catch {
@@ -514,23 +538,17 @@ final class StudioState: ObservableObject {
             workspaceStore = store
 
             let captureID = UUID()
-            let durableURL: URL
-            switch kind {
-            case .camera, .screen:
-                durableURL = try store
-                    .importSupplementalVideoCapture(
-                        sourceURL: url,
-                        projectID: projectID,
-                        assetID: captureID
-                    )
-            case .microphone, .systemAudio:
-                durableURL = try store
-                    .importSupplementalCapture(
-                        sourceURL: url,
-                        projectID: projectID,
-                        assetID: captureID
-                    )
-            }
+            preparationStatus = "Zusatzquelle im Projekt sichern …"
+            let durableURL = try await Task.detached(priority: .userInitiated) {
+                switch kind {
+                case .camera, .screen:
+                    return try store.importSupplementalVideoCapture(sourceURL: url, projectID: projectID, assetID: captureID)
+                case .microphone, .systemAudio:
+                    return try store.importSupplementalCapture(sourceURL: url, projectID: projectID, assetID: captureID)
+                }
+            }.value
+            guard !shouldStopProcessing, activeProjectID == projectID else { return false }
+            preparationStatus = "Zusatzquelle: Länge und Spuren lesen …"
 
             let mimeType: String
             switch kind {
@@ -575,6 +593,7 @@ final class StudioState: ObservableObject {
                 return false
             }
 
+            guard !shouldStopProcessing, activeProjectID == projectID else { return false }
             supplementalCaptures.removeAll {
                 $0.id == capture.id
             }
@@ -650,6 +669,7 @@ final class StudioState: ObservableObject {
         lastUndoneRevisionID = nil
         renderArtifact = nil
         transcript = nil
+        speechCleanupPlan = SpeechCleanupPlan(suggestions: [])
         captionURL = nil
         burnInCaptionsEnabled = false
         audioTechnicalAssessment = nil
@@ -722,6 +742,7 @@ final class StudioState: ObservableObject {
         lastUndoneRevisionID = nil
         renderArtifact = nil
         transcript = nil
+        speechCleanupPlan = SpeechCleanupPlan(suggestions: [])
         captionURL = nil
         burnInCaptionsEnabled = false
         audioTechnicalAssessment = nil
@@ -752,12 +773,105 @@ final class StudioState: ObservableObject {
         }
     }
 
+    func refreshSpeechCleanupPlan() {
+        guard let transcript else {
+            speechCleanupPlan = SpeechCleanupPlan(suggestions: [])
+            return
+        }
+        speechCleanupPlan = LocalSpeechCleanupPlanner().plan(
+            transcript: transcript,
+            outputDurationSeconds: currentOutputDurationSeconds
+        )
+    }
+
+    func applySpeechCleanup() async {
+        guard let asset, !speechCleanupPlan.suggestions.isEmpty else {
+            errorMessage = "Es wurden keine sicheren Sprachschnitt-Vorschläge gefunden."
+            return
+        }
+
+        let resolver = EditTimelineResolver()
+        let currentOperations = graph.currentOperations
+        let timeline = resolver.resolve(
+            sourceDurationSeconds: asset.durationSeconds,
+            operations: currentOperations
+        )
+        let sourceRanges = speechCleanupPlan.suggestions
+            .flatMap { timeline.sourceRanges(forOutputRange: $0.outputRange) }
+        let operations = sourceRanges.map { range in
+            EditOperation(
+                type: .removeRange,
+                timeRange: range,
+                createdAt: Date()
+            )
+        }
+        guard !operations.isEmpty else {
+            errorMessage = "Die Vorschläge liegen nicht mehr auf der aktuellen Zeitleiste. Bitte Untertitel erneut erstellen."
+            return
+        }
+
+        let nextPlan = resolver.resolve(
+            sourceDurationSeconds: asset.durationSeconds,
+            operations: currentOperations + operations
+        )
+        guard nextPlan.hasContent,
+              nextPlan.outputDurationSeconds
+                < timeline.outputDurationSeconds - 0.05 else {
+            errorMessage = "Der Sprachschnitt würde keinen sicheren Inhalt entfernen."
+            return
+        }
+
+        let before = graph.headID
+        var lastRevisionID = before
+        for operation in operations {
+            lastRevisionID = graph.apply(
+                operation,
+                actor: .acceptedAIProposal
+            ).id
+        }
+        let removedSeconds = timeline.outputDurationSeconds
+            - nextPlan.outputDurationSeconds
+        lastUndoneRevisionID = nil
+        renderArtifact = nil
+        transcript = nil
+        speechCleanupPlan = SpeechCleanupPlan(suggestions: [])
+        captionURL = nil
+        burnInCaptionsEnabled = false
+        audioTechnicalAssessment = nil
+        audioSignalAssessment = nil
+        audioLoudnessAssessment = nil
+        transcriptStructure = nil
+        retentionAdvisory = nil
+        retentionAdvisorAvailability = nil
+
+        ledger.append(.init(
+            timestamp: Date(),
+            actor: .blackstock,
+            stage: .editing,
+            action: "speech-cleanup-applied",
+            summary: "Sprachschnitt angewendet: \(operations.count) gemeinsame Bild-/Ton-Schnitte, \(format(removedSeconds)) gekürzt. Jeder Schnitt ist im Verlauf rückgängig machbar.",
+            beforeRevisionID: before,
+            afterRevisionID: lastRevisionID,
+            reversible: true,
+            correlationID: correlationID
+        ))
+
+        do {
+            try await rebuildPreview()
+            persistWorkspaceIfPossible()
+            errorMessage = nil
+        } catch {
+            errorMessage = "Sprachschnitt-Vorschau konnte nicht aktualisiert werden: \(error.localizedDescription)"
+        }
+    }
+
     func undo() async {
         let undone = graph.headID
         guard let restored = graph.undo() else { return }
         lastUndoneRevisionID = undone
         renderArtifact = nil
         transcript = nil
+        speechCleanupPlan = SpeechCleanupPlan(suggestions: [])
         captionURL = nil
         burnInCaptionsEnabled = false
         audioTechnicalAssessment = nil
@@ -790,6 +904,7 @@ final class StudioState: ObservableObject {
         lastUndoneRevisionID = nil
         renderArtifact = nil
         transcript = nil
+        speechCleanupPlan = SpeechCleanupPlan(suggestions: [])
         captionURL = nil
         burnInCaptionsEnabled = false
         audioTechnicalAssessment = nil
@@ -826,10 +941,11 @@ final class StudioState: ObservableObject {
 
         do {
             let proposal = try await LocalVisionFocalPointSuggester()
-                .suggest(url: asset.sourceURL)
+                .suggest(url: asset.sourceURL, sourceRange: .init(startSeconds: trimStart, durationSeconds: trimEnd - trimStart))
             focalPointProposal = proposal
             reframeFocalX = proposal.focalX
             reframeFocalY = proposal.focalY
+                reframePreserveFullFrame = reframeAspectRatio != .portrait9x16 && proposal.preserveFullFrame == true
 
             ledger.append(.init(
                 timestamp: Date(),
@@ -1024,7 +1140,7 @@ final class StudioState: ObservableObject {
         let spec = ReframeSpec(
             aspectRatio: reframeAspectRatio,
             focalX: reframeFocalX,
-            focalY: reframeFocalY
+            focalY: reframeFocalY, preserveFullFrame: reframePreserveFullFrame
         )
         let operation = EditOperation(
             type: .reframe,
@@ -1034,7 +1150,11 @@ final class StudioState: ObservableObject {
         let revision = graph.apply(operation, actor: .user)
         lastUndoneRevisionID = nil
         renderArtifact = nil
-        invalidateSavedClipRenders()
+        savedClipSelections = savedClipSelections.map { selection in
+            let isCurrent = abs(selection.sourceRange.startSeconds - trimStart) < 0.01
+                && abs(selection.sourceRange.endSeconds - trimEnd) < 0.01
+            return isCurrent ? selection.withReframeSpec(spec).withRenderArtifact(nil) : selection
+        }
         audioTechnicalAssessment = nil
         audioSignalAssessment = nil
         audioLoudnessAssessment = nil
@@ -1061,17 +1181,28 @@ final class StudioState: ObservableObject {
     }
 
     func generateLocalClipCandidates(
-        localeIdentifier: String
+        localeIdentifier: String,
+        forShort: Bool = true
     ) async {
+        guard !isGeneratingClipCandidates, !isTranscribing else {
+            clipCandidateStatusMessage = "Die Spracherkennung läuft bereits."
+            return
+        }
         guard let asset else {
             clipCandidateStatusMessage =
                 "Kein autorisiertes Produktionsmedium geladen."
             return
         }
 
+        let requestedProjectID = activeProjectID
+        let requestedAssetID = asset.id
         isGeneratingClipCandidates = true
         clipCandidateStatusMessage = nil
-        defer { isGeneratingClipCandidates = false }
+        defer {
+            if activeProjectID == requestedProjectID, self.asset?.id == requestedAssetID {
+                isGeneratingClipCandidates = false
+            }
+        }
 
         let transcriber = LocalOnDeviceTranscriber()
         var authorization = transcriber.authorizationState()
@@ -1099,12 +1230,20 @@ final class StudioState: ObservableObject {
         }
 
         do {
-            let sourceTranscript =
-                try await transcriber.transcribeVideo(
-                    url: asset.sourceURL,
-                    localeIdentifier: localeIdentifier
-                )
+            let sourceTranscript: LocalTranscript
+            if let cached = clipCandidateSourceTranscript, cached.localeIdentifier == localeIdentifier {
+                sourceTranscript = cached
+            } else {
+                sourceTranscript = try await transcriber.transcribeVideo(
+                    url: asset.sourceURL, localeIdentifier: localeIdentifier,
+                    progress: { [weak self] fraction in
+                        await MainActor.run {
+                            self?.clipCandidateStatusMessage = "Sprache analysieren · \(Int(fraction * 100)) % des Videos"
+                        }
+                    })
+            }
 
+            guard activeProjectID == requestedProjectID, self.asset?.id == requestedAssetID else { return }
             guard !shouldStopProcessing else {
                 localClipCandidates = []
                 clipCandidateStatusMessage =
@@ -1119,13 +1258,17 @@ final class StudioState: ObservableObject {
                 .generate(
                     transcript: sourceTranscript,
                     sourceDurationSeconds:
-                        asset.durationSeconds
+                        asset.durationSeconds,
+                    minimumDurationSeconds: forShort ? ClipOutputProfile.short.minimumDuration : ClipOutputProfile.video.minimumDuration,
+                    maximumDurationSeconds: forShort ? 90 : 360,
+                    pauseBoundarySeconds: 0.8,
+                    maximumCandidates: 48
                 )
 
             localClipCandidates = candidates
             if candidates.isEmpty {
                 clipCandidateStatusMessage =
-                    "Keine mindestens 15 Sekunden langen zusammenhängenden Sprachblöcke gefunden. Blackstock erfindet deshalb keine Clip-Vorschläge."
+                    "Keine ausreichend langen zusammenhängenden Sprachblöcke gefunden. Blackstock erfindet deshalb keine Clip-Vorschläge."
             } else {
                 clipCandidateStatusMessage =
                     "\(candidates.count) lokale Clip-Kandidaten aus Sprachsegmenten und gemessenen Pausen gefunden."
@@ -1148,36 +1291,108 @@ final class StudioState: ObservableObject {
             persistWorkspaceIfPossible()
             errorMessage = nil
         } catch {
+            guard activeProjectID == requestedProjectID, self.asset?.id == requestedAssetID else { return }
             localClipCandidates = []
-            clipCandidateStatusMessage =
-                "Lokale Clip-Analyse fehlgeschlagen: "
-                + error.localizedDescription
+            clipCandidateStatusMessage = error is CancellationError
+                ? "Verarbeitung gestoppt."
+                : "Lokale Clip-Analyse fehlgeschlagen: " + error.localizedDescription
         }
     }
 
     func createAutomaticHighlights(
         localeIdentifier: String,
-        maximumHighlights: Int = 3
+        maximumHighlights: Int = 8,
+        renderImmediately: Bool = true,
+        targetDuration: Double = 0,
+        analyzeSpeech: Bool = true,
+        includeCaptions: Bool = false,
+        portrait: Bool = true
     ) async {
         guard !isCreatingAutomaticHighlights else { return }
+        let requestedProjectID = activeProjectID
+        let requestedAssetID = asset?.id
 
         isCreatingAutomaticHighlights = true
         defer { isCreatingAutomaticHighlights = false }
+        errorMessage = nil
+        clipCandidateStatusMessage =
+            "Schritt 1 von 4: Sprache, Pausen und Clip-Bereiche werden lokal analysiert …"
 
-        await generateLocalClipCandidates(
-            localeIdentifier: localeIdentifier
-        )
-        guard !shouldStopProcessing,
-              errorMessage == nil,
-              !localClipCandidates.isEmpty else {
+        if analyzeSpeech || includeCaptions {
+            await generateLocalClipCandidates(localeIdentifier: localeIdentifier, forShort: portrait)
+        } else {
+            localClipCandidates = []
+        }
+        guard !shouldStopProcessing else {
+            return
+        }
+        // Visual analysis remains available when speech is absent or unavailable.
+        if let asset, targetDuration == 0 {
+            let speechStatus = clipCandidateStatusMessage
+            do {
+                let visual = try await VisualMomentAnalyzer().analyze(
+                    url: asset.sourceURL, duration: asset.durationSeconds,
+                    maximumDuration: portrait ? 90 : 360, profile: portrait ? .short : .video,
+                    progress: { [weak self] fraction in
+                        await MainActor.run {
+                            guard self?.activeProjectID == requestedProjectID,
+                                  self?.asset?.id == requestedAssetID else { return }
+                            self?.clipCandidateStatusMessage = "Bildbewegung und Szenenwechsel analysieren · \(Int(fraction * 100)) %"
+                        }
+                    })
+                guard !shouldStopProcessing, activeProjectID == requestedProjectID,
+                      self.asset?.id == requestedAssetID else { return }
+                let speech = localClipCandidates
+                let groundedVisual = visual.map { candidate -> LocalClipCandidate in
+                    guard let source = clipCandidateSourceTranscript,
+                          let excerpt = ClipTranscriptProjector().project(source: source, candidate: candidate) else { return candidate }
+                    return LocalClipCandidate(id: candidate.id, sourceRange: candidate.sourceRange,
+                        transcriptPreview: excerpt.text,
+                        wordCount: excerpt.text.split(whereSeparator: \.isWhitespace).count,
+                        averageConfidence: nil, segmentIDs: excerpt.segments.map(\.id),
+                        visualActivityScore: candidate.visualActivityScore,
+                        selectionExplanation: candidate.selectionExplanation)
+                }
+                localClipCandidates += groundedVisual.filter { candidate in
+                    !speech.contains { spoken in
+                        let overlap = min(spoken.sourceRange.endSeconds, candidate.sourceRange.endSeconds)
+                            - max(spoken.sourceRange.startSeconds, candidate.sourceRange.startSeconds)
+                        return overlap > candidate.sourceRange.durationSeconds * 0.5
+                    }
+                }
+                if localClipCandidates.isEmpty { clipCandidateStatusMessage = speechStatus }
+                else { errorMessage = nil }
+            } catch {
+                guard !shouldStopProcessing else { return }
+                if localClipCandidates.isEmpty {
+                    clipCandidateStatusMessage = "Bildanalyse fehlgeschlagen: " + error.localizedDescription
+                }
+            }
+        }
+        if targetDuration > 0, let asset {
+            localClipCandidates = automaticTimelineCandidates(
+                duration: asset.durationSeconds, targetDuration: targetDuration
+            )
+            errorMessage = nil
+            clipCandidateStatusMessage = "Zeitbasierter Schnitt vorbereitet. Spracherkennung ist dafür nicht erforderlich."
+        }
+        guard !localClipCandidates.isEmpty else {
+            errorMessage = clipCandidateStatusMessage ?? "Keine passenden Momente gefunden. Prüfe die erkannte Sprache oder wähle einen Ausschnitt manuell."
             return
         }
 
-        let ranked = LocalHighlightCandidateRanker()
-            .rank(localClipCandidates)
-        let selected = Array(
-            ranked.prefix(max(maximumHighlights, 1))
-        )
+        var ranked = LocalHighlightCandidateRanker().rank(localClipCandidates)
+        clipCandidateStatusMessage = "Momente werden nach Verständlichkeit und Aussage geordnet …"
+        if ranked.allSatisfy({ $0.wordCount > 0 }),
+           let editorial = await LocalClipEditorialAdvisor().rank(ranked, locale: localeIdentifier) {
+            ranked = editorial
+        }
+        guard !shouldStopProcessing,
+              activeProjectID == requestedProjectID,
+              asset?.id == requestedAssetID else { return }
+        ranked = LocalHighlightCandidateRanker().distinct(ranked, limit: 48)
+        localClipCandidates = ranked
+        let selected = Array(ranked.prefix(max(maximumHighlights, 1)))
 
         savedClipSelections = selected.enumerated().map {
             index, candidate in
@@ -1199,21 +1414,30 @@ final class StudioState: ObservableObject {
             return
         }
 
-        reframeAspectRatio = .portrait9x16
+        reframeAspectRatio = portrait ? .portrait9x16 : .landscape16x9
         reframeFocalX = 0.5
         reframeFocalY = 0.5
+        reframePreserveFullFrame = false
         if let asset {
             do {
                 let proposal = try await LocalVisionFocalPointSuggester()
-                    .suggest(url: asset.sourceURL)
+                    .suggest(url: asset.sourceURL, sourceRange: primary.sourceRange, sampleCount: min(60, max(7, Int(primary.sourceRange.durationSeconds))))
+                guard !shouldStopProcessing,
+                      activeProjectID == requestedProjectID,
+                      self.asset?.id == requestedAssetID else { return }
                 focalPointProposal = proposal
                 reframeFocalX = proposal.focalX
                 reframeFocalY = proposal.focalY
+                reframePreserveFullFrame = reframeAspectRatio != .portrait9x16 && proposal.preserveFullFrame == true
             } catch {
                 focalPointProposal = nil
             }
         }
+        // Portrait intent fills the canvas; the full-frame option remains available for wide action.
+        if portrait { reframePreserveFullFrame = false }
         captionVisualStyle = .strong
+        clipCandidateStatusMessage =
+            "Schritt 2 von 4: Schnitt und gewähltes Bildformat werden vorbereitet …"
 
         guard !shouldStopProcessing else {
             clipCandidateStatusMessage = "Verarbeitung gestoppt."
@@ -1224,28 +1448,58 @@ final class StudioState: ObservableObject {
         guard !shouldStopProcessing,
               errorMessage == nil else { return }
 
-        if let firstSaved = savedClipSelections.first,
+        self.transcript = savedClipSelections.first?.transcript
+        if includeCaptions, let firstSaved = savedClipSelections.first,
            let transcript = firstSaved.transcript {
             self.transcript = transcript
             transcriptStructure = TranscriptStructureAnalyzer()
                 .analyze(transcript: transcript)
             burnInCaptionsEnabled = true
+            clipCandidateStatusMessage =
+                "Schritt 3 von 4: Lesbare Untertitel werden aus der erkannten Sprache erzeugt …"
+        } else {
+            burnInCaptionsEnabled = false
+            captionURL = nil
+            clipCandidateStatusMessage = includeCaptions
+                ? "Keine verlässliche Sprache erkannt; das Video wird ohne Untertitel gerendert."
+                : "Untertitel deaktiviert · die Sprachanalyse bleibt Grundlage der Momentwahl."
         }
 
         let before = graph.headID
         let reframe = EditOperation(
             type: .reframe,
             reframeSpec: ReframeSpec(
-                aspectRatio: .portrait9x16,
+                aspectRatio: reframeAspectRatio,
                 focalX: reframeFocalX,
-                focalY: reframeFocalY
+                focalY: reframeFocalY, preserveFullFrame: reframePreserveFullFrame, focalPath: focalPointProposal?.focalPath
             ),
             createdAt: Date()
         )
-        let revision = graph.apply(
+        _ = graph.apply(
             reframe,
             actor: .acceptedAIProposal
         )
+        let clipDuration = primary.sourceRange.durationSeconds
+        let emphasisCues = automaticVisualDynamicsEnabled && !reframePreserveFullFrame
+            ? VisualEmphasisComposer.automaticCues(
+                duration: clipDuration, transcript: savedClipSelections.first?.transcript)
+            : []
+        if automaticVisualDynamicsEnabled {
+            for cue in emphasisCues {
+                _ = graph.apply(
+                    EditOperation(
+                        type: .emphasis,
+                        timeRange: EditTimeRange(
+                            startSeconds: cue.startSeconds,
+                            durationSeconds: cue.durationSeconds
+                        ),
+                        value: cue.scale,
+                        createdAt: Date()
+                    ),
+                    actor: .acceptedAIProposal
+                )
+            }
+        }
         lastUndoneRevisionID = nil
         renderArtifact = nil
 
@@ -1255,10 +1509,10 @@ final class StudioState: ObservableObject {
             stage: .editing,
             action: "automatic-highlights-prepared",
             summary:
-                "\(selected.count) Highlights wurden lokal priorisiert, als Clips gespeichert und für Hochkant-Export mit kräftigen Untertiteln vorbereitet.",
+                "\(selected.count) Highlights vorbereitet. Der erste Clip enthält \(emphasisCues.count) Fokus-Zooms an erkannten Sprachpausen. Ohne belastbare Sprachgrenzen bleiben automatische Zooms aus.",
             relatedSourceIDs: selected.map { $0.id.uuidString },
             beforeRevisionID: before,
-            afterRevisionID: revision.id,
+            afterRevisionID: graph.headID,
             reversible: true,
             correlationID: correlationID
         ))
@@ -1278,18 +1532,63 @@ final class StudioState: ObservableObject {
             return
         }
 
+        if !renderImmediately {
+            if targetDuration > 0 { savedClipSelections = [] }
+            clipCandidateStatusMessage = targetDuration > 0
+                ? "Erzählung vorbereitet. Noch kein fertiger Export."
+                : "\(savedClipSelections.count) Momente gefunden · der erste ist auf \(Int(primary.sourceRange.durationSeconds.rounded())) Sekunden zugeschnitten und in der Vorschau bereit. Mit „Video erstellen“ speicherst du den fertigen Clip."
+            persistWorkspaceIfPossible()
+            return
+        }
         await renderAllSavedClipSelections()
         guard !shouldStopProcessing,
               errorMessage == nil else { return }
 
         if let first = savedClipSelections.first,
            first.renderArtifact != nil {
+            clipCandidateStatusMessage =
+                "Schritt 4 von 4: Der fertige Clip wird geöffnet und für Titel, Thumbnail und Upload vorbereitet …"
             await useSavedClipForPackaging(first)
+        }
+        guard errorMessage == nil, renderArtifact != nil else {
+            if errorMessage == nil {
+                errorMessage = "Es wurde keine fertige Exportdatei erstellt. Bitte den Render-Schritt erneut starten."
+            }
+            return
         }
 
         clipCandidateStatusMessage =
-            "\(selected.count) Highlights sind geschnitten, als Hochkant-Clips vorbereitet und lokal validiert gerendert."
+                "\(selected.count) Highlights sind geschnitten und lokal validiert gerendert. Fokus-Zooms werden für jeden Clip separat geplant."
         errorMessage = nil
+    }
+
+    private func automaticTimelineCandidates(
+        duration: Double, targetDuration: Double = 45
+    ) -> [LocalClipCandidate] {
+        guard duration >= 8 else { return [] }
+        let clipDuration = min(max(targetDuration, 8), duration)
+        let centers = duration > clipDuration * 2 ? [0.2, 0.5, 0.8] : [0.5]
+        return centers.enumerated().map { index, fraction in
+            let start = min(
+                max(duration * fraction - clipDuration / 2, 0),
+                max(duration - clipDuration, 0)
+            )
+            let segments = clipCandidateSourceTranscript?.segments.filter {
+                $0.startSeconds < start + clipDuration
+                    && $0.startSeconds + $0.durationSeconds > start
+            } ?? []
+            let text = segments.map(\.text).joined(separator: " ")
+            return LocalClipCandidate(
+                sourceRange: EditTimeRange(
+                    startSeconds: start,
+                    durationSeconds: clipDuration
+                ),
+                transcriptPreview: text.isEmpty ? "Zeitbasierter Vorschlag \(index + 1)" : text,
+                wordCount: text.split(whereSeparator: { $0.isWhitespace }).count,
+                averageConfidence: nil,
+                segmentIDs: segments.map(\.id)
+            )
+        }
     }
 
     private func automaticHighlightTitle(
@@ -1313,7 +1612,9 @@ final class StudioState: ObservableObject {
            !firstSentence.isEmpty {
             return String(firstSentence.prefix(72))
         }
-        return "Highlight \(index + 1)"
+        return candidate.visualActivityScore != nil
+            ? "Visueller Moment \(index + 1)"
+            : "Highlight \(index + 1)"
     }
 
     func saveLocalClipCandidate(
@@ -1707,6 +2008,7 @@ final class StudioState: ObservableObject {
                 continue
             }
 
+            clipCandidateStatusMessage = "Clip \(completed + 1) von \(ids.count): \(selection.title ?? "Ohne Titel") wird gerendert …"
             await renderSavedClipSelection(
                 selection
             )
@@ -1758,13 +2060,19 @@ final class StudioState: ObservableObject {
                 actor: .user
             )
 
-            if let reframe = graph.currentOperations
-                .last(
-                    where: {
-                        $0.type == .reframe
-                    }
-                )?
-                .reframeSpec {
+            let reframeOperation = graph.currentOperations.last { $0.type == .reframe }
+            var clipReframe = selection.reframeSpec ?? reframeOperation?.reframeSpec
+            if selection.reframeSpec == nil, let base = clipReframe {
+                clipCandidateStatusMessage = "Bildausschnitt für diesen Clip wird geprüft …"
+                if let proposal = try? await LocalVisionFocalPointSuggester().suggest(
+                    url: asset.sourceURL, sourceRange: selection.sourceRange, sampleCount: min(60, max(7, Int(selection.sourceRange.durationSeconds)))
+                ) {
+                    clipReframe = ReframeSpec(aspectRatio: base.aspectRatio,
+                        focalX: proposal.focalX, focalY: proposal.focalY, preserveFullFrame: base.aspectRatio != .portrait9x16 && proposal.preserveFullFrame == true, focalPath: proposal.focalPath)
+                }
+            }
+            guard !shouldStopProcessing, activeProjectID == projectID else { return }
+            if let reframe = clipReframe {
                 _ = clipGraph.apply(
                     EditOperation(
                         type: .reframe,
@@ -1772,6 +2080,26 @@ final class StudioState: ObservableObject {
                         createdAt: Date()
                     ),
                     actor: .user
+                )
+            }
+
+            let dynamicsActive = !VisualEmphasisPlanner().cues(
+                operations: graph.currentOperations,
+                outputDurationSeconds: currentOutputDurationSeconds
+            ).isEmpty
+            let clipCues = dynamicsActive && clipReframe?.preserveFullFrame != true ? VisualEmphasisComposer.automaticCues(
+                duration: selection.sourceRange.durationSeconds,
+                transcript: selection.transcript
+            ) : []
+            for cue in clipCues {
+                _ = clipGraph.apply(
+                    EditOperation(
+                        type: .emphasis,
+                        timeRange: .init(startSeconds: cue.startSeconds, durationSeconds: cue.durationSeconds),
+                        value: cue.scale,
+                        createdAt: Date()
+                    ),
+                    actor: .acceptedAIProposal
                 )
             }
 
@@ -1840,6 +2168,7 @@ final class StudioState: ObservableObject {
             }
             savedClipSelections[index] =
                 savedClipSelections[index]
+                .withReframeSpec(clipReframe)
                 .withRenderArtifact(
                     artifact
                 )
@@ -1894,6 +2223,12 @@ final class StudioState: ObservableObject {
         renderArtifact = artifact
         packagingSuggestedTitle =
             selection.title
+        // Review the exact exported captions, zooms and framing, rather than
+        // an independently reconstructed edit preview.
+        player.pause()
+        player.defaultRate = 1
+        player.replaceCurrentItem(with: AVPlayerItem(url: artifact.fileURL))
+        player.volume = 1
         await refreshAudioInspection(
             for: artifact.fileURL
         )
@@ -1922,6 +2257,17 @@ final class StudioState: ObservableObject {
     func previewSavedClipSelection(
         _ selection: SavedClipSelection
     ) async {
+        if let artifact = selection.renderArtifact,
+           artifact.hasCurrentTechnicalValidation,
+           FileManager.default.fileExists(atPath: artifact.fileURL.path) {
+            player.pause()
+            player.defaultRate = 1
+            player.replaceCurrentItem(with: AVPlayerItem(url: artifact.fileURL))
+            player.volume = 1
+            player.playImmediately(atRate: 1)
+            clipCandidateStatusMessage = "Fertige Exportdatei: \(selection.title ?? "Ohne Titel")"
+            return
+        }
         let candidate = LocalClipCandidate(
             id: selection.id,
             sourceRange: selection.sourceRange,
@@ -1937,6 +2283,7 @@ final class StudioState: ObservableObject {
     func applySavedClipSelection(
         _ selection: SavedClipSelection
     ) async {
+        let includeCaptions = burnInCaptionsEnabled
         let candidate = LocalClipCandidate(
             id: selection.id,
             sourceRange: selection.sourceRange,
@@ -1947,13 +2294,37 @@ final class StudioState: ObservableObject {
             segmentIDs: []
         )
         await applyLocalClipCandidate(candidate)
-        guard errorMessage == nil,
-              let clipTranscript =
-                selection.transcript else {
+        guard errorMessage == nil else { return }
+        var selectedFrame = selection.reframeSpec
+        if selectedFrame == nil, let asset,
+           let proposal = try? await LocalVisionFocalPointSuggester().suggest(url: asset.sourceURL, sourceRange: selection.sourceRange, sampleCount: min(60, max(7, Int(selection.sourceRange.durationSeconds)))) {
+            selectedFrame = ReframeSpec(aspectRatio: reframeAspectRatio, focalX: proposal.focalX,
+                focalY: proposal.focalY, preserveFullFrame: reframeAspectRatio != .portrait9x16 && proposal.preserveFullFrame == true, focalPath: proposal.focalPath)
+        }
+        if let reframe = selectedFrame {
+            _ = graph.apply(.init(type: .reframe, reframeSpec: reframe, createdAt: Date()), actor: .user)
+            reframeAspectRatio = reframe.aspectRatio
+            reframeFocalX = reframe.focalX
+            reframeFocalY = reframe.focalY
+            reframePreserveFullFrame = reframe.preserveFullFrame == true
+            if let index = savedClipSelections.firstIndex(where: { $0.id == selection.id }) {
+                savedClipSelections[index] = savedClipSelections[index].withReframeSpec(reframe)
+            }
+            do { try await rebuildPreview() } catch {
+                errorMessage = "Die Clip-Vorschau konnte nicht aufgebaut werden: " + error.localizedDescription
+                return
+            }
+        }
+        guard let clipTranscript = selection.transcript else {
+            transcript = nil
+            captionURL = nil
+            burnInCaptionsEnabled = false
+            persistWorkspaceIfPossible()
             return
         }
 
         transcript = clipTranscript
+        burnInCaptionsEnabled = includeCaptions
         transcriptStructure =
             TranscriptStructureAnalyzer()
             .analyze(
@@ -2054,13 +2425,12 @@ final class StudioState: ObservableObject {
             )
 
             player.pause()
-            player.replaceCurrentItem(
-                with: AVPlayerItem(
-                    asset: composition
-                )
-            )
+            player.defaultRate = 1
+            let previewItem = AVPlayerItem(asset: composition)
+            previewItem.audioTimePitchAlgorithm = .spectral
+            player.replaceCurrentItem(with: previewItem)
             await player.seek(to: .zero)
-            player.play()
+            player.playImmediately(atRate: 1)
             previewedLocalClipCandidateID =
                 candidate.id
             clipCandidateStatusMessage =
@@ -2132,6 +2502,7 @@ final class StudioState: ObservableObject {
         lastUndoneRevisionID = nil
         renderArtifact = nil
         transcript = nil
+        speechCleanupPlan = SpeechCleanupPlan(suggestions: [])
         captionURL = nil
         burnInCaptionsEnabled = false
         transcriptStructure = nil
@@ -2174,6 +2545,10 @@ final class StudioState: ObservableObject {
     func generateLocalCaptions(
         localeIdentifier: String
     ) async {
+        guard !isTranscribing, !isGeneratingClipCandidates else {
+            errorMessage = "Die Spracherkennung läuft bereits."
+            return
+        }
         guard let asset else {
             errorMessage = "Kein Produktionsmedium geladen."
             return
@@ -2244,6 +2619,7 @@ final class StudioState: ObservableObject {
             )
 
             transcript = localTranscript
+            refreshSpeechCleanupPlan()
             captionURL = outputURL
             if burnInCaptionsEnabled {
                 renderArtifact = nil
@@ -2270,7 +2646,9 @@ final class StudioState: ObservableObject {
             persistWorkspaceIfPossible()
             errorMessage = nil
         } catch {
-            errorMessage = "Lokale Transkription fehlgeschlagen: \(error.localizedDescription)"
+            errorMessage = error is CancellationError
+                ? "Spracherkennung wurde gestoppt."
+                : "Lokale Transkription fehlgeschlagen: \(error.localizedDescription)"
         }
     }
 
@@ -2624,6 +3002,7 @@ final class StudioState: ObservableObject {
             captureID: captureID
         ) {
             $0.sourceStartSeconds = max(seconds, 0)
+            $0.selectionExplanation = "Ausschnitt manuell gewählt; automatischer Textbeleg wurde zurückgesetzt."
         }
         invalidateSupplementalVideoRender()
         persistWorkspaceIfPossible()
@@ -2637,9 +3016,235 @@ final class StudioState: ObservableObject {
             captureID: captureID
         ) {
             $0.durationSeconds = max(seconds, 0.05)
+            $0.selectionExplanation = "Ausschnittdauer manuell geändert; automatischer Textbeleg wurde zurückgesetzt."
         }
         invalidateSupplementalVideoRender()
         persistWorkspaceIfPossible()
+    }
+
+    func autoArrangeSupplementalVideos(
+        captureIDs: [UUID], usesOriginalAudio: Bool = false
+    ) {
+        let orderedCaptures = captureIDs.compactMap { id in
+            supplementalCaptures.first {
+                $0.id == id
+                    && ($0.kind == .camera || $0.kind == .screen)
+                    && $0.mayBeUsedInProduction
+            }
+        }
+        let outputDuration = currentOutputDurationSeconds
+        guard !orderedCaptures.isEmpty, outputDuration >= 0.5 else {
+            errorMessage = "Für den automatischen Mehrvideo-Schnitt fehlen geladene Ergänzungen oder eine gültige Hauptzeitleiste."
+            return
+        }
+
+        let slot = outputDuration / Double(orderedCaptures.count + 1)
+        let maximumInsertDuration = max(slot * 0.7, 0.5)
+        for (index, capture) in orderedCaptures.enumerated() {
+            let duration = min(
+                max(capture.durationSeconds ?? maximumInsertDuration, 0.1),
+                maximumInsertDuration,
+                outputDuration
+            )
+            let center = slot * Double(index + 1)
+            let start = min(
+                max(center - duration / 2, 0),
+                max(outputDuration - duration, 0)
+            )
+            updateSupplementalVideoInsertSetting(
+                captureID: capture.id
+            ) { setting in
+                setting.enabled = true
+                setting.distributedScenes = true
+                setting.usesOriginalAudio = usesOriginalAudio
+                setting.timelineStartSeconds = start
+                setting.sourceStartSeconds = max(0, ((capture.durationSeconds ?? duration) - duration) * 0.35)
+                setting.durationSeconds = duration
+                setting.selectionExplanation = "Zeitbasierter Ausschnitt aus der gewählten Bildquelle. Die Szene wurde nicht inhaltlich verifiziert; Vorschau prüfen."
+            }
+        }
+
+        invalidateSupplementalVideoRender()
+        ledger.append(.init(
+            timestamp: Date(),
+            actor: .blackstock,
+            stage: .editing,
+            action: "multi-source-video-auto-arranged",
+            summary: "Mehrvideo-Schnitt automatisch angeordnet: \(orderedCaptures.count) Ergänzungen wurden ohne Überlappung über die gemeinsame Zeitleiste verteilt; der Hauptton bleibt synchron.",
+            relatedSourceIDs: orderedCaptures.map { $0.id.uuidString },
+            reversible: false,
+            correlationID: correlationID
+        ))
+        persistWorkspaceIfPossible()
+        errorMessage = nil
+    }
+
+    func matchStoryNarration(captureIDs: [UUID], defaultLocale: String, sourceLocales: [UUID: String]) async {
+        guard !isRendering, !isGeneratingClipCandidates, let narration = transcript else {
+            clipCandidateStatusMessage = "Keine auswertbare Haupterzählung: Bildauswahl ist noch kein KI-Inhaltsmatch."
+            return
+        }
+        let initial = supplementalVideoInsertSettings
+        let projectID = activeProjectID
+        let revisionID = graph.headID
+        let sequence = plannedStorySequence()
+        var planned = initial
+        isGeneratingClipCandidates = true
+        defer { isGeneratingClipCandidates = false }
+        let transcriber = LocalOnDeviceTranscriber()
+        let matcher = SemanticSceneMatcher()
+        var matchCount = 0
+        for (index, id) in captureIDs.enumerated() {
+            guard !shouldStopProcessing, !Task.isCancelled, activeProjectID == projectID else { return }
+            guard let capture = supplementalCaptures.first(where: { $0.id == id }),
+                  let position = planned.firstIndex(where: { $0.captureID == id }) else { continue }
+            clipCandidateStatusMessage = "KI-Inhaltsabgleich · Quelle \(index + 1) von \(captureIDs.count)"
+            var scenes: [MatchedStoryScene] = []
+            let slots = sequence.filter { $0.captureID == id }
+            let recognized = try? await transcriber.transcribeVideo(url: capture.fileURL,
+                localeIdentifier: sourceLocales[id] ?? defaultLocale)
+            var used: [EditTimeRange] = []
+            for slot in slots {
+                guard !Task.isCancelled, !shouldStopProcessing else { return }
+                let reference = narration.segments.filter {
+                    $0.startSeconds < slot.timelineStartSeconds + slot.durationSeconds + 2
+                        && $0.startSeconds + $0.durationSeconds > slot.timelineStartSeconds - 2
+                }.map(\.text).joined(separator: " ")
+                if let recognized, let scene = await matcher.select(transcript: recognized, reference: reference,
+                    sourceDuration: capture.durationSeconds ?? 0, maximumDuration: slot.durationSeconds, excluding: used) {
+                    scenes.append(.init(outputStart: slot.timelineStartSeconds, sourceStart: scene.range.startSeconds,
+                        duration: scene.range.durationSeconds, explanation: scene.explanation))
+                    scenes[scenes.count - 1].spokenSegments = recognized.segments.filter {
+                        $0.startSeconds >= scene.range.startSeconds && $0.startSeconds + $0.durationSeconds <= scene.range.endSeconds + 0.001
+                    }.map { .init(start: $0.startSeconds, duration: $0.durationSeconds, text: $0.text, confidence: $0.confidence) }
+                    used.append(scene.range)
+                    matchCount += 1
+                } else {
+                    scenes.append(.init(outputStart: slot.timelineStartSeconds, sourceStart: slot.sourceStartSeconds,
+                        duration: slot.durationSeconds, explanation: "Kein belastbarer KI-Inhaltsmatch. Visuell/zeitbasiert vorgeschlagen; Inhalt vor Veröffentlichung prüfen."))
+                }
+                if scenes.last?.spokenSegments == nil, let recognized, !scenes.isEmpty {
+                    let selected = scenes[scenes.count - 1]
+                    scenes[scenes.count - 1].spokenSegments = recognized.segments.filter {
+                        $0.startSeconds >= selected.sourceStart && $0.startSeconds + $0.durationSeconds <= selected.sourceStart + selected.duration + 0.001
+                    }.map { .init(start: $0.startSeconds, duration: $0.durationSeconds, text: $0.text, confidence: $0.confidence) }
+                }
+            }
+            planned[position].matchedScenes = scenes
+            planned[position].selectionExplanation = scenes.map(\.explanation).joined(separator: "\n\n")
+        }
+        guard !Task.isCancelled, !shouldStopProcessing, activeProjectID == projectID,
+              graph.headID == revisionID, supplementalVideoInsertSettings == initial else { return }
+        supplementalVideoInsertSettings = planned
+        invalidateSupplementalVideoRender()
+        clipCandidateStatusMessage = "\(matchCount) von \(sequence.count) Szenen mit lokaler KI sprachlich zugeordnet. Übrige Vorschläge sind ausdrücklich markiert."
+        persistWorkspaceIfPossible()
+    }
+
+    func refineStoryPictures(captureIDs: [UUID]) async {
+        guard !isRendering, !isGeneratingClipCandidates else { return }
+        let projectID = activeProjectID
+        let initial = supplementalVideoInsertSettings
+        let revisionID = graph.headID
+        var planned = initial
+        isGeneratingClipCandidates = true
+        defer { isGeneratingClipCandidates = false }
+        let selector = VisualSceneSelector()
+        for (index, id) in captureIDs.enumerated() {
+            guard !shouldStopProcessing, !Task.isCancelled, activeProjectID == projectID else { return }
+            guard let capture = supplementalCaptures.first(where: { $0.id == id }),
+                  let position = planned.firstIndex(where: { $0.captureID == id }) else { continue }
+            clipCandidateStatusMessage = "Bildauswahl · Quelle \(index + 1) von \(captureIDs.count) · Helligkeit und Bildstruktur prüfen …"
+            do {
+                if let scene = try await selector.select(url: capture.fileURL,
+                    sourceDuration: capture.durationSeconds ?? 0,
+                    requestedDuration: planned[position].durationSeconds) {
+                    planned[position].sourceStartSeconds = scene.startSeconds
+                    planned[position].durationSeconds = scene.durationSeconds
+                    planned[position].selectionExplanation = scene.explanation
+                } else {
+                    planned[position].selectionExplanation = "Keine ausreichend bewertbare Bildfolge gefunden. Zeitbasierte Auswahl beibehalten; Vorschau prüfen."
+                }
+            } catch {
+                if Task.isCancelled { return }
+                planned[position].selectionExplanation = "Bildprüfung nicht verfügbar. Zeitbasierte Auswahl beibehalten; Vorschau prüfen."
+            }
+        }
+        guard !shouldStopProcessing, !Task.isCancelled, activeProjectID == projectID,
+              graph.headID == revisionID, supplementalVideoInsertSettings == initial else { return }
+        previousStorySceneSettings = initial
+        supplementalVideoInsertSettings = planned
+        invalidateSupplementalVideoRender()
+        persistWorkspaceIfPossible()
+    }
+
+    /// Builds all suggestions before committing them, so cancellation or a
+    /// project switch cannot leave a partially applied scene plan.
+    func refineStoryScenes(captureIDs: [UUID], reference: String,
+                           localeIdentifier: String, sourceLocales: [UUID: String] = [:]) async {
+        guard !isGeneratingClipCandidates, !isTranscribing, !isRendering else { return }
+        let projectID = activeProjectID
+        let revisionID = graph.headID
+        let initialSettings = supplementalVideoInsertSettings
+        let transcriber = LocalOnDeviceTranscriber()
+        var planned = initialSettings
+        isGeneratingClipCandidates = true
+        defer { isGeneratingClipCandidates = false }
+        for (index, id) in captureIDs.enumerated() {
+            guard !shouldStopProcessing, activeProjectID == projectID,
+                  graph.headID == revisionID else { return }
+            guard let capture = supplementalCaptures.first(where: { $0.id == id }),
+                  let settingIndex = planned.firstIndex(where: { $0.captureID == id }) else { continue }
+            planned[settingIndex].matchedScenes = nil
+            clipCandidateStatusMessage = "Szenen prüfen · Quelle \(index + 1) von \(captureIDs.count)"
+            do {
+                let sourceLocale = sourceLocales[id] ?? localeIdentifier
+                guard transcriber.authorizationState() == .authorized,
+                      transcriber.isOnDeviceAvailable(localeIdentifier: sourceLocale) else {
+                    throw CocoaError(.featureUnsupported)
+                }
+                let recognized = try await transcriber.transcribeVideo(
+                    url: capture.fileURL, localeIdentifier: sourceLocale)
+                guard let scene = StorySceneSelector().select(
+                    transcript: recognized, reference: reference,
+                    sourceDuration: capture.durationSeconds ?? 0,
+                    maximumDuration: planned[settingIndex].durationSeconds) else {
+                    planned[settingIndex].selectionExplanation = "Zeitbasierter Bildausschnitt bleibt aktiv. Keine sprachlich belegte Szene gefunden; Vorschau prüfen."
+                    continue
+                }
+                planned[settingIndex].sourceStartSeconds = scene.range.startSeconds
+                planned[settingIndex].durationSeconds = scene.range.durationSeconds
+                planned[settingIndex].enabled = true
+                planned[settingIndex].selectionExplanation = scene.explanation
+                    + " · Erkannter Text: „" + String(scene.excerpt.prefix(220)) + "“"
+            } catch {
+                guard !shouldStopProcessing else { return }
+                planned[settingIndex].selectionExplanation = "Zeitbasierter Bildausschnitt bleibt aktiv. Sprachanalyse nicht verfügbar; Vorschau prüfen."
+            }
+        }
+        guard !shouldStopProcessing, activeProjectID == projectID,
+              graph.headID == revisionID,
+              supplementalVideoInsertSettings == initialSettings else { return }
+        previousStorySceneSettings = initialSettings
+        supplementalVideoInsertSettings = planned
+        invalidateSupplementalVideoRender()
+        let accepted = planned.filter { captureIDs.contains($0.captureID) && $0.enabled }.count
+        clipCandidateStatusMessage = "\(accepted) von \(captureIDs.count) Ergänzungen mit belegtem Textbezug eingeplant. Ausgelassene Quellen sind im Schnitt gekennzeichnet."
+        ledger.append(.init(timestamp: Date(), actor: .blackstock, stage: .editing,
+            action: "story-scenes-matched",
+            summary: clipCandidateStatusMessage ?? "Szenenauswahl abgeschlossen.",
+            relatedSourceIDs: captureIDs.map(\.uuidString), reversible: false, correlationID: correlationID))
+        persistWorkspaceIfPossible()
+    }
+
+    func undoStorySceneSelection() {
+        guard !isGeneratingClipCandidates, !isRendering,
+              let previous = previousStorySceneSettings else { return }
+        supplementalVideoInsertSettings = previous
+        previousStorySceneSettings = nil
+        invalidateSupplementalVideoRender()
+        persistWorkspaceIfPossible()
+        clipCandidateStatusMessage = "Vorherige Szenenauswahl wiederhergestellt."
     }
 
     private func updateSupplementalVideoInsertSetting(
@@ -2649,6 +3254,8 @@ final class StudioState: ObservableObject {
         if let index = supplementalVideoInsertSettings.firstIndex(
             where: { $0.captureID == captureID }
         ) {
+            supplementalVideoInsertSettings[index].distributedScenes = false
+            supplementalVideoInsertSettings[index].matchedScenes = nil
             change(&supplementalVideoInsertSettings[index])
             return
         }
@@ -2666,6 +3273,75 @@ final class StudioState: ObservableObject {
         audioTechnicalAssessment = nil
         audioSignalAssessment = nil
         audioLoudnessAssessment = nil
+    }
+
+    func plannedStorySequence() -> [SupplementalVideoInsertInput] {
+            let outputDuration = currentOutputDurationSeconds
+            let inputs =
+                supplementalVideoInsertSettings
+                .compactMap { setting -> SupplementalVideoInsertInput? in
+                    guard let capture = supplementalCaptures.first(
+                        where: {
+                            $0.id == setting.captureID
+                                && $0.mayBeUsedInProduction
+                                && (
+                                    $0.kind == .camera
+                                    || $0.kind == .screen
+                                )
+                        }
+                    ) else {
+                        return nil
+                    }
+
+                    let sourceDuration =
+                        capture.durationSeconds
+                        ?? max(
+                            setting.sourceStartSeconds
+                                + setting.durationSeconds,
+                            setting.durationSeconds
+                        )
+                    guard let plan = SupplementalVideoInsertPlanner()
+                        .plan(
+                            setting: setting,
+                            sourceDurationSeconds: sourceDuration,
+                            outputDurationSeconds: outputDuration
+                        ) else {
+                        return nil
+                    }
+
+                    return SupplementalVideoInsertInput(
+                        captureID: capture.id,
+                        fileURL: capture.fileURL,
+                        timelineStartSeconds: plan.timelineStartSeconds,
+                        sourceStartSeconds: plan.sourceStartSeconds,
+                        durationSeconds: plan.durationSeconds,
+                        usesOriginalAudio: setting.usesOriginalAudio == true
+                    )
+                }
+
+        let active = supplementalVideoInsertSettings.filter(\.enabled)
+        if !active.isEmpty && active.allSatisfy({ $0.matchedScenes?.isEmpty == false }) {
+            return active.flatMap { setting -> [SupplementalVideoInsertInput] in
+                guard let capture = supplementalCaptures.first(where: { $0.id == setting.captureID }) else { return [] }
+                guard capture.mayBeUsedInProduction,
+                      let sourceDuration = capture.durationSeconds,
+                      (setting.matchedScenes ?? []).allSatisfy({ scene in
+                          scene.outputStart.isFinite && scene.sourceStart.isFinite && scene.duration.isFinite
+                              && scene.outputStart >= 0 && scene.sourceStart >= 0 && scene.duration >= 0.05
+                              && scene.outputStart + scene.duration <= outputDuration + 0.001
+                              && scene.sourceStart + scene.duration <= sourceDuration + 0.001
+                      }) else { return [] }
+                return (setting.matchedScenes ?? []).map { scene in
+                    .init(captureID: capture.id, fileURL: capture.fileURL,
+                        timelineStartSeconds: scene.outputStart, sourceStartSeconds: scene.sourceStart,
+                        durationSeconds: scene.duration, usesOriginalAudio: setting.usesOriginalAudio == true)
+                }
+            }.sorted { $0.timelineStartSeconds < $1.timelineStartSeconds }
+        }
+        if !active.isEmpty && active.allSatisfy({ $0.distributedScenes == true }) {
+            return StoryMontagePlanner.distribute(inputs, outputDuration: outputDuration, shotDuration: active.contains { $0.usesOriginalAudio == true } ? 12 : 6)
+        }
+        return inputs
     }
 
     func render(projectID: UUID) async {
@@ -2709,59 +3385,43 @@ final class StudioState: ObservableObject {
                     )
                 }
 
-            let outputDuration = currentOutputDurationSeconds
-            let supplementalVideo =
-                supplementalVideoInsertSettings
-                .compactMap { setting -> SupplementalVideoInsertInput? in
-                    guard let capture = supplementalCaptures.first(
-                        where: {
-                            $0.id == setting.captureID
-                                && $0.mayBeUsedInProduction
-                                && (
-                                    $0.kind == .camera
-                                    || $0.kind == .screen
-                                )
-                        }
-                    ) else {
-                        return nil
-                    }
+            let supplementalVideo = plannedStorySequence()
 
-                    let sourceDuration =
-                        capture.durationSeconds
-                        ?? max(
-                            setting.sourceStartSeconds
-                                + setting.durationSeconds,
-                            setting.durationSeconds
-                        )
-                    guard let plan = SupplementalVideoInsertPlanner()
-                        .plan(
-                            setting: setting,
-                            sourceDurationSeconds: sourceDuration,
-                            outputDurationSeconds: outputDuration
-                        ) else {
-                        return nil
-                    }
+            let selectedCaptureIDs = Set(supplementalVideoInsertSettings.filter(\.enabled).map(\.captureID))
+            guard selectedCaptureIDs == Set(supplementalVideo.map(\.captureID)) else {
+                errorMessage = "Mindestens eine ausgewählte Bildquelle hat keinen gültigen Ausschnitt. Bitte im Schnittplan prüfen; es wurde kein unvollständiger Export gestartet."
+                return
+            }
 
-                    return SupplementalVideoInsertInput(
-                        captureID: capture.id,
-                        fileURL: capture.fileURL,
-                        timelineStartSeconds: plan.timelineStartSeconds,
-                        sourceStartSeconds: plan.sourceStartSeconds,
-                        durationSeconds: plan.durationSeconds
-                    )
-                }
+            let orderedScenes = supplementalVideo.sorted { $0.timelineStartSeconds < $1.timelineStartSeconds }
+            guard zip(orderedScenes, orderedScenes.dropFirst()).allSatisfy({ previous, next in
+                previous.timelineStartSeconds + previous.durationSeconds <= next.timelineStartSeconds + 0.001
+            }) else {
+                errorMessage = "Zwei Bildszenen überlappen sich. Bitte im Schnittplan die Zeiten anpassen oder die Quellen neu anordnen."
+                return
+            }
 
+            let outputTranscript = storyOutputTranscript
+            if burnInCaptionsEnabled, let outputTranscript {
+                let directory = try store.captionDirectory(projectID: projectID)
+                let url = directory.appendingPathComponent("story.vtt")
+                try WebVTTCaptionWriter().write(transcript: outputTranscript, to: url)
+                captionURL = url
+            }
             let artifact = try await LocalVideoRenderer().render(
                 projectID: projectID,
                 asset: asset,
                 graph: graph,
                 outputURL: outputURL,
                 preset: renderPreset,
-                transcript: transcript,
+                transcript: outputTranscript,
                 burnInCaptions: burnInCaptionsEnabled,
                 captionStyle: captionVisualStyle,
                 supplementalAudio: supplementalAudio,
-                supplementalVideo: supplementalVideo
+                supplementalVideo: supplementalVideo,
+                onProgress: { [weak self] message in
+                    Task { @MainActor in self?.clipCandidateStatusMessage = message }
+                }
             )
             guard !shouldStopProcessing else {
                 try? FileManager.default.removeItem(
@@ -2771,15 +3431,37 @@ final class StudioState: ObservableObject {
                 return
             }
 
+            struct SourceReceipt: Encodable {
+                let captureID: UUID
+                let fileName: String
+                let outputStart: Double
+                let sourceStart: Double
+                let duration: Double
+                let originalAudio: Bool
+            }
+            struct RenderReceipt: Encodable {
+                let renderID: UUID
+                let mainAudioFile: String
+                let pictureSources: [SourceReceipt]
+            }
+            let receipt = RenderReceipt(renderID: artifact.id, mainAudioFile: asset.sourceURL.lastPathComponent,
+                pictureSources: supplementalVideo.map { .init(captureID: $0.captureID,
+                    fileName: $0.fileURL.lastPathComponent, outputStart: $0.timelineStartSeconds,
+                    sourceStart: $0.sourceStartSeconds, duration: $0.durationSeconds, originalAudio: $0.usesOriginalAudio) })
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try encoder.encode(receipt).write(to: outputURL.deletingPathExtension().appendingPathExtension("sources.json"), options: .atomic)
+
+            clipCandidateStatusMessage = "Export prüfen · Ton und Lautstärke des fertigen Schnitts …"
+            await refreshAudioInspection(for: artifact.fileURL)
+            guard !shouldStopProcessing else { return }
             renderArtifact = artifact
             player.replaceCurrentItem(
                 with: AVPlayerItem(url: artifact.fileURL)
             )
             player.volume = 1
             packagingSuggestedTitle = nil
-            await refreshAudioInspection(
-                for: artifact.fileURL
-            )
+
             ledger.append(.init(
                 timestamp: Date(),
                 actor: .blackstock,
@@ -2873,7 +3555,20 @@ final class StudioState: ObservableObject {
                     let layer = AVMutableVideoCompositionLayerInstruction(
                         assetTrack: compositionTrack
                     )
-                    layer.setTransform(plan.transform, at: .zero)
+                    let emphasisCues = VisualEmphasisPlanner().cues(
+                        operations: graph.currentOperations,
+                        outputDurationSeconds: timeline.outputDurationSeconds
+                    )
+                    if !TrackedReframeComposer.apply(spec: reframe, timeline: timeline, naturalSize: naturalSize,
+                        preferredTransform: preferredTransform, renderSize: renderSize, cues: emphasisCues, to: layer) {
+                    VisualEmphasisComposer.apply(
+                        cues: emphasisCues,
+                        baseTransform: plan.transform,
+                        renderSize: renderSize,
+                        anchor: plan.emphasisAnchor(for: reframe),
+                        to: layer
+                    )
+                    }
                     instruction.layerInstructions = [layer]
 
                     let videoComposition = AVMutableVideoComposition()
@@ -2891,6 +3586,10 @@ final class StudioState: ObservableObject {
             }
         }
 
+        player.pause()
+        player.defaultRate = 1
+        player.automaticallyWaitsToMinimizeStalling = true
+        item.audioTimePitchAlgorithm = .spectral
         player.replaceCurrentItem(with: item)
         player.volume = Float(appliedMasterVolume)
         await player.seek(to: .zero)

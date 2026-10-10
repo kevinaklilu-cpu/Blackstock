@@ -11,6 +11,10 @@ public struct SupplementalVideoInsertSetting:
     public var timelineStartSeconds: Double
     public var sourceStartSeconds: Double
     public var durationSeconds: Double
+    public var selectionExplanation: String?
+    public var usesOriginalAudio: Bool?
+    public var distributedScenes: Bool?
+    public var matchedScenes: [MatchedStoryScene]?
 
     public var id: UUID { captureID }
 
@@ -64,6 +68,7 @@ public struct SupplementalVideoInsertInput:
     public let timelineStartSeconds: Double
     public let sourceStartSeconds: Double
     public let durationSeconds: Double
+    public let usesOriginalAudio: Bool
 
     public var id: UUID { captureID }
 
@@ -72,8 +77,10 @@ public struct SupplementalVideoInsertInput:
         fileURL: URL,
         timelineStartSeconds: Double,
         sourceStartSeconds: Double,
-        durationSeconds: Double
+        durationSeconds: Double,
+        usesOriginalAudio: Bool = false
     ) {
+        self.usesOriginalAudio = usesOriginalAudio
         self.captureID = captureID
         self.fileURL = fileURL
         self.timelineStartSeconds = max(timelineStartSeconds, 0)
@@ -120,5 +127,27 @@ public struct SupplementalVideoInsertPlanner: Sendable {
             sourceStartSeconds: sourceStart,
             durationSeconds: duration
         )
+    }
+}
+
+public struct MatchedStoryScene: Codable, Sendable, Equatable {
+    public var outputStart: Double
+    public var sourceStart: Double
+    public var duration: Double
+    public var explanation: String
+    public var spokenSegments: [StorySpokenSegment]?
+    public init(outputStart: Double, sourceStart: Double, duration: Double, explanation: String) {
+        self.outputStart = outputStart; self.sourceStart = sourceStart
+        self.duration = duration; self.explanation = explanation
+    }
+}
+
+public struct StorySpokenSegment: Codable, Sendable, Equatable {
+    public var start: Double
+    public var duration: Double
+    public var text: String
+    public var confidence: Float
+    public init(start: Double, duration: Double, text: String, confidence: Float) {
+        self.start = start; self.duration = duration; self.text = text; self.confidence = confidence
     }
 }

@@ -27,11 +27,61 @@ private final class SupplementalMuxExportSessionBox:
     }
 }
 
+private final class SequentialInsertFrames {
+    let asset: AVAsset
+    let track: AVAssetTrack
+    let transform: CGAffineTransform
+    let start: Double
+    let duration: Double
+    var reader: AVAssetReader?
+    var output: AVAssetReaderTrackOutput?
+    var previous: CMSampleBuffer?
+    var next: CMSampleBuffer?
+
+    init(asset: AVAsset, track: AVAssetTrack, transform: CGAffineTransform,
+         start: Double, duration: Double) throws {
+        self.asset = asset; self.track = track; self.transform = transform
+        self.start = start; self.duration = duration
+    }
+
+    func image(at seconds: Double) throws -> CIImage {
+        if reader == nil {
+            let decoder = try AVAssetReader(asset: asset)
+            let frames = AVAssetReaderTrackOutput(track: track, outputSettings: [
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+            ])
+            frames.alwaysCopiesSampleData = false
+            decoder.add(frames)
+            decoder.timeRange = CMTimeRange(start: CMTime(seconds: start, preferredTimescale: 600),
+                duration: CMTime(seconds: duration, preferredTimescale: 600))
+            guard decoder.startReading() else { throw decoder.error ?? CocoaError(.fileReadCorruptFile) }
+            reader = decoder; output = frames; next = frames.copyNextSampleBuffer()
+        }
+        while let sample = next, CMSampleBufferGetPresentationTimeStamp(sample).seconds <= seconds + 0.0005 {
+            previous = sample
+            next = output?.copyNextSampleBuffer()
+        }
+        if reader?.status == .failed { throw reader?.error ?? CocoaError(.fileReadCorruptFile) }
+        guard let sample = previous ?? next, let pixel = CMSampleBufferGetImageBuffer(sample) else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        return CIImage(cvPixelBuffer: pixel).transformed(by: transform)
+    }
+    func cancel() { reader?.cancelReading(); reader = nil; output = nil; previous = nil; next = nil }
+}
+
+public struct TimedVideoOverlay: @unchecked Sendable {
+    let imageData: Data
+    let frame: CGRect
+    let start: Double
+    let duration: Double
+}
+
 public actor LocalSupplementalVideoCompositor {
     private struct PreparedInsert {
         let order: Int
         let captureID: UUID
-        let generator: AVAssetImageGenerator
+        let frames: SequentialInsertFrames
         let sourceStartSeconds: Double
         let timelineStartSeconds: Double
         let timelineEndSeconds: Double
@@ -43,7 +93,9 @@ public actor LocalSupplementalVideoCompositor {
         inputURL: URL,
         supplementalVideo: [SupplementalVideoInsertInput],
         outputURL: URL,
-        preset: LocalRenderPreset
+        preset: LocalRenderPreset,
+        overlays: [TimedVideoOverlay] = [],
+        onProgress: @Sendable (Double) -> Void = { _ in }
     ) async throws {
         let baseAsset = AVURLAsset(url: inputURL)
         let baseTracks = try await baseAsset.loadTracks(
@@ -87,6 +139,7 @@ public actor LocalSupplementalVideoCompositor {
         }
 
         var prepared: [PreparedInsert] = []
+        defer { prepared.forEach { $0.frames.cancel() } }
         for (order, input) in supplementalVideo.enumerated() {
             let asset = AVURLAsset(url: input.fileURL)
             let tracks = try await asset.loadTracks(
@@ -123,20 +176,15 @@ public actor LocalSupplementalVideoCompositor {
                 continue
             }
 
-            let generator = AVAssetImageGenerator(
-                asset: asset
-            )
-            generator.appliesPreferredTrackTransform = true
-            generator.requestedTimeToleranceBefore =
-                CMTime(seconds: 1.0 / 120.0, preferredTimescale: 600)
-            generator.requestedTimeToleranceAfter =
-                CMTime(seconds: 1.0 / 120.0, preferredTimescale: 600)
+            let frames = try SequentialInsertFrames(asset: asset, track: track,
+                transform: try await track.load(.preferredTransform),
+                start: sourceStart, duration: duration)
 
             prepared.append(
                 PreparedInsert(
                     order: order,
                     captureID: input.captureID,
-                    generator: generator,
+                    frames: frames,
                     sourceStartSeconds: sourceStart,
                     timelineStartSeconds: timelineStart,
                     timelineEndSeconds:
@@ -145,7 +193,7 @@ public actor LocalSupplementalVideoCompositor {
             )
         }
 
-        guard !prepared.isEmpty else {
+        guard !prepared.isEmpty || !overlays.isEmpty else {
             throw LocalSupplementalVideoError
                 .noUsableInsert
         }
@@ -169,14 +217,17 @@ public actor LocalSupplementalVideoCompositor {
             basePreferredTransform: preferredTransform,
             renderSize: renderSize,
             prepared: prepared,
+            overlays: overlays,
             outputURL: videoOnlyURL,
-            preset: preset
+            preset: preset,
+            onProgress: onProgress
         )
 
         try await muxBaseAudio(
             baseAsset: baseAsset,
             videoURL: videoOnlyURL,
-            outputURL: outputURL
+            outputURL: outputURL,
+            supplementalVideo: supplementalVideo
         )
 
         guard FileManager.default.fileExists(
@@ -194,8 +245,10 @@ public actor LocalSupplementalVideoCompositor {
         basePreferredTransform: CGAffineTransform,
         renderSize: CGSize,
         prepared: [PreparedInsert],
+        overlays: [TimedVideoOverlay],
         outputURL: URL,
-        preset: LocalRenderPreset
+        preset: LocalRenderPreset,
+        onProgress: @Sendable (Double) -> Void
     ) async throws {
         if FileManager.default.fileExists(
             atPath: outputURL.path
@@ -229,6 +282,10 @@ public actor LocalSupplementalVideoCompositor {
             outputURL: outputURL,
             fileType: .mp4
         )
+        defer {
+            if reader.status == .reading { reader.cancelReading() }
+            if writer.status == .writing { writer.cancelWriting() }
+        }
         let width = max(
             Int(renderSize.width.rounded()),
             2
@@ -302,11 +359,9 @@ public actor LocalSupplementalVideoCompositor {
         }
         writer.startSession(atSourceTime: .zero)
 
-        let context = CIContext(
-            options: [
-                .useSoftwareRenderer: true
-            ]
-        )
+        // Use the deterministic renderer; sequential source decoding avoids
+        // the expensive per-frame seeks without depending on GPU availability.
+        let context = CIContext(options: [.cacheIntermediates: false])
         let colorSpace = CGColorSpaceCreateDeviceRGB()
         let outputRect = CGRect(
             origin: .zero,
@@ -316,14 +371,14 @@ public actor LocalSupplementalVideoCompositor {
             )
         )
 
+        var overlayCache: [Int: CIImage] = [:]
         var appendedFrameCount = 0
+        var activeInsertOrder: Int?
 
         while reader.status == .reading,
               let sample =
                 readerOutput.copyNextSampleBuffer() {
-            autoreleasepool {
-                _ = sample
-            }
+            try Task.checkCancellation()
 
             guard let imageBuffer =
                     CMSampleBufferGetImageBuffer(
@@ -345,7 +400,7 @@ public actor LocalSupplementalVideoCompositor {
                 0
             )
 
-            let image: CIImage
+            var image: CIImage
             if let insert = prepared
                 .filter({
                     $0.timelineStartSeconds
@@ -356,23 +411,16 @@ public actor LocalSupplementalVideoCompositor {
                 .max(by: {
                     $0.order < $1.order
                 }) {
+                if activeInsertOrder != insert.order {
+                    prepared.first(where: { $0.order == activeInsertOrder })?.frames.cancel()
+                    activeInsertOrder = insert.order
+                }
                 let sourceSeconds =
                     insert.sourceStartSeconds
                     + timelineSeconds
                     - insert.timelineStartSeconds
                 do {
-                    let cgImage =
-                        try insert.generator.copyCGImage(
-                            at: CMTime(
-                                seconds: sourceSeconds,
-                                preferredTimescale: 600
-                            ),
-                            actualTime: nil
-                        )
-                    image = Self.aspectFill(
-                        CIImage(cgImage: cgImage),
-                        into: outputRect
-                    )
+                    image = Self.aspectFill(try insert.frames.image(at: sourceSeconds), into: outputRect)
                 } catch {
                     throw LocalSupplementalVideoError
                         .exportFailed(
@@ -381,6 +429,8 @@ public actor LocalSupplementalVideoCompositor {
                         )
                 }
             } else {
+                prepared.first(where: { $0.order == activeInsertOrder })?.frames.cancel()
+                activeInsertOrder = nil
                 let baseImage = CIImage(
                     cvPixelBuffer: imageBuffer
                 )
@@ -390,6 +440,22 @@ public actor LocalSupplementalVideoCompositor {
                         basePreferredTransform,
                     into: outputRect
                 )
+            }
+
+            let activeOverlays = overlays.indices.filter {
+                timelineSeconds >= overlays[$0].start && timelineSeconds < overlays[$0].start + overlays[$0].duration
+            }
+            overlayCache = overlayCache.filter { activeOverlays.contains($0.key) }
+            for index in activeOverlays {
+                if overlayCache[index] == nil {
+                    let overlay = overlays[index]
+                    guard let decoded = CIImage(data: overlay.imageData) else {
+                        throw LocalSupplementalVideoError.exportFailed("Eine Texteinblendung konnte nicht dekodiert werden.")
+                    }
+                    overlayCache[index] = decoded.transformed(by:
+                        CGAffineTransform(translationX: overlay.frame.minX, y: overlay.frame.minY))
+                }
+                if let layer = overlayCache[index] { image = layer.composited(over: image) }
             }
 
             while !writerInput.isReadyForMoreMediaData {
@@ -431,6 +497,9 @@ public actor LocalSupplementalVideoCompositor {
                     )
             }
             appendedFrameCount += 1
+            if appendedFrameCount % 30 == 0 {
+                onProgress(min(1, max(0, relativeTime.seconds / baseTimeRange.duration.seconds)))
+            }
         }
 
         if reader.status == .failed {
@@ -448,33 +517,20 @@ public actor LocalSupplementalVideoCompositor {
         }
 
         writerInput.markAsFinished()
-        try await withCheckedThrowingContinuation {
-            (
-                continuation:
-                    CheckedContinuation<Void, Error>
-            ) in
-            writer.finishWriting {
-                if writer.status == .completed {
-                    continuation.resume()
-                } else {
-                    continuation.resume(
-                        throwing:
-                            LocalSupplementalVideoError
-                            .exportFailed(
-                                writer.error?
-                                    .localizedDescription
-                                ?? "Software-Compositor konnte die Videodatei nicht abschließen."
-                            )
-                    )
-                }
-            }
+        await writer.finishWriting()
+        guard writer.status == .completed else {
+            throw LocalSupplementalVideoError.exportFailed(
+                writer.error?.localizedDescription
+                    ?? "Software-Compositor konnte die Videodatei nicht abschließen."
+            )
         }
     }
 
     private func muxBaseAudio(
         baseAsset: AVURLAsset,
         videoURL: URL,
-        outputURL: URL
+        outputURL: URL,
+        supplementalVideo: [SupplementalVideoInsertInput]
     ) async throws {
         let videoAsset = AVURLAsset(url: videoURL)
         let videoTracks = try await videoAsset.loadTracks(
@@ -509,6 +565,9 @@ public actor LocalSupplementalVideoCompositor {
         let audioTracks = try await baseAsset.loadTracks(
             withMediaType: .audio
         )
+        let originalScenes = supplementalVideo.filter(\.usesOriginalAudio)
+            .sorted { $0.timelineStartSeconds < $1.timelineStartSeconds }
+        if originalScenes.isEmpty {
         for audioTrack in audioTracks {
             guard let destination =
                     composition.addMutableTrack(
@@ -544,6 +603,43 @@ public actor LocalSupplementalVideoCompositor {
             )
         }
 
+        } else {
+            guard let destination = composition.addMutableTrack(withMediaType: .audio,
+                preferredTrackID: kCMPersistentTrackID_Invalid) else {
+                throw LocalSupplementalVideoError.exportFailed("Tonspur konnte nicht erstellt werden.")
+            }
+            func insertAudio(_ track: AVAssetTrack, start: Double, duration: Double, at: Double) async throws {
+                let wanted = CMTimeRange(start: CMTime(seconds: start, preferredTimescale: 600),
+                    duration: CMTime(seconds: duration, preferredTimescale: 600))
+                let available = try await track.load(.timeRange)
+                let overlap = CMTimeRangeGetIntersection(wanted, otherRange: available)
+                guard overlap.duration.seconds > 0 else { return }
+                // Keep the source's offset; never stretch audio to fill a picture range.
+                let position = at + overlap.start.seconds - start
+                try destination.insertTimeRange(overlap, of: track,
+                    at: CMTime(seconds: position, preferredTimescale: 600))
+            }
+            var cursor = 0.0
+            for scene in originalScenes {
+                try Task.checkCancellation()
+                if scene.timelineStartSeconds > cursor, let leadAudio = audioTracks.first {
+                    try await insertAudio(leadAudio, start: cursor,
+                        duration: scene.timelineStartSeconds - cursor, at: cursor)
+                }
+                let source = AVURLAsset(url: scene.fileURL)
+                guard let sourceAudio = try await source.loadTracks(withMediaType: .audio).first else {
+                    throw LocalSupplementalVideoError.exportFailed("Eine Szene hat keinen Originalton. Wähle für diese Story die durchgehende Haupterzählung oder eine andere Quelle.")
+                }
+                try await insertAudio(sourceAudio, start: scene.sourceStartSeconds,
+                    duration: scene.durationSeconds, at: scene.timelineStartSeconds)
+                cursor = scene.timelineStartSeconds + scene.durationSeconds
+            }
+            if cursor < videoRange.duration.seconds, let leadAudio = audioTracks.first {
+                try await insertAudio(leadAudio, start: cursor,
+                    duration: videoRange.duration.seconds - cursor, at: cursor)
+            }
+        }
+
         guard let exporter = AVAssetExportSession(
             asset: composition,
             presetName:
@@ -566,41 +662,19 @@ public actor LocalSupplementalVideoCompositor {
             )
         }
 
-        exporter.outputURL = outputURL
-        exporter.outputFileType = .mp4
         exporter.shouldOptimizeForNetworkUse = true
-
-        let box =
-            SupplementalMuxExportSessionBox(exporter)
-        try await withCheckedThrowingContinuation {
-            (
-                continuation:
-                    CheckedContinuation<Void, Error>
-            ) in
-            box.session.exportAsynchronously {
-                switch box.session.status {
-                case .completed:
-                    continuation.resume()
-                case .failed, .cancelled:
-                    continuation.resume(
-                        throwing:
-                            LocalSupplementalVideoError
-                            .exportFailed(
-                                box.session.error?
-                                    .localizedDescription
-                                ?? "Video und Hauptton konnten nicht zusammengeführt werden."
-                            )
-                    )
-                default:
-                    continuation.resume(
-                        throwing:
-                            LocalSupplementalVideoError
-                            .exportFailed(
-                                "Audio/Video-Muxing endete im Zustand \(box.session.status.rawValue)."
-                            )
-                    )
-                }
-            }
+        do {
+            try await AsyncAVAssetExporter.export(
+                exporter,
+                to: outputURL,
+                as: .mp4
+            )
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw LocalSupplementalVideoError.exportFailed(
+                error.localizedDescription
+            )
         }
     }
 

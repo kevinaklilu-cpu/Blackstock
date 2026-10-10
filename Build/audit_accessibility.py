@@ -29,8 +29,8 @@ CRITICAL = {
     "Sources/BlackstockApp/PackagingReviewView.swift": [
         'accessibilityLabel("YouTube-Beschreibung")',
         'accessibilityLabel("Variante des Veröffentlichungspakets löschen")',
-        'accessibilityLabel("\\(areaTitle(area)) geprüft")',
-        'accessibilityLabel("Prüfnotiz: \\(areaTitle(area))")',
+        'accessibilityLabel("Automatische Uploadprüfung")',
+        'accessibilityLabel("Erzeugtes Vorschaubild für YouTube")',
     ],
 }
 

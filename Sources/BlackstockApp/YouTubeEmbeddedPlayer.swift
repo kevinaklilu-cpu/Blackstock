@@ -22,7 +22,7 @@ struct YouTubeEmbeddedPlayer: NSViewRepresentable {
 
             if navigationAction.navigationType == .linkActivated,
                let host = url.host?.lowercased(),
-               host.contains("youtube.com"),
+               (host.contains("youtube.com") || host.contains("youtube-nocookie.com")),
                !url.path.hasPrefix("/embed/") {
                 NSWorkspace.shared.open(url)
                 return .cancel
@@ -153,13 +153,14 @@ struct YouTubeEmbeddedPlayer: NSViewRepresentable {
 
         var components = URLComponents(
             string:
-                "https://www.youtube.com/embed/"
+                "https://www.youtube-nocookie.com/embed/"
                 + safeVideoID
         )!
         components.queryItems = [
             .init(name: "playsinline", value: "1"),
             .init(name: "rel", value: "0"),
             .init(name: "enablejsapi", value: "1"),
+            .init(name: "modestbranding", value: "1"),
             .init(
                 name: "origin",
                 value: "https://blackstock.app"

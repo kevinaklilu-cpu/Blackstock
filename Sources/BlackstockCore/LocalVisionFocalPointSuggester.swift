@@ -28,6 +28,8 @@ public struct VisionFocalObservation: Codable, Sendable, Equatable {
 }
 
 public struct VisionFocalPointProposal: Codable, Sendable, Equatable {
+    public var focalPath: [ReframeFocalSample]?
+    public var preserveFullFrame: Bool?
     public let focalX: Double
     public let focalY: Double
     public let observationCount: Int
@@ -75,6 +77,7 @@ public struct LocalVisionFocalPointSuggester: Sendable {
 
     public func suggest(
         url: URL,
+        sourceRange: EditTimeRange? = nil,
         sampleCount: Int = 7,
         now: Date = Date()
     ) async throws -> VisionFocalPointProposal {
@@ -85,7 +88,8 @@ public struct LocalVisionFocalPointSuggester: Sendable {
             throw LocalVisionFocalPointError.invalidDuration
         }
 
-        let count = min(max(sampleCount, 3), 15)
+        let times = Self.sampleTimes(duration: seconds, sourceRange: sourceRange, sampleCount: sampleCount)
+        guard !times.isEmpty else { throw LocalVisionFocalPointError.invalidDuration }
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
         generator.maximumSize = CGSize(width: 1280, height: 1280)
@@ -100,11 +104,13 @@ public struct LocalVisionFocalPointSuggester: Sendable {
 
         var observations: [VisionFocalObservation] = []
         var sampledFrames = 0
+        var multipleSubjects = false
+        var focalPath: [ReframeFocalSample] = []
 
-        for index in 0..<count {
-            let fraction = Double(index + 1) / Double(count + 1)
+        for seconds in times {
+            try Task.checkCancellation()
             let time = CMTime(
-                seconds: seconds * fraction,
+                seconds: seconds,
                 preferredTimescale: 600
             )
 
@@ -113,24 +119,44 @@ public struct LocalVisionFocalPointSuggester: Sendable {
             }
             sampledFrames += 1
 
-            if let face = Self.largestFace(in: frame) {
+            let faces = Self.faces(in: frame)
+            if faces.count > 1,
+               (faces.map(\.normalizedX).max()! - faces.map(\.normalizedX).min()!) > 0.20 { multipleSubjects = true }
+            if let face = faces.max(by: { $0.weight < $1.weight }) {
                 observations.append(face)
+                focalPath.append(.init(sourceSeconds: seconds, focalX: face.normalizedX, focalY: face.normalizedYFromTop))
                 continue
             }
 
             if let human = Self.largestHuman(in: frame) {
                 observations.append(human)
+                focalPath.append(.init(sourceSeconds: seconds, focalX: human.normalizedX, focalY: human.normalizedYFromTop))
             }
         }
 
-        guard let proposal = Self.aggregate(
+        guard var proposal = Self.aggregate(
             observations,
             sampledFrameCount: sampledFrames,
             now: now
         ) else {
             throw LocalVisionFocalPointError.noRelevantObservation
         }
+        let spread = (observations.map(\.normalizedX).max() ?? 0) - (observations.map(\.normalizedX).min() ?? 0)
+        proposal.focalPath = focalPath
+        proposal.preserveFullFrame = multipleSubjects || spread > 0.25
         return proposal
+    }
+
+    public static func sampleTimes(duration: Double, sourceRange: EditTimeRange?, sampleCount: Int = 7) -> [Double] {
+        guard duration.isFinite, duration > 0 else { return [] }
+        let start = sourceRange?.startSeconds ?? 0
+        let length = sourceRange?.durationSeconds ?? duration
+        guard start.isFinite, length.isFinite, length > 0 else { return [] }
+        let lower = max(0, start)
+        let upper = min(duration, start + length)
+        guard upper > lower else { return [] }
+        let count = min(max(sampleCount, 3), 60)
+        return (1...count).map { lower + (upper - lower) * Double($0) / Double(count + 1) }
     }
 
     public static func aggregate(
@@ -165,30 +191,12 @@ public struct LocalVisionFocalPointSuggester: Sendable {
         )
     }
 
-    private static func largestFace(
-        in image: CGImage
-    ) -> VisionFocalObservation? {
+    private static func faces(in image: CGImage) -> [VisionFocalObservation] {
         let request = VNDetectFaceRectanglesRequest()
-        let handler = VNImageRequestHandler(cgImage: image)
-        do {
-            try handler.perform([request])
-        } catch {
-            return nil
+        do { try VNImageRequestHandler(cgImage: image).perform([request]) } catch { return [] }
+        return (request.results ?? []).filter { $0.confidence >= 0.5 }.map {
+            focalObservation(boundingBox: $0.boundingBox, confidence: Double($0.confidence), kind: .face)
         }
-
-        guard let observation = request.results?
-            .max(by: {
-                $0.boundingBox.width * $0.boundingBox.height
-                < $1.boundingBox.width * $1.boundingBox.height
-            }) else {
-            return nil
-        }
-
-        return focalObservation(
-            boundingBox: observation.boundingBox,
-            confidence: Double(observation.confidence),
-            kind: .face
-        )
     }
 
     private static func largestHuman(

@@ -12,14 +12,14 @@ final class IngestDirectoryWatcher: ObservableObject {
 
     private var source: DispatchSourceFileSystemObject?
     private var fileDescriptor: CInt = -1
-    private let queue = DispatchQueue(
-        label: "app.blackstock.ingest-watcher",
-        qos: .utility
-    )
+    // Dispatch handlers created here inherit MainActor isolation. Dispatching
+    // them on a utility queue traps before a nested Task can hop to MainActor.
+    private let queue = DispatchQueue.main
+    private var generation = UUID()
 
     func start(
         directoryURL: URL,
-        onChange: @escaping @Sendable () -> Void
+        onChange: @escaping @MainActor @Sendable () -> Void
     ) {
         stop()
 
@@ -34,6 +34,7 @@ final class IngestDirectoryWatcher: ObservableObject {
         }
 
         fileDescriptor = descriptor
+        let currentGeneration = generation
         let nextSource =
             DispatchSource.makeFileSystemObjectSource(
                 fileDescriptor: descriptor,
@@ -48,12 +49,10 @@ final class IngestDirectoryWatcher: ObservableObject {
             )
 
         nextSource.setEventHandler { [weak self] in
-            guard let self else { return }
-            Task { @MainActor in
-                self.lastEventAt = Date()
-                self.errorMessage = nil
-                onChange()
-            }
+            guard let self, self.generation == currentGeneration else { return }
+            self.lastEventAt = Date()
+            self.errorMessage = nil
+            onChange()
         }
 
         nextSource.setCancelHandler {
@@ -67,6 +66,7 @@ final class IngestDirectoryWatcher: ObservableObject {
     }
 
     func stop() {
+        generation = UUID()
         if let source {
             source.cancel()
             self.source = nil

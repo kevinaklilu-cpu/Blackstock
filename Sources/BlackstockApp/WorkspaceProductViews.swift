@@ -9,23 +9,43 @@ struct OpportunityWorkspaceView: View {
     let onProjectCreated: () -> Void
 
     @State private var query = ""
-    @State private var sortMode: OpportunitySortMode = .views
+    @State private var sortMode: OpportunitySortMode = .relevance
     @State private var selectedOpportunityID: String?
     @State private var hasLoadedInitially = false
+    @State private var showDiscoveryFilters = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        GeometryReader { viewport in
+        VStack(alignment: .leading, spacing: 12) {
             header
 
-            HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Label("Video entdecken", systemImage: "play.rectangle")
+                        .font(.headline)
+                    Spacer()
+                }
+
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(.secondary)
                     TextField(
-                        "YouTube durchsuchen",
+                        "Thema, Kanal oder Stichwort",
                         text: $query
                     )
                     .textFieldStyle(.plain)
+                    .accessibilityLabel("YouTube-Suchbegriff")
+                    if !query.isEmpty {
+                        Button {
+                            query = ""
+                            Task { await loadOpportunities() }
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("Suchbegriff löschen")
+                    }
                 }
                 .padding(.horizontal, 12)
                 .frame(height: 38)
@@ -34,6 +54,7 @@ struct OpportunityWorkspaceView: View {
                     Task { await loadOpportunities() }
                 }
 
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 250), spacing: 16)], alignment: .leading, spacing: 12) {
                 Picker(
                     "Format",
                     selection: $session.opportunityContentFilter
@@ -46,7 +67,7 @@ struct OpportunityWorkspaceView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 300)
+                .frame(maxWidth: .infinity)
 
                 Picker(
                     "Zeitraum",
@@ -60,7 +81,7 @@ struct OpportunityWorkspaceView: View {
                     }
                 }
                 .pickerStyle(.menu)
-                .frame(width: 120)
+                .frame(maxWidth: .infinity)
 
                 Picker("Sortierung", selection: $sortMode) {
                     ForEach(OpportunitySortMode.allCases, id: \.self) { mode in
@@ -68,41 +89,48 @@ struct OpportunityWorkspaceView: View {
                     }
                 }
                 .pickerStyle(.menu)
-                .frame(width: 175)
+                .frame(maxWidth: .infinity)
 
                 Button {
                     Task { await loadOpportunities() }
                 } label: {
                     HStack {
-                        if session.isWorking {
+                        if session.isLoadingOpportunities {
                             ProgressView().controlSize(.small)
                         }
                         Label(
-                            session.isWorking
+                            session.isLoadingOpportunities
                                 ? "Lädt …"
-                                : "Suchen",
-                            systemImage: "magnifyingglass"
+                                : (query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                    ? "Aktualisieren"
+                                    : "Suchen"),
+                            systemImage: query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                ? "sparkles"
+                                : "magnifyingglass"
                         )
                     }
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(BlackstockDesign.accent)
-                .disabled(
-                    session.isWorking
-                    || (
-                        query.trimmingCharacters(
-                            in: .whitespacesAndNewlines
-                        ).isEmpty
-                        && session.channelCategoryID.isEmpty
-                    )
-                )
+                .disabled(session.isLoadingOpportunities)
             }
 
-            HStack(spacing: 10) {
+            Button {
+                showDiscoveryFilters.toggle()
+            } label: {
+                Label("Kategorie, Land und Sprache", systemImage: "slider.horizontal.3")
+            }
+            .buttonStyle(.bordered)
+            .popover(isPresented: $showDiscoveryFilters, arrowEdge: .bottom) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 250), spacing: 16)], alignment: .leading, spacing: 12) {
                 Picker(
                     "Kategorie",
-                    selection: $session.channelCategoryID
+                    selection: $session.opportunityCategoryID
                 ) {
+                    Text("Alle Kategorien").tag("")
+                    if session.youtubeVideoCategories.isEmpty && !session.opportunityCategoryID.isEmpty {
+                        Text(session.primaryTopic.isEmpty ? "Gespeicherte Kategorie" : session.primaryTopic).tag(session.opportunityCategoryID)
+                    }
                     ForEach(
                         session.youtubeVideoCategories
                             .filter(\.assignable)
@@ -112,33 +140,37 @@ struct OpportunityWorkspaceView: View {
                     }
                 }
                 .pickerStyle(.menu)
-                .frame(minWidth: 190, idealWidth: 240)
+                .frame(maxWidth: .infinity)
 
                 Picker(
-                    "Region",
+                    "Land",
                     selection: $session.channelRegionCode
                 ) {
+                    if session.youtubeRegions.isEmpty {
+                        Text(session.channelRegionCode).tag(session.channelRegionCode)
+                    }
                     ForEach(session.youtubeRegions) { region in
                         Text(region.name)
                             .tag(region.code)
                     }
                 }
                 .pickerStyle(.menu)
-                .frame(width: 170)
+                .frame(maxWidth: .infinity)
 
                 Picker(
                     "Sprache",
                     selection: $session.contentLanguage
                 ) {
+                    if session.youtubeLanguages.isEmpty {
+                        Text(session.contentLanguage).tag(session.contentLanguage)
+                    }
                     ForEach(session.youtubeLanguages) { language in
                         Text(language.name)
                             .tag(language.code)
                     }
                 }
                 .pickerStyle(.menu)
-                .frame(width: 190)
-
-                Spacer()
+                .frame(maxWidth: .infinity)
 
                 if session.isLoadingYouTubeSetupOptions {
                     ProgressView()
@@ -155,37 +187,90 @@ struct OpportunityWorkspaceView: View {
                     .foregroundStyle(.secondary)
                 }
             }
+            .padding(20)
+            .frame(width: 380)
+            }
+            }
+            .padding(12)
+            .blackstockSurface(raised: true)
+
+            HStack {
+                Text(resultSummary)
+                    .font(.callout.weight(.semibold))
+                    .lineLimit(2)
+                Spacer()
+                if session.isLoadingOpportunities {
+                    ProgressView().controlSize(.small)
+                    Text("Videos und Aufrufzahlen werden geladen …").font(.caption)
+                } else if session.opportunityNextPageToken != nil {
+                    Button("Mehr laden") {
+                        Task {
+                            await session.loadMoreWorkspaceOpportunities(order: sortMode)
+                        }
+                    }
+                }
+            }
+            HStack(spacing: 6) {
+                Image(systemName: query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                      ? "wand.and.stars" : "line.3.horizontal.decrease.circle")
+                Text(session.opportunityRecommendationNote.isEmpty
+                     ? "Ohne Suchbegriff empfiehlt Blackstock automatisch passende Videos. Region, Sprache, Format und Zeitraum verfeinern die Auswahl."
+                     : session.opportunityRecommendationNote)
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
 
             if let error = session.errorMessage {
-                Label(
-                    error,
-                    systemImage: "exclamationmark.triangle.fill"
+                HStack(spacing: 12) {
+                    Label(
+                        error,
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    Spacer()
+                    if error.localizedCaseInsensitiveContains("Google")
+                        || error.localizedCaseInsensitiveContains("Berechtigung")
+                        || error.localizedCaseInsensitiveContains("Kanal") {
+                        Button("Google verbinden") {
+                            session.showGoogleConnection = true
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                    } else {
+                        Button("Erneut versuchen") {
+                            Task { await loadOpportunities() }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                }
+                .padding(12)
+                .background(
+                    Color.red.opacity(0.08),
+                    in: RoundedRectangle(cornerRadius: 12)
                 )
-                .font(.caption)
-                .foregroundStyle(.red)
             }
 
             if session.opportunities.isEmpty {
                 emptyState
             } else {
                 opportunityContent
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
             Spacer(minLength: 0)
         }
-        .padding(24)
+        .padding(20)
+        .frame(width: viewport.size.width, height: viewport.size.height, alignment: .topLeading)
         .background(BlackstockDesign.canvas)
+        }
         .task {
             guard !hasLoadedInitially else { return }
             hasLoadedInitially = true
             await session.ensureYouTubeDiscoveryOptionsLoaded()
             if session.opportunities.isEmpty,
-               (
-                    !session.channelCategoryID.isEmpty
-                    || !query.trimmingCharacters(
-                        in: .whitespacesAndNewlines
-                    ).isEmpty
-               ) {
+               session.workspaceChannelID != nil {
                 await loadOpportunities()
             } else {
                 selectedOpportunityID =
@@ -196,6 +281,13 @@ struct OpportunityWorkspaceView: View {
             guard hasLoadedInitially else { return }
             Task { await loadOpportunities() }
         }
+        .onChange(of: session.workspaceChannel?.id) { channelID in
+            guard hasLoadedInitially, channelID != nil else { return }
+            Task {
+                await session.ensureYouTubeDiscoveryOptionsLoaded()
+                await loadOpportunities()
+            }
+        }
         .onChange(of: session.opportunityTimeWindow) { _ in
             guard hasLoadedInitially else { return }
             Task { await loadOpportunities() }
@@ -204,14 +296,8 @@ struct OpportunityWorkspaceView: View {
             guard hasLoadedInitially else { return }
             Task { await loadOpportunities() }
         }
-        .onChange(of: session.channelCategoryID) { categoryID in
+        .onChange(of: session.opportunityCategoryID) { categoryID in
             guard hasLoadedInitially else { return }
-            if let category =
-                    session.youtubeVideoCategories.first(
-                        where: { $0.id == categoryID }
-                    ) {
-                session.primaryTopic = category.title
-            }
             Task { await loadOpportunities() }
         }
         .onChange(of: session.channelRegionCode) { _ in
@@ -230,21 +316,54 @@ struct OpportunityWorkspaceView: View {
         }
     }
 
+    private var resultSummary: String {
+        let category = session.opportunityCategoryID.isEmpty ? "Alle Kategorien"
+            : (session.youtubeVideoCategories.first(where: { $0.id == session.opportunityCategoryID })?.title ?? "Gewählte Kategorie")
+        return ["\(session.opportunities.count) Videos", session.opportunityTimeWindow.germanTitle,
+                session.opportunityContentFilter.germanTitle, sortMode.germanTitle, category].joined(separator: " · ")
+    }
+
     private var header: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(alignment: .center, spacing: 16) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                BlackstockDesign.accent,
+                                BlackstockDesign.accent.opacity(0.62)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                Image(systemName: "sparkles.tv.fill")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(.white)
+            }
+            .frame(width: 40, height: 40)
+
+            VStack(alignment: .leading, spacing: 5) {
                 Text("Entdecken")
-                    .font(.largeTitle.bold())
-                Text(
-                    session.primaryTopic.isEmpty
-                        ? "Finde ein Video und erstelle daraus einen Clip."
-                        : "Kanal-Kategorie: \(session.primaryTopic) · Zeitraum: \(session.opportunityTimeWindow.germanTitle)"
-                )
-                    .font(.title3)
+                    .font(.title2.bold())
+                Text("Videos entdecken. Starke Momente finden.")
+                    .font(.callout)
                     .foregroundStyle(.secondary)
             }
+
             Spacer()
+
+            Label(
+                session.workspaceChannel?.title ?? "Verbindung prüfen",
+                systemImage: session.workspaceChannel == nil ? "exclamationmark.circle" : "checkmark.seal.fill"
+            )
+            .font(.callout.weight(.semibold))
+            .foregroundStyle(session.workspaceChannel == nil ? Color.secondary : Color.green)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color.green.opacity(0.09), in: Capsule())
         }
+        .padding(.vertical, 4)
     }
 
     private var emptyState: some View {
@@ -253,12 +372,42 @@ struct OpportunityWorkspaceView: View {
                 Image(systemName: "sparkle.magnifyingglass")
                     .font(.largeTitle)
                     .foregroundStyle(.secondary)
-                Text("Noch keine Videos")
+                Text(
+                    session.workspaceChannelID == nil
+                        ? "YouTube verbinden"
+                        : "Noch keine passenden Videos"
+                )
                     .font(.headline)
-                Text("Lade die Videos deiner Kanal-Kategorie oder suche zusätzlich nach einem Begriff.")
+                Text(
+                    session.workspaceChannelID == nil
+                        ? "Verbinde dein Google-Konto und wähle anschließend den YouTube-Kanal, für den du recherchieren möchtest."
+                        : "Blackstock lädt Empfehlungen automatisch. Passe bei Bedarf Kategorie, Region, Zeitraum oder Format an."
+                )
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: 560)
+
+                HStack(spacing: 10) {
+                    if session.workspaceChannelID == nil {
+                        Button("Google / YouTube verbinden") {
+                            session.showGoogleConnection = true
+                        }
+                        .buttonStyle(.borderedProminent)
+                    } else {
+                        Button("Erneut suchen") {
+                            Task { await loadOpportunities() }
+                        }
+                        .buttonStyle(.borderedProminent)
+
+                        Button("Filter zurücksetzen") {
+                            query = ""
+                            session.opportunityContentFilter = .all
+                            session.opportunityTimeWindow = .last7Days
+                            Task { await loadOpportunities() }
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 36)
@@ -272,39 +421,92 @@ struct OpportunityWorkspaceView: View {
                     ForEach(session.opportunities) { item in
                         opportunityRow(item)
                     }
+                    discoveryPageFooter
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, 4)
+                .padding(.trailing, 12)
             }
-            .frame(minWidth: 390, idealWidth: 430)
+            .scrollIndicators(.visible)
+            .accessibilityLabel("Videotreffer")
+            .id(session.opportunities.first?.id)
+            .frame(minWidth: 300, idealWidth: 380)
 
             ScrollView {
                 if let selectedOpportunity {
                     opportunityDetail(selectedOpportunity)
-                        .padding(.leading, 18)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 4)
                 } else {
                     Text("Wähle links ein Video aus.")
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, minHeight: 280)
                 }
             }
-            .frame(minWidth: 560)
+            .scrollIndicators(.visible)
+            .accessibilityLabel("Videovorschau und Details")
+            .id(selectedOpportunity?.id)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if let item = selectedOpportunity {
+                    HStack {
+                        Text("Dein nächster Clip")
+                            .font(.callout.weight(.semibold))
+                        Spacer()
+                        startClipButton(item)
+                    }
+                    .padding(12)
+                    .background(BlackstockDesign.surface)
+                    .overlay(alignment: .top) { Divider() }
+                }
+            }
+            .frame(minWidth: 340)
         }
+        .frame(maxHeight: .infinity)
+        .layoutPriority(1)
+        // The parent sizes these panes to the current window instead of a
+        // fixed 620-point canvas that pushes controls below smaller screens.
+    }
+
+    private var discoveryPageFooter: some View {
+        VStack(spacing: 10) {
+            if session.isLoadingOpportunities {
+                ProgressView("Weitere Videos werden geladen …")
+            } else if session.opportunityNextPageToken != nil {
+                Button {
+                    Task { await session.loadMoreWorkspaceOpportunities(order: sortMode) }
+                } label: {
+                    Label("Weitere Videos laden", systemImage: "arrow.down.circle")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+            } else if session.errorMessage != nil {
+                Button("Videosuche erneut versuchen") { Task { await loadOpportunities() } }
+                    .buttonStyle(.bordered)
+            } else {
+                Text("Alle verfügbaren Treffer dieser Suche geladen")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Text("\(session.opportunities.count) Videos in dieser Liste")
+                .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 16)
     }
 
     private func opportunityRow(
         _ item: YouTubeOpportunityCandidate
     ) -> some View {
-        Button {
-            selectedOpportunityID = item.id
-        } label: {
-            HStack(alignment: .top, spacing: 12) {
+        ZStack(alignment: .bottomTrailing) {
+            Button {
+                selectedOpportunityID = item.id
+            } label: {
+                HStack(alignment: .top, spacing: 12) {
                 AsyncImage(url: item.thumbnailURL) { image in
                     image.resizable().scaledToFill()
                 } placeholder: {
                     Rectangle()
                         .fill(Color.primary.opacity(0.06))
                 }
-                .frame(width: 150, height: 84)
+                .frame(width: 112, height: 63)
                 .clipShape(RoundedRectangle(cornerRadius: 9))
 
                 VStack(alignment: .leading, spacing: 5) {
@@ -346,6 +548,7 @@ struct OpportunityWorkspaceView: View {
                 }
 
                 Spacer()
+
             }
             .padding(10)
             .background(
@@ -368,48 +571,30 @@ struct OpportunityWorkspaceView: View {
                         : BlackstockDesign.subtleBorder
                 )
             )
-            .contentShape(Rectangle())
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+
         }
-        .buttonStyle(.plain)
     }
 
     private func opportunityDetail(
         _ item: YouTubeOpportunityCandidate
     ) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            if item.embeddable != false {
-                YouTubeEmbeddedPlayer(videoID: item.videoID)
-                    .accessibilityLabel(
-                        "YouTube-Vorschau: \(item.title)"
-                    )
-                    .aspectRatio(16.0 / 9.0, contentMode: .fit)
-                    .background(BlackstockDesign.mediaSurface)
-                    .clipShape(
-                        RoundedRectangle(
-                            cornerRadius: BlackstockDesign.cornerRadius,
-                            style: .continuous
-                        )
-                    )
-                    .overlay(
-                        RoundedRectangle(
-                            cornerRadius: BlackstockDesign.cornerRadius,
-                            style: .continuous
-                        )
-                        .strokeBorder(BlackstockDesign.subtleBorder)
-                    )
-            } else {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 14)
-                        .fill(Color.primary.opacity(0.04))
-                    VStack(spacing: 8) {
-                        Image(systemName: "play.slash")
-                            .font(.title)
-                        Text("YouTube-Vorschau hier nicht verfügbar.")
-                            .font(.headline)
-                    }
+            ZStack {
+                discoveryPreview(item)
+                if item.embeddable != false {
+                    YouTubeEmbeddedPlayer(videoID: item.videoID)
+                        .aspectRatio(16.0 / 9.0, contentMode: .fit)
                 }
-                .frame(minHeight: 260)
             }
+            .clipShape(RoundedRectangle(cornerRadius: BlackstockDesign.cornerRadius))
+            .overlay(
+                RoundedRectangle(cornerRadius: BlackstockDesign.cornerRadius)
+                    .strokeBorder(BlackstockDesign.subtleBorder)
+            )
 
             HStack {
                 Spacer()
@@ -425,6 +610,10 @@ struct OpportunityWorkspaceView: View {
                 .buttonStyle(.link)
             }
 
+            if item.embeddable == false {
+                Label("Der Kanal erlaubt die Vorschau nur auf YouTube.", systemImage: "arrow.up.right.square")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Text(item.title)
                 .font(.title2.bold())
                 .textSelection(.enabled)
@@ -501,46 +690,27 @@ struct OpportunityWorkspaceView: View {
                 .foregroundStyle(.secondary)
             }
 
-            HStack(spacing: 10) {
-                Button {
-                    let previousID = session.activeProject?.id
-                    session.useOpportunity(item)
-                    if session.activeProject?.id != previousID {
-                        onProjectCreated()
-                    }
-                } label: {
-                    Label(
-                        "Neues Projekt",
-                        systemImage: "plus.rectangle.on.folder"
-                    )
-                }
-                .buttonStyle(.bordered)
-
-                Button {
-                    let previousID = session.activeProject?.id
-                    session.useOpportunityAsClip(item)
-                    if session.activeProject?.id != previousID {
-                        onProjectCreated()
-                    }
-                } label: {
-                    Label(
-                        "Clip erstellen",
-                        systemImage: "scissors"
-                    )
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(BlackstockDesign.accent)
-                .disabled(
-                    !session.workspaceRightsResponsibilityAccepted
-                )
-            }
         }
+    }
+
+    private func startClipButton(_ item: YouTubeOpportunityCandidate) -> some View {
+        Button {
+            let previousID = session.activeProject?.id
+            session.useOpportunityAsClip(item)
+            if session.activeProject?.id != previousID { onProjectCreated() }
+        } label: {
+            Label("Video schneiden", systemImage: "scissors")
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(BlackstockDesign.accent)
+        .controlSize(.large)
+        .disabled(!session.workspaceRightsResponsibilityAccepted)
     }
 
     private func videoFacts(
         _ item: YouTubeOpportunityCandidate
     ) -> some View {
-        HStack(spacing: 8) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 105))], alignment: .leading, spacing: 8) {
             metricChip(
                 "Format",
                 item.contentKind.germanTitle,
@@ -650,6 +820,45 @@ struct OpportunityWorkspaceView: View {
             format: "%d:%02d",
             minutes,
             remainder
+        )
+    }
+
+    private func discoveryPreview(
+        _ item: YouTubeOpportunityCandidate
+    ) -> some View {
+        ZStack {
+            AsyncImage(url: item.thumbnailURL) { image in
+                image.resizable().scaledToFill()
+            } placeholder: {
+                Rectangle().fill(BlackstockDesign.mediaSurface)
+            }
+            .aspectRatio(16.0 / 9.0, contentMode: .fit)
+
+            LinearGradient(
+                colors: [.clear, .black.opacity(0.62)],
+                startPoint: .center,
+                endPoint: .bottom
+            )
+
+            VStack {
+                Spacer()
+                HStack {
+                    Label("Vorschau", systemImage: "play.fill")
+                        .font(.callout.bold())
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(.black.opacity(0.66), in: Capsule())
+                    Spacer()
+                }
+                .padding(14)
+            }
+        }
+        .accessibilityLabel("YouTube-Vorschau: \(item.title)")
+        .clipShape(RoundedRectangle(cornerRadius: BlackstockDesign.cornerRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: BlackstockDesign.cornerRadius)
+                .strokeBorder(BlackstockDesign.subtleBorder)
         )
     }
 
@@ -862,6 +1071,17 @@ struct ProjectLibraryView: View {
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
 
+                ProgressView(
+                    value: Double(
+                        project.stage.canonicalProgressPosition
+                    ),
+                    total: Double(
+                        BlackstockStage.canonicalProgressCount
+                    )
+                )
+                .frame(width: 150)
+                .tint(BlackstockDesign.accent)
+
                 HStack(spacing: 8) {
                     if session.activeProject?.id == project.id {
                         Button {
@@ -947,6 +1167,7 @@ struct ChannelAnalyticsWorkspaceView: View {
                 channelIdentityCard
 
                 if analyticsConnected {
+                    monetizationCard
                     periodMetrics
                     performanceDetails
                 } else {
@@ -1111,6 +1332,55 @@ struct ChannelAnalyticsWorkspaceView: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
             }
+        }
+        .padding(20)
+        .blackstockSurface(raised: true)
+    }
+
+    private var monetizationCard: some View {
+        let subscribers = max(
+            session.workspaceChannel?.subscriberCount ?? 0,
+            0
+        )
+        let subscriberTarget = 1_000
+        let missingSubscribers = max(subscriberTarget - subscribers, 0)
+
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Label("Monetarisierung", systemImage: "eurosign.circle.fill")
+                    .font(.title2.bold())
+                Spacer()
+                Text(missingSubscribers == 0 ? "Abo-Ziel erreicht" : "Noch \(missingSubscribers) Abonnenten")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+
+            ProgressView(
+                value: Double(min(subscribers, subscriberTarget)),
+                total: Double(subscriberTarget)
+            )
+            Text("\(subscribers.formatted()) von \(subscriberTarget.formatted()) Abonnenten")
+                .font(.caption.monospacedDigit())
+
+            Text("Für Werbeeinnahmen prüft YouTube zusätzlich qualifizierte öffentliche Wiedergabestunden der letzten 12 Monate oder qualifizierte Shorts-Aufrufe der letzten 90 Tage. Diese beiden YPP-Zähler und der aktive Anmeldestatus werden von der verwendeten API nicht vollständig bereitgestellt.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if let minutes = session.latestChannelAnalytics?.estimatedMinutesWatched {
+                Label(
+                    "Gemessene Wiedergabezeit im gewählten Zeitraum: \(watchHours(minutes)) · kein offizieller YPP-Zähler",
+                    systemImage: "info.circle"
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
+            Button("Vollständigen Status in YouTube Studio öffnen") {
+                guard let channelID = session.workspaceChannelID,
+                      let url = URL(string: "https://studio.youtube.com/channel/\(channelID)/monetization") else { return }
+                NSWorkspace.shared.open(url)
+            }
+            .buttonStyle(.borderedProminent)
         }
         .padding(20)
         .blackstockSurface(raised: true)

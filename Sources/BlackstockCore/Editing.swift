@@ -129,16 +129,33 @@ public enum ReframeAspectRatio: String, Codable, Sendable, CaseIterable, Hashabl
     }
 }
 
+public struct ReframeFocalSample: Codable, Sendable, Equatable {
+    public let sourceSeconds: Double
+    public let focalX: Double
+    public let focalY: Double
+    public init(sourceSeconds: Double, focalX: Double, focalY: Double) {
+        self.sourceSeconds = sourceSeconds
+        self.focalX = min(max(focalX, 0), 1)
+        self.focalY = min(max(focalY, 0), 1)
+    }
+}
+
 public struct ReframeSpec: Codable, Sendable, Equatable {
     public let aspectRatio: ReframeAspectRatio
     public let focalX: Double
     public let focalY: Double
+    public let preserveFullFrame: Bool?
+    public let focalPath: [ReframeFocalSample]?
 
     public init(
         aspectRatio: ReframeAspectRatio,
         focalX: Double = 0.5,
-        focalY: Double = 0.5
+        focalY: Double = 0.5,
+        preserveFullFrame: Bool? = nil,
+        focalPath: [ReframeFocalSample]? = nil
     ) {
+        self.preserveFullFrame = preserveFullFrame
+        self.focalPath = focalPath
         self.aspectRatio = aspectRatio
         self.focalX = min(max(focalX, 0), 1)
         self.focalY = min(max(focalY, 0), 1)
@@ -186,7 +203,7 @@ public struct ReframeCropPlan: Codable, Sendable, Equatable {
             return .init(
                 sourceWidth: sourceWidth,
                 sourceHeight: sourceHeight,
-                cropX: maxX * spec.focalX,
+                cropX: min(max(sourceWidth * spec.focalX - cropWidth / 2, 0), maxX),
                 cropY: 0,
                 cropWidth: cropWidth,
                 cropHeight: cropHeight
@@ -200,7 +217,7 @@ public struct ReframeCropPlan: Codable, Sendable, Equatable {
             sourceWidth: sourceWidth,
             sourceHeight: sourceHeight,
             cropX: 0,
-            cropY: maxY * spec.focalY,
+            cropY: min(max(sourceHeight * spec.focalY - cropHeight / 2, 0), maxY),
             cropWidth: cropWidth,
             cropHeight: cropHeight
         )
@@ -215,6 +232,7 @@ public enum EditOperationType: String, Codable, Sendable {
     case caption
     case crop
     case reframe
+    case emphasis
     case overlay
 }
 
@@ -428,6 +446,72 @@ public struct EditTimelineResolver: Sendable {
         }
 
         return EditTimelinePlan(sourceRanges: kept)
+    }
+}
+
+public struct VisualEmphasisCue: Sendable, Equatable {
+    public let startSeconds: Double
+    public let durationSeconds: Double
+    public let scale: Double
+
+    public init(
+        startSeconds: Double,
+        durationSeconds: Double,
+        scale: Double
+    ) {
+        self.startSeconds = startSeconds
+        self.durationSeconds = durationSeconds
+        self.scale = scale
+    }
+}
+
+public struct VisualEmphasisPlanner: Sendable {
+    public init() {}
+
+    public func cues(
+        operations: [EditOperation],
+        outputDurationSeconds: Double
+    ) -> [VisualEmphasisCue] {
+        guard outputDurationSeconds.isFinite, outputDurationSeconds > 0.6 else { return [] }
+
+        var accepted: [VisualEmphasisCue] = []
+        // A new framing starts a new visual treatment, including an automatic rerun.
+        let startIndex = operations.lastIndex { $0.type == .reframe }
+            .map { operations.index(after: $0) } ?? operations.startIndex
+        let candidates = operations[startIndex...]
+            .filter { $0.type == .emphasis }
+            .compactMap { operation -> VisualEmphasisCue? in
+                guard let range = operation.timeRange,
+                      range.startSeconds.isFinite,
+                      range.durationSeconds.isFinite,
+                      (operation.value ?? 1.08).isFinite else { return nil }
+                let start = min(
+                    max(range.startSeconds, 0),
+                    outputDurationSeconds
+                )
+                let end = min(
+                    max(range.endSeconds, start),
+                    outputDurationSeconds
+                )
+                guard end - start >= 0.6 else { return nil }
+                return VisualEmphasisCue(
+                    startSeconds: start,
+                    durationSeconds: end - start,
+                    scale: min(max(operation.value ?? 1.08, 1.03), 1.18)
+                )
+            }
+            .sorted { $0.startSeconds < $1.startSeconds }
+
+        for cue in candidates {
+            guard let previous = accepted.last else {
+                accepted.append(cue)
+                continue
+            }
+            let previousEnd = previous.startSeconds + previous.durationSeconds
+            guard cue.startSeconds >= previousEnd + 0.15 else { continue }
+            accepted.append(cue)
+        }
+        return accepted
     }
 }
 

@@ -15,7 +15,7 @@ public struct ClipTranscriptProjector: Sendable {
 
         let segments = source.segments
             .filter {
-                ids.contains($0.id)
+                ids.isEmpty || ids.contains($0.id)
             }
             .compactMap {
                 segment -> TranscriptSegment? in
