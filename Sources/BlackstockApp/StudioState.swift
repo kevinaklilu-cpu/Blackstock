@@ -54,6 +54,7 @@ final class StudioState: ObservableObject {
     @Published var renderingSavedClipID: UUID?
     @Published var isRenderingSavedClipBatch = false
     @Published var isExportingSavedClipBatch = false
+    @Published var publicationPreparationStatus: String?
     @Published var packagingSuggestedTitle: String?
     @Published var overlayText = ""
     @Published var overlayStart: Double = 0
@@ -98,6 +99,7 @@ final class StudioState: ObservableObject {
 
     func loadWorkspace(projectID: UUID) async {
         activeProjectID = projectID
+        publicationPreparationStatus = nil
         previousStorySceneSettings = nil
         processingStopRequested = false
         localClipCandidates = []
@@ -1137,11 +1139,10 @@ final class StudioState: ObservableObject {
         guard asset != nil else { return }
 
         let before = graph.headID
-        let spec = ReframeSpec(
-            aspectRatio: reframeAspectRatio,
-            focalX: reframeFocalX,
-            focalY: reframeFocalY, preserveFullFrame: reframePreserveFullFrame
-        )
+        let previous = graph.currentOperations.last { $0.type == .reframe }?.reframeSpec
+        let spec = (previous ?? ReframeSpec(aspectRatio: reframeAspectRatio, focalX: reframeFocalX, focalY: reframeFocalY))
+            .adjusted(aspectRatio: reframeAspectRatio, focalX: reframeFocalX,
+                      focalY: reframeFocalY, preserveFullFrame: reframePreserveFullFrame)
         let operation = EditOperation(
             type: .reframe,
             reframeSpec: spec,
@@ -2062,7 +2063,7 @@ final class StudioState: ObservableObject {
 
             let reframeOperation = graph.currentOperations.last { $0.type == .reframe }
             var clipReframe = selection.reframeSpec ?? reframeOperation?.reframeSpec
-            if selection.reframeSpec == nil, let base = clipReframe {
+            if let base = clipReframe, selection.reframeSpec == nil || (base.aspectRatio == .portrait9x16 && base.preserveFullFrame != true && (base.focalPath?.count ?? 0) < 2) {
                 clipCandidateStatusMessage = "Bildausschnitt für diesen Clip wird geprüft …"
                 if let proposal = try? await LocalVisionFocalPointSuggester().suggest(
                     url: asset.sourceURL, sourceRange: selection.sourceRange, sampleCount: min(60, max(7, Int(selection.sourceRange.durationSeconds)))
@@ -2166,6 +2167,10 @@ final class StudioState: ObservableObject {
                     .fileNoSuchFile
                 )
             }
+            await preparePublicationText(artifact: artifact, projectID: projectID, transcript: selection.transcript,
+                isShort: clipReframe?.aspectRatio == .portrait9x16)
+            guard !shouldStopProcessing, activeProjectID == projectID,
+                  savedClipSelections.indices.contains(index), savedClipSelections[index].id == selection.id else { return }
             savedClipSelections[index] =
                 savedClipSelections[index]
                 .withReframeSpec(clipReframe)
@@ -3344,6 +3349,48 @@ final class StudioState: ObservableObject {
         return inputs
     }
 
+    private func preparePublicationText(artifact: RenderArtifact, projectID: UUID, transcript: LocalTranscript?, isShort: Bool) async {
+        let key = "blackstock.publication.editor." + projectID.uuidString + "." + artifact.id.uuidString
+        guard UserDefaults.standard.data(forKey: key) == nil else { return }
+        publicationPreparationStatus = "Titel, Beschreibung und Tags für diesen Schnitt vorbereiten …"
+        var evidence = transcript
+        // Prefer the actual rendered audio, including manual changes to the cut.
+        do {
+            let recognizer = LocalOnDeviceTranscriber()
+            let language = UserDefaults.standard.string(forKey: "blackstock.workspace.contentLanguage") ?? "de"
+            let locale = language == "de" ? "de-DE" : language == "en" ? "en-US" : language
+            if recognizer.authorizationState() == .authorized, recognizer.isOnDeviceAvailable(localeIdentifier: locale) {
+                if let renderedEvidence = try? await recognizer.transcribeVideo(url: artifact.fileURL, localeIdentifier: locale) {
+                    evidence = renderedEvidence
+                }
+            }
+        }
+        guard !shouldStopProcessing, activeProjectID == projectID else { return }
+        guard let evidence, !evidence.text.isEmpty else {
+            publicationPreparationStatus = "Video fertig · kein verlässlicher Sprachinhalt für automatische Veröffentlichungstexte erkannt."
+            return
+        }
+        guard LocalRetentionAdvisor().availability(localeIdentifier: evidence.localeIdentifier) == .available else {
+            publicationPreparationStatus = "Video fertig · Apple Intelligence ist für die automatischen Texte noch nicht bereit."
+            return
+        }
+        let generated = await LocalClipEditorialAdvisor().publication(transcript: evidence, isShort: isShort)
+        guard !shouldStopProcessing, activeProjectID == projectID else { return }
+        guard let draft = generated else {
+            publicationPreparationStatus = "Video fertig · Textvorschläge konnten noch nicht erstellt werden."
+            return
+        }
+        // Recheck after generation so a concurrently edited draft is never overwritten.
+        guard UserDefaults.standard.data(forKey: key) == nil else { return }
+        let editor = PublicationEditorDraft(title: draft.title, description: draft.description,
+            tags: draft.tags.joined(separator: ", "), thumbnailURL: nil, thumbnailOptions: [],
+            alternativeTitles: draft.alternativeTitles, alternativeDescriptions: draft.alternativeDescriptions)
+        if let data = try? JSONEncoder().encode(editor) {
+            UserDefaults.standard.set(data, forKey: key)
+            publicationPreparationStatus = "Video, Titel, Beschreibung und Tags sind vorbereitet."
+        }
+    }
+
     func render(projectID: UUID) async {
         guard !shouldStopProcessing else {
             errorMessage = "Verarbeitung wurde gestoppt."
@@ -3408,6 +3455,18 @@ final class StudioState: ObservableObject {
                 try WebVTTCaptionWriter().write(transcript: outputTranscript, to: url)
                 captionURL = url
             }
+            if let reframe = graph.currentOperations.last(where: { $0.type == .reframe })?.reframeSpec,
+               reframe.aspectRatio == .portrait9x16, reframe.preserveFullFrame != true,
+               (reframe.focalPath?.count ?? 0) < 2 {
+                clipCandidateStatusMessage = "Kamerabewegung für diesen Ausschnitt vorbereiten …"
+                let range = EditTimeRange(startSeconds: trimStart, durationSeconds: trimEnd - trimStart)
+                if let focus = try? await LocalVisionFocalPointSuggester().suggest(url: asset.sourceURL, sourceRange: range,
+                    sampleCount: min(60, max(7, Int(range.durationSeconds * 2)))) {
+                    _ = graph.apply(.init(type: .reframe, reframeSpec: .init(aspectRatio: reframe.aspectRatio,
+                        focalX: focus.focalX, focalY: focus.focalY, preserveFullFrame: false, focalPath: focus.focalPath), createdAt: Date()), actor: .acceptedAIProposal)
+                }
+                guard !shouldStopProcessing, activeProjectID == projectID else { return }
+            }
             let artifact = try await LocalVideoRenderer().render(
                 projectID: projectID,
                 asset: asset,
@@ -3456,6 +3515,9 @@ final class StudioState: ObservableObject {
             await refreshAudioInspection(for: artifact.fileURL)
             guard !shouldStopProcessing else { return }
             renderArtifact = artifact
+            await preparePublicationText(artifact: artifact, projectID: projectID, transcript: outputTranscript,
+                isShort: reframeAspectRatio == .portrait9x16)
+            guard !shouldStopProcessing, activeProjectID == projectID else { return }
             player.replaceCurrentItem(
                 with: AVPlayerItem(url: artifact.fileURL)
             )

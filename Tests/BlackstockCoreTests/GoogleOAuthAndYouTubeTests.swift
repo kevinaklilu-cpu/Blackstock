@@ -3,6 +3,33 @@ import Foundation
 @testable import BlackstockCore
 
 final class GoogleOAuthAndYouTubeTests: XCTestCase {
+    func testChannelUploadsLoadStatisticsAndPreservePagination() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [OAuthURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { OAuthURLProtocol.handler = nil; session.invalidateAndCancel() }
+        OAuthURLProtocol.handler = { request in
+            let url = try XCTUnwrap(request.url)
+            let json: String
+            if url.path.hasSuffix("/playlistItems") {
+                let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+                XCTAssertEqual(query.first(where: { $0.name == "playlistId" })?.value, "uploads")
+                XCTAssertEqual(query.first(where: { $0.name == "pageToken" })?.value, "page2")
+                json = #"{"nextPageToken":"page3","items":[{"snippet":{"title":"My short"},"contentDetails":{"videoId":"one"}},{"snippet":{"title":"Deleted"},"contentDetails":{"videoId":"deleted"}}]}"#
+            } else {
+                json = #"{"items":[{"id":"one","statistics":{"viewCount":"1200","likeCount":"42","commentCount":"3"}}]}"#
+            }
+            return (HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data(json.utf8))
+        }
+        let page = try await YouTubeAuthorizedClient(accessToken: "test").uploadedVideos(playlistID: "uploads", pageToken: "page2", session: session)
+        XCTAssertEqual(page.nextPageToken, "page3")
+        XCTAssertEqual(page.videos.count, 1)
+        XCTAssertEqual(page.videos.first?.title, "My short")
+        XCTAssertEqual(page.videos.first?.views, 1200)
+        XCTAssertEqual(page.videos.first?.likes, 42)
+        XCTAssertEqual(page.videos.first?.comments, 3)
+    }
+
     func testDiscoveryRejectsOldAndUndatedRowsEvenIfProviderReturnsThem() async throws {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [OAuthURLProtocol.self]

@@ -1165,6 +1165,7 @@ struct ChannelAnalyticsWorkspaceView: View {
             VStack(alignment: .leading, spacing: 22) {
                 header
                 channelIdentityCard
+                uploadedVideosCard
 
                 if analyticsConnected {
                     monetizationCard
@@ -1192,6 +1193,7 @@ struct ChannelAnalyticsWorkspaceView: View {
         .background(BlackstockDesign.canvas)
         .task {
             await session.refreshWorkspaceChannelIdentity()
+            await session.refreshChannelVideos()
             if analyticsConnected {
                 await session.collectChannelAnalytics(
                     days: days
@@ -1206,6 +1208,44 @@ struct ChannelAnalyticsWorkspaceView: View {
                 )
             }
         }
+    }
+
+    private var uploadedVideosCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Deine Videos").font(.title2.bold())
+                Spacer()
+                Button("Zahlen aktualisieren") {
+                    Task { await session.refreshChannelVideos() }
+                }.disabled(session.isLoadingChannelVideos)
+            }
+            if let date = session.channelVideosUpdatedAt {
+                Text("Abgerufen \(date.formatted(date: .abbreviated, time: .shortened)) · Aktueller API-Stand, keine Echtzeitmessung")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if session.isLoadingChannelVideos { ProgressView("Videostatistiken laden …") }
+            if let error = session.channelVideosError {
+                Text(error).font(.caption).foregroundStyle(.red)
+            }
+            if session.channelVideos.isEmpty && !session.isLoadingChannelVideos && session.channelVideosError == nil {
+                Text("Noch keine Videos geladen.").foregroundStyle(.secondary)
+            }
+            ForEach(session.channelVideos) { video in
+                HStack {
+                    Text(video.title).lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
+                    Text("\(video.views.map { String($0) } ?? "–") Aufrufe")
+                    Text("\(video.likes.map { String($0) } ?? "–") Likes")
+                    Text("\(video.comments.map { String($0) } ?? "–") Kommentare")
+                }.font(.callout).padding(.vertical, 6)
+                Divider()
+            }
+            if session.channelVideosNextPage != nil {
+                Button("Weitere Videos laden") { Task { await session.refreshChannelVideos(loadMore: true) } }
+                    .disabled(session.isLoadingChannelVideos)
+            }
+            Text("Wiedergabezeit und weitere Analytics-Werte werden von YouTube verzögert bereitgestellt.")
+                .font(.caption).foregroundStyle(.secondary)
+        }.padding(18).background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 14))
     }
 
     private var analyticsConnected: Bool {

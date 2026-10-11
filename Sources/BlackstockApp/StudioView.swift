@@ -1382,6 +1382,13 @@ struct StudioView: View {
                     .foregroundStyle(.secondary)
             }
 
+            if let message = state.publicationPreparationStatus {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel(message)
+            }
+
             ForEach(
                 Array(
                     state.localClipCandidates

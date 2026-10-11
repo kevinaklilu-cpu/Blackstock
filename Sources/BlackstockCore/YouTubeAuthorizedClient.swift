@@ -233,6 +233,22 @@ public struct YouTubeAuthorizedClient: Sendable {
         self.accessToken = accessToken
     }
 
+    public func uploadedVideos(playlistID: String, pageToken: String? = nil, session: URLSession = .shared) async throws -> ChannelVideoPage {
+        var components = URLComponents(string: "https://www.googleapis.com/youtube/v3/playlistItems")!
+        components.queryItems = [.init(name: "part", value: "snippet,contentDetails"), .init(name: "playlistId", value: playlistID), .init(name: "maxResults", value: "50")]
+        if let pageToken { components.queryItems?.append(.init(name: "pageToken", value: pageToken)) }
+        let response = try JSONDecoder().decode(ChannelUploadResponse.self, from: await perform(components.url!, session: session))
+        let details = try await loadVideoDetails(ids: response.items.map { $0.contentDetails.videoId }, session: session)
+        return ChannelVideoPage(videos: response.items.compactMap { item in
+            let id = item.contentDetails.videoId
+            guard let video = details[id] else { return nil }
+            return ChannelVideoSummary(id: id, title: item.snippet.title,
+                views: video.statistics.flatMap { Int($0.viewCount ?? "") },
+                likes: video.statistics.flatMap { Int($0.likeCount ?? "") },
+                comments: video.statistics.flatMap { Int($0.commentCount ?? "") })
+        }, nextPageToken: response.nextPageToken)
+    }
+
     public func myChannels(session: URLSession = .shared) async throws -> [YouTubeChannelIdentity] {
         var c = URLComponents(string: "https://www.googleapis.com/youtube/v3/channels")!
         c.queryItems = [
@@ -825,4 +841,26 @@ public struct YouTubeOpportunityPage: Sendable {
         self.candidates = candidates
         self.nextPageToken = nextPageToken
     }
+}
+
+public struct ChannelVideoSummary: Identifiable, Sendable, Equatable {
+    public let id: String
+    public let title: String
+    public let views: Int?
+    public let likes: Int?
+    public let comments: Int?
+}
+public struct ChannelVideoPage: Sendable {
+    public let videos: [ChannelVideoSummary]
+    public let nextPageToken: String?
+}
+private struct ChannelUploadResponse: Decodable {
+    let items: [Item]
+    let nextPageToken: String?
+    struct Item: Decodable {
+        let snippet: Snippet
+        let contentDetails: Details
+    }
+    struct Snippet: Decodable { let title: String }
+    struct Details: Decodable { let videoId: String }
 }

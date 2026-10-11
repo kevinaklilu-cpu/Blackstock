@@ -13,6 +13,18 @@ final class ClipOutputProfileTests: XCTestCase {
         XCTAssertNil(TrackedReframeComposer.focalSample(at: 1, path: []))
     }
 
+    func testAdjustingFramePreservesTrackingAndClampsManualOffset() throws {
+        let original = ReframeSpec(aspectRatio: .portrait9x16, focalX: 0.5, focalY: 0.5,
+            focalPath: [.init(sourceSeconds: 10, focalX: 0.4, focalY: 0.5),
+                        .init(sourceSeconds: 12, focalX: 0.9, focalY: 0.5)])
+        let adjusted = original.adjusted(aspectRatio: .portrait9x16, focalX: 0.7, focalY: 0.5, preserveFullFrame: false)
+        XCTAssertEqual(adjusted.focalPath?.count, 2)
+        XCTAssertEqual(try XCTUnwrap(adjusted.focalPath?.first?.focalX), 0.6, accuracy: 0.001)
+        XCTAssertEqual(adjusted.focalPath?.last?.focalX, 1)
+        XCTAssertEqual(adjusted.focalPath?.last?.sourceSeconds, 12)
+        XCTAssertEqual(try JSONDecoder().decode(ReframeSpec.self, from: JSONEncoder().encode(adjusted)), adjusted)
+    }
+
     func testSustainedVisualActivityOutranksIsolatedIntroFlash() {
         let intro = (0..<12).map { VisualMomentSample(time: Double($0), activity: $0 == 4 ? 0.9 : 0.01) }
         let action = (50..<62).map { VisualMomentSample(time: Double($0), activity: 0.4) }

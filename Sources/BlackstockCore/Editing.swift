@@ -141,6 +141,12 @@ public struct ReframeFocalSample: Codable, Sendable, Equatable {
 }
 
 public struct ReframeSpec: Codable, Sendable, Equatable {
+    public func adjusted(aspectRatio: ReframeAspectRatio, focalX: Double, focalY: Double, preserveFullFrame: Bool) -> ReframeSpec {
+        let dx = focalX - self.focalX, dy = focalY - self.focalY
+        return .init(aspectRatio: aspectRatio, focalX: focalX, focalY: focalY, preserveFullFrame: preserveFullFrame,
+                     focalPath: focalPath?.map { .init(sourceSeconds: $0.sourceSeconds, focalX: $0.focalX + dx, focalY: $0.focalY + dy) })
+    }
+
     public let aspectRatio: ReframeAspectRatio
     public let focalX: Double
     public let focalY: Double

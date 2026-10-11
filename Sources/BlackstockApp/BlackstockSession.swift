@@ -734,6 +734,11 @@ final class BlackstockSession: ObservableObject {
         lastPublishingResult = nil
         latestGrowthLearning = nil
         latestChannelAnalytics = nil
+        channelVideos = []
+        channelVideosUpdatedAt = nil
+        channelVideosNextPage = nil
+        channelVideosOwner = nil
+        channelVideosError = nil
         latestCommentPage = nil
         latestCommentsVideoID = nil
         isLoadingComments = false
@@ -1683,10 +1688,50 @@ final class BlackstockSession: ObservableObject {
         }
     }
 
+    @Published private(set) var channelVideos: [ChannelVideoSummary] = []
+    @Published private(set) var channelVideosUpdatedAt: Date?
+    @Published private(set) var channelVideosNextPage: String?
+    @Published private(set) var isLoadingChannelVideos = false
+    @Published private(set) var channelVideosError: String?
+    private var channelVideosOwner: String?
+
+    func refreshChannelVideos(loadMore: Bool = false) async {
+        guard !isLoadingChannelVideos, let channelID = workspaceChannelID else { return }
+        isLoadingChannelVideos = true
+        defer { isLoadingChannelVideos = false }
+        if channelVideosOwner != channelID {
+            channelVideos = []
+            channelVideosNextPage = nil
+            channelVideosUpdatedAt = nil
+            channelVideosOwner = channelID
+        }
+        if loadMore && channelVideosNextPage == nil { return }
+        channelVideosError = nil
+        do {
+            let token = try await validatedReadOnlyAccessToken(targetChannelID: channelID)
+            let client = YouTubeAuthorizedClient(accessToken: token)
+            let identities = try await client.myChannels()
+            guard workspaceChannelID == channelID,
+                  let identity = identities.first(where: { $0.id == channelID }),
+                  let playlist = identity.uploadsPlaylistID else { return }
+            let page = try await client.uploadedVideos(playlistID: playlist, pageToken: loadMore ? channelVideosNextPage : nil)
+            guard workspaceChannelID == channelID else { return }
+            channels = identities
+            var seen = Set<String>()
+            channelVideos = ((loadMore ? channelVideos : []) + page.videos).filter { seen.insert($0.id).inserted }
+            channelVideosNextPage = page.nextPageToken
+            channelVideosUpdatedAt = Date()
+        } catch {
+            guard workspaceChannelID == channelID else { return }
+            channelVideosError = "Videostatistiken konnten nicht aktualisiert werden: \(error.localizedDescription)"
+        }
+    }
+
     func collectChannelAnalytics(
         days: Int = 28,
         now: Date = Date()
     ) async {
+        guard !isCollectingAnalytics else { return }
         guard let channelID = workspaceChannelID else {
             errorMessage =
                 "Kein YouTube-Kanal für die Analyse ausgewählt."
@@ -2782,7 +2827,7 @@ final class BlackstockSession: ObservableObject {
                         // Keep successful pages and retry the failed cursor on the next action.
                         break
                     }
-                    if !accumulator.needsMore() { break }
+                    if !accumulator.needsMore(target: 100) { break }
                 }
                 pageParameters = OpportunitySearchParameters(
                     query: searchQuery, category: categoryID,
