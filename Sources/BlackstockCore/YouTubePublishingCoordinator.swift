@@ -5,15 +5,18 @@ public struct YouTubePublishingResult: Codable, Sendable, Equatable {
     public let videoID: String
     public let publishedRecord: PublishedVideoRecord
     public let uploadReused: Bool
+    public let packagingWarnings: [String]?
 
     public init(
         videoID: String,
         publishedRecord: PublishedVideoRecord,
-        uploadReused: Bool
+        uploadReused: Bool,
+        packagingWarnings: [String]? = nil
     ) {
         self.videoID = videoID
         self.publishedRecord = publishedRecord
         self.uploadReused = uploadReused
+        self.packagingWarnings = packagingWarnings
     }
 }
 
@@ -61,7 +64,9 @@ public struct YouTubePublishingCoordinator: Sendable {
             now: now
         )
 
+        var packagingWarnings: [String] = []
         if let thumbnail = review.package.thumbnail {
+            do {
             try await performJournaledPackagingAction(
                 actionType: .youtubeThumbnailSet,
                 targetChannelID: review.project.targetChannelID,
@@ -77,9 +82,13 @@ public struct YouTubePublishingCoordinator: Sendable {
                     session: session
                 )
             }
+            } catch let error as YouTubePackagingError {
+                packagingWarnings.append("Video hochgeladen; Vorschaubild noch offen: " + error.localizedDescription)
+            }
         }
 
         for caption in review.package.captions {
+            do {
             try await performJournaledPackagingAction(
                 actionType: .youtubeCaptionUpload,
                 targetChannelID: review.project.targetChannelID,
@@ -98,6 +107,9 @@ public struct YouTubePublishingCoordinator: Sendable {
                     session: session
                 )
             }
+            } catch let error as YouTubePackagingError {
+                packagingWarnings.append("Video hochgeladen; Untertitel noch offen: " + error.localizedDescription)
+            }
         }
 
         let record = PublishedVideoRecord(
@@ -111,7 +123,8 @@ public struct YouTubePublishingCoordinator: Sendable {
         return YouTubePublishingResult(
             videoID: upload.videoID,
             publishedRecord: record,
-            uploadReused: upload.reusedCommittedAction
+            uploadReused: upload.reusedCommittedAction,
+            packagingWarnings: packagingWarnings.isEmpty ? nil : packagingWarnings
         )
     }
 

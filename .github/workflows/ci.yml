@@ -17,6 +17,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  render-regression:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Pinned macOS toolchain guard
+        run: |
+          test -d "$DEVELOPER_DIR"
+          test "$(xcodebuild -version | head -n 1)" = "Xcode 26.6"
+      - name: Build render regression executable
+        run: swift build -c release --product BlackstockE2ESmoke
+      - name: Verify rendered scene pixels and audio before packaging
+        env:
+          BLACKSTOCK_E2E_DIAGNOSTICS_DIR: ${{ runner.temp }}/render-diagnostics
+        run: .build/release/BlackstockE2ESmoke --output "$RUNNER_TEMP/render-e2e.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: render-regression-diagnostics
+          path: ${{ runner.temp }}/render-diagnostics
+          retention-days: 3
   test:
     runs-on: macos-26
     steps:
@@ -33,7 +55,10 @@ jobs:
         run: |
           set -euo pipefail
           grep -q '23c51e7d90ca653c92b04b19a7b65615fdf420f581caa16024725c4935bde827' docs/CANONICAL_SOURCE.md
-          grep -q 'NOCH NICHT MARKTREIF' README.md
+          grep -q 'LOKALES 1.0.0-PAKET VALIDIERT' README.md
+          grep -q 'ÖFFENTLICHE MACOS-FREIGABE AUSSTEHEND' README.md
+      - name: Blackstock 1.0 product audit
+        run: python3 Build/audit_v1_product.py
       - name: Accessibility semantic audit
         run: python3 Build/audit_accessibility.py
       - name: GitHub Actions supply-chain audit
@@ -64,6 +89,10 @@ jobs:
         run: python3 Build/audit_end_to_end_flow.py
       - name: Capture foundation audit
         run: python3 Build/audit_capture.py
+      - name: Keychain and ingest interaction regression
+        run: bash Build/test_local_interaction.sh
+      - name: Download recovery regression
+        run: bash Build/test_download_recovery.sh
       - name: Capture hardware evidence validator audit
         run: |
           set -euo pipefail
@@ -1375,5 +1404,4 @@ jobs:
             ${{ runner.temp }}/blackstock-intel-clean-machine-e2e.log
           retention-days: 7
           if-no-files-found: error
-
 

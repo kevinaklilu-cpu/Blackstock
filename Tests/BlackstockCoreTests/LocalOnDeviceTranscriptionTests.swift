@@ -1,8 +1,36 @@
 import XCTest
+import Speech
 @testable import BlackstockCore
 
 #if os(macOS)
 final class LocalOnDeviceTranscriptionTests: XCTestCase {
+    func testAuthorizationCallbackMayArriveOnBackgroundQueue() async {
+        let status = await LocalOnDeviceTranscriber.authorizationStatus { callback in
+            DispatchQueue.global(qos: .userInitiated).async {
+                callback(.authorized)
+            }
+        }
+
+        XCTAssertEqual(status, .authorized)
+    }
+
+    func testDisabledDictationErrorProvidesGermanRecoveryStep() {
+        let error = NSError(
+            domain: "Speech",
+            code: 1,
+            userInfo: [
+                NSLocalizedDescriptionKey: "Siri and Dictation are disabled"
+            ]
+        )
+
+        let message = LocalOnDeviceTranscriber
+            .recognitionFailureMessage(error)
+
+        XCTAssertTrue(message.contains("Systemeinstellungen"))
+        XCTAssertTrue(message.contains("Diktierfunktion"))
+        XCTAssertFalse(message.contains("disabled"))
+    }
+
     func testWebVTTWriterUsesTranscriptSegmentTiming() {
         let transcript = LocalTranscript(
             localeIdentifier: "de-DE",

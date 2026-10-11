@@ -76,14 +76,14 @@ trap 'rm -rf "$WORK"' EXIT
 ARM64_BUILD="$WORK/build-arm64"
 X86_64_BUILD="$WORK/build-x86_64"
 
-swift build -c release --arch arm64 --scratch-path "$ARM64_BUILD"
-swift build -c release --arch x86_64 --scratch-path "$X86_64_BUILD"
+swift build --disable-sandbox -c release --arch arm64 --scratch-path "$ARM64_BUILD"
+swift build --disable-sandbox -c release --arch x86_64 --scratch-path "$X86_64_BUILD"
 
 ARM64_BIN_DIR="$(
-  swift build -c release --arch arm64     --scratch-path "$ARM64_BUILD"     --show-bin-path
+  swift build --disable-sandbox -c release --arch arm64     --scratch-path "$ARM64_BUILD"     --show-bin-path
 )"
 X86_64_BIN_DIR="$(
-  swift build -c release --arch x86_64     --scratch-path "$X86_64_BUILD"     --show-bin-path
+  swift build --disable-sandbox -c release --arch x86_64     --scratch-path "$X86_64_BUILD"     --show-bin-path
 )"
 
 require_universal_binary() {
@@ -98,8 +98,14 @@ require_universal_binary() {
   done
 }
 
+python3 Build/prepare_download_tools.py
 APP="$WORK/Blackstock.app"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Helpers"
+cp "$ROOT/.build/download-tools/yt-dlp" "$APP/Contents/Helpers/yt-dlp"
+cp "$ROOT/.build/download-tools/deno" "$APP/Contents/Helpers/deno"
+cp "$ROOT/Build/DownloadTools-NOTICE.md" "$APP/Contents/Resources/DownloadTools-NOTICE.md"
+require_universal_binary "$APP/Contents/Helpers/yt-dlp"
+require_universal_binary "$APP/Contents/Helpers/deno"
 swift Build/generate_app_icon.swift "$APP/Contents/Resources/Blackstock.icns"
 test -s "$APP/Contents/Resources/Blackstock.icns"
 lipo -create   "$ARM64_BIN_DIR/Blackstock"   "$X86_64_BIN_DIR/Blackstock"   -output "$APP/Contents/MacOS/Blackstock"
@@ -175,6 +181,17 @@ EOF
   PRODUCTBUILD_KEYCHAIN_ARGS=(--keychain "$SIGNING_KEYCHAIN")
 fi
 
+for helper in yt-dlp deno; do
+  if [[ -n "$APP_SIGN_IDENTITY" ]]; then
+    codesign --force --options runtime --timestamp "${CODESIGN_KEYCHAIN_ARGS[@]}" \
+      --entitlements "$ROOT/Build/DownloadTools.entitlements" \
+      --sign "$APP_SIGN_IDENTITY" "$APP/Contents/Helpers/$helper"
+  else
+    codesign --force --options runtime --entitlements "$ROOT/Build/DownloadTools.entitlements" \
+      --sign - "$APP/Contents/Helpers/$helper"
+  fi
+done
+
 if [[ -n "$APP_SIGN_IDENTITY" ]]; then
   if [[ "$INCLUDE_E2E_SMOKE" == "1" ]]; then
     codesign --force --options runtime --timestamp       "${CODESIGN_KEYCHAIN_ARGS[@]}"       --sign "$APP_SIGN_IDENTITY"       "$APP/Contents/Helpers/BlackstockE2ESmoke"
@@ -187,7 +204,8 @@ else
   if [[ "$INCLUDE_E2E_SMOKE" == "1" ]]; then
     codesign --force --sign - "$APP/Contents/Helpers/BlackstockE2ESmoke"
   fi
-  codesign --force --deep --options runtime \
+  codesign --force --options runtime \
+    --requirements "$ROOT/Build/Blackstock.requirements" \
     --entitlements "$ROOT/Build/Blackstock.entitlements" \
     --sign - "$APP"
 fi
@@ -202,7 +220,19 @@ mkdir -p "$PAYLOAD/Applications"
 cp -R "$APP" "$PAYLOAD/Applications/Blackstock.app"
 
 COMPONENT="$WORK/Blackstock-component.pkg"
-pkgbuild --root "$PAYLOAD" --install-location / --identifier "$BUNDLE_ID" --version "$VERSION" "$COMPONENT"
+# Never let Installer redirect the app to a preview, Trash, or old user copy.
+pkgbuild --root "$PAYLOAD" --component-plist "$ROOT/Build/Blackstock.component.plist" \
+  --install-location / --identifier "$BUNDLE_ID" --version "$VERSION" "$COMPONENT"
+pkgutil --expand "$COMPONENT" "$WORK/component-check"
+python3 - "$WORK/component-check/PackageInfo" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+info = ET.parse(sys.argv[1]).getroot()
+assert info.get("install-location") == "/", "Unexpected install root"
+assert not info.findall("./relocate/bundle"), "App relocation must be disabled"
+assert any(b.get("path", "").removeprefix("./") == "Applications/Blackstock.app"
+           for b in info.findall("./bundle")), "Missing Applications destination"
+PY
 
 if [[ -n "$INSTALLER_SIGN_IDENTITY" ]]; then
   productbuild     "${PRODUCTBUILD_KEYCHAIN_ARGS[@]}"     --sign "$INSTALLER_SIGN_IDENTITY"     --package "$COMPONENT"     "$OUT/Blackstock.pkg"

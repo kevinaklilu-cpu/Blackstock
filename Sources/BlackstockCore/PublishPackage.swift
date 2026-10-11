@@ -143,15 +143,7 @@ public struct PublishReviewContext: Sendable, Equatable {
         guard let qualityReview else {
             throw PublishPackageValidationError.qualityReviewMissing
         }
-        let requiredQualityAreas: Set<CreatorQualityArea> = [
-            .packaging,
-            .retentionStructure,
-            .audio,
-            .captions,
-            .visualComposition,
-            .rightsAndPolicy,
-            .renderIntegrity
-        ]
+        let requiredQualityAreas = AutomaticPublishReview.requiredAreas
         guard qualityReview.projectID == project.id,
               qualityReview.passesReleaseGate(requiredAreas: requiredQualityAreas) else {
             throw PublishPackageValidationError.qualityReviewFailed

@@ -88,10 +88,16 @@ public struct MediaSourceResolver: Sendable {
 
     public func resolve(
         _ source: MediaSourceReference,
-        approvedProvider: RemoteIngestProviderAuthorization?
+        approvedProvider: RemoteIngestProviderAuthorization?,
+        localYouTubeDownloaderAvailable: Bool = false
     ) -> ResolvedMediaSource {
         switch source.provider {
         case .youtube:
+            if localYouTubeDownloaderAvailable {
+                return .init(source: source, status: .ingestReady,
+                    ingestProviderID: "local-youtube-download",
+                    explanation: "Das Video kann auf diesen Mac geladen und danach geschnitten werden.")
+            }
             if let approvedProvider, approvedProvider.mayIngestYouTubeLinks {
                 return .init(
                     source: source,

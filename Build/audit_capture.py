@@ -301,7 +301,8 @@ else:
             break
 
 adhoc_contract = "\n".join([
-    "  codesign --force --deep --options runtime \\",
+    "  codesign --force --options runtime \\",
+    '    --requirements "$ROOT/Build/Blackstock.requirements" \\',
     '    --entitlements "$ROOT/Build/Blackstock.entitlements" \\',
     '    --sign - "$APP"',
 ])
@@ -310,6 +311,20 @@ if adhoc_contract not in package_script:
         "Build/package.sh: ad-hoc CI signing path must include Hardened "
         "Runtime and capture entitlements"
     )
+
+# Helpers need their own JIT/library entitlements. Recursively re-signing the
+# bundle would replace these with the application's capture entitlements.
+for marker in [
+    'for helper in yt-dlp deno; do',
+    '--entitlements "$ROOT/Build/DownloadTools.entitlements"',
+    '--sign "$APP_SIGN_IDENTITY" "$APP/Contents/Helpers/$helper"',
+    '--sign - "$APP/Contents/Helpers/$helper"',
+    'codesign --verify --deep --strict "$APP"',
+]:
+    if marker not in package_script:
+        errors.append("Build/package.sh: missing explicit helper signing or deep verification: " + marker)
+if "codesign --force --deep" in package_script:
+    errors.append("Build/package.sh: recursive signing must not overwrite helper entitlements")
 
 if errors:
     print("Capture audit failed:", file=sys.stderr)

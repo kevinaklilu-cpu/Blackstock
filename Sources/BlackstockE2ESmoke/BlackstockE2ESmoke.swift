@@ -4,6 +4,7 @@ import BlackstockCore
 import CoreMedia
 import CoreVideo
 import Foundation
+import ImageIO
 
 @main
 struct BlackstockE2ESmokeMain {
@@ -86,6 +87,39 @@ private struct CleanMachineE2EResult:
 
 @MainActor
 private struct CleanMachineScenario {
+    private func traceFrames(_ url: URL, stage: String) async throws {
+        let probe = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+        probe.appliesPreferredTrackTransform = true
+        probe.requestedTimeToleranceBefore = .zero
+        probe.requestedTimeToleranceAfter = .zero
+        for time in [0.9, 1.0, 1.1, 1.55, 2.0] {
+            let result = try await probe.image(at: CMTime(seconds: time, preferredTimescale: 600))
+            print("E2E_FRAME", stage, time, result.actualTime.seconds, try sampledPixel(result.image))
+            if let directory = ProcessInfo.processInfo.environment["BLACKSTOCK_E2E_DIAGNOSTICS_DIR"] {
+                let dir = URL(fileURLWithPath: directory)
+                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                let output = dir.appendingPathComponent("\(stage)-\(time).png")
+                if let destination = CGImageDestinationCreateWithURL(output as CFURL, "public.png" as CFString, 1, nil) {
+                    CGImageDestinationAddImage(destination, result.image, nil)
+                    CGImageDestinationFinalize(destination)
+                }
+            }
+        }
+    }
+
+    private func sampledPixel(_ frame: CGImage) throws -> [UInt8] {
+        var pixel = [UInt8](repeating: 0, count: 4)
+        try pixel.withUnsafeMutableBytes { bytes in
+            guard let context = CGContext(data: bytes.baseAddress, width: 1, height: 1,
+                bitsPerComponent: 8, bytesPerRow: 4, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
+                throw E2EError(message: "pixel probe allocation failed")
+            }
+            context.draw(frame, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+        }
+        return pixel
+    }
+
     func run() async throws
         -> CleanMachineE2EResult {
         let root = FileManager.default
@@ -99,9 +133,11 @@ private struct CleanMachineScenario {
             withIntermediateDirectories: true
         )
         defer {
-            try? FileManager.default.removeItem(
-                at: root
-            )
+            if ProcessInfo.processInfo.environment["BLACKSTOCK_E2E_KEEP_FILES"] == "1" {
+                print("E2E_FIXTURES", root.path)
+            } else {
+                try? FileManager.default.removeItem(at: root)
+            }
             E2EMockURLProtocol.handler = nil
         }
 
@@ -120,6 +156,29 @@ private struct CleanMachineScenario {
             "synthetic source missing"
         )
 
+        // Exercise the exact download-to-editor boundary with a combined input.
+        // No downloaded stream may bypass this normalization and timing check.
+        let downloadDirectory = root.appendingPathComponent("download", isDirectory: true)
+        try FileManager.default.createDirectory(at: downloadDirectory, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: sourceURL, to: downloadDirectory.appendingPathComponent("source.mp4"))
+        try Data("{\"duration\":4}".utf8).write(to: downloadDirectory.appendingPathComponent("source.info.json"))
+        let normalizedURL = downloadDirectory.appendingPathComponent("normalized.mp4")
+        try await YouTubeMediaAssembler.assemble(directory: downloadDirectory, output: normalizedURL)
+        let normalizedAsset = AVURLAsset(url: normalizedURL)
+        let normalizedVideo = try await normalizedAsset.loadTracks(withMediaType: .video).first!
+        let normalizedAudio = try await normalizedAsset.loadTracks(withMediaType: .audio).first!
+        let videoRange = try await normalizedVideo.load(.timeRange)
+        let audioRange = try await normalizedAudio.load(.timeRange)
+        try require(abs(videoRange.start.seconds - audioRange.start.seconds) < 0.001,
+                    "download normalization introduced a start offset")
+        try require(abs(videoRange.duration.seconds - audioRange.duration.seconds) < 0.025,
+                    "download normalization introduced duration drift")
+        try require(abs(videoRange.duration.seconds - 4) < 0.05,
+                    "download normalization changed playback duration")
+        // Render the normalized file in the rest of the end-to-end test.
+        try FileManager.default.removeItem(at: sourceURL)
+        try FileManager.default.copyItem(at: normalizedURL, to: sourceURL)
+
         let supplementalVideoURL = root
             .appendingPathComponent(
                 "supplemental.mov"
@@ -127,7 +186,7 @@ private struct CleanMachineScenario {
         try await SyntheticMediaFactory()
             .createSourceMovie(
                 at: supplementalVideoURL,
-                durationSeconds: 2.5
+                durationSeconds: 2.5, redFixture: true
             )
         try require(
             FileManager.default.fileExists(
@@ -135,6 +194,19 @@ private struct CleanMachineScenario {
             ),
             "synthetic supplemental video missing"
         )
+
+        let fixtureProbe = AVAssetImageGenerator(asset: AVURLAsset(url: supplementalVideoURL))
+        fixtureProbe.requestedTimeToleranceBefore = .zero
+        fixtureProbe.requestedTimeToleranceAfter = .zero
+        let fixtureFrame = try await fixtureProbe.image(at: CMTime(seconds: 0.9, preferredTimescale: 600)).image
+        let fixturePixel = try sampledPixel(fixtureFrame)
+        try require(Int(fixturePixel[0]) > Int(fixturePixel[2]) * 2,
+                    "supplemental source fixture is not red before rendering: \(fixturePixel)")
+
+        let visualSelection = try await VisualSceneSelector().select(url: supplementalVideoURL,
+            sourceDuration: 2.5, requestedDuration: 0.25)
+        try require((visualSelection?.startSeconds ?? 0) >= 0.5,
+                    "visual scene selection failed to avoid black opening frames")
 
         let sourceAsset = AVURLAsset(
             url: sourceURL
@@ -410,6 +482,20 @@ private struct CleanMachineScenario {
             "text overlay cues missing"
         )
 
+        // Separate composition from Core Animation caption burn-in so a
+        // platform-specific image regression identifies the failing stage.
+        var plainGraph = graph
+        _ = plainGraph.undo() // Last operation is the text overlay.
+        let plainURL = root.appendingPathComponent("without-captions.mp4")
+        _ = try await LocalVideoRenderer().render(projectID: projectID, asset: asset, graph: plainGraph,
+            outputURL: plainURL, preset: .hd1080, supplementalVideo: [
+                .init(captureID: UUID(), fileURL: supplementalVideoURL, timelineStartSeconds: 0.8,
+                      sourceStartSeconds: 0.7, durationSeconds: 0.5, usesOriginalAudio: true),
+                .init(captureID: UUID(), fileURL: supplementalVideoURL, timelineStartSeconds: 1.8,
+                      sourceStartSeconds: 1.3, durationSeconds: 0.5, usesOriginalAudio: true)
+            ])
+        try await traceFrames(plainURL, stage: "composition")
+
         let renderURL = root
             .appendingPathComponent("final.mp4")
         let artifact = try await LocalVideoRenderer()
@@ -434,8 +520,15 @@ private struct CleanMachineScenario {
                         captureID: UUID(),
                         fileURL: supplementalVideoURL,
                         timelineStartSeconds: 0.8,
-                        sourceStartSeconds: 0.2,
-                        durationSeconds: 1.4
+                        sourceStartSeconds: 0.7,
+                        durationSeconds: 0.5, usesOriginalAudio: true
+                    ),
+                    SupplementalVideoInsertInput(
+                        captureID: UUID(),
+                        fileURL: supplementalVideoURL,
+                        timelineStartSeconds: 1.8,
+                        sourceStartSeconds: 1.3,
+                        durationSeconds: 0.5, usesOriginalAudio: true
                     )
                 ]
             )
@@ -443,6 +536,48 @@ private struct CleanMachineScenario {
             artifact.hasCurrentTechnicalValidation,
             "render validation did not pass"
         )
+
+        try await traceFrames(renderURL, stage: "captions")
+
+        // Verify pixels of the final movie, not merely that the source exists.
+        let probe = AVAssetImageGenerator(asset: AVURLAsset(url: renderURL))
+        probe.appliesPreferredTrackTransform = true
+        probe.requestedTimeToleranceBefore = .zero
+        probe.requestedTimeToleranceAfter = .zero
+        for (time, expectInsert) in [(1.0, true), (1.55, false), (2.0, true)] {
+            let frame = try await probe.image(at: CMTime(seconds: time, preferredTimescale: 600)).image
+            let pixel = try sampledPixel(frame)
+            let isInsert = Int(pixel[0]) > Int(pixel[2]) * 2
+            try require(isInsert == expectInsert,
+                        "picture sequence disagrees with planned source at \(time)s: \(pixel)")
+        }
+
+        // Decode short windows: audible source must switch with each picture.
+        for (time, expectedFrequency) in [(1.0, 499.0), (1.55, 997.0), (2.0, 499.0)] {
+            let audioAsset = AVURLAsset(url: renderURL)
+            let track = try unwrap(try await audioAsset.loadTracks(withMediaType: .audio).first, "missing audio")
+            let reader = try AVAssetReader(asset: audioAsset)
+            let samples = AVAssetReaderTrackOutput(track: track, outputSettings: [
+                AVFormatIDKey: kAudioFormatLinearPCM, AVLinearPCMIsFloatKey: true,
+                AVLinearPCMBitDepthKey: 32, AVNumberOfChannelsKey: 1,
+                AVSampleRateKey: 48_000, AVLinearPCMIsNonInterleaved: false
+            ])
+            reader.add(samples)
+            reader.timeRange = CMTimeRange(start: CMTime(seconds: time, preferredTimescale: 600),
+                duration: CMTime(seconds: 0.12, preferredTimescale: 600))
+            try require(reader.startReading(), "audio source verification did not start")
+            var values: [Float] = []
+            while let sample = samples.copyNextSampleBuffer(), let block = CMSampleBufferGetDataBuffer(sample) {
+                let length = CMBlockBufferGetDataLength(block)
+                var data = Data(count: length)
+                _ = data.withUnsafeMutableBytes { CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: length, destination: $0.baseAddress!) }
+                values += data.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
+            }
+            let crossings = zip(values, values.dropFirst()).filter { $0 < 0 && $1 >= 0 }.count
+            let frequency = Double(crossings) * 48_000 / Double(max(values.count, 1))
+            try require(abs(frequency - expectedFrequency) < 45,
+                "audio does not follow selected scene at \(time)s: \(frequency) Hz")
+        }
 
         let technical = try await
             LocalAudioTechnicalInspector()
@@ -904,26 +1039,30 @@ private final class E2EMockURLProtocol:
 private struct SyntheticMediaFactory {
     func createSourceMovie(
         at outputURL: URL,
-        durationSeconds: Double
+        durationSeconds: Double, redFixture: Bool = false
     ) async throws {
         let videoURL = outputURL
             .deletingLastPathComponent()
             .appendingPathComponent(
-                "synthetic-video.mov"
+                "synthetic-video-\(UUID().uuidString).mov"
             )
         let audioURL = outputURL
             .deletingLastPathComponent()
             .appendingPathComponent(
-                "synthetic-audio.caf"
+                "synthetic-audio-\(UUID().uuidString).caf"
             )
 
+        defer {
+            try? FileManager.default.removeItem(at: videoURL)
+            try? FileManager.default.removeItem(at: audioURL)
+        }
         try await createVideo(
             at: videoURL,
-            durationSeconds: durationSeconds
+            durationSeconds: durationSeconds, redFixture: redFixture
         )
         try createAudio(
             at: audioURL,
-            durationSeconds: durationSeconds
+            durationSeconds: durationSeconds, frequency: redFixture ? 499 : 997
         )
         try await mux(
             videoURL: videoURL,
@@ -934,7 +1073,7 @@ private struct SyntheticMediaFactory {
 
     private func createVideo(
         at url: URL,
-        durationSeconds: Double
+        durationSeconds: Double, redFixture: Bool
     ) async throws {
         try? FileManager.default
             .removeItem(at: url)
@@ -1045,11 +1184,13 @@ private struct SyntheticMediaFactory {
                 let value = UInt8(
                     32 + (frame % 160)
                 )
-                base.initializeMemory(
-                    as: UInt8.self,
-                    repeating: value,
-                    count: size
-                )
+                let pixels = base.assumingMemoryBound(to: UInt8.self)
+                for offset in stride(from: 0, to: size, by: 4) {
+                    pixels[offset] = redFixture ? (frame < 15 ? 0 : 20) : value
+                    pixels[offset + 1] = redFixture ? (frame < 15 ? 0 : 20) : value
+                    pixels[offset + 2] = redFixture ? (frame < 15 ? 0 : 230) : value
+                    pixels[offset + 3] = 255
+                }
             }
             CVPixelBufferUnlockBaseAddress(
                 pixelBuffer,
@@ -1080,7 +1221,7 @@ private struct SyntheticMediaFactory {
 
     private func createAudio(
         at url: URL,
-        durationSeconds: Double
+        durationSeconds: Double, frequency: Double = 997
     ) throws {
         try? FileManager.default
             .removeItem(at: url)
@@ -1122,7 +1263,7 @@ private struct SyntheticMediaFactory {
                 * sin(
                     2
                     * Double.pi
-                    * 997
+                    * frequency
                     * Double(frame)
                     / 48_000
                 )

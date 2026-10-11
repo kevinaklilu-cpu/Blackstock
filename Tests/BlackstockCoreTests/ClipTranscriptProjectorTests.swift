@@ -2,6 +2,40 @@ import XCTest
 @testable import BlackstockCore
 
 final class ClipTranscriptProjectorTests: XCTestCase {
+    func testVisualClipsUseOnlyTheirOwnSpeechAndPublicationText() throws {
+        let source = LocalTranscript(localeIdentifier: "de-DE", text: "Gesamtes Video", segments: [
+            .init(startSeconds: 12, durationSeconds: 4, text: "Diese Kamera spart viel Energie.", confidence: 0.9),
+            .init(startSeconds: 102, durationSeconds: 5, text: "Diese Pflanzen brauchen frisches Wasser.", confidence: 0.9)
+        ], onDevice: true, createdAt: Date())
+        func project(_ start: Double) throws -> LocalTranscript {
+            try XCTUnwrap(ClipTranscriptProjector().project(source: source, candidate:
+                .init(sourceRange: .init(startSeconds: start, durationSeconds: 20),
+                      transcriptPreview: "", wordCount: 0, averageConfidence: nil, segmentIDs: [])))
+        }
+        let first = try project(10)
+        let second = try project(100)
+        XCTAssertEqual(first.text, "Diese Kamera spart viel Energie.")
+        XCTAssertEqual(second.text, "Diese Pflanzen brauchen frisches Wasser.")
+        XCTAssertEqual(second.segments.first?.startSeconds, 2)
+        let a = StoryPublicationDraft.forClip(transcript: first, sourceURL: nil, start: 10, duration: 20, isShort: true)
+        let b = StoryPublicationDraft.forClip(transcript: second, sourceURL: nil, start: 100, duration: 20, isShort: true)
+        XCTAssertNotEqual(a.title, b.title)
+        XCTAssertFalse(b.description.contains("Kamera"))
+        XCTAssertTrue(b.description.contains("Pflanzen"))
+    }
+
+    func testDistinctMomentsExcludeContainedAndOverlappingDuplicates() {
+        func candidate(_ start: Double, _ duration: Double) -> LocalClipCandidate {
+            .init(sourceRange: .init(startSeconds: start, durationSeconds: duration),
+                  transcriptPreview: "", wordCount: 0, averageConfidence: nil, segmentIDs: [])
+        }
+        let clips = [candidate(10, 30), candidate(12, 10), candidate(15, 30), candidate(60, 20), candidate(100, 25)]
+        let ranker = LocalHighlightCandidateRanker()
+        XCTAssertEqual(ranker.distinct(clips, limit: 8).map(\.id), [clips[0].id, clips[3].id, clips[4].id])
+        XCTAssertEqual(ranker.distinct(clips, limit: 2).count, 2)
+        XCTAssertTrue(ranker.distinct(clips, limit: 0).isEmpty)
+    }
+
     func testProjectionRebasesSegmentsToClipStart() throws {
         let firstID = UUID()
         let secondID = UUID()

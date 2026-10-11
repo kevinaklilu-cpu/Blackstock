@@ -14,7 +14,16 @@ struct BlackstockBrandMark: View {
                 cornerRadius: width * 0.24,
                 style: .continuous
             )
-            .fill(BlackstockDesign.accent)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        BlackstockDesign.accentGlow,
+                        BlackstockDesign.accent
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
 
             RoundedRectangle(
                 cornerRadius: width * 0.24,
@@ -25,17 +34,22 @@ struct BlackstockBrandMark: View {
                 lineWidth: max(width * 0.025, 1)
             )
 
-            Image(systemName: "play.fill")
+            Text("B")
                 .font(
                     .system(
-                        size: width * 0.36,
+                        size: width * 0.53,
                         weight: .black
                     )
                 )
                 .foregroundStyle(.white)
-                .offset(x: width * 0.025)
+
         }
         .frame(width: width, height: height)
+        .shadow(
+            color: BlackstockDesign.accent.opacity(0.24),
+            radius: width * 0.16,
+            y: width * 0.08
+        )
         .accessibilityHidden(true)
     }
 }

@@ -11,6 +11,8 @@ public struct LocalClipCandidate:
     public let wordCount: Int
     public let averageConfidence: Float?
     public let segmentIDs: [UUID]
+    public let visualActivityScore: Double?
+    public let selectionExplanation: String?
 
     public init(
         id: UUID = UUID(),
@@ -18,7 +20,9 @@ public struct LocalClipCandidate:
         transcriptPreview: String,
         wordCount: Int,
         averageConfidence: Float?,
-        segmentIDs: [UUID]
+        segmentIDs: [UUID],
+        visualActivityScore: Double? = nil,
+        selectionExplanation: String? = nil
     ) {
         self.id = id
         self.sourceRange = sourceRange
@@ -26,6 +30,8 @@ public struct LocalClipCandidate:
         self.wordCount = max(wordCount, 0)
         self.averageConfidence = averageConfidence
         self.segmentIDs = segmentIDs
+        self.visualActivityScore = visualActivityScore
+        self.selectionExplanation = selectionExplanation
     }
 }
 
@@ -38,7 +44,7 @@ public struct LocalClipCandidateGenerator: Sendable {
         minimumDurationSeconds: Double = 15,
         maximumDurationSeconds: Double = 75,
         pauseBoundarySeconds: Double = 2.5,
-        maximumCandidates: Int = 8
+        maximumCandidates: Int = 24
     ) -> [LocalClipCandidate] {
         let minimumDuration = max(minimumDurationSeconds, 1)
         let maximumDuration = max(
@@ -127,6 +133,13 @@ public struct LocalClipCandidateGenerator: Sendable {
                 } else {
                     chunk.append(segment)
                 }
+                if let first = chunk.first,
+                   segment.startSeconds + segment.durationSeconds - first.startSeconds >= minimumDuration,
+                   segment.text.trimmingCharacters(in: .whitespacesAndNewlines).last.map({ ".!?…。！？".contains($0) }) == true {
+                    appendCandidate(from: chunk, sourceDurationSeconds: sourceDuration,
+                        minimumDurationSeconds: minimumDuration, maximumDurationSeconds: maximumDuration, to: &candidates)
+                    chunk = []
+                }
             }
 
             appendCandidate(
@@ -137,13 +150,12 @@ public struct LocalClipCandidateGenerator: Sendable {
                 to: &candidates
             )
 
-            if candidates.count >= maximumCandidates {
-                break
-            }
+
         }
 
         return Array(
-            candidates.prefix(maximumCandidates)
+            LocalHighlightCandidateRanker().rank(candidates).prefix(maximumCandidates)
+                .sorted { $0.sourceRange.startSeconds < $1.sourceRange.startSeconds }
         )
     }
 

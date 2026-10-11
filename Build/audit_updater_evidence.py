@@ -78,14 +78,6 @@ requirements = {
         "let finalURL = http.url",
         "packageURLMustUseHTTPS",
     ],
-    "Sources/BlackstockApp/BlackstockApp.swift": [
-        "BlackstockUpdateInstallationPreflight()",
-        "BlackstockUpdateAudit",
-        ".recordVerifiedPackage",
-        "BlackstockUpdateAudit.recordInstallerOpened",
-        "NSWorkspace.shared.open",
-        "Developer-ID-Installer-Team",
-    ],
     "Sources/BlackstockApp/BlackstockSession.swift": [
         "BlackstockUpdateAudit.reconcilePostUpdateLaunch",
     ],

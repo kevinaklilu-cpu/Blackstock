@@ -71,8 +71,11 @@ public struct YouTubeUploadResult: Codable, Sendable, Equatable {
 public struct YouTubeResumableUploader: Sendable {
     public let accessToken: String
     public let chunkSize: Int
+    public let onProgress: @Sendable (Double) -> Void
 
-    public init(accessToken: String, chunkSize: Int = 8 * 1024 * 1024) {
+    public init(accessToken: String, chunkSize: Int = 8 * 1024 * 1024,
+                onProgress: @escaping @Sendable (Double) -> Void = { _ in }) {
+        self.onProgress = onProgress
         self.accessToken = accessToken
         self.chunkSize = max(256 * 1024, chunkSize)
     }
@@ -118,6 +121,7 @@ public struct YouTubeResumableUploader: Sendable {
             if existing.state == .remoteCommitted,
                let videoID = existing.remoteResourceID,
                !videoID.isEmpty {
+                onProgress(1)
                 return .init(
                     videoID: videoID,
                     idempotencyKey: idempotencyKey,
@@ -317,6 +321,7 @@ public struct YouTubeResumableUploader: Sendable {
         defer { try? handle.close() }
 
         var offset = initialOffset
+        onProgress(Double(offset) / Double(totalSize))
         try handle.seek(toOffset: UInt64(offset))
 
         while offset < totalSize {
@@ -344,6 +349,7 @@ public struct YouTubeResumableUploader: Sendable {
                 offset = Self.nextOffset(
                     fromRangeHeader: http.value(forHTTPHeaderField: "Range")
                 )
+                onProgress(min(1, Double(offset) / Double(totalSize)))
                 try handle.seek(toOffset: UInt64(offset))
                 if var entry = await journal.entry(for: idempotencyKey) {
                     entry.nextByteOffset = offset
@@ -359,6 +365,7 @@ public struct YouTubeResumableUploader: Sendable {
             guard let videoID = Self.videoID(from: responseData) else {
                 throw YouTubeUploadError.missingVideoID
             }
+            onProgress(1)
             return videoID
         }
 

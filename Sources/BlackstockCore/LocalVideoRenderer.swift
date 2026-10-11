@@ -47,7 +47,8 @@ public actor LocalVideoRenderer {
         burnInCaptions: Bool = false,
         captionStyle: CaptionVisualStyle = .clear,
         supplementalAudio: [SupplementalAudioMixInput] = [],
-        supplementalVideo: [SupplementalVideoInsertInput] = []
+        supplementalVideo: [SupplementalVideoInsertInput] = [],
+        onProgress: @Sendable (String) -> Void = { _ in }
     ) async throws -> RenderArtifact {
         guard asset.mayEnterProduction else {
             throw LocalRenderError.unauthorizedMedia
@@ -59,6 +60,7 @@ public actor LocalVideoRenderer {
                 EditOperationType.removeRange,
                 EditOperationType.volume,
                 EditOperationType.reframe,
+                EditOperationType.emphasis,
                 EditOperationType.overlay
             ].contains($0.type)
         }
@@ -272,7 +274,25 @@ public actor LocalVideoRenderer {
             let layer = AVMutableVideoCompositionLayerInstruction(
                 assetTrack: compositionTrack
             )
-            layer.setTransform(plan.transform, at: .zero)
+            let emphasisCues = VisualEmphasisPlanner().cues(
+                operations: graph.currentOperations,
+                outputDurationSeconds: timeline.outputDurationSeconds
+            ).filter { cue in
+                reframe.preserveFullFrame != true && !supplementalVideo.contains { insert in
+                    cue.startSeconds < insert.timelineStartSeconds + insert.durationSeconds + 0.4
+                        && cue.startSeconds + cue.durationSeconds > insert.timelineStartSeconds - 0.4
+                }
+            }
+            if !TrackedReframeComposer.apply(spec: reframe, timeline: timeline, naturalSize: naturalSize,
+                preferredTransform: preferredTransform, renderSize: renderSize, cues: emphasisCues, to: layer) {
+            VisualEmphasisComposer.apply(
+                cues: emphasisCues,
+                baseTransform: plan.transform,
+                renderSize: renderSize,
+                anchor: plan.emphasisAnchor(for: reframe),
+                to: layer
+            )
+            }
             instruction.layerInstructions = [layer]
 
             let videoComposition = AVMutableVideoComposition()
@@ -298,40 +318,18 @@ public actor LocalVideoRenderer {
             )
         }
 
-        exporter.outputURL = exportOutputURL
-        exporter.outputFileType = .mp4
+        onProgress("Leitvideo schneiden · Bildformat und Ton vorbereiten …")
         exporter.shouldOptimizeForNetworkUse = true
-
-        let exportBox = ExportSessionBox(exporter)
-        try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { continuation in
-                exportBox.session.exportAsynchronously {
-                    let session = exportBox.session
-                    switch session.status {
-                    case .completed:
-                        continuation.resume()
-                    case .failed:
-                        continuation.resume(
-                            throwing: LocalRenderError.exportFailed(
-                                session.error?.localizedDescription
-                                    ?? "Unbekannter Exportfehler"
-                            )
-                        )
-                    case .cancelled:
-                        continuation.resume(
-                            throwing: CancellationError()
-                        )
-                    default:
-                        continuation.resume(
-                            throwing: LocalRenderError.exportFailed(
-                                "Export endete im Zustand \(session.status.rawValue)."
-                            )
-                        )
-                    }
-                }
-            }
-        } onCancel: {
-            exportBox.session.cancelExport()
+        do {
+            try await AsyncAVAssetExporter.export(
+                exporter,
+                to: exportOutputURL,
+                as: .mp4
+            )
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw LocalRenderError.exportFailed(error.localizedDescription)
         }
 
         try Task.checkCancellation()
@@ -365,12 +363,16 @@ public actor LocalVideoRenderer {
                     supplementalVideo:
                         supplementalVideo,
                     outputURL: visualOutputURL,
-                    preset: preset
+                    preset: preset,
+                    onProgress: { fraction in
+                        onProgress("Alle Quellen zusammensetzen · \(Int(fraction * 100)) % · Bild und Ton folgen dem Schnittplan")
+                    }
                 )
             postProcessInputURL = visualOutputURL
         }
 
         if hasCaptionPostProcess {
+            onProgress("Untertitel und Einblendungen in den Zusammenschnitt setzen …")
             try await LocalCaptionBurnInRenderer()
                 .render(
                     inputURL: postProcessInputURL,

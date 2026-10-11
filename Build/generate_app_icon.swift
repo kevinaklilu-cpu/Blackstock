@@ -82,11 +82,32 @@ for size in [16, 32, 128, 256, 512] {
     try render(size: size, scale: 2, name: "icon_\(size)x\(size)@2x.png")
 }
 
-let process = Process()
-process.executableURL = URL(fileURLWithPath: "/usr/bin/iconutil")
-process.arguments = ["-c", "icns", work.path, "-o", output.path]
-try process.run()
-process.waitUntilExit()
-guard process.terminationStatus == 0 else {
-    throw NSError(domain: "BlackstockIcon", code: Int(process.terminationStatus))
+// Write the PNG-backed ICNS container directly. This avoids an iconutil
+// regression on recent macOS toolchains that rejects otherwise valid iconsets.
+let chunks: [(String, String)] = [
+    ("icp4", "icon_16x16.png"),
+    ("icp5", "icon_32x32.png"),
+    ("icp6", "icon_32x32@2x.png"),
+    ("ic07", "icon_128x128.png"),
+    ("ic08", "icon_128x128@2x.png"),
+    ("ic09", "icon_256x256@2x.png"),
+    ("ic10", "icon_512x512@2x.png"),
+]
+
+func appendUInt32(_ value: UInt32, to data: inout Data) {
+    var bigEndian = value.bigEndian
+    withUnsafeBytes(of: &bigEndian) { data.append(contentsOf: $0) }
 }
+
+var body = Data()
+for (type, fileName) in chunks {
+    let png = try Data(contentsOf: work.appendingPathComponent(fileName))
+    body.append(contentsOf: type.utf8)
+    appendUInt32(UInt32(png.count + 8), to: &body)
+    body.append(png)
+}
+
+var icns = Data("icns".utf8)
+appendUInt32(UInt32(body.count + 8), to: &icns)
+icns.append(body)
+try icns.write(to: output, options: .atomic)
